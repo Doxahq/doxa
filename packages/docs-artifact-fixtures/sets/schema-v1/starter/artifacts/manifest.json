@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "siteId": "site-frozen-starter",
+  "versionId": "version-frozen-starter-1",
+  "projectSlug": "frozen-starter",
+  "generatedAt": "2026-09-23T00:00:00.000Z",
+  "pages": [
+    {
+      "title": "Frozen Starter",
+      "href": "/",
+      "sourcePath": "source/index.mdx"
+    },
+    {
+      "title": "Getting Started",
+      "href": "/getting-started",
+      "sourcePath": "source/getting-started/index.mdx"
+    }
+  ]
+}

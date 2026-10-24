@@ -1,0 +1,44 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doxa-docs-renderer-shared",
+  "main": "worker.js",
+  "compatibility_date": "2025-03-30",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_populate_process_env"
+  ],
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "none"
+  },
+  "vars": {
+    "VITE_OPENSOURCE_REPO_URL": "https://github.com/ipenywis/doxa",
+    "DOXA_API_BASE_URL": "https://api.doxa.so",
+    "DOXA_DASHBOARD_BASE_URL": "https://doxa.so",
+    "DOXA_DOCS_BASE_DOMAIN": "doxa.page",
+    "DOXA_DOCS_RUNTIME_SOURCE": "binding"
+  },
+  "services": [
+    {
+      "binding": "DOXA_DOCS_CONTENT_BINDING",
+      "service": "doxa-docs-runtime-production",
+      "entrypoint": "RuntimeSourceApi"
+    }
+  ],
+  "observability": {
+    "enabled": false,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": false,
+      "persist": true,
+      "head_sampling_rate": 1
+    }
+  }
+}

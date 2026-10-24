@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "data": [
+    {
+      "title": "Frozen Legacy",
+      "href": "/"
+    },
+    {
+      "title": "Usage",
+      "href": "/usage"
+    }
+  ]
+}

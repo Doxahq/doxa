@@ -1,0 +1,21 @@
+{
+  "name": "@doxahq/docs-dispatcher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@doxahq/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260701.1",
+    "es-module-lexer": "^1.7.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9",
+    "wrangler": "4.107.0"
+  }
+}

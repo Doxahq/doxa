@@ -1,0 +1,245 @@
+flowchart TD
+
+%% generation-pipeline-with-dependency-graph
+%% Proposed integration of a versioned semantic dependency graph into Doxa's
+%% existing revision-aware generation pipeline. Nodes prefixed with "NEW" are
+%% proposed additions; the remaining nodes describe current pipeline behavior.
+
+    subgraph A["1. Trigger and admission"]
+        A1["Manual generation from dashboard/API"]
+        A2["GitHub pull-request webhook / Doxabot"]
+        A3["Authenticate project owner"]
+        A4["Verify webhook signature and deduplicate delivery"]
+        A5["Check PR eligibility, base branch, draft state, and head revision"]
+        A6["Create production job with production concurrency key"]
+        A7["Create preview job with PR concurrency key"]
+        A8["Store baseline version, baseline revision, target revision, models, and fingerprints in Postgres"]
+        A9["Publish GenerateJobMessage to Cloudflare Queue"]
+
+        A1 --> A3 --> A6
+        A2 --> A4 --> A5 --> A7
+        A6 --> A8
+        A7 --> A8
+        A8 --> A9
+    end
+
+    subgraph B["2. Durable workflow admission and preparation"]
+        B1["Queue consumer checks global generation control"]
+        B2{"Generation paused?"}
+        B3["Cancel job and acknowledge queue message"]
+        B4["Create idempotent Cloudflare Workflow using job ID"]
+        B5["Verify database schema compatibility"]
+        B6["Load exact execution context from Postgres"]
+        B7["Mark job running and create new version ID"]
+        B8{"Preview generation?"}
+        B9["Re-check current PR head and proposal state"]
+        B10{"Still current?"}
+        B11["Mark superseded and stop"]
+        B12["Continue exact revision generation"]
+
+        B1 --> B2
+        B2 -->|"Yes"| B3
+        B2 -->|"No"| B4 --> B5 --> B6 --> B7 --> B8
+        B8 -->|"Yes"| B9 --> B10
+        B10 -->|"No"| B11
+        B10 -->|"Yes"| B12
+        B8 -->|"No"| B12
+    end
+
+    A9 --> B1
+
+    subgraph C["3. Baseline state and graph loading"]
+        C1["Read baselineVersionId and generationStatePrefix from Postgres"]
+        C2["Load immutable baseline manifest from R2"]
+        C3["Validate site ID, version ID, schema version, object hashes, and storage prefix"]
+        C4["Load reusable source, analysis, structure, and page state"]
+        C5["NEW · Load dependency-graph reference from manifest"]
+        C6["NEW · Read compact dependency-graph snapshot from R2"]
+        C7["NEW · Validate graph schema, source revision, generator version, coverage, and hash"]
+        C8{"Graph usable?"}
+        C9["NEW · Build in-memory forward and reverse adjacency indexes"]
+        C10["Record graph-unavailable reason and retain current conservative planner"]
+
+        C1 --> C2 --> C3
+        C3 -->|"Valid"| C4 --> C5 --> C6 --> C7 --> C8
+        C3 -->|"Missing or invalid"| C10
+        C8 -->|"Yes"| C9
+        C8 -->|"No"| C10
+    end
+
+    B12 --> C1
+
+    subgraph D["4. Exact repository snapshot and semantic change detection"]
+        D1["Agent container prepares isolated stage workspace"]
+        D2["Acquire short-lived GitHub installation token"]
+        D3["Checkout exact target revision or PR merge revision"]
+        D4{"Merge conflict?"}
+        D5["Report action required and stop without publication"]
+        D6["Capture target source tree and deterministic file hashes"]
+        D7["Compare baseline and target trees"]
+        D8["Changed, added, deleted, and renamed files"]
+        D9["NEW · Public-surface extractor"]
+        D10["Exports, classes, SDK methods, API operations, schemas, CLI commands, configuration, examples"]
+        D11["NEW · Normalize stable semantic IDs"]
+        D12["NEW · Compute added, changed, renamed, and deleted public surfaces"]
+        D13["NEW · Attach source evidence and extractor confidence"]
+
+        D1 --> D2 --> D3 --> D4
+        D4 -->|"Yes"| D5
+        D4 -->|"No"| D6 --> D7 --> D8 --> D9 --> D10 --> D11 --> D12 --> D13
+    end
+
+    C9 --> D1
+    C10 --> D1
+
+    subgraph E["5. Impact analysis, project analysis, and structure planning"]
+        E1{"Validated graph available?"}
+        E2["NEW · Seed traversal with changed files and semantic surfaces"]
+        E3["NEW · Traverse only propagation-enabled edge types with cycle and depth bounds"]
+        E4["NEW · Produce affected pages, affected concepts, reasons, confidence, and coverage"]
+        E5{"Impact mapping confidently complete?"}
+        E6["Current file-dependency planner"]
+        E7["Conservative broad or full regeneration"]
+        E8["Combine graph result with page-input hashes, planning fingerprint, writing fingerprint, and structural fingerprint"]
+        E9["Create preliminary analysisMode and structureMode"]
+        E10{"Analysis mode"}
+        E11["Reuse published analysis"]
+        E12["Incrementally update analysis using changed-source context"]
+        E13["Run full repository analysis"]
+        E14{"Structure mode"}
+        E15["Reuse compatible published structure"]
+        E16["Generate proposed structure with LLM planner"]
+        E17["Review structure for public readers"]
+        E18["Apply page budget and profile rules"]
+        E19["Build page targets, stable page IDs, routes, navigation, and writer handoff"]
+        E20["NEW · Re-run graph impact against final page targets"]
+        E21["Final generation plan"]
+        E22["regeneratePageIds"]
+        E23["reusePageIds"]
+        E24["removedPageIds"]
+        E25["Reasons and regeneration causes"]
+
+        D13 --> E1
+        E1 -->|"Yes"| E2 --> E3 --> E4 --> E5
+        E5 -->|"Yes"| E8
+        E5 -->|"No"| E7 --> E8
+        E1 -->|"No"| E6 --> E7
+        E8 --> E9 --> E10
+        E10 -->|"Reuse"| E11 --> E14
+        E10 -->|"Incremental"| E12 --> E14
+        E10 -->|"Full"| E13 --> E14
+        E14 -->|"Reuse"| E15 --> E19
+        E14 -->|"Regenerate"| E16 --> E17 --> E18 --> E19
+        E19 --> E20 --> E21
+        E21 --> E22
+        E21 --> E23
+        E21 --> E24
+        E21 --> E25
+    end
+
+    subgraph F["6. Page reuse and affected-page writing"]
+        F1{"Any pages to regenerate?"}
+        F2["Skip writer stages"]
+        F3["Create bounded page batches"]
+        F4["Prepare page-cache context"]
+        F5{"Validated page-cache hit?"}
+        F6["Checkpoint cached page"]
+        F7["Build focused evidence bundle for one page"]
+        F8{"Evidence sufficient?"}
+        F9["Tool-light writer with deterministic evidence"]
+        F10["Agentic writer with read-only repository tools"]
+        F11["LLM writes complete MDX page"]
+        F12["Per-page validation"]
+        F13["Frontmatter, MDX parse, JSX balance, allowed components, code fences, links, content rules"]
+        F14{"Page valid?"}
+        F15["Bounded repair or fresh-page retry"]
+        F16["Record final page dependencies"]
+        F17["Files, evidence, symbols, routes"]
+        F18["NEW · Concepts, workflows, configuration, examples, snippets, prerequisites"]
+        F19["Write resumable page checkpoint to R2"]
+        F20["Load reused page records and artifacts from baseline R2"]
+        F21["Writers receive only focused evidence—not the complete graph"]
+
+        E22 --> F1
+        F1 -->|"No"| F2
+        F1 -->|"Yes"| F3 --> F4 --> F5
+        F5 -->|"Yes"| F6 --> F19
+        F5 -->|"No"| F7 --> F8
+        F8 -->|"Yes"| F9 --> F11
+        F8 -->|"No"| F10 --> F11
+        F11 --> F12 --> F13 --> F14
+        F14 -->|"No"| F15 --> F11
+        F14 -->|"Yes"| F16 --> F17 --> F18 --> F19
+        E23 --> F20
+        F7 -.-> F21
+    end
+
+    subgraph G["7. Assembly, global validation, and graph finalization"]
+        G1["Read generated page checkpoints"]
+        G2["Combine regenerated and reused pages in structure order"]
+        G3["Finalize navigation and runtime routes"]
+        G4["Run complete-documentation quality validation"]
+        G5["Cross-page links, missing routes, reference coverage, navigation, duplicate IDs, and MDX integrity"]
+        G6{"Documentation valid?"}
+        G7["Run bounded targeted quality repairs"]
+        G8["Fail job when repair budget is exhausted"]
+        G9["Create runtime documentation artifacts"]
+        G10["NEW · Build next dependency graph"]
+        G11["Start from baseline graph when compatible"]
+        G12["Remove nodes and edges owned by changed/deleted files and regenerated/removed pages"]
+        G13["Insert target semantic surfaces and final page dependencies"]
+        G14["Carry forward validated unaffected nodes and edges"]
+        G15["NEW · Validate graph identities, edge policy, evidence, coverage, cycles, and revision"]
+        G16{"Next graph complete and valid?"}
+        G17["Write immutable graph snapshot"]
+        G18["Mark graph unavailable/partial and force safe fallback on next generation"]
+        G19["Emit graph-build diagnostic without invalidating otherwise valid docs"]
+
+        F19 --> G1
+        F2 --> G1
+        F20 --> G2
+        G1 --> G2 --> G3 --> G4 --> G5 --> G6
+        G6 -->|"Repairable"| G7 --> G4
+        G6 -->|"Not repairable"| G8
+        G6 -->|"Valid"| G9 --> G10
+        G10 --> G11 --> G12 --> G13 --> G14 --> G15 --> G16
+        G16 -->|"Yes"| G17
+        G16 -->|"No"| G18 --> G19
+    end
+
+    subgraph H["8. Immutable persistence and atomic publication"]
+        H1["Upload versioned docs artifacts to R2"]
+        H2["Persist source state"]
+        H3["Persist analysis state"]
+        H4["Persist structure state"]
+        H5["Persist page states"]
+        H6["Persist graph reference or explicit graph-unavailable status"]
+        H7["Write completion manifest last"]
+        H8["Manifest includes hashes, schema versions, source revision, fingerprints, and graph status"]
+        H9["Complete version through internal API"]
+        H10{"Publication mode"}
+        H11["Production: atomically flip active published version"]
+        H12["Preview: update isolated PR preview version"]
+        H13["Update GitHub review/check with preview URL and metrics"]
+        H14["Docs runtime serves versioned artifacts"]
+        H15["Delete transient generation checkpoints"]
+
+        G17 --> H1
+        G19 --> H1
+        H1 --> H2 --> H3 --> H4 --> H5 --> H6 --> H7 --> H8 --> H9 --> H10
+        H10 -->|"Production"| H11 --> H14
+        H10 -->|"Preview"| H12 --> H13
+        H11 --> H15
+        H13 --> H15
+    end
+
+    subgraph I["9. Cross-cutting safety and observability"]
+        I1["Every durable step checks job-active state"]
+        I2["Per-stage and overall time budgets"]
+        I3["Idempotent Workflow steps and immutable R2 keys"]
+        I4["Resumable page checkpoints"]
+        I5["Cancellation, supersession, and watchdog destroy the container"]
+        I6["No artifact publication after failure or cancellation"]
+        I7["NEW · Graph metrics: bytes, load, parse, traversal, coverage, affected ratio, fallback reason"]
+        I8["Existing model usage, tool, retry, repair, and stage timing telemetry"]
+    end

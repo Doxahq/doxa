@@ -1,0 +1,13 @@
+# Provider plugins and local state.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# Real values. Commit only the *.example files.
+*.tfvars
+backend.hcl
+
+# Lock files belong to root stacks only. Module tests create their own.
+modules/**/.terraform.lock.hcl

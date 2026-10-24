@@ -1,0 +1,116 @@
+{
+  "ok": true,
+  "data": {
+    "type": "page",
+    "slug": "api/messages/create",
+    "href": "/api/messages/create",
+    "homeHref": "/",
+    "site": {
+      "name": "frozen-showcase",
+      "description": "Documentation for frozen-showcase.",
+      "url": "https://frozen.doxa.page"
+    },
+    "features": {
+      "branding": true,
+      "rightSidebar": true,
+      "feedbackEdit": false,
+      "tableOfContents": true,
+      "scrollToTop": true,
+      "ai": {
+        "chat": false,
+        "chatWithPage": false,
+        "floatingInput": false
+      },
+      "copyPage": {
+        "markdown": true,
+        "rawText": true
+      },
+      "apiPlayground": true,
+      "rawMarkdown": true,
+      "loadFromGithub": false
+    },
+    "sections": [
+      {
+        "slug": "default",
+        "label": "Documentation",
+        "default": true,
+        "kind": "documentation",
+        "layout": "docs"
+      },
+      {
+        "slug": "api",
+        "label": "API Reference",
+        "kind": "reference",
+        "layout": "reference",
+        "default": false
+      }
+    ],
+    "currentSection": {
+      "slug": "api",
+      "label": "API Reference",
+      "kind": "reference",
+      "layout": "reference",
+      "default": false
+    },
+    "sectionHomeHrefs": {
+      "default": "/",
+      "api": "/api/messages/create"
+    },
+    "sectionNavigation": [
+      {
+        "heading": "Messages"
+      },
+      {
+        "title": "Create Message",
+        "href": "/api/messages/create"
+      },
+      {
+        "spacer": true
+      },
+      {
+        "heading": "Other"
+      },
+      {
+        "title": "API Overview",
+        "href": "/api/overview",
+        "icon": "server"
+      }
+    ],
+    "sectionRoutes": [
+      {
+        "title": "Create Message",
+        "href": "/api/messages/create"
+      },
+      {
+        "title": "API Overview",
+        "href": "/api/overview",
+        "icon": "server"
+      }
+    ],
+    "routeTitle": "Create Message",
+    "sectionHeading": "Messages",
+    "previous": null,
+    "next": {
+      "title": "API Overview",
+      "href": "/api/overview",
+      "icon": "server"
+    },
+    "page": {
+      "slug": "api/messages/create",
+      "href": "/api/messages/create",
+      "title": "Create Message",
+      "description": "Reference for POST /v1/messages, including request fields and responses.",
+      "apiMethod": "POST",
+      "apiPath": "/v1/messages",
+      "sourcePath": "source/api/messages/create/index.mdx",
+      "body": "---\ntitle: \"Create Message\"\ndescription: \"Reference for POST /v1/messages, including request fields and responses.\"\nkeywords: [\"post\", \"messages\", \"rest-api\"]\nicon: \"server\"\napiMethod: \"POST\"\napiPath: \"/v1/messages\"\n---\n\nCreates a message record and returns the stored message with its generated identifier.\n\n<ApiEndpoint method=\"POST\" path=\"/v1/messages\" baseUrl=\"https://api.example.com/v1\">\n\n<ApiRequestExample client=\"curl\" lang=\"bash\" label=\"Create a message\">\n\n```bash\ncurl -X POST \"https://api.example.com/v1/messages\" \\\n  -H \"Authorization: Bearer doxa_test_token\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"body\":\"Ship reference docs as a separate section.\"}'\n```\n\n</ApiRequestExample>\n\n<ApiRequestExample client=\"node-fetch\" lang=\"js\" label=\"Create a message\">\n\n```js\nconst response = await fetch(\"https://api.example.com/v1/messages\", {\n  method: \"POST\",\n  headers: {\n    Authorization: \"Bearer doxa_test_token\",\n    \"Content-Type\": \"application/json\",\n  },\n  body: JSON.stringify({ body: \"Ship reference docs as a separate section.\" }),\n});\n```\n\n</ApiRequestExample>\n\n<ApiResponseExample status=\"201\" contentType=\"application/json\">\n\n```json\n{ \"id\": \"msg_123\", \"body\": \"Ship reference docs as a separate section.\" }\n```\n\n</ApiResponseExample>\n\n<ApiParams title=\"Body\" detail=\"application/json\">\n  <ApiParam name=\"body\" type=\"string\" location=\"body\" required>\n    The message text.\n  </ApiParam>\n</ApiParams>\n\n<ApiParams title=\"Response\" detail=\"application/json\">\n  <ApiParam name=\"id\" type=\"string\" location=\"response\" required>\n    The stable message identifier.\n  </ApiParam>\n</ApiParams>\n\n</ApiEndpoint>\n",
+      "keywords": [
+        "[\"post\"",
+        "\"messages\"",
+        "\"rest-api\"]"
+      ],
+      "sectionSlug": "api",
+      "headings": []
+    }
+  }
+}

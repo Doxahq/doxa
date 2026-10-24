@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: doxa-platform-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: doxa
+      POSTGRES_USER: doxa
+      POSTGRES_PASSWORD: doxa
+    ports:
+      - "5432:5432"
+    volumes:
+      - doxa_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U doxa -d doxa"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Key-value store of the Node API origin (pnpm dev --api-node), in place of Workers KV.
+  valkey:
+    image: valkey/valkey:8.1-alpine
+    container_name: doxa-platform-valkey
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  doxa_postgres_data:

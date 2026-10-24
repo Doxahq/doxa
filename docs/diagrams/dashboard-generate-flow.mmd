@@ -1,0 +1,29 @@
+sequenceDiagram
+  participant User
+  participant Web as apps/web
+  participant API as apps/api
+  participant DB as Postgres
+  participant Gen as packages/generation
+  participant GH as GitHub App
+  participant C as agent-container
+  participant R2
+
+  User->>Web: Click Generate Docs
+  Web->>API: POST /projects/:id/generate
+  API->>DB: Create job if no active job exists
+  API->>Gen: Start real generation
+
+  Gen->>API: Internal RPC: get repo context
+  API->>DB: Read project/repo/site
+  Gen->>API: Internal RPC: create GitHub token
+  API->>GH: Request installation token
+
+  Gen->>C: POST /generate
+  C->>GH: Clone repo
+  C->>C: Run @doxahq/agent
+  C-->>Gen: Return docs artifacts
+
+  Gen->>R2: Upload versioned artifacts
+  Gen->>API: Internal RPC: publish output
+  API->>DB: Set published_version_id
+  API-->>Web: Job status/events update

@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doxa-docs-resolver",
+  "main": "src/docs-resolver.ts",
+  "compatibility_date": "2026-06-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [],
+  "vars": {
+    "DOCS_BASE_DOMAIN": "localhost",
+    "DATABASE_URL": "postgresql://doxa:doxa@localhost:5432/doxa"
+  },
+  "observability": { "enabled": true },
+  "env": {
+    "production": {
+      "placement": { "region": "aws:us-east-1" },
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [],
+      "vars": { "DOCS_BASE_DOMAIN": "doxa.page", "DATABASE_URL": "" },
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE_CACHE_DISABLED",
+          "id": "${CF_HYPERDRIVE_CACHE_DISABLED_ID}"
+        }
+      ]
+    }
+  }
+}

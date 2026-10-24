@@ -1,0 +1,123 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doxa-docs-renderer",
+  "main": "src/index.ts",
+  "cache": {
+    "enabled": false
+  },
+  "exports": {
+    "default": {
+      "type": "worker",
+      "cache": {
+        "enabled": false
+      }
+    },
+    "DocsHostCache": {
+      "type": "worker",
+      "cache": {
+        "enabled": true
+      }
+    },
+    "DocsHtmlCache": {
+      "type": "worker",
+      "cache": {
+        "enabled": true
+      }
+    },
+    "DocsPrerenderCache": {
+      "type": "worker",
+      "cache": {
+        "enabled": true
+      }
+    },
+    "DocsRouteDataCache": {
+      "type": "worker",
+      "cache": {
+        "enabled": true
+      }
+    }
+  },
+  "compatibility_date": "2026-06-12",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "routes": [
+    {
+      "pattern": "*/*",
+      "zone_id": "${CF_DOCS_ZONE_ID}"
+    }
+  ],
+  "assets": {
+    "directory": "../docs-template/dist/client",
+    "binding": "ASSETS",
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+  "services": [
+    {
+      "binding": "DOCS_RESOLVER",
+      "service": "doxa-docs-resolver-production"
+    },
+    {
+      "binding": "DOCS_RUNTIME",
+      "service": "doxa-docs-runtime-production",
+      "entrypoint": "RuntimeSourceApi"
+    },
+    {
+      "binding": "SHARED_RENDERER",
+      "service": "doxa-docs-renderer-shared"
+    },
+    {
+      "binding": "PRERENDER_TASKS",
+      "service": "doxa-api-production",
+      "entrypoint": "PrerenderTaskApi"
+    }
+  ],
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "RENDERER_CODE_BUCKET",
+      "bucket_name": "doxa-docs-renderer-code"
+    },
+    {
+      "binding": "DOCS_RENDERED_BUCKET",
+      "bucket_name": "doxa-docs-rendered-html"
+    }
+  ],
+  "vars": {
+    "DEBUG": "false",
+    "DOXA_PROD_DYNAMIC_RENDERER_MODE": "all",
+    "DOXA_PROD_DYNAMIC_RENDERER_SITE_IDS": "",
+    "DOXA_RENDERER_BUILD_ID": "unconfigured",
+    "DOXA_RENDERER_PACKAGE_KEY": "unconfigured",
+    "DOXA_RENDERER_RELEASE_ID": "unconfigured",
+    "DOXA_PROD_PRERENDER_MODE": "off",
+    "DOXA_PROD_PRERENDER_SITE_IDS": "",
+    "DOXA_PRERENDER_REPAIR_ENABLED": "false",
+    "DOXA_PROD_ROUTE_DATA_CACHE_MODE": "all",
+    "DOXA_PROD_ROUTE_DATA_CACHE_SITE_IDS": "",
+    "VITE_OPENSOURCE_REPO_URL": "https://github.com/ipenywis/doxa",
+    "DOXA_API_BASE_URL": "https://api.doxa.so",
+    "DOXA_DASHBOARD_BASE_URL": "https://doxa.so",
+    "DOXA_DOCS_BASE_DOMAIN": "doxa.page"
+  },
+  "observability": {
+    "enabled": false,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": false,
+      "persist": true,
+      "head_sampling_rate": 1
+    }
+  }
+}

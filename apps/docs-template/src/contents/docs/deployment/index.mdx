@@ -1,0 +1,157 @@
+---
+title: Deployment
+description: Deploy Doxa Docs to Cloudflare Workers, Vercel, or Docker with the right build target, environment variables, and validation steps.
+keywords:
+  [
+    "deployment",
+    "cloudflare workers",
+    "vercel",
+    "docker",
+    "build",
+    "environment variables",
+  ]
+---
+
+Doxa includes scripts for Cloudflare Workers, Vercel, and Docker. Cloudflare is the default target, Vercel has dedicated build and deploy commands, and the included Dockerfile makes Doxa Docs deployable to any VPS or server that supports Docker with a single build-and-run flow.
+
+## Deployment Targets
+
+<Tabs defaultValue="cloudflare" className="pt-5 pb-1">
+  <TabsList>
+    <TabsTrigger value="cloudflare">Cloudflare Workers</TabsTrigger>
+    <TabsTrigger value="vercel">Vercel</TabsTrigger>
+    <TabsTrigger value="docker">Docker</TabsTrigger>
+  </TabsList>
+  <TabsContent value="cloudflare">
+    <code>{"pnpm deploy:docs-template"}</code>
+  </TabsContent>
+  <TabsContent value="vercel">
+    <code>{"pnpm --filter @doxahq/docs-template deploy:vercel"}</code>
+  </TabsContent>
+  <TabsContent value="docker">
+    <code>
+      {
+        "docker build -f apps/docs-template/Dockerfile --build-arg VITE_SITE_URL=https://docs.example.com -t doxa-docs ."
+      }
+    </code>
+  </TabsContent>
+</Tabs>
+
+## Required Production Settings
+
+| Setting             | Why it matters                                                                                            |
+| :------------------ | :-------------------------------------------------------------------------------------------------------- |
+| `VITE_SITE_URL`     | Preferred host for canonical tags, sitemap entries, robots, Open Graph URLs, and `llms.txt` source links. |
+| `AI_API_KEY`        | Required when Chat with Docs is enabled.                                                                  |
+| `CONTENT_SOURCE`    | Selects bundled or runtime docs content.                                                                  |
+| GitHub adapter vars | Required only when `CONTENT_SOURCE=github`.                                                               |
+
+<Note title="Sitemap host fallback" type="info">
+  If `VITE_SITE_URL` is not set, the build infers the sitemap host from common
+  deployment variables such as `VERCEL_PROJECT_PRODUCTION_URL`, `VERCEL_URL`,
+  `CF_PAGES_URL`, `URL`, `DEPLOY_URL`, or `DEPLOY_PRIME_URL`.
+</Note>
+
+## Cloudflare Workers
+
+<Step>
+  <StepItem title="Set environment variables and secrets">
+    Add public settings and private secrets in your Cloudflare project.
+
+    ```bash
+    pnpm --filter @doxahq/docs-template exec wrangler secret put AI_API_KEY -c wrangler.renderer.json
+    ```
+
+  </StepItem>
+
+<StepItem title="Build for Cloudflare">
+  ```bash pnpm --filter @doxahq/docs-template build:cloudflare ```
+</StepItem>
+
+  <StepItem title="Deploy">
+    ```bash
+    pnpm deploy:docs-template
+    ```
+  </StepItem>
+</Step>
+
+## Vercel
+
+<Step>
+  <StepItem title="Link the project">
+    ```bash
+    vercel link
+    ```
+  </StepItem>
+
+<StepItem title="Set environment variables">
+  ```bash vercel env add VITE_SITE_URL vercel env add AI_API_KEY ```
+</StepItem>
+
+  <StepItem title="Deploy">
+    ```bash
+    pnpm --filter @doxahq/docs-template deploy:vercel
+    ```
+  </StepItem>
+</Step>
+
+## Docker
+
+Because the repository ships with a production Dockerfile, Doxa Docs can be
+deployed to any VPS or container host that supports Docker without writing a
+custom server wrapper. Build the image, run it behind your provider's reverse
+proxy, and point your domain at the host.
+
+<Step>
+  <StepItem title="Build the image">
+    Pass public site settings as build arguments so generated client assets,
+    canonical tags, sitemap entries, robots, and AI-native source URLs match
+    your production host.
+
+    ```bash
+    docker build \
+      -f apps/docs-template/Dockerfile \
+      --build-arg VITE_SITE_URL=https://docs.example.com \
+      -t doxa-docs \
+      .
+    ```
+
+  </StepItem>
+
+  <StepItem title="Run the container">
+    Pass private values as runtime environment variables. The app listens on
+    port `3000` inside the container; map any public host port to that internal
+    port. This example exposes the app at `http://localhost:6000`.
+
+    ```bash
+    docker run --rm -p 6000:3000 \
+      -e AI_API_KEY=your-provider-key \
+      doxa-docs
+    ```
+
+  </StepItem>
+</Step>
+
+<Note title="Minimal runtime" type="info">
+  Docker uses Nitro's Node server preset and a non-root distroless Node 24
+  runtime image. The final image contains only Nitro's generated `.output`
+  directory, not source files, package manager state, or development
+  dependencies. Seeing `Listening on: http://localhost:3000/` in the container
+  logs is expected when the host is mapped with `-p 6000:3000`.
+</Note>
+
+## Preflight Checklist
+
+- [x] `pnpm --filter @doxahq/docs-template generate-content-json` has been run after content changes.
+- [x] `src/contents/settings/documents.json` has no stale demo routes.
+- [x] `VITE_SITE_URL` points at the production docs URL.
+- [x] `AI_API_KEY` is set when chat is enabled.
+- [x] `/sitemap.xml` is generated and uses the production docs host.
+- [x] `/llms.txt` and `/llms-full.txt` return the expected content.
+- [x] Search opens with `Command+K` or `Ctrl+K`.
+- [x] Docker deployments map a host port to container port `3000` and pass secrets as runtime environment variables.
+
+<Note title="Build before deploy" type="success">
+  Run the same build target in CI that you deploy in production. That catches
+  route, MDX, and environment issues before traffic reaches the site.
+</Note>

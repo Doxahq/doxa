@@ -1,0 +1,36 @@
+---
+title: "Guides"
+description: "Outcome-oriented workflows for environments, migration, and production use"
+keywords: ["guides", "api", "install", "configuration"]
+icon: "bookOpen"
+---
+
+## Adding a New Environment
+
+Use environments to separate staging, production, and testing flag configurations.
+
+<Step>
+  <StepItem title="Create the environment via the control plane">
+    Send a POST request to the environments endpoint with your project and name.
+
+    ```bash
+    curl -X POST http://localhost:4000/environments \
+      -H "Authorization: Bearer $API_KEY"
+    ```
+  </StepItem>
+  <StepItem title="Seed initial flags for the environment">
+    Copy flag variations and rules from an existing environment or create from scratch.
+  </StepItem>
+  <StepItem title="Update your application">
+    Initialize the SDK for the new environment using its client key.
+  </StepItem>
+</Step>
+
+## Production Integration
+
+Deploy FlagForge with key rotation, audit-log monitoring, and webhooks for change notifications.
+
+<CardGrid>
+  <Card title="Getting Started" href="/getting-started" description="Install and run the API and SDK." />
+  <Card title="SDK Integration" href="/sdk-integration" description="Bootstrap FlagForgeClient for local evaluation." />
+</CardGrid>

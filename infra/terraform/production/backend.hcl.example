@@ -1,0 +1,7 @@
+# Copy to backend.hcl, then run: terraform init -backend-config=backend.hcl
+# Create the bucket once, with versioning on (see infra/terraform/README.md).
+bucket       = "doxa-terraform-state-<aws-account-id>"
+key          = "api/production.tfstate"
+region       = "us-east-1"
+encrypt      = true
+use_lockfile = true

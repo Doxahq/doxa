@@ -1,0 +1,53 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doxa-docs-runtime",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-12",
+  "vars": {
+    "API_BASE_URL": "http://localhost:8787",
+    "ALLOW_INTERNAL_HTTP": "true",
+    "DOCS_PUBLIC_BASE_URL": "http://localhost:8788"
+  },
+  "services": [
+    {
+      "binding": "API",
+      "service": "doxa-api",
+      "entrypoint": "InternalApi"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DOCS_BUCKET",
+      "bucket_name": "doxa-docs-artifacts"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "env": {
+    "production": {
+      "vars": {
+        "API_BASE_URL": "",
+        "ALLOW_INTERNAL_HTTP": "false",
+        "DOCS_PUBLIC_BASE_URL": "https://preview.doxa.so"
+      },
+      "services": [
+        {
+          "binding": "DOCS_RESOLVER",
+          "service": "doxa-docs-resolver-production"
+        },
+        {
+          "binding": "API",
+          "service": "doxa-api-production",
+          "entrypoint": "InternalApi"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "DOCS_BUCKET",
+          "bucket_name": "doxa-docs-artifacts-enam"
+        }
+      ]
+    }
+  }
+}

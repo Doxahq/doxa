@@ -1,0 +1,640 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+/* Typography for the docs content preview. The rules the published docs
+   renderer layers on top come from the shared package, so an edited page looks
+   the same in the editor as it does once published. */
+@plugin "@tailwindcss/typography";
+@import "@doxahq/docs-prose/styles.css";
+/* The shared prose components live outside this app, so Tailwind must scan
+   them for class names. */
+@source "../../../../packages/docs-prose/src";
+
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Near-black canvas with a faint cool cast. Pure black and pure white are
+     avoided: both cause halation on long reading and writing sessions. */
+  --background: #0b0b0c;
+  /* Strong text: titles, values, headings. */
+  --foreground: #f4f4f5;
+  /* Body and nav text, one step below the strong text. */
+  --body: #dcdce0;
+
+  /* Cards and panels. */
+  --card: #101012;
+  --card-foreground: #f4f4f5;
+  /* A 1px top highlight gives a card a faint edge without a drop shadow. */
+  --card-highlight: rgb(255 255 255 / 0.03);
+  /* Row and list hover inside a card. */
+  --surface-hover: #141417;
+  /* Hover and highlight on any surface, including menus. */
+  --overlay: rgb(255 255 255 / 0.045);
+  /* Keyboard focus on controls that are not text fields. */
+  --focus-wash: rgb(255 255 255 / 0.08);
+
+  /* Menus, popovers and dropdowns: one step above cards, with a stronger edge
+     and the only soft shadow in the system. */
+  --popover: #141416;
+  --popover-foreground: #f4f4f5;
+  --menu-border: #2e2e33;
+  --menu-shadow: 0 16px 40px rgb(0 0 0 / 0.55);
+
+  /* Blue accent: indicator bars, underlines, caret, focus ring. Used sparingly.
+     `--dashboard-primary` holds it under a name the docs site theme does not
+     set. The site canvas replaces `--primary` with the site's own accent, so
+     editor chrome inside the canvas reads `--dashboard-primary`. */
+  --dashboard-primary: #3d8bff;
+  --primary: var(--dashboard-primary);
+  --primary-foreground: #f4f4f5;
+  /* Blue text: links, the active tab, the active nav item. Lighter than the
+     accent so that it reads at body size on the dark surfaces. */
+  --primary-text: #6aa6ff;
+  /* Wash behind an active nav or list item. */
+  --primary-wash: rgb(61 139 255 / 0.09);
+
+  --secondary: #18181b;
+  --secondary-foreground: #dcdce0;
+
+  --muted: #1c1c20;
+  /* Secondary text: descriptions, inactive tabs. */
+  --muted-foreground: #a1a1aa;
+  /* Uppercase mono labels (STATUS, SLUG, WORKSPACE). */
+  --label: #8e8e98;
+  /* Icons and chevrons only. It fails text contrast, so never use it for text. */
+  --faint: #5c5c66;
+
+  /* Hover surface for buttons and menu items. */
+  --accent: #141417;
+  --accent-foreground: #f4f4f5;
+
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  /* Red text for destructive menu items on dark surfaces. */
+  --danger: #f87171;
+  --success: #4ade80;
+  --success-foreground: #0b0b0c;
+  --warning: #fbbf24;
+  --warning-foreground: #0b0b0c;
+
+  /* Main 1px borders. */
+  --border: #26262a;
+  /* A bordered control's edge on hover. */
+  --border-strong: #34343a;
+  /* Row separators inside cards. */
+  --divider: #1c1c20;
+  /* shadcn reads `--input` as the input border color. */
+  --input: #26262a;
+  /* Input fill, also the "Go to" search box. */
+  --input-background: #111113;
+  /* Focus ring: the blue accent, drawn as a 1px outline 2px off the element. */
+  --ring: var(--dashboard-primary);
+
+  /* Docs editor writing surface. */
+  --editor: #0f0f11;
+  /* Body text on the editor writing surface. */
+  --prose: #dfdfe3;
+  /* Inline code and code blocks in dashboard chrome and the source editor. */
+  --code: #161619;
+  /* Text selection. */
+  --selection: rgb(61 139 255 / 0.3);
+
+  /* Project monogram fills. Each passes 4.5:1 with the strong text on top. */
+  --monogram-0: #2563eb;
+  --monogram-1: #7c3aed;
+  --monogram-2: #0f766e;
+  --monogram-3: #b45309;
+  --monogram-4: #be123c;
+  --monogram-5: #15803d;
+  --monogram-6: #0369a1;
+  --monogram-7: #a21caf;
+
+  /* Soft corners — slight rounding (experiment; original was 0) */
+  --radius: 0.375rem;
+
+  /* Inline-code chip in the docs content preview. These are the docs renderer's
+     dark-theme values, so a page previews exactly as it publishes. They are
+     read only by the shared prose stylesheet, never by dashboard chrome. */
+  --code-bg: oklch(0.25 0 0);
+  --code-fg: oklch(0.8 0 0);
+  --code-border: oklch(0.35 0 0);
+
+  /* Sidebar and status bar sit one step darker than the page. Active items use
+     the blue accent bar and wash, hover is a faint white lift. */
+  --sidebar: #080809;
+  --sidebar-foreground: #dcdce0;
+  --sidebar-primary: #3d8bff;
+  --sidebar-primary-foreground: #f4f4f5;
+  --sidebar-accent: var(--overlay);
+  --sidebar-accent-foreground: #f4f4f5;
+  --sidebar-border: #26262a;
+  --sidebar-ring: #3d8bff;
+
+  /* Scrollbars. The thumb sits at border strength, so it reads as chrome and
+     not as content. It lifts on hover, so the target stays findable. */
+  --scrollbar-thumb: #26262a;
+  --scrollbar-thumb-hover: #3a3a40;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-body: var(--body);
+  --color-prose: var(--prose);
+  --color-label: var(--label);
+  --color-surface-hover: var(--surface-hover);
+  --color-input-background: var(--input-background);
+  --color-editor: var(--editor);
+  --color-code: var(--code);
+  --color-divider: var(--divider);
+  --color-primary-text: var(--primary-text);
+  --color-primary-wash: var(--primary-wash);
+  --color-faint: var(--faint);
+  --color-overlay: var(--overlay);
+  --color-danger: var(--danger);
+  --color-menu-border: var(--menu-border);
+  --color-border-strong: var(--border-strong);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-dashboard-primary: var(--dashboard-primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sora: "Sora", sans-serif;
+  --font-inter: "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-mono);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* The dashboard frame is exactly the window height, and each page scrolls
+     inside it. Libraries such as Mermaid add measure and tooltip elements at
+     the end of <body>, below the frame. They must not make the window scroll.
+     The body clips them, so a script scroll also finds nothing below the frame.
+     Fixed layers (menus, dialogs, toasts) are not clipped. */
+  html:has([data-dashboard-shell]) {
+    overflow: hidden;
+  }
+
+  html:has([data-dashboard-shell]) body {
+    position: relative;
+    height: 100svh;
+    overflow: clip;
+  }
+
+  /* Only fields that take typed text show a focus ring: a 1px accent outline
+     set 2px off the field. Other controls show keyboard focus as a light wash
+     over their own background (a gradient layer, so the background color and
+     shadows stay). Solid buttons darken instead, in `ui/button.tsx`, because
+     a light wash does not show on them. Components do not draw their own
+     rings. */
+  :focus-visible {
+    outline: none;
+  }
+
+  /* A text field with a role, such as the command menu search (a combobox),
+     keeps the text-field focus style below, never the wash. */
+  :where(a, button, summary, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="option"], [role="switch"], [role="checkbox"], [role="radio"], [role="combobox"], [tabindex]:not([tabindex="-1"]):not([contenteditable])):not(input, textarea):focus-visible {
+    background-image: linear-gradient(var(--focus-wash), var(--focus-wash));
+  }
+
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"]):focus-visible,
+  textarea:focus-visible {
+    outline: 1px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--selection);
+  }
+
+  /* JetBrains Mono joins sequences such as "//", "://" and "=>" into single
+     ligature glyphs. In URLs, paths and code that hides the real characters:
+     "https://" reads as "https: /". Technical text shows every character. */
+  input,
+  textarea,
+  code,
+  kbd,
+  pre,
+  samp,
+  .font-mono,
+  .cm-editor {
+    font-variant-ligatures: none;
+  }
+}
+
+/* A card or panel: raised surface, hairline border, 1px top highlight. */
+@utility surface-card {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 var(--card-highlight);
+}
+
+/* A floating menu or popover surface. */
+@utility surface-menu {
+  background-color: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--menu-shadow);
+}
+
+/* An inline text link: accent text, underline on hover only. */
+@utility text-link {
+  color: var(--primary-text);
+  text-decoration-line: none;
+  text-underline-offset: 3px;
+
+  &:hover {
+    text-decoration-line: underline;
+  }
+}
+
+/* Thin, near-invisible scrollbar for dark dashboard surfaces. Firefox and
+   recent Safari use `scrollbar-width`. Chrome and older Safari use the
+   `-webkit-` rules. Both paths draw the same thing. */
+@utility scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 9999px;
+  }
+
+  &:hover::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+}
+
+/* Stencil / outlined text effect for hero headlines */
+.text-stencil {
+  -webkit-text-stroke: 2px oklch(0.95 0 0);
+  color: transparent;
+}
+
+/* Subtle grid pattern — thin lines */
+.grid-pattern {
+  background-image:
+    linear-gradient(oklch(0.15 0 0) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.15 0 0) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Subtle dot pattern */
+.dot-pattern {
+  background-image: radial-gradient(circle, oklch(0.2 0 0) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Horizontal rule — thin white divider */
+.section-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    oklch(0.25 0 0),
+    oklch(0.25 0 0),
+    transparent
+  );
+}
+
+/* Terminal window panels */
+.terminal-window {
+  border: 1px solid oklch(0.22 0 0);
+  background: oklch(0.04 0 0);
+}
+
+.terminal-window-header {
+  border-bottom: 1px solid oklch(0.18 0 0);
+  background: oklch(0.06 0 0);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.terminal-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: oklch(0.25 0 0);
+}
+
+/* Bottom fade mask — aggressively fades the bottom 40% to transparent */
+.mask-fade-bottom {
+  mask-image: linear-gradient(to bottom, black 55%, rgba(0,0,0,0.3) 75%, transparent 95%);
+  -webkit-mask-image: linear-gradient(to bottom, black 55%, rgba(0,0,0,0.3) 75%, transparent 95%);
+}
+
+/* ─── Site canvas ─────────────────────────────────────────────────────────
+   The part of the content editor drawn with the docs site's theme. The site's
+   token values arrive as inline variables (see `site-canvas.tsx`). These rules
+   repeat what the published site sets on its page body. */
+.doxa-site-canvas {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  color-scheme: light;
+}
+
+.doxa-site-canvas.dark {
+  color-scheme: dark;
+}
+
+/* The published site keeps Tailwind's default monospace stack for code, and
+   shows code ligatures. The dashboard sets JetBrains Mono and turns them off. */
+.doxa-site-canvas :where(code, kbd, samp, pre) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-variant-ligatures: normal;
+}
+
+/* ─── Write editor ────────────────────────────────────────────────────────
+   The page body is the published article: `ARTICLE_PROSE_CLASS` and
+   `.prose-content` style it inside the site canvas, so no typography is set
+   here. These rules add only what editing needs: the caret, the empty-block
+   hint, and the outline of a selected block. */
+.doxa-write-content {
+  outline: none;
+  caret-color: var(--dashboard-primary);
+}
+
+/* Empty-block hint: "Type '/' for commands…". */
+.doxa-write-content p.is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+}
+
+/* Code colors: the token spans carry both themes, as the site's `.shiki`
+   markup does, and the canvas's color mode picks one. */
+.doxa-write-content .doxa-code-token {
+  color: var(--shiki-light);
+}
+
+.dark .doxa-write-content .doxa-code-token {
+  color: var(--shiki-dark);
+}
+
+/* A step with no title yet. */
+.doxa-write-content h3[data-step-title].is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+}
+
+.doxa-write-content hr.ProseMirror-selectednode {
+  border-top-color: var(--dashboard-primary);
+}
+
+/* Tables. TipTap keeps the header row in `tbody` and wraps each cell's text
+   in a paragraph. The published table has a `thead` and bare cell text, so
+   these rules give the editor's header row the typography plugin's `thead`
+   look and drop the cell paragraphs' margins. */
+.doxa-write-content .tableWrapper {
+  overflow-x: auto;
+}
+
+/* A table is as wide as the article, as on the site, whatever width TipTap
+   writes on it. */
+.doxa-write-content table {
+  width: 100% !important;
+}
+
+.doxa-write-content table col {
+  width: auto !important;
+}
+
+.doxa-write-content table :where(th, td) > p {
+  margin: 0;
+}
+
+.doxa-write-content table tr:has(> th) {
+  border-bottom-color: var(--tw-prose-th-borders);
+}
+
+.doxa-write-content table th {
+  color: var(--tw-prose-headings);
+  font-weight: 600;
+  vertical-align: bottom;
+  padding: 0 0.5714286em 0.5714286em;
+}
+
+.doxa-write-content table th:first-child {
+  padding-inline-start: 0;
+}
+
+.doxa-write-content table th:last-child {
+  padding-inline-end: 0;
+}
+
+.doxa-write-content table .selectedCell {
+  background-color: color-mix(in srgb, var(--dashboard-primary) 12%, transparent);
+}
+
+.doxa-card-group {
+  margin: 14px 0 8px;
+}
+
+.doxa-mdx-block {
+  margin: 12px 0;
+  border: 1px solid var(--border);
+}
+
+.doxa-card-group[data-selected],
+.doxa-atom-block[data-selected],
+.doxa-mdx-block[data-selected] {
+  outline: 1px solid var(--dashboard-primary);
+  outline-offset: 2px;
+}
+
+.doxa-gutter {
+  transition: opacity 120ms;
+}
+
+/* ─── Login sync panel ────────────────────────────────────────────────────
+   The right panel of the login page (`auth-brand-panel.tsx`): a code diff
+   above the logo and the docs page it changes below. The colors are the
+   landing page's (`styles/marketing/home.css`). Every moving part runs on one
+   6s loop, so each percentage below is a point in that loop:
+     0–31%   a dot runs down the line from the diff to the logo
+     28–50%  the logo glows
+     36–65%  a dot runs on from the logo to the docs page
+     64–74%  the updated docs wipe in, and the status turns to SYNCED
+     93–99%  the updated docs wipe out for the next loop */
+.doxa-sync-row::before,
+.doxa-sync-row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-image: linear-gradient(90deg, var(--border-strong) 0 4px, transparent 4px 8px);
+  background-size: 8px 1px;
+  transform-origin: 0% 50%;
+  animation: doxa-sync-draw 1.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.doxa-sync-row::before {
+  top: 0;
+}
+
+.doxa-sync-row::after {
+  bottom: 0;
+}
+
+.doxa-sync-del {
+  color: #f09a9a;
+  background: rgb(229 90 90 / 0.08);
+}
+
+.doxa-sync-add {
+  color: #9cc2ff;
+  background: rgb(61 123 255 / 0.12);
+}
+
+.doxa-sync-changed,
+.doxa-sync-done {
+  color: #9cc2ff;
+}
+
+/* 5px wide, centered on the 1px line. */
+.doxa-sync-dot {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 5px;
+  height: 5px;
+  background: #9cc2ff;
+  box-shadow: 0 0 8px rgb(156 194 255 / 0.8);
+  opacity: 0;
+  animation: 6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.doxa-sync-dot--in {
+  animation-name: doxa-sync-in;
+}
+
+.doxa-sync-dot--out {
+  animation-name: doxa-sync-out;
+}
+
+/* The logo glows only where the panes show (Tailwind's `xl`). */
+@media (min-width: 80rem) {
+  .doxa-sync-mark {
+    animation: doxa-sync-glow 6s ease-in-out infinite;
+  }
+}
+
+.doxa-sync-pending {
+  animation: doxa-sync-pending 6s step-end infinite;
+}
+
+.doxa-sync-done {
+  opacity: 0;
+  animation: doxa-sync-done 6s step-end infinite;
+}
+
+.doxa-sync-new {
+  clip-path: inset(0 100% 0 0);
+  animation: doxa-sync-wipe 6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@keyframes doxa-sync-draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes doxa-sync-in {
+  0% { top: 0; opacity: 0; }
+  4% { top: 0; opacity: 1; }
+  28% { top: calc(100% - 5px); opacity: 1; }
+  31%, 100% { top: calc(100% - 5px); opacity: 0; }
+}
+
+@keyframes doxa-sync-out {
+  0%, 36% { top: 0; opacity: 0; }
+  40% { top: 0; opacity: 1; }
+  62% { top: calc(100% - 5px); opacity: 1; }
+  65%, 100% { top: calc(100% - 5px); opacity: 0; }
+}
+
+@keyframes doxa-sync-glow {
+  0%, 28% { filter: drop-shadow(0 0 0 rgb(61 123 255 / 0)); }
+  36% { filter: drop-shadow(0 0 10px rgb(61 123 255 / 0.9)); }
+  50%, 100% { filter: drop-shadow(0 0 0 rgb(61 123 255 / 0)); }
+}
+
+@keyframes doxa-sync-pending {
+  0% { opacity: 1; }
+  64% { opacity: 0; }
+  97%, 100% { opacity: 1; }
+}
+
+@keyframes doxa-sync-done {
+  0% { opacity: 0; }
+  64% { opacity: 1; }
+  97%, 100% { opacity: 0; }
+}
+
+/* The new copy comes in with the diff's "+" tint, which then settles to the pane color. */
+@keyframes doxa-sync-wipe {
+  0%, 64% { clip-path: inset(0 100% 0 0); background-color: color-mix(in srgb, var(--editor), #3d7bff 12%); }
+  74% { clip-path: inset(0 0 0 0); background-color: color-mix(in srgb, var(--editor), #3d7bff 12%); }
+  88%, 93% { clip-path: inset(0 0 0 0); background-color: var(--editor); }
+  99%, 100% { clip-path: inset(0 0 0 100%); background-color: var(--editor); }
+}

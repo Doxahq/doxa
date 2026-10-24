@@ -1,0 +1,61 @@
+{
+  "name": "@doxahq/agent",
+  "version": "0.1.1",
+  "description": "Shared Doxa documentation-generation agent.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./adapters/node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    },
+    "./structure": {
+      "types": "./dist/structure.d.ts",
+      "import": "./dist/structure.js"
+    }
+  },
+  "files": [
+    "dist",
+    "runtime",
+    "README.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup && node scripts/harden-dist.mjs && node scripts/assert-dist.mjs",
+    "preflight": "node scripts/preflight.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "pack:dry-run": "pnpm pack --dry-run"
+  },
+  "dependencies": {
+    "@doxahq/contracts": "workspace:*",
+    "@doxahq/mdx-runtime": "workspace:*",
+    "@mdx-js/mdx": "^3.1.1",
+    "@tanstack/ai": "0.42.0",
+    "@tanstack/ai-anthropic": "0.16.3",
+    "@tanstack/ai-openrouter": "0.15.10",
+    "remark-parse": "11.0.0",
+    "remark-stringify": "11.0.0",
+    "unified": "11.0.5",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/mdast": "4.0.4",
+    "@types/node": "^26.6.5",
+    "javascript-obfuscator": "^5.4.3",
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

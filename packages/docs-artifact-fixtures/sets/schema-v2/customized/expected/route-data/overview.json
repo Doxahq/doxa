@@ -1,0 +1,75 @@
+{
+  "ok": true,
+  "data": {
+    "type": "page",
+    "slug": "overview",
+    "href": "/overview",
+    "homeHref": "/overview",
+    "site": {
+      "name": "Customized Docs",
+      "description": "A customized frozen site.",
+      "url": "https://frozen.doxa.page"
+    },
+    "features": {
+      "branding": true,
+      "rightSidebar": true,
+      "feedbackEdit": false,
+      "tableOfContents": true,
+      "scrollToTop": true,
+      "ai": {
+        "chat": false,
+        "chatWithPage": false,
+        "floatingInput": false
+      },
+      "copyPage": {
+        "markdown": true,
+        "rawText": true
+      },
+      "apiPlayground": true,
+      "rawMarkdown": true,
+      "loadFromGithub": false
+    },
+    "sections": [
+      {
+        "slug": "default",
+        "label": "Docs",
+        "default": true
+      }
+    ],
+    "currentSection": {
+      "slug": "default",
+      "label": "Docs",
+      "default": true
+    },
+    "sectionHomeHrefs": {
+      "default": "/overview"
+    },
+    "sectionNavigation": [
+      {
+        "title": "Overview",
+        "href": "/overview"
+      }
+    ],
+    "sectionRoutes": [
+      {
+        "title": "Overview",
+        "href": "/overview"
+      }
+    ],
+    "routeTitle": "Overview",
+    "sectionHeading": null,
+    "previous": null,
+    "next": null,
+    "page": {
+      "slug": "overview",
+      "href": "/overview",
+      "title": "Overview",
+      "description": "Customized site overview",
+      "sourcePath": "source/overview/index.mdx",
+      "body": "---\ntitle: Overview\ndescription: Customized site overview\n---\n\n# Overview\n\nWelcome to the customized documentation fixture.\n",
+      "keywords": [],
+      "sectionSlug": "default",
+      "headings": []
+    }
+  }
+}

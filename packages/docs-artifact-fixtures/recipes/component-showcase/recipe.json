@@ -1,0 +1,91 @@
+{
+  "description": "A structured site with two sections, grouped navigation, icons, badges, every MDX component from the component playbook, and one REST endpoint reference page.",
+  "siteId": "site-frozen-showcase",
+  "versionId": "version-frozen-showcase-1",
+  "projectId": "project-frozen-showcase",
+  "projectSlug": "frozen-showcase",
+  "projectName": "Frozen Showcase",
+  "generatedAt": "2026-09-23T00:00:00.000Z",
+  "features": { "apiPlayground": true },
+  "navigation": {
+    "sections": [
+      {
+        "slug": "default",
+        "items": [],
+        "groups": [
+          {
+            "heading": "Start Here",
+            "items": ["overview/index.mdx", "quickstart/index.mdx"]
+          },
+          {
+            "heading": "Authoring",
+            "items": ["components/index.mdx", "diagrams/index.mdx"]
+          }
+        ]
+      },
+      {
+        "slug": "api",
+        "items": ["api/overview/index.mdx"],
+        "groups": [
+          {
+            "heading": "Messages",
+            "items": ["api/messages/create/index.mdx"]
+          }
+        ]
+      }
+    ],
+    "icons": {
+      "overview/index.mdx": "book",
+      "quickstart/index.mdx": "rocket",
+      "api/overview/index.mdx": "server"
+    },
+    "navTitles": {
+      "overview/index.mdx": "Overview"
+    },
+    "navBadges": {
+      "diagrams/index.mdx": "New"
+    },
+    "sectionMetadata": {
+      "default": { "label": "Documentation", "kind": "documentation", "layout": "docs" },
+      "api": { "label": "API Reference", "kind": "reference", "layout": "reference" }
+    }
+  },
+  "pages": [
+    {
+      "title": "Frozen Showcase",
+      "route": "/",
+      "navigationPath": "overview/index.mdx",
+      "file": "pages/overview.mdx"
+    },
+    {
+      "title": "Quickstart",
+      "route": "/quickstart",
+      "navigationPath": "quickstart/index.mdx",
+      "file": "pages/quickstart.mdx"
+    },
+    {
+      "title": "MDX Components",
+      "route": "/components",
+      "navigationPath": "components/index.mdx",
+      "file": "pages/components.mdx"
+    },
+    {
+      "title": "Diagrams And Trees",
+      "route": "/diagrams",
+      "navigationPath": "diagrams/index.mdx",
+      "file": "pages/diagrams.mdx"
+    },
+    {
+      "title": "API Overview",
+      "route": "/api/overview",
+      "navigationPath": "api/overview/index.mdx",
+      "file": "pages/api-overview.mdx"
+    },
+    {
+      "title": "Create Message",
+      "route": "/api/messages/create",
+      "navigationPath": "api/messages/create/index.mdx",
+      "file": "pages/api-messages-create.mdx"
+    }
+  ]
+}

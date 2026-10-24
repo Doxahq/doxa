@@ -1,0 +1,18 @@
+sequenceDiagram
+  participant User
+  participant Template as apps/docs-template
+  participant Docs as apps/docs-runtime
+  participant API as apps/api InternalApi
+  participant DB as Postgres
+  participant R2
+
+  User->>Template: Open docs domain/path
+  Template->>Docs: POST /runtime-source
+  Docs->>API: RPC resolveDocsProject(projectId)
+  API->>DB: Find published docs version
+  API-->>Docs: artifactPrefix + manifestPath
+
+  Docs->>R2: Read manifest.json
+  Docs->>R2: Read settings + source/*.mdx
+  Docs-->>Template: Runtime JSON payload
+  Template-->>User: Render docs page

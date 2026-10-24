@@ -1,0 +1,39 @@
+---
+title: Frozen Showcase
+description: A frozen artifact set that exercises every documented MDX component.
+keywords: ["overview", "showcase", "compatibility"]
+icon: book
+---
+
+Frozen Showcase is a fixture site. It exists so the evergreen renderer proves it can still read artifact schema version 1.
+
+<CardGrid>
+  <Card
+    subtitle="Start"
+    title="Quickstart"
+    description="Install dependencies and run the docs site locally."
+    href="/quickstart"
+  />
+  <Card
+    title="Components"
+    href="/components"
+    icon="alignJustify"
+    variant="small"
+    description="Notes, steps, and tabs."
+  />
+  <Card
+    title="Repository"
+    href="https://github.com/doxahq/doxa"
+    external={true}
+  />
+</CardGrid>
+
+## What this site covers
+
+- Grouped navigation with icons and badges.
+- Two sections: documentation and API reference.
+- Every component from the component playbook.
+
+<Note title="Frozen">
+  Do not edit the pages of this site. A change here silently weakens the compatibility gate.
+</Note>

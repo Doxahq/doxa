@@ -1,0 +1,73 @@
+---
+title: Code blocks
+description: Show code with syntax highlighting, file titles, line numbers, and highlighted lines.
+keywords: ["code", "syntax highlighting", "snippets"]
+icon: code
+---
+
+Code blocks have syntax highlighting and a copy button. Put the language name after the opening fence.
+
+## A basic code block
+
+```bash
+npm install @example/sdk
+```
+
+## Add a file title
+
+Add `title="..."` after the language to show a file name above the code.
+
+```ts title="src/client.ts"
+import { createClient } from "@example/sdk";
+
+export const client = createClient({
+  apiKey: process.env.EXAMPLE_API_KEY,
+});
+```
+
+## Line numbers and highlighted lines
+
+Add `showLineNumbers` to number the lines. Add line ranges in braces, for example `{3-5}`, to highlight lines.
+
+```ts {3-5} showLineNumbers
+import { client } from "./client";
+
+const note = await client.notes.create({
+  body: "Ship the docs today.",
+});
+
+console.log(note.id);
+```
+
+## The same example in more than one language
+
+Use tabs when readers choose one option, for example a package manager:
+
+<Tabs defaultValue="npm" className="pt-5 pb-1">
+  <TabsList>
+    <TabsTrigger value="npm">npm</TabsTrigger>
+    <TabsTrigger value="pnpm">pnpm</TabsTrigger>
+    <TabsTrigger value="yarn">yarn</TabsTrigger>
+  </TabsList>
+  <TabsContent value="npm">
+
+```bash
+npm install @example/sdk
+```
+
+  </TabsContent>
+  <TabsContent value="pnpm">
+
+```bash
+pnpm add @example/sdk
+```
+
+  </TabsContent>
+  <TabsContent value="yarn">
+
+```bash
+yarn add @example/sdk
+```
+
+  </TabsContent>
+</Tabs>

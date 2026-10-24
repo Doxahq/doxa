@@ -1,0 +1,97 @@
+{
+  "ok": true,
+  "data": {
+    "type": "page",
+    "slug": "",
+    "href": "/",
+    "homeHref": "/",
+    "site": {
+      "name": "frozen-starter",
+      "description": "Documentation for frozen-starter.",
+      "url": "https://frozen.doxa.page"
+    },
+    "features": {
+      "branding": true,
+      "rightSidebar": true,
+      "feedbackEdit": false,
+      "tableOfContents": true,
+      "scrollToTop": true,
+      "ai": {
+        "chat": false,
+        "chatWithPage": false,
+        "floatingInput": false
+      },
+      "copyPage": {
+        "markdown": true,
+        "rawText": true
+      },
+      "apiPlayground": true,
+      "rawMarkdown": true,
+      "loadFromGithub": false
+    },
+    "sections": [
+      {
+        "slug": "default",
+        "label": "Docs",
+        "default": true
+      }
+    ],
+    "currentSection": {
+      "slug": "default",
+      "label": "Docs",
+      "default": true
+    },
+    "sectionHomeHrefs": {
+      "default": "/"
+    },
+    "sectionNavigation": [
+      {
+        "title": "Frozen Starter",
+        "href": "/"
+      },
+      {
+        "title": "Getting Started",
+        "href": "/getting-started"
+      }
+    ],
+    "sectionRoutes": [
+      {
+        "title": "Frozen Starter",
+        "href": "/"
+      },
+      {
+        "title": "Getting Started",
+        "href": "/getting-started"
+      }
+    ],
+    "routeTitle": "Frozen Starter",
+    "sectionHeading": null,
+    "previous": null,
+    "next": {
+      "title": "Getting Started",
+      "href": "/getting-started"
+    },
+    "page": {
+      "slug": "",
+      "href": "/",
+      "title": "Frozen Starter",
+      "description": "Generated documentation for Frozen Starter",
+      "sourcePath": "source/index.mdx",
+      "body": "---\ntitle: Frozen Starter\ndescription: Generated documentation for Frozen Starter\n---\n\n# Frozen Starter\n\nThis is the first generated Doxa documentation version for Frozen Starter.\n\n## Local MVP Path\n\n- The dashboard created a generation job.\n- The API wrote versioned docs artifacts to R2.\n- The docs runtime now serves this published version from the shared Worker.\n\n## Next Step\n\nWire the Cloudflare container runner to replace this starter artifact with full repository-aware generation.\n",
+      "keywords": [],
+      "sectionSlug": "default",
+      "headings": [
+        {
+          "level": 2,
+          "text": "Local MVP Path",
+          "href": "#local-mvp-path"
+        },
+        {
+          "level": 2,
+          "text": "Next Step",
+          "href": "#next-step"
+        }
+      ]
+    }
+  }
+}

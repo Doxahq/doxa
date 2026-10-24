@@ -1,0 +1,9 @@
+{
+  "name": "starter",
+  "description": "The two-page starter site that the API publishes for a brand-new project, with flat navigation and no custom sections.",
+  "schemaVersion": 1,
+  "siteId": "site-frozen-starter",
+  "versionId": "version-frozen-starter-1",
+  "projectId": "project-frozen-starter",
+  "projectSlug": "frozen-starter"
+}

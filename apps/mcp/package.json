@@ -1,0 +1,35 @@
+{
+  "name": "@doxahq/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8791 --inspector-port 9233 --persist-to ../../.wrangler/state",
+    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.1",
+    "@doxahq/api": "workspace:*",
+    "@doxahq/contracts": "workspace:*",
+    "@doxahq/db": "workspace:*",
+    "@doxahq/docs-engine": "workspace:*",
+    "@doxahq/docs-search": "workspace:*",
+    "@doxahq/mdx-runtime": "workspace:*",
+    "@doxahq/site-config": "workspace:*",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/server": "2.3.1",
+    "agents": "0.26.0",
+    "drizzle-orm": "^0.45.2",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260612.0",
+    "@modelcontextprotocol/ext-tasks": "0.2.2",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9",
+    "wrangler": "^4.82.2"
+  }
+}

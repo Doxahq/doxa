@@ -1,0 +1,17 @@
+{
+  "description": "The two-page starter site that the API publishes for a brand-new project, with flat navigation and no custom sections.",
+  "siteId": "site-frozen-starter",
+  "versionId": "version-frozen-starter-1",
+  "projectId": "project-frozen-starter",
+  "projectSlug": "frozen-starter",
+  "projectName": "Frozen Starter",
+  "generatedAt": "2026-09-23T00:00:00.000Z",
+  "pages": [
+    { "title": "Frozen Starter", "route": "/", "file": "pages/index.mdx" },
+    {
+      "title": "Getting Started",
+      "route": "/getting-started",
+      "file": "pages/getting-started.mdx"
+    }
+  ]
+}

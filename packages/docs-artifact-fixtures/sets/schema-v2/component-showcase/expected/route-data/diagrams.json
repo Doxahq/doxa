@@ -1,0 +1,144 @@
+{
+  "ok": true,
+  "data": {
+    "type": "page",
+    "slug": "diagrams",
+    "href": "/diagrams",
+    "homeHref": "/",
+    "site": {
+      "name": "Frozen Showcase",
+      "description": "",
+      "url": "https://frozen.doxa.page"
+    },
+    "features": {
+      "branding": true,
+      "rightSidebar": true,
+      "feedbackEdit": false,
+      "tableOfContents": true,
+      "scrollToTop": true,
+      "ai": {
+        "chat": false,
+        "chatWithPage": false,
+        "floatingInput": false
+      },
+      "copyPage": {
+        "markdown": true,
+        "rawText": true
+      },
+      "apiPlayground": true,
+      "rawMarkdown": true,
+      "loadFromGithub": false
+    },
+    "sections": [
+      {
+        "slug": "default",
+        "label": "Documentation",
+        "default": true,
+        "kind": "documentation",
+        "layout": "docs"
+      },
+      {
+        "slug": "api",
+        "label": "API Reference",
+        "kind": "reference",
+        "layout": "reference",
+        "default": false
+      }
+    ],
+    "currentSection": {
+      "slug": "default",
+      "label": "Documentation",
+      "default": true,
+      "kind": "documentation",
+      "layout": "docs"
+    },
+    "sectionHomeHrefs": {
+      "default": "/",
+      "api": "/api/messages/create"
+    },
+    "sectionNavigation": [
+      {
+        "heading": "Start Here"
+      },
+      {
+        "title": "Overview",
+        "href": "/",
+        "icon": "book"
+      },
+      {
+        "title": "Quickstart",
+        "href": "/quickstart",
+        "icon": "rocket"
+      },
+      {
+        "spacer": true
+      },
+      {
+        "heading": "Authoring"
+      },
+      {
+        "title": "MDX Components",
+        "href": "/components"
+      },
+      {
+        "title": "Diagrams And Trees",
+        "href": "/diagrams",
+        "badge": "New"
+      }
+    ],
+    "sectionRoutes": [
+      {
+        "title": "Overview",
+        "href": "/",
+        "icon": "book"
+      },
+      {
+        "title": "Quickstart",
+        "href": "/quickstart",
+        "icon": "rocket"
+      },
+      {
+        "title": "MDX Components",
+        "href": "/components"
+      },
+      {
+        "title": "Diagrams And Trees",
+        "href": "/diagrams",
+        "badge": "New"
+      }
+    ],
+    "routeTitle": "Diagrams And Trees",
+    "sectionHeading": "Authoring",
+    "previous": {
+      "title": "MDX Components",
+      "href": "/components"
+    },
+    "next": null,
+    "page": {
+      "slug": "diagrams",
+      "href": "/diagrams",
+      "title": "Diagrams And Trees",
+      "description": "Mermaid diagrams and file trees rendered from frozen content.",
+      "sourcePath": "source/diagrams/index.mdx",
+      "body": "---\ntitle: Diagrams And Trees\ndescription: Mermaid diagrams and file trees rendered from frozen content.\nkeywords: [\"mermaid\", \"diagram\", \"file tree\"]\n---\n\n## Request flow\n\n<Mermaid\n  chart={`graph TD;\n    Visitor[Visitor] --> Dispatcher[doxa-docs-renderer];\n    Dispatcher --> Worker[Dynamic Worker];\n    Worker --> Runtime[docs-runtime];\n    Runtime --> R2[(R2 artifacts)];`}\n/>\n\n## Project layout\n\n<FileTree>\n  <Folder name=\"src\" label=\"Source\" defaultOpen>\n    <Folder name=\"contents\" label=\"Docs content\">\n      <File name=\"docs/overview/index.mdx\" label=\"Overview page\" />\n    </Folder>\n    <File name=\"router.tsx\" />\n  </Folder>\n</FileTree>\n",
+      "keywords": [
+        "[\"mermaid\"",
+        "\"diagram\"",
+        "\"file tree\"]"
+      ],
+      "sectionSlug": "default",
+      "headings": [
+        {
+          "level": 2,
+          "text": "Request flow",
+          "href": "#request-flow"
+        },
+        {
+          "level": 2,
+          "text": "Project layout",
+          "href": "#project-layout"
+        }
+      ]
+    }
+  }
+}

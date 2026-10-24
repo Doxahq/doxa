@@ -1,0 +1,81 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doxa-email",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-12",
+  "vars": {
+    "EMAIL_PROVIDER": "cloudflare",
+    "EMAIL_FROM_TRANSACTIONAL": "Doxa <no-reply@mail.doxa.so>",
+    "EMAIL_FROM_NOTIFICATIONS": "Doxa <no-reply@notification.doxa.so>",
+    "EMAIL_REPLY_TO": "support@doxa.so"
+  },
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": [
+        "no-reply@mail.doxa.so",
+        "no-reply@notification.doxa.so"
+      ]
+    }
+  ],
+  "services": [
+    {
+      "binding": "API",
+      "service": "doxa-api",
+      "entrypoint": "EmailDeliveryApi"
+    }
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "queue": "doxa-email-deliveries",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_concurrency": 5,
+        "max_retries": 30,
+        "retry_delay": 30
+      }
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "env": {
+    "production": {
+      "vars": {
+        "EMAIL_PROVIDER": "cloudflare",
+        "EMAIL_FROM_TRANSACTIONAL": "Doxa <no-reply@mail.doxa.so>",
+        "EMAIL_FROM_NOTIFICATIONS": "Doxa <no-reply@notification.doxa.so>",
+        "EMAIL_REPLY_TO": "support@doxa.so"
+      },
+      "send_email": [
+        {
+          "name": "EMAIL",
+          "allowed_sender_addresses": [
+            "no-reply@mail.doxa.so",
+            "no-reply@notification.doxa.so"
+          ]
+        }
+      ],
+      "services": [
+        {
+          "binding": "API",
+          "service": "doxa-api-production",
+          "entrypoint": "EmailDeliveryApi"
+        }
+      ],
+      "queues": {
+        "consumers": [
+          {
+            "queue": "doxa-email-deliveries",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_concurrency": 5,
+            "max_retries": 30,
+            "retry_delay": 30
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+---
+title: Diagrams and file trees
+description: Draw flowcharts and sequence diagrams with Mermaid, and show folder layouts with file trees.
+keywords: ["mermaid", "diagram", "file tree"]
+icon: compass
+---
+
+Diagrams explain how parts of a system connect. Doxa draws them from text, so they stay easy to change.
+
+## Flowchart
+
+<Mermaid
+  chart={`graph LR;
+    Write[Write a page] --> Draft[Save a draft];
+    Draft --> Review[Preview the change];
+    Review --> Publish[Publish];
+    Publish --> Live[Live site];`}
+/>
+
+## Sequence diagram
+
+<Mermaid
+  chart={`sequenceDiagram
+    participant App
+    participant API
+    participant Database
+    App->>API: POST /v1/notes
+    API->>Database: Insert note
+    Database-->>API: Note row
+    API-->>App: 201 Created`}
+/>
+
+## File tree
+
+Use a file tree to show the layout of a project.
+
+<FileTree>
+  <Folder name="my-app" defaultOpen>
+    <Folder name="src" label="Source code" defaultOpen>
+      <File name="index.ts" label="Entry point" />
+      <File name="client.ts" />
+    </Folder>
+    <File name="package.json" />
+    <File name="README.md" />
+  </Folder>
+</FileTree>

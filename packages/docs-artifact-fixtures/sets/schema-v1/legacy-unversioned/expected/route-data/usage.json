@@ -1,0 +1,86 @@
+{
+  "ok": true,
+  "data": {
+    "type": "page",
+    "slug": "usage",
+    "href": "/usage",
+    "homeHref": "/",
+    "site": {
+      "name": "frozen-legacy",
+      "description": "Documentation for frozen-legacy.",
+      "url": "https://frozen.doxa.page"
+    },
+    "features": {
+      "branding": true,
+      "rightSidebar": true,
+      "feedbackEdit": false,
+      "tableOfContents": true,
+      "scrollToTop": true,
+      "ai": {
+        "chat": false,
+        "chatWithPage": false,
+        "floatingInput": false
+      },
+      "copyPage": {
+        "markdown": true,
+        "rawText": true
+      },
+      "apiPlayground": true,
+      "rawMarkdown": true,
+      "loadFromGithub": false
+    },
+    "sections": [
+      {
+        "slug": "default",
+        "label": "Docs",
+        "default": true
+      }
+    ],
+    "currentSection": {
+      "slug": "default",
+      "label": "Docs",
+      "default": true
+    },
+    "sectionHomeHrefs": {
+      "default": "/"
+    },
+    "sectionNavigation": [
+      {
+        "title": "Frozen Legacy",
+        "href": "/"
+      },
+      {
+        "title": "Usage",
+        "href": "/usage"
+      }
+    ],
+    "sectionRoutes": [
+      {
+        "title": "Frozen Legacy",
+        "href": "/"
+      },
+      {
+        "title": "Usage",
+        "href": "/usage"
+      }
+    ],
+    "routeTitle": "Usage",
+    "sectionHeading": null,
+    "previous": {
+      "title": "Frozen Legacy",
+      "href": "/"
+    },
+    "next": null,
+    "page": {
+      "slug": "usage",
+      "href": "/usage",
+      "title": "Usage",
+      "description": "A second page so navigation has a previous and next link.",
+      "sourcePath": "source/usage/index.mdx",
+      "body": "---\ntitle: Usage\ndescription: A second page so navigation has a previous and next link.\n---\n\n# Usage\n\n```bash\ndoxa publish\n```\n\nSee the [overview](/) for context.\n",
+      "keywords": [],
+      "sectionSlug": "default",
+      "headings": []
+    }
+  }
+}

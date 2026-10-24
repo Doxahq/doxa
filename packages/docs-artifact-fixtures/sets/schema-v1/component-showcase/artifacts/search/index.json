@@ -1,0 +1,309 @@
+{
+  "schemaVersion": 1,
+  "contentVersion": "version-frozen-showcase-1",
+  "documents": [
+    {
+      "id": "/",
+      "slug": "/",
+      "title": "Overview",
+      "description": "A frozen artifact set that exercises every documented MDX component.",
+      "breadcrumb": [
+        "Start Here"
+      ],
+      "icon": "book",
+      "section": "default",
+      "headings": [
+        "What this site covers",
+        "Do not edit the pages of this site. A change here silently weakens the compatibility gate."
+      ],
+      "keywords": [
+        "overview",
+        "showcase",
+        "compatibility"
+      ],
+      "content": "Frozen Showcase is a fixture site. It exists so the evergreen renderer proves it can still read artifact schema version 1. <Card subtitle=\"Start\" title=\"Quickstart\" description=\"Install dependencies and run the docs site locally.\" href=\"/quickstart\" <Card title=\"Components\" href=\"/components\" icon=\"alignJustify\" variant=\"small\" description=\"Notes, steps, and tabs.\" <Card title=\"Repository\" href=\"https://github.com/doxahq/doxa\" external={true} What this site covers Do not edit the pages of this site. A change here silently weakens the compatibility gate.",
+      "lines": [
+        {
+          "text": "Frozen Showcase is a fixture site. It exists so the evergreen renderer proves it can still read artifact schema version 1."
+        },
+        {
+          "text": "<Card"
+        },
+        {
+          "text": "subtitle=\"Start\""
+        },
+        {
+          "text": "title=\"Quickstart\""
+        },
+        {
+          "text": "description=\"Install dependencies and run the docs site locally.\""
+        },
+        {
+          "text": "href=\"/quickstart\""
+        },
+        {
+          "text": "<Card"
+        },
+        {
+          "text": "title=\"Components\""
+        },
+        {
+          "text": "href=\"/components\""
+        },
+        {
+          "text": "icon=\"alignJustify\""
+        },
+        {
+          "text": "variant=\"small\""
+        },
+        {
+          "text": "description=\"Notes, steps, and tabs.\""
+        },
+        {
+          "text": "<Card"
+        },
+        {
+          "text": "title=\"Repository\""
+        },
+        {
+          "text": "href=\"https://github.com/doxahq/doxa\""
+        },
+        {
+          "text": "external={true}"
+        },
+        {
+          "text": "What this site covers",
+          "anchor": "what-this-site-covers"
+        },
+        {
+          "text": "Do not edit the pages of this site. A change here silently weakens the compatibility gate.",
+          "anchor": "what-this-site-covers"
+        }
+      ]
+    },
+    {
+      "id": "/quickstart",
+      "slug": "/quickstart",
+      "title": "Quickstart",
+      "description": "Run the showcase docs site locally in three steps.",
+      "breadcrumb": [
+        "Start Here"
+      ],
+      "icon": "rocket",
+      "section": "default",
+      "headings": [
+        "Choose a deployment target",
+        "Cloudflare",
+        "Vercel",
+        "The local docs site is running."
+      ],
+      "keywords": [
+        "quickstart",
+        "install",
+        "dev server"
+      ],
+      "content": "Follow these steps to run the site. Open http://localhost:3000 in the browser. Choose a deployment target Cloudflare Vercel The local docs site is running.",
+      "lines": [
+        {
+          "text": "Follow these steps to run the site."
+        },
+        {
+          "text": "Open http://localhost:3000 in the browser."
+        },
+        {
+          "text": "Choose a deployment target",
+          "anchor": "choose-a-deployment-target"
+        },
+        {
+          "text": "Cloudflare",
+          "anchor": "choose-a-deployment-target"
+        },
+        {
+          "text": "Vercel",
+          "anchor": "choose-a-deployment-target"
+        },
+        {
+          "text": "The local docs site is running.",
+          "anchor": "choose-a-deployment-target"
+        }
+      ]
+    },
+    {
+      "id": "/components",
+      "slug": "/components",
+      "title": "MDX Components",
+      "description": "Every note variant, inline code, tables, and links in one page.",
+      "breadcrumb": [
+        "Authoring"
+      ],
+      "section": "default",
+      "headings": [
+        "Notes",
+        "Run pnpm generate-content-json after editing docs.",
+        "Set AIAPIKEY before enabling Chat with Docs in production.",
+        "Do not expose provider secrets as public Vite environment variables.",
+        "Standard Markdown",
+        "Inline code, bold, italic, and a relative link plus an external link.",
+        "A block quote survives the round trip."
+      ],
+      "keywords": [
+        "mdx",
+        "components",
+        "notes"
+      ],
+      "content": "Notes Run pnpm generate-content-json after editing docs. Set AIAPIKEY before enabling Chat with Docs in production. Do not expose provider secrets as public Vite environment variables. Standard Markdown Inline code, bold, italic, and a relative link plus an external link. A block quote survives the round trip.",
+      "lines": [
+        {
+          "text": "Notes",
+          "anchor": "notes"
+        },
+        {
+          "text": "Run pnpm generate-content-json after editing docs.",
+          "anchor": "notes"
+        },
+        {
+          "text": "Set AIAPIKEY before enabling Chat with Docs in production.",
+          "anchor": "notes"
+        },
+        {
+          "text": "Do not expose provider secrets as public Vite environment variables.",
+          "anchor": "notes"
+        },
+        {
+          "text": "Standard Markdown",
+          "anchor": "standard-markdown"
+        },
+        {
+          "text": "Inline code, bold, italic, and a relative link plus an external link.",
+          "anchor": "standard-markdown"
+        },
+        {
+          "text": "A block quote survives the round trip.",
+          "anchor": "standard-markdown"
+        }
+      ]
+    },
+    {
+      "id": "/diagrams",
+      "slug": "/diagrams",
+      "title": "Diagrams And Trees",
+      "description": "Mermaid diagrams and file trees rendered from frozen content.",
+      "breadcrumb": [
+        "Authoring"
+      ],
+      "section": "default",
+      "headings": [
+        "Request flow",
+        "<Mermaid",
+        "chart={graph TD;",
+        "Visitor[Visitor] -- Dispatcher[doxa-docs-renderer];",
+        "Dispatcher -- Worker[Dynamic Worker];",
+        "Worker -- Runtime[docs-runtime];",
+        "Runtime -- R2[(R2 artifacts)];}",
+        "Project layout"
+      ],
+      "keywords": [
+        "mermaid",
+        "diagram",
+        "file tree"
+      ],
+      "content": "Request flow <Mermaid chart={graph TD; Visitor[Visitor] -- Dispatcher[doxa-docs-renderer]; Dispatcher -- Worker[Dynamic Worker]; Worker -- Runtime[docs-runtime]; Runtime -- R2[(R2 artifacts)];} Project layout",
+      "lines": [
+        {
+          "text": "Request flow",
+          "anchor": "request-flow"
+        },
+        {
+          "text": "<Mermaid",
+          "anchor": "request-flow"
+        },
+        {
+          "text": "chart={graph TD;",
+          "anchor": "request-flow"
+        },
+        {
+          "text": "Visitor[Visitor] -- Dispatcher[doxa-docs-renderer];",
+          "anchor": "request-flow"
+        },
+        {
+          "text": "Dispatcher -- Worker[Dynamic Worker];",
+          "anchor": "request-flow"
+        },
+        {
+          "text": "Worker -- Runtime[docs-runtime];",
+          "anchor": "request-flow"
+        },
+        {
+          "text": "Runtime -- R2[(R2 artifacts)];}",
+          "anchor": "request-flow"
+        },
+        {
+          "text": "Project layout",
+          "anchor": "project-layout"
+        }
+      ]
+    },
+    {
+      "id": "/api/overview",
+      "slug": "/api/overview",
+      "title": "API Overview",
+      "description": "Authentication and conventions for the showcase REST API.",
+      "breadcrumb": [
+        "API Reference"
+      ],
+      "icon": "server",
+      "section": "api",
+      "headings": [
+        "Conventions"
+      ],
+      "keywords": [
+        "api",
+        "authentication",
+        "rest"
+      ],
+      "content": "Every request carries a bearer token in the Authorization header. The showcase API lives at https://api.example.com/v1. Conventions",
+      "lines": [
+        {
+          "text": "Every request carries a bearer token in the Authorization header."
+        },
+        {
+          "text": "The showcase API lives at https://api.example.com/v1."
+        },
+        {
+          "text": "Conventions",
+          "anchor": "conventions"
+        }
+      ]
+    },
+    {
+      "id": "/api/messages/create",
+      "slug": "/api/messages/create",
+      "title": "Create Message",
+      "description": "Reference for POST /v1/messages, including request fields and responses.",
+      "breadcrumb": [
+        "API Reference",
+        "Messages"
+      ],
+      "icon": "server",
+      "section": "api",
+      "headings": [],
+      "keywords": [
+        "post",
+        "messages",
+        "rest-api"
+      ],
+      "content": "Creates a message record and returns the stored message with its generated identifier. The message text. The stable message identifier.",
+      "lines": [
+        {
+          "text": "Creates a message record and returns the stored message with its generated identifier."
+        },
+        {
+          "text": "The message text."
+        },
+        {
+          "text": "The stable message identifier."
+        }
+      ]
+    }
+  ]
+}

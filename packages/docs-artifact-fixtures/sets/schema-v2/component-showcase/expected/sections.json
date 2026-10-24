@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "data": [
+    {
+      "slug": "default",
+      "label": "Documentation",
+      "default": true,
+      "kind": "documentation",
+      "layout": "docs"
+    },
+    {
+      "slug": "api",
+      "label": "API Reference",
+      "kind": "reference",
+      "layout": "reference",
+      "default": false
+    }
+  ]
+}

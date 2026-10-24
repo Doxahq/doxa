@@ -1,0 +1,12 @@
+.git
+.artifacts
+.wrangler
+**/.workspaces
+**/.wrangler
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+**/.dev.vars
+**/.dev.vars.*

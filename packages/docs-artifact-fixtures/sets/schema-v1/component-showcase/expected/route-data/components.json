@@ -1,0 +1,149 @@
+{
+  "ok": true,
+  "data": {
+    "type": "page",
+    "slug": "components",
+    "href": "/components",
+    "homeHref": "/",
+    "site": {
+      "name": "frozen-showcase",
+      "description": "Documentation for frozen-showcase.",
+      "url": "https://frozen.doxa.page"
+    },
+    "features": {
+      "branding": true,
+      "rightSidebar": true,
+      "feedbackEdit": false,
+      "tableOfContents": true,
+      "scrollToTop": true,
+      "ai": {
+        "chat": false,
+        "chatWithPage": false,
+        "floatingInput": false
+      },
+      "copyPage": {
+        "markdown": true,
+        "rawText": true
+      },
+      "apiPlayground": true,
+      "rawMarkdown": true,
+      "loadFromGithub": false
+    },
+    "sections": [
+      {
+        "slug": "default",
+        "label": "Documentation",
+        "default": true,
+        "kind": "documentation",
+        "layout": "docs"
+      },
+      {
+        "slug": "api",
+        "label": "API Reference",
+        "kind": "reference",
+        "layout": "reference",
+        "default": false
+      }
+    ],
+    "currentSection": {
+      "slug": "default",
+      "label": "Documentation",
+      "default": true,
+      "kind": "documentation",
+      "layout": "docs"
+    },
+    "sectionHomeHrefs": {
+      "default": "/",
+      "api": "/api/messages/create"
+    },
+    "sectionNavigation": [
+      {
+        "heading": "Start Here"
+      },
+      {
+        "title": "Overview",
+        "href": "/",
+        "icon": "book"
+      },
+      {
+        "title": "Quickstart",
+        "href": "/quickstart",
+        "icon": "rocket"
+      },
+      {
+        "spacer": true
+      },
+      {
+        "heading": "Authoring"
+      },
+      {
+        "title": "MDX Components",
+        "href": "/components"
+      },
+      {
+        "title": "Diagrams And Trees",
+        "href": "/diagrams",
+        "badge": "New"
+      }
+    ],
+    "sectionRoutes": [
+      {
+        "title": "Overview",
+        "href": "/",
+        "icon": "book"
+      },
+      {
+        "title": "Quickstart",
+        "href": "/quickstart",
+        "icon": "rocket"
+      },
+      {
+        "title": "MDX Components",
+        "href": "/components"
+      },
+      {
+        "title": "Diagrams And Trees",
+        "href": "/diagrams",
+        "badge": "New"
+      }
+    ],
+    "routeTitle": "MDX Components",
+    "sectionHeading": "Authoring",
+    "previous": {
+      "title": "Quickstart",
+      "href": "/quickstart",
+      "icon": "rocket"
+    },
+    "next": {
+      "title": "Diagrams And Trees",
+      "href": "/diagrams",
+      "badge": "New"
+    },
+    "page": {
+      "slug": "components",
+      "href": "/components",
+      "title": "MDX Components",
+      "description": "Every note variant, inline code, tables, and links in one page.",
+      "sourcePath": "source/components/index.mdx",
+      "body": "---\ntitle: MDX Components\ndescription: Every note variant, inline code, tables, and links in one page.\nkeywords: [\"mdx\", \"components\", \"notes\"]\n---\n\n## Notes\n\n<Note title=\"Search index\">\n  Run `pnpm generate-content-json` after editing docs.\n</Note>\n\n<Note title=\"Warning\" type=\"warning\">\n  Set `AI_API_KEY` before enabling Chat with Docs in production.\n</Note>\n\n<Note title=\"Danger\" type=\"danger\">\n  Do not expose provider secrets as public Vite environment variables.\n</Note>\n\n## Standard Markdown\n\nInline `code`, **bold**, _italic_, and a [relative link](/quickstart) plus an [external link](https://doxa.so).\n\n| Option | Default | Meaning |\n| ------ | ------- | ------- |\n| `port` | `3000`  | The dev server port. |\n| `open` | `false` | Open the browser on start. |\n\n```ts title=\"example.ts\"\nexport function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n```\n\n> A block quote survives the round trip.\n\n1. First ordered item.\n2. Second ordered item.\n\n- First unordered item.\n- Second unordered item.\n",
+      "keywords": [
+        "[\"mdx\"",
+        "\"components\"",
+        "\"notes\"]"
+      ],
+      "sectionSlug": "default",
+      "headings": [
+        {
+          "level": 2,
+          "text": "Notes",
+          "href": "#notes"
+        },
+        {
+          "level": 2,
+          "text": "Standard Markdown",
+          "href": "#standard-markdown"
+        }
+      ]
+    }
+  }
+}

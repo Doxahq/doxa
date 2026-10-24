@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "data": [
+    {
+      "kind": "page",
+      "pathname": "/"
+    },
+    {
+      "kind": "redirect",
+      "pathname": "/api",
+      "target": "/api/messages/create",
+      "status": 308
+    },
+    {
+      "kind": "page",
+      "pathname": "/api/messages/create"
+    },
+    {
+      "kind": "page",
+      "pathname": "/api/overview"
+    },
+    {
+      "kind": "page",
+      "pathname": "/components"
+    },
+    {
+      "kind": "page",
+      "pathname": "/diagrams"
+    },
+    {
+      "kind": "page",
+      "pathname": "/quickstart"
+    }
+  ]
+}

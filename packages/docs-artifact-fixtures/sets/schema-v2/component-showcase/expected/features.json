@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "data": {
+    "branding": true,
+    "rightSidebar": true,
+    "feedbackEdit": false,
+    "tableOfContents": true,
+    "scrollToTop": true,
+    "ai": {
+      "chat": false,
+      "chatWithPage": false,
+      "floatingInput": false
+    },
+    "copyPage": {
+      "markdown": true,
+      "rawText": true
+    },
+    "apiPlayground": true,
+    "rawMarkdown": true,
+    "loadFromGithub": false
+  }
+}

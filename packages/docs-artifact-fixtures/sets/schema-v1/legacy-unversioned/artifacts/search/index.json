@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "contentVersion": "version-frozen-legacy-1",
+  "documents": [
+    {
+      "id": "/",
+      "slug": "/",
+      "title": "Frozen Legacy",
+      "description": "Documentation published before manifests carried a schema version.",
+      "breadcrumb": [],
+      "section": "default",
+      "headings": [],
+      "keywords": [],
+      "content": "Frozen Legacy This site was published by an older writer. The renderer must still read it. The manifest of this site has no schemaVersion field.",
+      "lines": [
+        {
+          "text": "Frozen Legacy"
+        },
+        {
+          "text": "This site was published by an older writer. The renderer must still read it."
+        },
+        {
+          "text": "The manifest of this site has no schemaVersion field."
+        }
+      ]
+    },
+    {
+      "id": "/usage",
+      "slug": "/usage",
+      "title": "Usage",
+      "description": "A second page so navigation has a previous and next link.",
+      "breadcrumb": [],
+      "section": "default",
+      "headings": [],
+      "keywords": [],
+      "content": "Usage See the overview for context.",
+      "lines": [
+        {
+          "text": "Usage"
+        },
+        {
+          "text": "See the overview for context."
+        }
+      ]
+    }
+  ]
+}

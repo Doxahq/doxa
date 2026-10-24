@@ -1,0 +1,122 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doxa-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-12",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "vars": {
+    "DATABASE_URL": "postgresql://doxa:doxa@localhost:5432/doxa",
+    "MCP_RESOURCE_URL": "http://localhost:8791/mcp",
+    "OAUTH_ISSUER": "http://localhost:8787",
+    "WEB_ORIGIN": "http://localhost:3001",
+    "DOCS_BASE_DOMAIN": "localhost",
+    "DOCS_RENDERER_BASE_URL": "http://localhost:3002",
+    "MCP_DEV_AUTH_BYPASS": "true"
+  },
+  "services": [
+    {
+      "binding": "AUTH_SERVER",
+      "service": "doxa-api",
+      "entrypoint": "OAuthTokenValidator"
+    },
+    {
+      "binding": "PLATFORM_ACTIONS",
+      "service": "doxa-api",
+      "entrypoint": "AgentActionsApi"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DOCS_BUCKET",
+      "bucket_name": "doxa-docs-artifacts"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "MCP_READ_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 600, "period": 60 }
+    },
+    {
+      "name": "MCP_WRITE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 120, "period": 60 }
+    },
+    {
+      "name": "MCP_EXPENSIVE_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "env": {
+    "production": {
+      "placement": {
+        "region": "aws:us-east-1"
+      },
+      "routes": [
+        {
+          "pattern": "mcp.doxa.so",
+          "custom_domain": true
+        }
+      ],
+      "vars": {
+        "DATABASE_URL": "",
+        "MCP_RESOURCE_URL": "https://mcp.doxa.so/mcp",
+        "OAUTH_ISSUER": "https://api.doxa.so",
+        "WEB_ORIGIN": "https://doxa.so",
+        "DOCS_BASE_DOMAIN": "doxa.page",
+        "DOCS_RENDERER_BASE_URL": "",
+        "DOCS_CUSTOM_DOMAIN_CNAME_TARGET": "cname.doxa.page",
+        "MCP_DEV_AUTH_BYPASS": "false"
+      },
+      "services": [
+        {
+          "binding": "AUTH_SERVER",
+          "service": "doxa-api-production",
+          "entrypoint": "OAuthTokenValidator"
+        },
+        {
+          "binding": "PLATFORM_ACTIONS",
+          "service": "doxa-api-production",
+          "entrypoint": "AgentActionsApi"
+        }
+      ],
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE",
+          "id": "${CF_HYPERDRIVE_ID}"
+        },
+        {
+          "binding": "HYPERDRIVE_CACHE_DISABLED",
+          "id": "${CF_HYPERDRIVE_CACHE_DISABLED_ID}"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "DOCS_BUCKET",
+          "bucket_name": "doxa-docs-artifacts-enam"
+        }
+      ],
+      "ratelimits": [
+        {
+          "name": "MCP_READ_LIMITER",
+          "namespace_id": "2001",
+          "simple": { "limit": 600, "period": 60 }
+        },
+        {
+          "name": "MCP_WRITE_LIMITER",
+          "namespace_id": "2002",
+          "simple": { "limit": 120, "period": 60 }
+        },
+        {
+          "name": "MCP_EXPENSIVE_LIMITER",
+          "namespace_id": "2003",
+          "simple": { "limit": 20, "period": 60 }
+        }
+      ]
+    }
+  }
+}

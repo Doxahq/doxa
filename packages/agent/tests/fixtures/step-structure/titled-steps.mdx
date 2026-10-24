@@ -1,0 +1,149 @@
+---
+title: "Migrate to API 0.2.0"
+description: "Move flag definitions and clients from numeric variation indexes to variation keys, and adopt the Audit Log API"
+---
+## What changed in 0.2.0
+
+API 0.2.0 includes one breaking change and one addition:
+
+- **Breaking:** variations are referenced by **key**, not by numeric index. Flag definitions, targeting rules, rollouts, targeting requests, and evaluation results that use numbers must be updated.
+- **New:** the Audit Log API, `GET /v1/projects/{projectId}/audit-logs`, returns the history of flag changes.
+
+Existing flag definitions that use numeric variation references must be updated to keys. Plan the migration before you upgrade the API used by production clients.
+
+<Note type="warning">
+  The change is not backward compatible. Numeric variation references are replaced by keys in every flag config, and evaluation results return `variationKey` instead of `variationIndex`. Update your server definitions and your client code together.
+</Note>
+
+## Field mapping
+
+| Area                     | Before 0.2.0                                  | Since 0.2.0                                                         |
+| ------------------------ | --------------------------------------------- | ------------------------------------------------------------------- |
+| Variation identity       | Position in the `variations` array            | Required unique `key`, for example `{ "key": "on", "value": true }` |
+| Targeting rule target    | `variation` (number)                          | `variationKey` (string)                                             |
+| Rollout branch target    | Numeric index                                 | `variationKey` (string)                                             |
+| Flag config default      | `defaultVariation` (number)                   | `defaultVariationKey` (string)                                      |
+| Flag config off value    | `offVariation` (number)                       | `offVariationKey` (string)                                          |
+| `PUT .../targeting` body | Numeric `defaultVariation` and `offVariation` | `defaultVariationKey` and `offVariationKey`                         |
+| Evaluation result        | `variationIndex`                              | `variationKey`                                                      |
+
+## Migrate your flag definitions
+
+<Step title="Add a key to every variation">
+  Each variation of each flag needs a key that is unique within that flag. Keys such as `on` and `off` work well for boolean flags.
+
+  ```json
+  {
+    "variations": [
+      { "key": "on", "value": true },
+      { "key": "off", "value": false }
+    ]
+  }
+  ```
+</Step>
+
+<Step title="Replace numeric references with keys">
+  Map each old index to the key of the variation at that position. For a flag whose variations were `[on, off]` in that order, index `0` becomes `on` and index `1` becomes `off`.
+
+  Update targeting rules to use `variationKey`:
+
+  ```json
+  {
+    "id": "pro-users",
+    "conditions": [{ "attribute": "plan", "operator": "equals", "values": ["pro"] }],
+    "variationKey": "on"
+  }
+  ```
+
+  Update rollout branches the same way. Weights are out of 100000, so `25000` means 25%:
+
+  ```json
+  {
+    "rollout": {
+      "branches": [
+        { "variationKey": "on", "weight": 25000 },
+        { "variationKey": "off", "weight": 75000 }
+      ]
+    }
+  }
+  ```
+</Step>
+
+<Step title="Update the flag config and targeting calls">
+  Replace `defaultVariation` and `offVariation` with `defaultVariationKey` and `offVariationKey`. Use the same change in the body of the targeting request, which sets the enabled state, the default and off variations, and the ordered rules of one environment. The rules in the request replace the existing rules.
+
+  ```bash
+  BASE_URL="https://flags.example.com"
+  SERVER_KEY="srv_your_server_key"
+  PROJECT_ID="your-project-id"
+  FLAG_KEY="new-checkout"
+
+  curl -X PUT "$BASE_URL/v1/projects/$PROJECT_ID/flags/$FLAG_KEY/targeting" \
+    -H "Authorization: Bearer $SERVER_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "enabled": true,
+      "defaultVariationKey": "off",
+      "offVariationKey": "off",
+      "rules": []
+    }'
+  ```
+
+  See [Set flag targeting](/rest-api/rest-api-put-v1-projects-flags-flag-key-targeting) for the complete request body.
+</Step>
+
+<Step title="Update clients that read evaluation results">
+  Code that reads `variationIndex` from an evaluation result must read `variationKey` instead. Compare the key with a string, not a number.
+
+  ```ts
+  import { FlagForgeClient } from "@flagforge/sdk";
+
+  const ff = new FlagForgeClient({
+    clientKey: process.env.FLAGFORGE_CLIENT_KEY!,
+    baseUrl: "https://flags.example.com",
+    environment: "production",
+  });
+
+  await ff.init();
+
+  const result = ff.detailedVariation("new-checkout", { key: "user-123" });
+  if (result?.variationKey === "on") {
+    // serve the new checkout
+  }
+  ```
+
+  `@flagforge/core` returns the same `variationKey` field in its evaluation results. See [Use the Core Engine](/use-the-core-engine) if you evaluate flag definitions directly.
+</Step>
+
+## Use the Audit Log API
+
+The Audit Log API returns the flag change history of a project, newest first. Each entry records a create, update, delete, or targeting change, the API key that made it, and before and after snapshots of the flag.
+
+Filter the history with the `flagKey` and `event` query parameters:
+
+```bash
+curl "$BASE_URL/v1/projects/$PROJECT_ID/audit-logs?flagKey=$FLAG_KEY" \
+  -H "Authorization: Bearer $SERVER_KEY"
+```
+
+Use the snapshots to review a change or to confirm that a migration updated the expected fields. The endpoint requires a server key. A project-scoped key returns only the history of its own project.
+
+For the full parameter list, see [List audit log entries](/rest-api/rest-api-get-v1-projects-audit-logs) and the [Audit log](/rest-api/audit) reference.
+
+## Verify the migration
+
+- Fetch each migrated flag with `GET /v1/projects/{projectId}/flags/{flagKey}` and confirm that every variation has a `key` and that no numeric references remain.
+- Evaluate a few subjects in each environment and confirm that `variationKey` matches what you expect.
+- Check the audit log for your migration changes.
+
+If a request fails after the upgrade, see [Troubleshooting](/troubleshooting). For background on keys and targeting, see [Flags and Variations](/flags-and-variations) and [Targeting and Segments](/targeting-and-segments).
+
+## Next steps
+
+<Card title="Manage Flags with the API" href="/manage-flags-with-the-api">
+  Create and update flags, targeting rules, and rollouts through the REST API.
+</Card>
+
+<Card title="Evaluate Flags with the SDK" href="/evaluate-flags-with-the-sdk">
+  Read evaluation results and typed values in your application.
+</Card>

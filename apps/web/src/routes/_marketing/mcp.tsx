@@ -1,0 +1,12 @@
+import { createFileRoute } from "@tanstack/react-router"
+import { McpPage } from "~/components/marketing/mcp/mcp-page"
+
+export const Route = createFileRoute("/_marketing/mcp")({
+  head: () => ({
+    meta: [
+      { title: "MCP server — Doxa" },
+      { name: "description", content: "Connect Claude Code, Cursor, VS Code, Codex and other agents to Doxa with the Doxa MCP server." },
+    ],
+  }),
+  component: McpPage,
+})

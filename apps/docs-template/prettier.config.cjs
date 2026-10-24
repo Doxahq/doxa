@@ -1,0 +1,38 @@
+/* eslint-disable no-undef */
+/** @type {import('prettier').Config} */
+module.exports = {
+  endOfLine: "lf",
+  semi: true,
+  singleQuote: false,
+  tabWidth: 2,
+  trailingComma: "es5",
+  arrowParens: "always",
+  bracketSpacing: true,
+  plugins: [
+    "@ianvs/prettier-plugin-sort-imports",
+    "prettier-plugin-tailwindcss",
+  ],
+  importOrder: [
+    "<BUILTIN_MODULES>",
+    "",
+    "^(react/(.*)$)|^(react$)",
+    "^(next/(.*)$)|^(next$)",
+    "<THIRD_PARTY_MODULES>",
+    "",
+    "^@/src/types/(.*)$",
+    "^@/src/settings/(.*)$",
+    "^@/src/lib/(.*)$",
+    "^@/src/hooks/(.*)$",
+    "^@/src/providers/(.*)$",
+    "^@/src/components/ui/(.*)$",
+    "^@/src/components/(.*)$",
+    "^@/src/routes/(.*)$",
+    "^@/src/styles/(.*)$",
+    "^@/utils/(.*)$",
+    "^~/(.*)$",
+    "",
+    "^[./]",
+  ],
+  tailwindStylesheet: "./src/styles/globals.css",
+  importOrderParserPlugins: ["typescript", "jsx", "decorators-legacy"],
+};

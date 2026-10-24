@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "contentVersion": "version-frozen-starter-1",
+  "documents": [
+    {
+      "id": "/",
+      "slug": "/",
+      "title": "Frozen Starter",
+      "description": "Generated documentation for Frozen Starter",
+      "breadcrumb": [],
+      "section": "default",
+      "headings": [
+        "Local MVP Path",
+        "Next Step",
+        "Wire the Cloudflare container runner to replace this starter artifact with full repository-aware generation."
+      ],
+      "keywords": [],
+      "content": "Frozen Starter This is the first generated Doxa documentation version for Frozen Starter. Local MVP Path Next Step Wire the Cloudflare container runner to replace this starter artifact with full repository-aware generation.",
+      "lines": [
+        {
+          "text": "Frozen Starter"
+        },
+        {
+          "text": "This is the first generated Doxa documentation version for Frozen Starter."
+        },
+        {
+          "text": "Local MVP Path",
+          "anchor": "local-mvp-path"
+        },
+        {
+          "text": "Next Step",
+          "anchor": "next-step"
+        },
+        {
+          "text": "Wire the Cloudflare container runner to replace this starter artifact with full repository-aware generation.",
+          "anchor": "next-step"
+        }
+      ]
+    },
+    {
+      "id": "/getting-started",
+      "slug": "/getting-started",
+      "title": "Getting Started",
+      "description": "How to open the generated Frozen Starter docs",
+      "breadcrumb": [],
+      "section": "default",
+      "headings": [],
+      "keywords": [],
+      "content": "Getting Started The published version is immutable. A new generation creates a new version.",
+      "lines": [
+        {
+          "text": "Getting Started"
+        },
+        {
+          "text": "The published version is immutable. A new generation creates a new version."
+        }
+      ]
+    }
+  ]
+}

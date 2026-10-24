@@ -1,0 +1,41 @@
+---
+title: API overview
+description: Authentication, base URL, and conventions for the example Notes API.
+keywords: ["api", "authentication", "rest"]
+icon: server
+---
+
+This section shows how an API reference looks in Doxa. It documents a small example API for notes.
+
+<Note title="Base URL">
+  All requests go to `https://api.example.com/v1`.
+</Note>
+
+## Authentication
+
+Send your API key in the `Authorization` header of each request:
+
+```bash
+curl https://api.example.com/v1/notes \
+  -H "Authorization: Bearer sk_test_123"
+```
+
+## Conventions
+
+- Request and response bodies use JSON.
+- Timestamps are ISO 8601 strings in UTC.
+- Identifiers are opaque strings, for example `note_123`.
+
+## Errors
+
+Errors return an HTTP status code and a JSON body:
+
+```json
+{ "code": "not_found", "message": "Note not found." }
+```
+
+| Status | Meaning |
+| ------ | ------- |
+| `400` | The request body is not valid. |
+| `401` | The API key is missing or not valid. |
+| `404` | The resource does not exist. |

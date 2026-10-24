@@ -1,0 +1,20 @@
+[
+  {
+    "heading": "Messages"
+  },
+  {
+    "title": "Create Message",
+    "href": "/api/messages/create"
+  },
+  {
+    "spacer": true
+  },
+  {
+    "heading": "Other"
+  },
+  {
+    "title": "API Overview",
+    "href": "/api/overview",
+    "icon": "server"
+  }
+]

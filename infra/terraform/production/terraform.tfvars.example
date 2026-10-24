@@ -1,0 +1,89 @@
+# Copy to your ops repo and fill in the values. Never commit the filled file to this repo.
+
+cloudflare_account_id = "<cloudflare-account-id>"
+
+# The first image, pushed before the first full apply (see README.md).
+api_image = "<aws-account-id>.dkr.ecr.us-east-1.amazonaws.com/doxa-api:<git-sha>"
+
+# 2 vCPU / 4 GB, one task. Set max_task_count above 1 to turn on autoscaling.
+cpu_units      = 2048
+memory_mb      = 4096
+min_task_count = 1
+max_task_count = 1
+
+alert_emails       = ["<you@example.com>"]
+monthly_budget_usd = 120
+
+# Repositories whose deploy workflows may take the AWS deploy role.
+# Newer repos send owner@<owner-id>/<name>@<repo-id> in the OIDC subject: use that form for them.
+github_repositories = ["<owner>@<owner-id>/<ops-repo>@<repo-id>"]
+
+# Set this if the AWS account already has the GitHub OIDC provider.
+# github_oidc_provider_arn = "arn:aws:iam::<aws-account-id>:oidc-provider/token.actions.githubusercontent.com"
+
+# Secret values live in SSM at /doxa/api/production/<NAME>, never in Terraform.
+# Write each one with the put_secret_command output before the first deploy.
+api_secret_names = [
+  "DATABASE_URL",
+  "BETTER_AUTH_SECRET",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
+  "GITHUB_APP_ID",
+  "GITHUB_APP_SLUG",
+  "GITHUB_APP_PRIVATE_KEY",
+  "GITHUB_WEBHOOK_SECRET",
+  "OPENROUTER_API_KEY",
+  "CLOUDFLARE_API_TOKEN",
+  # R2 over the S3 API, in place of the DOCS_BUCKET binding.
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  # Worker → origin and origin → Worker bridge keys.
+  "ORIGIN_SHARED_SECRET",
+  "BRIDGE_SHARED_SECRET",
+]
+
+# The production vars of apps/api/wrangler.json (env.production), plus what
+# the Node runtime needs. The Worker keeps the GitHub and Google client IDs as
+# secrets, so they are in api_secret_names. DOXA_RENDERER_RELEASE_ID comes
+# from each deploy (--env), not from here.
+api_environment = {
+  BETTER_AUTH_URL                 = "https://api.doxa.so"
+  AUTH_COOKIE_DOMAIN              = ".doxa.so"
+  WEB_ORIGIN                      = "https://doxa.so"
+  OAUTH_ISSUER                    = "https://api.doxa.so"
+  MCP_RESOURCE_URL                = "https://mcp.doxa.so/mcp"
+  DOCS_RUNTIME_URL                = "https://preview.doxa.so"
+  DOCS_BASE_DOMAIN                = "doxa.page"
+  DOCS_CUSTOM_DOMAIN_CNAME_TARGET = "cname.doxa.page"
+  CLOUDFLARE_ACCOUNT_ID           = "<cloudflare-account-id>"
+  CLOUDFLARE_ZONE_ID              = "<custom-hostnames-zone-id>"
+  ADMIN_EMAILS                    = "<admin@example.com>"
+  DOXA_RUNTIME_ENVIRONMENT        = "production"
+  GENERATION_MODE                 = "queue"
+  ALLOW_INTERNAL_HTTP             = "false"
+  DEV_ADMIN_ENABLED               = "false"
+
+  DOXA_PLANNER_MODEL                  = "x-ai/grok-4.5:nitro"
+  DOXA_WRITER_MODEL                   = "openai/gpt-5.6-luna"
+  DOXA_GENERATION_PROFILE             = "fast-mvp"
+  DOXA_AGENT_PAGE_CONCURRENCY         = "6"
+  DOXA_AGENT_MAX_PAGES                = "120"
+  DOXABOT_ENABLED                     = "false"
+  DOXABOT_PUBLIC_REPOSITORIES_ENABLED = "false"
+  GENERATION_TIMEOUT_MS               = "720000"
+  GENERATION_IDLE_TIMEOUT_MS          = "90000"
+  GENERATION_OVERALL_TIMEOUT_MS       = "10800000"
+  ANALYSIS_STAGE_TIMEOUT_MS           = "2700000"
+  STRUCTURE_STAGE_TIMEOUT_MS          = "1800000"
+  PAGE_BATCH_TIMEOUT_MS               = "1800000"
+  FINALIZATION_TIMEOUT_MS             = "600000"
+
+  # R2 over the S3 API.
+  R2_ENDPOINT = "https://<cloudflare-account-id>.r2.cloudflarestorage.com"
+  R2_BUCKET   = "doxa-docs-artifacts-enam"
+
+  # The thin doxa-api Worker, for queue sends and service binding calls.
+  BRIDGE_URL = "https://api.doxa.so"
+}

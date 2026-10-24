@@ -1,0 +1,11 @@
+{
+  "$schema": "https://doxa.so/schemas/site-config/v1.json",
+  "name": "doxa",
+  "description": "Beautiful, fast documentation that stays out of your way. Built for developers who care about the reading experience as much as the writing.",
+  "seo": { "keywords": ["doxa", "documentation", "open source", "SEO"] },
+  "navbar": { "links": [{ "label": "Docs", "href": "/" }] },
+  "features": {
+    "feedbackEdit": true,
+    "ai": { "chat": true, "chatWithPage": true, "floatingInput": true }
+  }
+}

@@ -1,0 +1,48 @@
+---
+title: "Configuration"
+description: "Environment variables, Prisma setup, and Zod schemas"
+keywords: ["configuration", "api", "setup", "overview", "node"]
+icon: "cog"
+---
+
+## Overview
+
+FlagForge reads configuration exclusively from validated environment variables exposed through `apps/api/src/config/env.ts`. These values control the HTTP server address, logging, database connection, and administrative access.
+
+## Configuration Options
+
+| Field            | Type                          | Default                       | Description                                      |
+|------------------|-------------------------------|-------------------------------|--------------------------------------------------|
+| NODE_ENV         | development \| test \| production | development                | Runtime environment affecting logging behavior  |
+| PORT             | number                        | 4000                          | TCP port the Fastify server listens on          |
+| HOST             | string                        | 0.0.0.0                       | Network interface the server binds to           |
+| LOG_LEVEL        | fatal \| error \| warn \| info \| debug \| trace \| silent | info | Log verbosity level                             |
+| DATABASE_URL     | string                        | file:./dev.db                 | Prisma-compatible connection string             |
+| ADMIN_SERVER_KEY | string                        | srv_dev_admin_key_change_me   | Bearer token required for administrative routes |
+
+## Common Setups
+
+<Tabs defaultValue="minimal">
+  <TabsList>
+    <TabsTrigger value="minimal">Minimal (SQLite)</TabsTrigger>
+    <TabsTrigger value="production">Production (PostgreSQL)</TabsTrigger>
+  </TabsList>
+  <TabsContent value="minimal">
+```bash
+NODE_ENV=development
+PORT=4000
+DATABASE_URL="file:./dev.db"
+```
+  </TabsContent>
+  <TabsContent value="production">
+```bash
+NODE_ENV=production
+PORT=8080
+DATABASE_URL="postgresql://..."
+```
+  </TabsContent>
+</Tabs>
+
+<Note type="warning">
+  Never commit real production keys. Rotate `ADMIN_SERVER_KEY` immediately after any suspected exposure.
+</Note>

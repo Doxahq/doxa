@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 2,
+  "siteConfig": {
+    "path": "settings/site.json",
+    "sha256": "65b1a1da5d9f1e19d3419037c438f6b2a53efa95ee8fbcebf369f72fcd6e67fd"
+  },
+  "siteId": "site-frozen-showcase",
+  "versionId": "version-frozen-showcase-1",
+  "projectSlug": "frozen-showcase",
+  "generatedAt": "2026-09-23T00:00:00.000Z",
+  "pages": [
+    {
+      "title": "Frozen Showcase",
+      "href": "/",
+      "sourcePath": "source/index.mdx"
+    },
+    {
+      "title": "Quickstart",
+      "href": "/quickstart",
+      "sourcePath": "source/quickstart/index.mdx"
+    },
+    {
+      "title": "MDX Components",
+      "href": "/components",
+      "sourcePath": "source/components/index.mdx"
+    },
+    {
+      "title": "Diagrams And Trees",
+      "href": "/diagrams",
+      "sourcePath": "source/diagrams/index.mdx"
+    },
+    {
+      "title": "API Overview",
+      "href": "/api/overview",
+      "sourcePath": "source/api/overview/index.mdx"
+    },
+    {
+      "title": "Create Message",
+      "href": "/api/messages/create",
+      "sourcePath": "source/api/messages/create/index.mdx"
+    }
+  ]
+}

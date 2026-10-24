@@ -1,0 +1,13 @@
+{
+  "description": "A site published before manifests carried a schemaVersion field. Its manifest has no schemaVersion on purpose and must stay readable as schema version 1.",
+  "siteId": "site-frozen-legacy",
+  "versionId": "version-frozen-legacy-1",
+  "projectId": "project-frozen-legacy",
+  "projectSlug": "frozen-legacy",
+  "projectName": "Frozen Legacy",
+  "generatedAt": "2026-06-01T00:00:00.000Z",
+  "pages": [
+    { "title": "Frozen Legacy", "route": "/", "file": "pages/index.mdx" },
+    { "title": "Usage", "route": "/usage", "file": "pages/usage.mdx" }
+  ]
+}

@@ -1,0 +1,25 @@
+flowchart TD
+  Generate["Generate docs request"]
+  Mode["GENERATION_MODE"]
+
+  Starter["starter-dev<br/>Fake docs only<br/>Local smoke test"]
+  Inline["container-inline<br/>Real generation<br/>Local smoke test"]
+  Queue["queue<br/>Real generation<br/>Staging/production"]
+
+  AgentWorker["apps/agent-worker<br/>Queue consumer"]
+  RealGen["packages/generation<br/>Shared coordinator"]
+  Container["apps/agent-container"]
+  Publish["R2 upload + publish docs version"]
+
+  Generate --> Mode
+  Mode --> Starter
+  Mode --> Inline
+  Mode --> Queue
+
+  Starter --> Publish
+  Inline --> RealGen
+  Queue --> AgentWorker
+  AgentWorker --> RealGen
+  RealGen --> Container
+  Container --> RealGen
+  RealGen --> Publish

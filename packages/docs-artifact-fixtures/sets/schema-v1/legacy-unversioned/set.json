@@ -1,0 +1,9 @@
+{
+  "name": "legacy-unversioned",
+  "description": "A site published before manifests carried a schemaVersion field. Its manifest has no schemaVersion on purpose and must stay readable as schema version 1.",
+  "schemaVersion": 1,
+  "siteId": "site-frozen-legacy",
+  "versionId": "version-frozen-legacy-1",
+  "projectId": "project-frozen-legacy",
+  "projectSlug": "frozen-legacy"
+}

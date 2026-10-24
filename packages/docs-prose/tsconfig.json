@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "baseUrl": ".",
+    "paths": {
+      "@doxahq/mdx-runtime": ["../mdx-runtime/src/index.ts"],
+      "@doxahq/mdx-runtime/highlight": ["../mdx-runtime/src/highlight/index.ts"]
+    }
+  },
+  "include": ["src", "tests"]
+}

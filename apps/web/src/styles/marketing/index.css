@@ -1,0 +1,8 @@
+/* Marketing site styles, loaded only by the `_marketing` layout route.
+   shared.css holds the nav, guide lines, bands and footer; each page file is
+   scoped to its root class (`.pg--home`, `.pg--pricing`, …). */
+@import "./shared.css";
+@import "./home.css";
+@import "./pricing.css";
+@import "./mcp.css";
+@import "./about.css";

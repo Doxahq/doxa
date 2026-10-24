@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "siteConfig": {
+    "path": "settings/site.json",
+    "sha256": "0dc7fa9b2f61118bad94fea0490258c8216852f4effa3767bcacdda64451885a"
+  },
+  "siteId": "site-frozen-customized",
+  "versionId": "version-frozen-customized-2",
+  "projectSlug": "frozen-customized",
+  "generatedAt": "2026-09-24T00:00:00.000Z",
+  "pages": [
+    {
+      "title": "Overview",
+      "href": "/overview",
+      "sourcePath": "source/overview/index.mdx"
+    }
+  ]
+}

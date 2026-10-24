@@ -1,0 +1,130 @@
+---
+title: Local Setup
+description: Install the Doxa Platform workspace, run the docs template, and learn the commands used for renderer development.
+keywords: ["setup", "install", "pnpm", "dev server", "scripts"]
+icon: rocket
+---
+
+A clean checkout to a running dev server takes about a minute on a warm pnpm cache.
+
+## Prerequisites
+
+- Node.js `^24.x` (the engines field enforces this)
+- pnpm `10.33.0` (declared in the monorepo root `package.json`)
+- Git
+
+<Note title="Use the declared package manager" type="warning">
+  Run `pnpm` directly. Don't substitute `npm` or `yarn` — the lockfile is
+  pnpm-shaped and CI tooling assumes pnpm.
+</Note>
+
+## Clone and install
+
+<Step>
+  <StepItem title="Fork and clone">
+    ```bash
+    git clone https://github.com/<your-username>/doxa-platform.git
+    cd doxa-platform
+    ```
+
+    Working from a fork keeps your branches isolated and makes pull requests trivial later.
+
+  </StepItem>
+
+  <StepItem title="Install dependencies">
+    ```bash
+    pnpm install
+    ```
+
+    pnpm links `apps/docs-template` to shared workspace packages such as `packages/mdx-runtime`. No published `@doxahq/mdx-runtime` package is required.
+
+  </StepItem>
+
+  <StepItem title="Start the dev server">
+    ```bash
+    pnpm dev:docs-template
+    ```
+
+    This starts only the public docs template. Use `pnpm dev` when you need the complete platform, including the private content runtime and project-scoped generated docs. The Vercel adapter is also available:
+
+    <Tabs defaultValue="cloudflare" className="pt-5 pb-1">
+      <TabsList>
+        <TabsTrigger value="cloudflare">Cloudflare</TabsTrigger>
+        <TabsTrigger value="vercel">Vercel</TabsTrigger>
+      </TabsList>
+      <TabsContent value="cloudflare">
+        ```bash
+        pnpm --filter @doxahq/docs-template dev:cloudflare
+        ```
+      </TabsContent>
+      <TabsContent value="vercel">
+        ```bash
+        pnpm --filter @doxahq/docs-template dev:vercel
+        ```
+      </TabsContent>
+    </Tabs>
+
+  </StepItem>
+
+  <StepItem title="Open the docs">
+    Visit the local URL Vite prints (typically `http://localhost:5173`). The docs landing page is `/overview`.
+  </StepItem>
+</Step>
+
+## Daily commands
+
+| Command                                                     | What it does                                             |
+| :---------------------------------------------------------- | :------------------------------------------------------- |
+| `pnpm dev`                                                  | Run the complete local Doxa Platform stack.              |
+| `pnpm dev:docs-template`                                    | Run only the docs template with the Cloudflare target.   |
+| `pnpm --filter @doxahq/docs-template build`                 | Produce a production build for the active deploy target. |
+| `pnpm --filter @doxahq/docs-template start`                 | Preview the production build locally.                    |
+| `pnpm --filter @doxahq/docs-template typecheck`             | Run `tsc --noEmit` for the template.                     |
+| `pnpm --filter @doxahq/docs-template lint`                  | Run ESLint for the template.                             |
+| `pnpm --filter @doxahq/docs-template format:check`          | Check the template with Prettier.                        |
+| `pnpm --filter @doxahq/docs-template quality`               | Run the template format, lint, and typecheck gate.       |
+| `pnpm --filter @doxahq/docs-template generate:docs`         | Append newly added MDX pages to the matching nav file.   |
+| `pnpm --filter @doxahq/docs-template generate:docs:watch`   | Regenerate navigation when content changes.              |
+| `pnpm --filter @doxahq/docs-template generate-content-json` | Rebuild the search index from current MDX content.       |
+
+## Adding pages while you work
+
+Drop a new folder under `src/contents/docs/<page>/index.mdx` (or `src/contents/docs/<section-slug>/<page>/index.mdx` for a non-default section), then run:
+
+```bash
+pnpm --filter @doxahq/docs-template generate:docs
+```
+
+The generator is **append-only** — it never reorders or deletes nav entries. It does, however, sync the optional `icon:` frontmatter field on existing entries so sidebar icons stay current.
+
+<Note title="Search index" type="success">
+  Run `pnpm --filter @doxahq/docs-template generate-content-json` after
+  meaningful content edits — search hits, snippets, and breadcrumbs are derived
+  from `public/search-data/index.json`.
+</Note>
+
+## Environment variables
+
+Most local development needs none. The two that affect behaviour:
+
+- `DOXA_DEPLOY_TARGET` — `cloudflare` (default), `docker`, or `vercel`. Picked up by `pnpm dev:*` and `pnpm build:*`.
+- `CONTENT_SOURCE` — `vite` (default) or `github`. Selects the content adapter in `src/settings/content.ts`.
+
+## Next
+
+<CardGrid>
+  <Card
+    title="Architecture"
+    href="/development/architecture"
+    icon="layers"
+    variant="small"
+    description="Tour the routes, content layer, and component registry"
+  />
+  <Card
+    title="Coding Standards"
+    href="/development/coding-standards"
+    icon="settings"
+    variant="small"
+    description="The conventions every PR is reviewed against"
+  />
+</CardGrid>

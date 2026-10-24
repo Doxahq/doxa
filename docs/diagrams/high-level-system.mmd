@@ -1,0 +1,25 @@
+flowchart TD
+  User["User Browser"]
+
+  Web["apps/web<br/>Homepage + Dashboard"]
+  API["apps/api<br/>Public API + Auth + Internal RPC"]
+  DB["Postgres<br/>PlanetScale prod / Docker local"]
+  R2["Cloudflare R2<br/>Docs artifacts"]
+  GitHub["GitHub App<br/>Repo access"]
+  Container["apps/agent-container<br/>Clone repo + run agent"]
+  Template["apps/docs-template<br/>Public docs renderer"]
+  Docs["apps/docs-runtime<br/>Runtime-source content API"]
+
+  User --> Web
+  Web --> API
+
+  API --> DB
+  API --> GitHub
+  API --> Container
+  Container --> R2
+  API --> R2
+
+  User --> Template
+  Template --> Docs
+  Docs --> API
+  Docs --> R2

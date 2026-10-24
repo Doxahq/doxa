@@ -1,0 +1,35 @@
+{
+  "name": "@doxahq/email",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./catalog": "./src/catalog/index.ts",
+    "./mailer": "./src/mailer-entry.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "email:dev": "email dev --dir emails --port 3013",
+    "email:export": "email export --dir emails --outDir .react-email-export"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-email": "6.11.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@react-email/ui": "6.11.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

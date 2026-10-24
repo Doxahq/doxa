@@ -1,0 +1,37 @@
+{
+  "name": "@doxahq/agent-container",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "start": "tsx src/index.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --dir tests",
+    "test:synthetic": "pnpm --filter @doxahq/agent build && tsx synthetic/cli.ts",
+    "test:image": "docker build -t doxa-agent-container-image-test -f Dockerfile ../.. && docker run --rm --entrypoint git doxa-agent-container-image-test --version && docker run --rm --entrypoint sh doxa-agent-container-image-test -c 'test \"$DOXA_WORKSPACE_ROOT\" = /app && test -w \"$DOXA_WORKSPACE_ROOT/.workspaces\" && mkdir \"$DOXA_WORKSPACE_ROOT/.workspaces/image-smoke-test\"'"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.7",
+    "@doxahq/agent": "workspace:*",
+    "@doxahq/contracts": "workspace:*",
+    "@doxahq/docs-engine": "workspace:*",
+    "@doxahq/generation": "workspace:*",
+    "@doxahq/utility-kit": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260612.1",
+    "@doxahq/mdx-runtime": "workspace:*",
+    "@types/node": "^26.6.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9",
+    "wrangler": "^4.100.0"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

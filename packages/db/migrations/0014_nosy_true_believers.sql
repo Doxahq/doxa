@@ -1,0 +1,1 @@
+ALTER TABLE "docs_sites" ADD COLUMN "generation_baseline_reset_at" timestamp with time zone;

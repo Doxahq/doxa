@@ -1,0 +1,9 @@
+{
+  "name": "customized",
+  "description": "A customized site with theme, navigation, footer, and asset references.",
+  "schemaVersion": 2,
+  "siteId": "site-frozen-customized",
+  "versionId": "version-frozen-customized-2",
+  "projectId": "project-frozen-customized",
+  "projectSlug": "frozen-customized"
+}

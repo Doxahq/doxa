@@ -1,0 +1,58 @@
+import type { ThemePreset } from "../primitives/theme-preset";
+import type { ThemeTokenKey } from "../tokens";
+
+export const brutalistTheme = {
+  name: "Brutalist",
+  colorMode: "dark-only",
+  light: {
+    background: "oklch(0 0 0)",
+    foreground: "oklch(0.95 0 0)",
+    card: "oklch(0.07 0 0)",
+    cardForeground: "oklch(0.95 0 0)",
+    popover: "oklch(0.07 0 0)",
+    popoverForeground: "oklch(0.95 0 0)",
+    primary: "oklch(0.55 0.214 259.815)",
+    primaryForeground: "oklch(1 0 0)",
+    secondary: "oklch(0.12 0 0)",
+    secondaryForeground: "oklch(0.85 0 0)",
+    muted: "oklch(0.15 0 0)",
+    mutedForeground: "oklch(0.45 0 0)",
+    accent: "oklch(0.1 0 0)",
+    accentForeground: "oklch(0.95 0 0)",
+    destructive: "oklch(0.577 0.245 27.325)",
+    destructiveForeground: "oklch(0.985 0 0)",
+    border: "oklch(0.22 0 0)",
+    input: "oklch(0.22 0 0)",
+    ring: "oklch(0.55 0.214 259.815)",
+    radius: "0",
+    chart1: "oklch(0.488 0.243 264.376)",
+    chart2: "oklch(0.696 0.17 162.48)",
+    chart3: "oklch(0.769 0.188 70.08)",
+    chart4: "oklch(0.627 0.265 303.9)",
+    chart5: "oklch(0.645 0.246 16.439)",
+    sidebar: "oklch(0.05 0 0)",
+    sidebarForeground: "oklch(0.95 0 0)",
+    sidebarPrimary: "oklch(0.55 0.214 259.815)",
+    sidebarPrimaryForeground: "oklch(1 0 0)",
+    sidebarAccent: "oklch(0.1 0 0)",
+    sidebarAccentForeground: "oklch(0.95 0 0)",
+    sidebarBorder: "oklch(0.22 0 0)",
+    sidebarRing: "oklch(0.55 0.214 259.815)",
+    codeBg: "oklch(0.12 0 0)",
+    codeFg: "oklch(0.8 0 0)",
+    codeBorder: "oklch(0.22 0 0)",
+  },
+  fonts: { body: "JetBrains Mono", code: "JetBrains Mono" },
+  extraCss: [
+    "::selection { background: oklch(0.55 0.214 259.815 / 0.3); }",
+    ".grid-pattern { background-image: linear-gradient(oklch(0.15 0 0) 1px, transparent 1px), linear-gradient(90deg, oklch(0.15 0 0) 1px, transparent 1px); background-size: 60px 60px; }",
+    ".dot-pattern { background-image: radial-gradient(circle, oklch(0.2 0 0) 1px, transparent 1px); background-size: 32px 32px; }",
+    ".section-divider { height: 1px; background: linear-gradient(90deg, transparent, oklch(0.25 0 0), oklch(0.25 0 0), transparent); }",
+    ".terminal-window { border: 1px solid oklch(0.22 0 0); background: oklch(0.04 0 0); }",
+    ".terminal-window-header { border-bottom: 1px solid oklch(0.18 0 0); background: oklch(0.06 0 0); padding: 8px 12px; display: flex; align-items: center; gap: 6px; }",
+    ".terminal-dot { width: 8px; height: 8px; border-radius: 50%; background: oklch(0.25 0 0); }",
+  ].join("\n"),
+} satisfies ThemePreset & {
+  light: Record<ThemeTokenKey, string>;
+  dark?: Record<ThemeTokenKey, string>;
+};

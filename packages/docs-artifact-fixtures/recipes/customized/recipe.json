@@ -1,0 +1,72 @@
+{
+  "description": "A customized site with theme, navigation, footer, and asset references.",
+  "siteId": "site-frozen-customized",
+  "versionId": "version-frozen-customized-2",
+  "projectId": "project-frozen-customized",
+  "projectSlug": "frozen-customized",
+  "projectName": "Customized Docs",
+  "generatedAt": "2026-09-24T00:00:00.000Z",
+  "siteConfig": {
+    "name": "Customized Docs",
+    "description": "A customized frozen site.",
+    "theme": {
+      "preset": "brutalist",
+      "primary": "#123456",
+      "tokens": {
+        "light": {
+          "background": "#ffffff"
+        },
+        "dark": {
+          "background": "#111111"
+        }
+      }
+    },
+    "branding": {
+      "logo": {
+        "light": "asset:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "dark": "asset:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    "navbar": {
+      "cta": {
+        "label": "Start here",
+        "href": "/overview",
+        "variant": "primary"
+      },
+      "links": [
+        {
+          "label": "Blog",
+          "href": "https://example.com/blog",
+          "newTab": true
+        }
+      ],
+      "github": "https://github.com/example/docs"
+    },
+    "footer": {
+      "groups": [
+        {
+          "title": "Product",
+          "links": [
+            {
+              "label": "Pricing",
+              "href": "https://example.com/pricing"
+            }
+          ]
+        }
+      ],
+      "socials": {
+        "github": "https://github.com/example/docs"
+      }
+    },
+    "seo": {
+      "keywords": ["customized", "docs"]
+    }
+  },
+  "pages": [
+    {
+      "title": "Overview",
+      "route": "/overview",
+      "file": "pages/overview.mdx"
+    }
+  ]
+}

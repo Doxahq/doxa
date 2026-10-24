@@ -1,0 +1,22 @@
+{
+  "name": "@doxahq/api-edge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The thin doxa-api Worker: proxies api.doxa.so to the Node origin, forwards the RPC entrypoints, bridges Cloudflare bindings for the origin and sends the cron tick.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787 --inspector-port 9238 --persist-to ../../.wrangler/state",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@doxahq/api-bridge": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260612.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9",
+    "wrangler": "^4.82.2"
+  }
+}

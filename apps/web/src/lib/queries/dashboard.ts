@@ -1,0 +1,234 @@
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query"
+import type { GitHubRepositoryDto } from "@doxahq/contracts"
+import type { BranchRef } from "@doxahq/contracts/docs-branches"
+
+import { getErrorMessage } from "~/lib/errors"
+import {
+  getJob,
+  getProject,
+  getProjectContent,
+  getProjectContentMdxReport,
+  getProjectContentPage,
+  getProjectDoxabotSettings,
+  getProjectGenerationCache,
+  getProjectPreviewVisibility,
+  getProjectGeneration,
+  listDocsDomains,
+  listJobEvents,
+  listPendingMerges,
+  listProjectGenerationEvents,
+  listProjectGenerations,
+  listProjects,
+  listRepositories,
+} from "~/lib/platform-api"
+import { fromProjectShell } from "~/lib/queries/project-shell"
+
+/**
+ * The repositories the GitHub App can read. A failed list is a result with an
+ * error, not a failed query, so the screens that show it keep working.
+ */
+export interface GitHubRepositoriesResult {
+  repositories: GitHubRepositoryDto[]
+  error: string | null
+}
+
+export type ProjectDetail = Awaited<ReturnType<typeof getProject>>
+
+export const dashboardQueryKeys = {
+  all: ["dashboard"] as const,
+  /** The account-level lists. Invalidating it refreshes both lists below. */
+  summary: () => [...dashboardQueryKeys.all, "summary"] as const,
+  projects: () => [...dashboardQueryKeys.summary(), "projects"] as const,
+  githubRepositories: () => [...dashboardQueryKeys.summary(), "github-repositories"] as const,
+  project: (projectId: string) => [...dashboardQueryKeys.all, "projects", projectId] as const,
+  contentRoot: (projectId: string) => [...dashboardQueryKeys.project(projectId), "content"] as const,
+  content: (projectId: string, branch: BranchRef) =>
+    [...dashboardQueryKeys.contentRoot(projectId), branch] as const,
+  contentPage: (projectId: string, branch: BranchRef, href: string) =>
+    [...dashboardQueryKeys.content(projectId, branch), "pages", href] as const,
+  /** Under `content`, so every edit, sync, discard and publish refreshes it. */
+  contentMdxReport: (projectId: string, branch: BranchRef) =>
+    [...dashboardQueryKeys.content(projectId, branch), "mdx-issues"] as const,
+  domains: (projectId: string) => [...dashboardQueryKeys.project(projectId), "domains"] as const,
+  doxabot: (projectId: string) => [...dashboardQueryKeys.project(projectId), "doxabot"] as const,
+  pendingMerges: (projectId: string) =>
+    [...dashboardQueryKeys.project(projectId), "pending-merges"] as const,
+  generationCache: (projectId: string) =>
+    [...dashboardQueryKeys.project(projectId), "generation-cache"] as const,
+  previewVisibility: (projectId: string) =>
+    [...dashboardQueryKeys.project(projectId), "preview-visibility"] as const,
+  generations: (projectId: string) => [...dashboardQueryKeys.project(projectId), "generations"] as const,
+  generation: (projectId: string, generationId: string) => [
+    ...dashboardQueryKeys.generations(projectId),
+    generationId,
+  ] as const,
+  generationEvents: (projectId: string, generationId: string) => [
+    ...dashboardQueryKeys.generation(projectId, generationId),
+    "events",
+  ] as const,
+  job: (jobId: string) => [...dashboardQueryKeys.all, "jobs", jobId] as const,
+  events: (jobId: string) => [...dashboardQueryKeys.job(jobId), "events"] as const,
+}
+
+/**
+ * The projects list changes only through mutations, and each of them
+ * invalidates it, so it stays fresh for minutes. The shell, the project
+ * switcher and ⌘K then share it with no request on each mount.
+ */
+const PROJECTS_STALE_TIME_MS = 5 * 60_000
+
+export function projectsListQueryOptions() {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.projects(),
+    queryFn: listProjects,
+    staleTime: PROJECTS_STALE_TIME_MS,
+  })
+}
+
+/** Only the screens that show repositories use it, so other pages skip the request. */
+export function githubRepositoriesQueryOptions() {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.githubRepositories(),
+    queryFn: loadGitHubRepositories,
+    staleTime: 10_000,
+  })
+}
+
+export function projectDetailQueryOptions(projectId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.project(projectId),
+    queryFn: (context) => fromProjectShell(context, projectId, "project", () => getProject(projectId)),
+    staleTime: 5_000,
+  })
+}
+
+export function projectContentQueryOptions(projectId: string, branch: BranchRef) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.content(projectId, branch),
+    queryFn: () => getProjectContent(projectId, branch),
+    staleTime: 5_000,
+    retry: false,
+  })
+}
+
+export function projectContentMdxReportQueryOptions(projectId: string, branch: BranchRef) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.contentMdxReport(projectId, branch),
+    queryFn: () => getProjectContentMdxReport(projectId, branch),
+    staleTime: 5_000,
+    retry: false,
+  })
+}
+
+export function projectContentPageQueryOptions(
+  projectId: string,
+  branch: BranchRef,
+  href: string | null,
+) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.contentPage(projectId, branch, href ?? ""),
+    queryFn: () => getProjectContentPage(projectId, href ?? "/", branch),
+    enabled: href !== null,
+    // Page sources are only changed through this editor, so the cached copy
+    // stays authoritative until a mutation replaces it.
+    staleTime: Infinity,
+    retry: false,
+  })
+}
+
+export function docsDomainsQueryOptions(projectId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.domains(projectId),
+    queryFn: (context) => fromProjectShell(context, projectId, "docsDomains", () => listDocsDomains(projectId)),
+    staleTime: 5_000,
+  })
+}
+
+/** Pull requests merged since the last production generation started. */
+export function pendingMergesQueryOptions(projectId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.pendingMerges(projectId),
+    queryFn: (context) => fromProjectShell(context, projectId, "pendingMerges", () => listPendingMerges(projectId)),
+    staleTime: 30_000,
+    retry: false,
+  })
+}
+
+export function projectDoxabotQueryOptions(projectId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.doxabot(projectId),
+    queryFn: (context) =>
+      fromProjectShell(context, projectId, "doxabot", () => getProjectDoxabotSettings(projectId)),
+    staleTime: 5_000,
+  })
+}
+
+export function projectGenerationCacheQueryOptions(projectId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.generationCache(projectId),
+    queryFn: () => getProjectGenerationCache(projectId),
+    staleTime: 5_000,
+  })
+}
+
+export function projectPreviewVisibilityQueryOptions(projectId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.previewVisibility(projectId),
+    queryFn: () => getProjectPreviewVisibility(projectId),
+    staleTime: 5_000,
+  })
+}
+
+export function projectGenerationsQueryOptions(projectId: string) {
+  return infiniteQueryOptions({
+    queryKey: dashboardQueryKeys.generations(projectId),
+    queryFn: (context) => {
+      const fetchPage = () => listProjectGenerations(projectId, { limit: 20, cursor: context.pageParam })
+      // The shell holds the first page only.
+      return context.pageParam === null ? fromProjectShell(context, projectId, "generations", fetchPage) : fetchPage()
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    staleTime: 2_500,
+  })
+}
+
+export function projectGenerationQueryOptions(projectId: string, generationId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.generation(projectId, generationId),
+    queryFn: () => getProjectGeneration(projectId, generationId),
+    staleTime: 2_500,
+  })
+}
+
+export function projectGenerationEventsQueryOptions(projectId: string, generationId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.generationEvents(projectId, generationId),
+    queryFn: () => listProjectGenerationEvents(projectId, generationId),
+    staleTime: 2_500,
+  })
+}
+
+export function generationJobQueryOptions(jobId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.job(jobId),
+    queryFn: () => getJob(jobId),
+    staleTime: 2_500,
+  })
+}
+
+export function jobEventsQueryOptions(jobId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.events(jobId),
+    queryFn: () => listJobEvents(jobId),
+    staleTime: 2_500,
+  })
+}
+
+async function loadGitHubRepositories(): Promise<GitHubRepositoriesResult> {
+  try {
+    return { repositories: await listRepositories(), error: null }
+  } catch (error) {
+    return { repositories: [], error: getErrorMessage(error, "Failed to load repositories.") }
+  }
+}

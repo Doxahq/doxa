@@ -1,0 +1,58 @@
+---
+title: Quickstart
+description: Edit a page, preview it, and publish your first change.
+keywords: ["quickstart", "edit", "publish"]
+icon: rocket
+---
+
+Use these steps to make your first change to this site.
+
+<Step>
+  <StepItem title="Open the editor">
+    In the dashboard, open **Content**. Select this page, **Quickstart**, in the page list.
+  </StepItem>
+
+  <StepItem title="Change the text">
+    Click in the page and type. Use **Write** mode for a visual editor, or **Split** mode to edit the MDX source next to a live preview.
+  </StepItem>
+
+  <StepItem title="Publish">
+    Click **Publish**. Your change goes live on your site in a few seconds.
+  </StepItem>
+</Step>
+
+<Note title="Your changes are saved" type="success">
+  Doxa saves every edit as a draft. Nothing changes on your live site until you publish.
+</Note>
+
+## Edit in the editor or in MDX
+
+Every page is an MDX file. MDX is Markdown with components. Choose the mode that you like:
+
+<Tabs defaultValue="write" className="pt-5 pb-1">
+  <TabsList>
+    <TabsTrigger value="write">Write mode</TabsTrigger>
+    <TabsTrigger value="mdx">MDX source</TabsTrigger>
+  </TabsList>
+  <TabsContent value="write">
+    Write mode works like a document editor. Use the toolbar or type `/` to add headings, lists, code blocks, and components.
+  </TabsContent>
+  <TabsContent value="mdx">
+
+```mdx title="quickstart/index.mdx"
+---
+title: Quickstart
+description: Edit a page, preview it, and publish your first change.
+---
+
+Use these steps to make your first change to this site.
+```
+
+  </TabsContent>
+</Tabs>
+
+## Next steps
+
+- Learn the Markdown basics in [Text and formatting](/writing/formatting).
+- Add notes, cards, and steps with [Callouts and cards](/writing/components).
+- Change the sidebar and sections in [Navigation and sections](/publishing/navigation).

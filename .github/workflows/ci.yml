@@ -1,0 +1,97 @@
+name: CI
+
+# Checks every pull request and every push to main. It has no secrets and
+# deploys nothing: production deploys run from the operator's private ops
+# repo, against a commit of this repo (see docs/current/self-hosting.md).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push cancels the old run on a PR branch. On main every commit keeps
+# its run: the ops deploy reads that result instead of testing again.
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || 'branch' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  check:
+    name: Validate, typecheck and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      CI: "true"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # setup-node@v5 caches the packageManager store, so pnpm must exist first.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The configs hold ID placeholders here; the checks run on their structure.
+      - name: Validate production configuration
+        run: pnpm validate:production-config
+
+      - name: Build workspace packages
+        run: pnpm --filter './packages/**' build
+
+      - name: Run typecheck
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test
+
+  agent-node26:
+    name: Test the agent container on Node 26
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      CI: "true"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "26"
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages
+        run: pnpm --filter './packages/**' build
+
+      - name: Run agent and utility job tests
+        run: >-
+          pnpm
+          --filter @doxahq/agent
+          --filter @doxahq/agent-container
+          --filter @doxahq/utility-kit
+          --filter @doxahq/job-spec-reader
+          test

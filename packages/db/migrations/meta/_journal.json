@@ -1,0 +1,286 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1781283111619,
+      "tag": "0000_special_imperial_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781454870688,
+      "tag": "0002_classy_kate_bishop",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781599830645,
+      "tag": "0003_luxuriant_misty_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781680000000,
+      "tag": "0004_ordered_job_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782135490232,
+      "tag": "0005_docs_domains",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782144262256,
+      "tag": "0006_docs_domain_provider_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783166197829,
+      "tag": "0007_chubby_secret_warriors",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784457341290,
+      "tag": "0008_marvelous_slyde",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784802989397,
+      "tag": "0009_doxabot_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784806301290,
+      "tag": "0010_doxabot_control_plane_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784807646745,
+      "tag": "0011_doxabot_durable_ingress",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784931888463,
+      "tag": "0012_immutable_generation_config",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785005868311,
+      "tag": "0013_generation_observability_and_models",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785193500000,
+      "tag": "0014_repair_generation_observability_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1785779492769,
+      "tag": "0014_nosy_true_believers",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1787250619284,
+      "tag": "0015_fantastic_wildside",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787350614647,
+      "tag": "0016_yielding_ronan",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1787353581082,
+      "tag": "0017_groovy_golden_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787593839775,
+      "tag": "0018_charming_loki",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787698751932,
+      "tag": "0019_smooth_golden_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788130881802,
+      "tag": "0020_fair_cerebro",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789551232803,
+      "tag": "0021_docs_cache_invalidations",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789860055956,
+      "tag": "0022_docs_prerender_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790030706567,
+      "tag": "0023_storage_gc_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790267240606,
+      "tag": "0024_tricky_tusk",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790292677987,
+      "tag": "0025_docs_version_channel_numbers",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791127807626,
+      "tag": "0026_agent_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791129550283,
+      "tag": "0027_agent_approval_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1791221292760,
+      "tag": "0028_agent_action_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791222347435,
+      "tag": "0029_docs_branch_creator",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791227329884,
+      "tag": "0030_teams",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791368947303,
+      "tag": "0031_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791379869444,
+      "tag": "0032_docs_domain_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791728764608,
+      "tag": "0033_generation_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791731752036,
+      "tag": "0034_page_ownership",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791732436138,
+      "tag": "0035_seeded_generation",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791733326579,
+      "tag": "0036_merge_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791927879529,
+      "tag": "0037_review_page_branch_href",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792106502478,
+      "tag": "0038_usage_records_kept",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792107115947,
+      "tag": "0039_version_retention",
+      "breakpoints": true
+    }
+  ]
+}

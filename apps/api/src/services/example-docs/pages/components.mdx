@@ -1,0 +1,96 @@
+---
+title: Callouts and cards
+description: Use notes, cards, steps, and tabs to make pages easier to scan.
+keywords: ["components", "notes", "cards", "steps", "tabs"]
+icon: layers
+---
+
+Components add structure that plain Markdown cannot give. In Write mode, type `/` to add a component.
+
+## Notes
+
+Use a note for information that readers must not miss. There are four types:
+
+<Note title="Note">
+  Use the default type for helpful information.
+</Note>
+
+<Note title="Success" type="success">
+  Use the success type to confirm that a task is complete.
+</Note>
+
+<Note title="Warning" type="warning">
+  Use the warning type when an action has a side effect.
+</Note>
+
+<Note title="Danger" type="danger">
+  Use the danger type when an action can cause data loss.
+</Note>
+
+## Cards
+
+Use cards to link to related pages. Put cards in a `CardGrid`.
+
+<CardGrid>
+  <Card
+    title="Code blocks"
+    description="Syntax highlighting and file titles."
+    href="/writing/code-blocks"
+  />
+  <Card
+    title="Diagrams"
+    description="Flowcharts and file trees."
+    href="/writing/diagrams"
+  />
+  <Card
+    title="Small card"
+    icon="alignJustify"
+    variant="small"
+    description="A compact card with an icon."
+    href="/publishing/navigation"
+  />
+</CardGrid>
+
+## Steps
+
+Use steps for a procedure that readers do in order.
+
+<Step>
+  <StepItem title="Create an API key">
+    Open **Settings** and click **New API key**.
+  </StepItem>
+
+  <StepItem title="Save the key">
+    Copy the key into your environment file.
+
+```bash title=".env"
+EXAMPLE_API_KEY=sk_test_123
+```
+
+  </StepItem>
+
+  <StepItem title="Make a request">
+    Send your first request. The [API reference](/api) shows each endpoint.
+  </StepItem>
+</Step>
+
+## Tabs
+
+Use tabs when readers choose one option from a set.
+
+<Tabs defaultValue="macos" className="pt-5 pb-1">
+  <TabsList>
+    <TabsTrigger value="macos">macOS</TabsTrigger>
+    <TabsTrigger value="windows">Windows</TabsTrigger>
+    <TabsTrigger value="linux">Linux</TabsTrigger>
+  </TabsList>
+  <TabsContent value="macos">
+    Install with Homebrew: `brew install example`.
+  </TabsContent>
+  <TabsContent value="windows">
+    Install with winget: `winget install example`.
+  </TabsContent>
+  <TabsContent value="linux">
+    Install with the script: `curl -fsSL https://example.com/install.sh | sh`.
+  </TabsContent>
+</Tabs>

@@ -1,0 +1,310 @@
+flowchart TD
+
+%% generation-pipeline-v1
+%% Current source-of-truth flow for manual production generation, Doxabot
+%% preview generation, durable stage execution, incremental reuse, publication,
+%% observability, cancellation, and docs delivery. The flow contains only
+%% behavior implemented by the current platform.
+%% Primary source map:
+%% - apps/api/src/routes/projects.ts
+%% - apps/api/src/routes/github.ts
+%% - apps/api/src/services/production-generation-admission.ts
+%% - apps/api/src/services/doxabot/webhook-orchestrator.ts
+%% - apps/agent-worker/src/index.ts
+%% - apps/agent-worker/src/generation-workflow-runtime.ts
+%% - apps/agent-worker/src/generation-state-store.ts
+%% - apps/agent-worker/src/generation-page-cache.ts
+%% - apps/agent-container/src/staged-generation.ts
+%% - apps/agent-container/src/incremental-generation.ts
+%% - apps/agent-container/src/repository-snapshot.ts
+%% - packages/agent/src/state/planning.ts
+%% - packages/agent/src/doxa-agent/generation-service.ts
+%% - packages/agent/src/utils/page-validator.ts
+%% - packages/agent/src/utils/docs-quality-validator.ts
+%% - apps/docs-runtime/src/runtime-source.ts
+
+    subgraph A["1. Trigger and generation-job admission — apps/api"]
+        A1["Manual generation from dashboard/API"]
+        A2["POST /projects/:projectId/generate"]
+        A3["Authenticate user and verify project ownership"]
+        A4["Check global pause and production concurrency key"]
+        A5["Resolve exact default-branch revision and compatible published baseline"]
+        A6["Create production job with pinned models, profile, revisions, and fingerprints"]
+
+        A7["GitHub pull-request webhook / Doxabot"]
+        A8["Verify signature and idempotently claim delivery"]
+        A9["Normalize event and check project automation policy"]
+        A10["Require eligible open, non-draft PR targeting the default branch"]
+        A11["Cancel superseded active preview for the same PR"]
+        A12["Select prior compatible PR preview or published version as baseline"]
+        A13["Create preview job with idempotency and PR concurrency keys"]
+        A14["Create or reconcile GitHub review/check run"]
+
+        A15{"GENERATION_MODE"}
+        A16["starter-dev: publish fixed starter documentation"]
+        A17["container-inline: run legacy local coordinator"]
+        A18["queue: publish GenerateJobMessage to Cloudflare Queue"]
+
+        A1 --> A2 --> A3 --> A4 --> A5 --> A6 --> A15
+        A7 --> A8 --> A9 --> A10 --> A11 --> A12 --> A13 --> A14 --> A18
+        A15 -->|"starter-dev"| A16
+        A15 -->|"container-inline"| A17
+        A15 -->|"queue"| A18
+    end
+
+    subgraph B["2. Durable workflow admission and preparation — apps/agent-worker"]
+        B1["Queue consumer receives job message"]
+        B2{"Generation globally paused?"}
+        B3["Cancel job and acknowledge message"]
+        B4["Create Cloudflare Workflow instance using job ID"]
+        B5["Duplicate Workflow delivery is acknowledged idempotently"]
+        B6["Verify generation database schema compatibility"]
+        B7["Load exact execution context from InternalApi/Postgres"]
+        B8{"Revision-aware production or preview context?"}
+        B9["Use current revision-aware durable workflow"]
+        B10["Use legacy durable workflow"]
+        B11["Check pause state and OpenRouter configuration"]
+        B12["Mark job running and create immutable version ID"]
+        B13{"Preview job?"}
+        B14["Re-read current PR head and accepted base revision"]
+        B15{"Still current?"}
+        B16["Mark superseded, update review run, and stop"]
+        B17["Continue exact revision generation"]
+
+        B1 --> B2
+        B2 -->|"Yes"| B3
+        B2 -->|"No"| B4
+        B4 -.-> B5
+        B4 --> B6 --> B7 --> B8
+        B8 -->|"Yes"| B9 --> B11
+        B8 -->|"No"| B10
+        B11 --> B12 --> B13
+        B13 -->|"Yes"| B14 --> B15
+        B15 -->|"No"| B16
+        B15 -->|"Yes"| B17
+        B13 -->|"No"| B17
+    end
+
+    A18 --> B1
+
+    subgraph C["3. Compatible baseline-state loading — R2 + Postgres"]
+        C1["Read baselineVersionId and baseline version metadata from execution context"]
+        C2{"Exact generation-state prefix recorded?"}
+        C3["Load immutable generation-state manifest from R2"]
+        C4["Validate schema version, site/version identity, prefix, and object references"]
+        C5["Load and hash-validate source state"]
+        C6["Load and hash-validate reusable analysis state"]
+        C7["Load and hash-validate reusable structure state"]
+        C8["Load and hash-validate per-page states"]
+        C9["Baseline provides file hashes, page-input hashes, content hashes, dependencies, and fingerprints"]
+        C10["No compatible reusable state; planner will use safe full-generation behavior"]
+
+        C1 --> C2
+        C2 -->|"Yes"| C3 --> C4
+        C4 -->|"Valid"| C5 --> C6 --> C7 --> C8 --> C9
+        C2 -->|"No"| C10
+        C4 -->|"Missing, corrupt, or incompatible"| C10
+    end
+
+    B17 --> C1
+
+    subgraph D["4. Plan-stage workspace and source-change detection — agent container"]
+        D1["Worker creates a short-lived GitHub installation token"]
+        D2["Invoke combined plan stage by default"]
+        D3["Create isolated workspace for this stage execution"]
+        D4["Checkout exact commit or synthetic PR merge revision"]
+        D5{"Merge conflict?"}
+        D6["Return action-required result without writing or publishing docs"]
+        D7["Capture source inventory and deterministic content hashes"]
+        D8["Compare target source state against baseline source state"]
+        D9["Detect added, modified, deleted, and content-identical renamed files"]
+        D10["Filter documentation-irrelevant paths such as tests, lockfiles, and binary assets"]
+
+        D1 --> D2 --> D3 --> D4 --> D5
+        D5 -->|"Yes"| D6
+        D5 -->|"No"| D7 --> D8 --> D9 --> D10
+    end
+
+    C9 --> D1
+    C10 --> D1
+
+    subgraph E["5. Current revision-aware analysis and structure planning"]
+        E1["Build structural fingerprint from route, API, schema, package, and docs-config signals"]
+        E2["Create preliminary generation plan against published structure and page state"]
+        E3{"Compatible baseline exists?"}
+        E4["Full analysis, regenerate structure, regenerate all pages"]
+        E5{"Planning fingerprint changed?"}
+        E6["Full analysis and full regeneration"]
+        E7{"Any documentation-relevant source change?"}
+        E8["Reuse analysis, structure, and all existing pages; zero model calls"]
+        E9{"Structural signal or structural fingerprint changed?"}
+        E10["Incrementally update analysis and regenerate structure"]
+        E11{"Writing fingerprint changed?"}
+        E12["Reuse analysis and structure but rewrite all pages"]
+        E13["Use changed file paths and prior per-page file dependencies"]
+        E14{"Changed paths map to prior pages?"}
+        E15["Regenerate pages whose input hash or file dependency changed"]
+        E16["Conservative broad/full page regeneration because changes are unmapped"]
+
+        E17{"Analysis mode"}
+        E18["Reuse published analysis"]
+        E19["Run incremental LLM analysis using published analysis plus changed-source context"]
+        E20["Run full LLM repository analysis"]
+
+        E21{"Structure mode"}
+        E22["Reuse compatible published structure"]
+        E23["Suggest structure with planner model"]
+        E24["Review proposed structure for public readers"]
+        E25["Apply generation-profile and maximum-page budget"]
+        E26["Flatten structure into stable page targets and input hashes"]
+        E27["Build deterministic navigation, route registry, and writer handoff"]
+        E28["Finalize page plan against final structure"]
+        E29["regeneratePageIds"]
+        E30["reusePageIds"]
+        E31["removedPageIds"]
+        E32["Persist analysis and structure checkpoints to transient R2 keys"]
+
+        D10 --> E1 --> E2 --> E3
+        E3 -->|"No"| E4 --> E17
+        E3 -->|"Yes"| E5
+        E5 -->|"Yes"| E6 --> E17
+        E5 -->|"No"| E7
+        E7 -->|"No"| E8 --> E17
+        E7 -->|"Yes"| E9
+        E9 -->|"Yes"| E10 --> E17
+        E9 -->|"No"| E11
+        E11 -->|"Yes"| E12 --> E17
+        E11 -->|"No"| E13 --> E14
+        E14 -->|"Yes"| E15 --> E17
+        E14 -->|"No"| E16 --> E17
+
+        E17 -->|"Reuse"| E18 --> E21
+        E17 -->|"Incremental"| E19 --> E21
+        E17 -->|"Full"| E20 --> E21
+        E21 -->|"Reuse"| E22 --> E26
+        E21 -->|"Regenerate"| E23 --> E24 --> E25 --> E26
+        E26 --> E27 --> E28
+        E28 --> E29
+        E28 --> E30
+        E28 --> E31
+        E28 --> E32
+    end
+
+    subgraph F["6. Page reuse, page cache, and affected-page writing"]
+        F1{"Any regeneratePageIds?"}
+        F2["Skip writer stages"]
+        F3["Split affected pages into batches using page concurrency"]
+        F4["Dispatch bounded durable write-batch workers"]
+        F5["Read analysis and structure checkpoints"]
+        F6["Prepare page-cache context from declared evidence and prior dependencies"]
+        F7{"Validated page-cache hit?"}
+        F8["Checkpoint cached page without a model call"]
+        F9["Build page-specific evidence bundle"]
+        F10{"Evidence bundle sufficient?"}
+        F11["Use evidence-first writer path"]
+        F12["Use agentic fallback with read-only repository tools"]
+        F13["LLM produces complete MDX page"]
+        F14["Rewrite internal links against the current route registry"]
+        F15["Validate frontmatter, MDX syntax, JSX balance, components, code fences, and page rules"]
+        F16{"Page acceptable?"}
+        F17["Apply bounded targeted repair or fresh-page retry"]
+        F18["Record accessed, discovered, and evidence source files plus referenced symbol/route metadata"]
+        F19["Calculate content hash and page-input hash"]
+        F20["Write resumable per-page checkpoint to R2"]
+        F21["Run partial-doc quality validation for the generated batch"]
+        F22{"Batch quality acceptable?"}
+        F23["Run bounded quality-repair candidates"]
+        F24["Fail the batch when retry/repair policy is exhausted"]
+        F25["Load reusePageIds from baseline artifacts and verify prefix/content hash"]
+
+        E29 --> F1
+        F1 -->|"No"| F2
+        F1 -->|"Yes"| F3 --> F4 --> F5 --> F6 --> F7
+        F7 -->|"Yes"| F8 --> F20
+        F7 -->|"No"| F9 --> F10
+        F10 -->|"Yes"| F11 --> F13
+        F10 -->|"No"| F12 --> F13
+        F13 --> F14 --> F15 --> F16
+        F16 -->|"No"| F17 --> F13
+        F16 -->|"Yes"| F18 --> F19 --> F20
+        F20 --> F21 --> F22
+        F22 -->|"No"| F23 --> F21
+        F22 -->|"Repair budget exhausted"| F24
+        E30 --> F25
+    end
+
+    subgraph G["7. Incremental assembly and runtime-artifact validation"]
+        G1["Read generated page checkpoints in parallel"]
+        G2["Read verified reused pages from baseline R2 artifacts"]
+        G3["Assemble regenerated and reused pages in final structure order"]
+        G4["Reject missing, duplicate, unavailable, or unexpected page IDs"]
+        G5["Finalize runtime navigation"]
+        G6["Build versioned docs bundle"]
+        G7["source MDX, settings, sections, document indexes, search index, and manifest"]
+        G8["Validate artifact paths, identities, and required files"]
+        G9["Emit internal-link warnings"]
+        G10["Upload artifacts to versioned R2 prefix"]
+        G11["Create finalization checkpoint with page states and generation counts"]
+
+        F20 --> G1
+        F2 --> G1
+        F25 --> G2
+        G1 --> G3
+        G2 --> G3
+        G3 --> G4 --> G5 --> G6 --> G7 --> G8 --> G9 --> G10 --> G11
+    end
+
+    subgraph H["8. Immutable generation state and atomic publication"]
+        H1["Persist source state to immutable R2 key"]
+        H2["Persist analysis state to immutable R2 key"]
+        H3["Persist structure state to immutable R2 key"]
+        H4["Persist sorted per-page state objects to immutable R2 keys"]
+        H5["Write generation-state manifest last"]
+        H6["Manifest records baseline, revisions, hashes, fingerprints, and object references"]
+        H7["Call InternalApi completeJobOutput"]
+        H8{"Publication mode"}
+        H9["Production: transactionally create version and advance publishedVersionId"]
+        H10["Preview: create isolated version and compare-and-set preview channel head"]
+        H11["Update GitHub review/check with status, preview URL, and generation counts"]
+        H12["Delete transient job checkpoints"]
+
+        G11 --> H1 --> H2 --> H3 --> H4 --> H5 --> H6 --> H7 --> H8
+        H8 -->|"Production"| H9 --> H12
+        H8 -->|"Preview"| H10 --> H11 --> H12
+    end
+
+    subgraph I["9. Docs delivery"]
+        I1["Resolve production publishedVersionId or preview currentVersionId"]
+        I2["apps/docs-runtime reads the exact R2 manifest, settings, search data, and MDX"]
+        I3["apps/docs-template renders the shared documentation experience"]
+        I4["Reader opens generated documentation"]
+
+        I1 --> I2 --> I3 --> I4
+    end
+
+    H9 --> I1
+    H10 --> I1
+    B10 -.->|"Legacy durable full-generation compatibility path"| I1
+    A16 -.->|"Starter version"| I1
+    A17 -.->|"Inline-generated production version"| I1
+
+    subgraph J["10. Cross-cutting reliability, cancellation, and observability"]
+        J1["Every durable step checks job-active state"]
+        J2["Stage timeouts are bounded by the overall generation budget"]
+        J3["Workflow retries use idempotent steps and immutable state keys"]
+        J4["Container NDJSON emits events, heartbeats, usage, diagnostics, page checkpoints, and results"]
+        J5["Postgres job events feed dashboard SSE"]
+        J6["Model usage, retries, repair diagnostics, and stage timings are recorded best-effort"]
+        J7["User cancellation, admin pause, supersession, or watchdog makes the job terminal"]
+        J8["Failed/cancelled jobs request container destruction and cannot publish"]
+        J9["Successful jobs clean transient checkpoints after publication"]
+    end
+
+    B4 -.-> J1
+    D2 -.-> J2
+    F4 -.-> J3
+    F13 -.-> J4
+    J4 --> J5
+    J4 --> J6
+    J7 --> J8
+    H12 -.-> J9

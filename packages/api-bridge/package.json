@@ -1,0 +1,24 @@
+{
+  "name": "@doxahq/api-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The HTTP protocol between the thin doxa-api Worker and the Node API origin: RPC calls, bridge calls, the cron tick, the codec and the shared keys.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "devalue": "6.0.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

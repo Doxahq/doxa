@@ -1,0 +1,3 @@
+# Copy to .dev.vars. The Node origin (apps/api, pnpm dev:api:node) must use the same two values.
+ORIGIN_SHARED_SECRET=<at least 32 random characters>
+BRIDGE_SHARED_SECRET=<at least 32 random characters>

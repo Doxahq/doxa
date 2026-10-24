@@ -1,0 +1,42 @@
+---
+title: MDX Components
+description: Every note variant, inline code, tables, and links in one page.
+keywords: ["mdx", "components", "notes"]
+---
+
+## Notes
+
+<Note title="Search index">
+  Run `pnpm generate-content-json` after editing docs.
+</Note>
+
+<Note title="Warning" type="warning">
+  Set `AI_API_KEY` before enabling Chat with Docs in production.
+</Note>
+
+<Note title="Danger" type="danger">
+  Do not expose provider secrets as public Vite environment variables.
+</Note>
+
+## Standard Markdown
+
+Inline `code`, **bold**, _italic_, and a [relative link](/quickstart) plus an [external link](https://doxa.so).
+
+| Option | Default | Meaning |
+| ------ | ------- | ------- |
+| `port` | `3000`  | The dev server port. |
+| `open` | `false` | Open the browser on start. |
+
+```ts title="example.ts"
+export function greet(name: string): string {
+  return `Hello, ${name}`;
+}
+```
+
+> A block quote survives the round trip.
+
+1. First ordered item.
+2. Second ordered item.
+
+- First unordered item.
+- Second unordered item.

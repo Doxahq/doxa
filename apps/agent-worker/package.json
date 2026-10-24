@@ -1,0 +1,26 @@
+{
+  "name": "@doxahq/agent-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --inspector-port 9232",
+    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@doxahq/agent": "workspace:*",
+    "@doxahq/contracts": "workspace:*",
+    "@doxahq/docs-engine": "workspace:*",
+    "@doxahq/generation": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260612.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9",
+    "wrangler": "^4.82.2"
+  }
+}

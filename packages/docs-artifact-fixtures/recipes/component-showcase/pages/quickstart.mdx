@@ -1,0 +1,57 @@
+---
+title: Quickstart
+description: Run the showcase docs site locally in three steps.
+keywords: ["quickstart", "install", "dev server"]
+icon: rocket
+---
+
+Follow these steps to run the site.
+
+<Step>
+  <StepItem title="Install dependencies">
+
+```bash
+pnpm install
+```
+
+  </StepItem>
+
+  <StepItem title="Start the dev server">
+
+```bash
+pnpm dev
+```
+
+  </StepItem>
+
+  <StepItem title="Open the site">
+    Open `http://localhost:3000` in the browser.
+  </StepItem>
+</Step>
+
+## Choose a deployment target
+
+<Tabs defaultValue="cloudflare" className="pt-5 pb-1">
+  <TabsList>
+    <TabsTrigger value="cloudflare">Cloudflare</TabsTrigger>
+    <TabsTrigger value="vercel">Vercel</TabsTrigger>
+  </TabsList>
+  <TabsContent value="cloudflare">
+
+```bash
+pnpm build:cloudflare
+```
+
+  </TabsContent>
+  <TabsContent value="vercel">
+
+```bash
+pnpm build:vercel
+```
+
+  </TabsContent>
+</Tabs>
+
+<Note title="Success" type="success">
+  The local docs site is running.
+</Note>

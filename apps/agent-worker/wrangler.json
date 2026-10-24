@@ -1,0 +1,154 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doxa-agent-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-12",
+  "vars": {
+    "AGENT_CONTAINER_URL": "http://localhost:8789",
+    "DOXA_MODEL_PROVIDER": "anthropic",
+    "DOXA_PLANNER_MODEL": "claude-sonnet-5-5",
+    "DOXA_WRITER_MODEL": "claude-haiku-5-5",
+    "DOXA_PLANNER_MODEL_OPENROUTER": "anthropic/claude-sonnet-5.5",
+    "DOXA_WRITER_MODEL_OPENROUTER": "anthropic/claude-haiku-5.5",
+    "DOXA_PLANNER_MODEL_PREVIOUS": "x-ai/grok-4.5:nitro",
+    "DOXA_WRITER_MODEL_PREVIOUS": "openai/gpt-5.6-luna",
+    "DOXA_GENERATION_PROFILE": "full-prod",
+    "DOXA_AGENT_PAGE_CONCURRENCY": "24",
+    "DOXA_AGENT_MAX_PAGES": "120",
+    "GENERATION_TIMEOUT_MS": "720000",
+    "GENERATION_IDLE_TIMEOUT_MS": "90000",
+    "GENERATION_OVERALL_TIMEOUT_MS": "10800000",
+    "ANALYSIS_STAGE_TIMEOUT_MS": "2700000",
+    "STRUCTURE_STAGE_TIMEOUT_MS": "1800000",
+    "PAGE_BATCH_TIMEOUT_MS": "1800000",
+    "FINALIZATION_TIMEOUT_MS": "600000"
+  },
+  "workflows": [
+    {
+      "binding": "GENERATION_WORKFLOW",
+      "name": "doxa-generation-workflow",
+      "class_name": "GenerationWorkflow"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "WRITER_SLOTS",
+        "class_name": "WriterSlotsDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "WriterSlotsDurableObject"
+      ]
+    }
+  ],
+  "services": [
+    {
+      "binding": "API",
+      "service": "doxa-api",
+      "entrypoint": "InternalApi"
+    },
+    {
+      "binding": "AGENT_CONTAINER",
+      "service": "doxa-agent-container"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DOCS_BUCKET",
+      "bucket_name": "doxa-docs-artifacts"
+    }
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "queue": "doxa-generation-jobs",
+        "max_batch_size": 1,
+        "max_batch_timeout": 30,
+        "max_concurrency": 5,
+        "max_retries": 5,
+        "retry_delay": 60
+      }
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  },
+  "env": {
+    "production": {
+      "vars": {
+        "AGENT_CONTAINER_URL": "",
+        "DOXA_PLANNER_MODEL": "x-ai/grok-4.5:nitro",
+        "DOXA_WRITER_MODEL": "openai/gpt-5.6-luna",
+        "DOXA_GENERATION_PROFILE": "full-prod",
+        "DOXA_AGENT_PAGE_CONCURRENCY": "24",
+        "DOXA_AGENT_MAX_PAGES": "120",
+        "GENERATION_TIMEOUT_MS": "720000",
+        "GENERATION_IDLE_TIMEOUT_MS": "90000",
+        "GENERATION_OVERALL_TIMEOUT_MS": "10800000",
+        "ANALYSIS_STAGE_TIMEOUT_MS": "2700000",
+        "STRUCTURE_STAGE_TIMEOUT_MS": "1800000",
+        "PAGE_BATCH_TIMEOUT_MS": "1800000",
+        "FINALIZATION_TIMEOUT_MS": "600000"
+      },
+      "workflows": [
+        {
+          "binding": "GENERATION_WORKFLOW",
+          "name": "doxa-generation-workflow-production",
+          "class_name": "GenerationWorkflow"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "WRITER_SLOTS",
+            "class_name": "WriterSlotsDurableObject"
+          }
+        ]
+      },
+      "services": [
+        {
+          "binding": "API",
+          "service": "doxa-api-production",
+          "entrypoint": "InternalApi"
+        },
+        {
+          "binding": "AGENT_CONTAINER",
+          "service": "doxa-agent-container-production"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "DOCS_BUCKET",
+          "bucket_name": "doxa-docs-artifacts-enam"
+        }
+      ],
+      "queues": {
+        "consumers": [
+          {
+            "queue": "doxa-generation-jobs",
+            "max_batch_size": 1,
+            "max_batch_timeout": 30,
+            "max_concurrency": 5,
+            "max_retries": 5,
+            "retry_delay": 60
+          }
+        ]
+      },
+      "triggers": {
+        "crons": [
+          "*/5 * * * *"
+        ]
+      }
+    }
+  }
+}

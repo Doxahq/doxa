@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "data": [
+    {
+      "title": "Frozen Starter",
+      "href": "/"
+    },
+    {
+      "title": "Getting Started",
+      "href": "/getting-started"
+    }
+  ]
+}

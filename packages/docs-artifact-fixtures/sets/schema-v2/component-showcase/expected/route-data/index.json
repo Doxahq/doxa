@@ -1,0 +1,140 @@
+{
+  "ok": true,
+  "data": {
+    "type": "page",
+    "slug": "",
+    "href": "/",
+    "homeHref": "/",
+    "site": {
+      "name": "Frozen Showcase",
+      "description": "",
+      "url": "https://frozen.doxa.page"
+    },
+    "features": {
+      "branding": true,
+      "rightSidebar": true,
+      "feedbackEdit": false,
+      "tableOfContents": true,
+      "scrollToTop": true,
+      "ai": {
+        "chat": false,
+        "chatWithPage": false,
+        "floatingInput": false
+      },
+      "copyPage": {
+        "markdown": true,
+        "rawText": true
+      },
+      "apiPlayground": true,
+      "rawMarkdown": true,
+      "loadFromGithub": false
+    },
+    "sections": [
+      {
+        "slug": "default",
+        "label": "Documentation",
+        "default": true,
+        "kind": "documentation",
+        "layout": "docs"
+      },
+      {
+        "slug": "api",
+        "label": "API Reference",
+        "kind": "reference",
+        "layout": "reference",
+        "default": false
+      }
+    ],
+    "currentSection": {
+      "slug": "default",
+      "label": "Documentation",
+      "default": true,
+      "kind": "documentation",
+      "layout": "docs"
+    },
+    "sectionHomeHrefs": {
+      "default": "/",
+      "api": "/api/messages/create"
+    },
+    "sectionNavigation": [
+      {
+        "heading": "Start Here"
+      },
+      {
+        "title": "Overview",
+        "href": "/",
+        "icon": "book"
+      },
+      {
+        "title": "Quickstart",
+        "href": "/quickstart",
+        "icon": "rocket"
+      },
+      {
+        "spacer": true
+      },
+      {
+        "heading": "Authoring"
+      },
+      {
+        "title": "MDX Components",
+        "href": "/components"
+      },
+      {
+        "title": "Diagrams And Trees",
+        "href": "/diagrams",
+        "badge": "New"
+      }
+    ],
+    "sectionRoutes": [
+      {
+        "title": "Overview",
+        "href": "/",
+        "icon": "book"
+      },
+      {
+        "title": "Quickstart",
+        "href": "/quickstart",
+        "icon": "rocket"
+      },
+      {
+        "title": "MDX Components",
+        "href": "/components"
+      },
+      {
+        "title": "Diagrams And Trees",
+        "href": "/diagrams",
+        "badge": "New"
+      }
+    ],
+    "routeTitle": "Overview",
+    "sectionHeading": "Start Here",
+    "previous": null,
+    "next": {
+      "title": "Quickstart",
+      "href": "/quickstart",
+      "icon": "rocket"
+    },
+    "page": {
+      "slug": "",
+      "href": "/",
+      "title": "Frozen Showcase",
+      "description": "A frozen artifact set that exercises every documented MDX component.",
+      "sourcePath": "source/index.mdx",
+      "body": "---\ntitle: Frozen Showcase\ndescription: A frozen artifact set that exercises every documented MDX component.\nkeywords: [\"overview\", \"showcase\", \"compatibility\"]\nicon: book\n---\n\nFrozen Showcase is a fixture site. It exists so the evergreen renderer proves it can still read artifact schema version 1.\n\n<CardGrid>\n  <Card\n    subtitle=\"Start\"\n    title=\"Quickstart\"\n    description=\"Install dependencies and run the docs site locally.\"\n    href=\"/quickstart\"\n  />\n  <Card\n    title=\"Components\"\n    href=\"/components\"\n    icon=\"alignJustify\"\n    variant=\"small\"\n    description=\"Notes, steps, and tabs.\"\n  />\n  <Card\n    title=\"Repository\"\n    href=\"https://github.com/doxahq/doxa\"\n    external={true}\n  />\n</CardGrid>\n\n## What this site covers\n\n- Grouped navigation with icons and badges.\n- Two sections: documentation and API reference.\n- Every component from the component playbook.\n\n<Note title=\"Frozen\">\n  Do not edit the pages of this site. A change here silently weakens the compatibility gate.\n</Note>\n",
+      "keywords": [
+        "[\"overview\"",
+        "\"showcase\"",
+        "\"compatibility\"]"
+      ],
+      "sectionSlug": "default",
+      "headings": [
+        {
+          "level": 2,
+          "text": "What this site covers",
+          "href": "#what-this-site-covers"
+        }
+      ]
+    }
+  }
+}

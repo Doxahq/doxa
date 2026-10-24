@@ -1,0 +1,18 @@
+---
+title: API Overview
+description: Authentication and conventions for the showcase REST API.
+keywords: ["api", "authentication", "rest"]
+icon: server
+---
+
+Every request carries a bearer token in the `Authorization` header.
+
+<Note title="Base URL">
+  The showcase API lives at `https://api.example.com/v1`.
+</Note>
+
+## Conventions
+
+- Timestamps are ISO 8601 strings in UTC.
+- Identifiers are opaque strings.
+- Errors return a JSON body with `code` and `message`.

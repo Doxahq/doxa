@@ -1,0 +1,172 @@
+{
+  "ok": true,
+  "data": {
+    "$schema": "https://doxa.so/schemas/site-config/v1.json",
+    "version": 1,
+    "name": "Customized Docs",
+    "description": "A customized frozen site.",
+    "branding": {
+      "logo": {
+        "light": "asset:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "dark": "asset:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "href": "/"
+      },
+      "favicon": null,
+      "ogImage": null,
+      "poweredBy": true
+    },
+    "theme": {
+      "preset": "brutalist",
+      "defaultMode": "system",
+      "colorMode": "dark-only",
+      "primary": "#123456",
+      "radius": "0",
+      "fonts": {
+        "body": "JetBrains Mono",
+        "code": "JetBrains Mono"
+      },
+      "tokens": {
+        "light": {
+          "background": "#ffffff",
+          "foreground": "oklch(0.95 0 0)",
+          "card": "oklch(0.07 0 0)",
+          "cardForeground": "oklch(0.95 0 0)",
+          "popover": "oklch(0.07 0 0)",
+          "popoverForeground": "oklch(0.95 0 0)",
+          "primary": "#123456",
+          "primaryForeground": "oklch(1 0 0)",
+          "secondary": "oklch(0.12 0 0)",
+          "secondaryForeground": "oklch(0.85 0 0)",
+          "muted": "oklch(0.15 0 0)",
+          "mutedForeground": "oklch(0.45 0 0)",
+          "accent": "oklch(0.1 0 0)",
+          "accentForeground": "oklch(0.95 0 0)",
+          "destructive": "oklch(0.577 0.245 27.325)",
+          "destructiveForeground": "oklch(0.985 0 0)",
+          "border": "oklch(0.22 0 0)",
+          "input": "oklch(0.22 0 0)",
+          "ring": "oklch(0.55 0.214 259.815)",
+          "radius": "0",
+          "chart1": "oklch(0.488 0.243 264.376)",
+          "chart2": "oklch(0.696 0.17 162.48)",
+          "chart3": "oklch(0.769 0.188 70.08)",
+          "chart4": "oklch(0.627 0.265 303.9)",
+          "chart5": "oklch(0.645 0.246 16.439)",
+          "sidebar": "oklch(0.05 0 0)",
+          "sidebarForeground": "oklch(0.95 0 0)",
+          "sidebarPrimary": "oklch(0.55 0.214 259.815)",
+          "sidebarPrimaryForeground": "oklch(1 0 0)",
+          "sidebarAccent": "oklch(0.1 0 0)",
+          "sidebarAccentForeground": "oklch(0.95 0 0)",
+          "sidebarBorder": "oklch(0.22 0 0)",
+          "sidebarRing": "oklch(0.55 0.214 259.815)",
+          "codeBg": "oklch(0.12 0 0)",
+          "codeFg": "oklch(0.8 0 0)",
+          "codeBorder": "oklch(0.22 0 0)"
+        },
+        "dark": {
+          "background": "#111111",
+          "foreground": "oklch(0.95 0 0)",
+          "card": "oklch(0.07 0 0)",
+          "cardForeground": "oklch(0.95 0 0)",
+          "popover": "oklch(0.07 0 0)",
+          "popoverForeground": "oklch(0.95 0 0)",
+          "primary": "#123456",
+          "primaryForeground": "oklch(1 0 0)",
+          "secondary": "oklch(0.12 0 0)",
+          "secondaryForeground": "oklch(0.85 0 0)",
+          "muted": "oklch(0.15 0 0)",
+          "mutedForeground": "oklch(0.45 0 0)",
+          "accent": "oklch(0.1 0 0)",
+          "accentForeground": "oklch(0.95 0 0)",
+          "destructive": "oklch(0.577 0.245 27.325)",
+          "destructiveForeground": "oklch(0.985 0 0)",
+          "border": "oklch(0.22 0 0)",
+          "input": "oklch(0.22 0 0)",
+          "ring": "oklch(0.55 0.214 259.815)",
+          "radius": "0",
+          "chart1": "oklch(0.488 0.243 264.376)",
+          "chart2": "oklch(0.696 0.17 162.48)",
+          "chart3": "oklch(0.769 0.188 70.08)",
+          "chart4": "oklch(0.627 0.265 303.9)",
+          "chart5": "oklch(0.645 0.246 16.439)",
+          "sidebar": "oklch(0.05 0 0)",
+          "sidebarForeground": "oklch(0.95 0 0)",
+          "sidebarPrimary": "oklch(0.55 0.214 259.815)",
+          "sidebarPrimaryForeground": "oklch(1 0 0)",
+          "sidebarAccent": "oklch(0.1 0 0)",
+          "sidebarAccentForeground": "oklch(0.95 0 0)",
+          "sidebarBorder": "oklch(0.22 0 0)",
+          "sidebarRing": "oklch(0.55 0.214 259.815)",
+          "codeBg": "oklch(0.12 0 0)",
+          "codeFg": "oklch(0.8 0 0)",
+          "codeBorder": "oklch(0.22 0 0)"
+        }
+      }
+    },
+    "navbar": {
+      "cta": {
+        "label": "Start here",
+        "href": "/overview",
+        "newTab": false,
+        "variant": "primary"
+      },
+      "links": [
+        {
+          "label": "Blog",
+          "href": "https://example.com/blog",
+          "newTab": true
+        }
+      ],
+      "github": "https://github.com/example/docs"
+    },
+    "footer": {
+      "groups": [
+        {
+          "title": "Product",
+          "links": [
+            {
+              "label": "Pricing",
+              "href": "https://example.com/pricing",
+              "newTab": false
+            }
+          ]
+        }
+      ],
+      "socials": {
+        "x": null,
+        "github": "https://github.com/example/docs",
+        "linkedin": null,
+        "discord": null,
+        "youtube": null
+      }
+    },
+    "seo": {
+      "keywords": [
+        "customized",
+        "docs"
+      ],
+      "twitterHandle": ""
+    },
+    "features": {
+      "branding": true,
+      "rightSidebar": true,
+      "feedbackEdit": false,
+      "tableOfContents": true,
+      "scrollToTop": true,
+      "AgressiveNavPrefetch": true,
+      "ai": {
+        "chat": false,
+        "chatWithPage": false,
+        "floatingInput": false
+      },
+      "copyPage": {
+        "markdown": true,
+        "rawText": true
+      },
+      "apiPlayground": true,
+      "rawMarkdown": true,
+      "loadFromGithub": false
+    }
+  }
+}

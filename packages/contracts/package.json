@@ -1,0 +1,45 @@
+{
+  "name": "@doxahq/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./validation": "./src/validation.ts",
+    "./validation-messages": "./src/validation-messages.ts",
+    "./docs-branches": "./src/docs-branches.ts",
+    "./generation-reviews": "./src/generation-reviews.ts",
+    "./project-shell": "./src/project-shell.ts",
+    "./docs-assets": "./src/docs-assets.ts",
+    "./agent-access": "./src/agent-access.ts",
+    "./approval-requests": "./src/approval-requests.ts",
+    "./approval-settings": "./src/approval-settings.ts",
+    "./teams": "./src/teams.ts",
+    "./site-assets": "./src/site-assets.ts",
+    "./entitlements": "./src/entitlements.ts",
+    "./docs-prerender": "./src/docs-prerender.ts",
+    "./docs-prerender-tasks": "./src/docs-prerender-tasks.ts",
+    "./docs-resolver": "./src/docs-resolver.ts",
+    "./storage-gc": "./src/storage-gc.ts",
+    "./storage-lifecycle": "./src/storage-lifecycle.ts",
+    "./retention-policy": "./src/retention-policy.ts",
+    "./email-preferences": "./src/email-preferences.ts",
+    "./email-deliveries": "./src/email-deliveries.ts",
+    "./spec-reader": "./src/spec-reader.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@doxahq/email": "workspace:*",
+    "@doxahq/site-config": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

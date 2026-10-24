@@ -1,0 +1,82 @@
+/* Shared styles for the marketing site (nav, guide lines, bands, buttons, footer).
+   Every page root carries `.pg` plus `.pg--<page>`; see components/marketing. */
+
+/* Undo two Tailwind base rules that the design does not have: line-height 1.5 on
+   html, and block images and icons. `:where` keeps any page rule stronger. */
+.pg { line-height: normal; }
+.pg :where(img, svg, video, canvas) { display: inline; vertical-align: baseline; }
+.pg a { color: inherit; text-decoration: none; }
+.pg a:hover { color: #ffffff; }
+
+/* ---------- Guide lines ---------- */
+.pg .rails { position: absolute; top: 0; bottom: 0; left: var(--gutter); right: var(--gutter); z-index: 6; pointer-events: none; background-image: var(--dash-y), var(--dash-y); background-size: 1px 8px, 1px 8px; background-position: left top, right top; background-repeat: repeat-y; }
+.pg .hr { position: relative; z-index: 6; height: 1px; background-image: var(--dash-x); background-size: 8px 1px; background-repeat: repeat-x; }
+.pg .hr::before, .pg .hr::after { content: "+"; position: absolute; top: 0; padding: 0 2px; transform: translate(-50%, -50%); font: 400 13px/1 var(--mono); color: #8a8a8f; background: var(--night); }
+.pg .hr::before { left: var(--gutter); }
+.pg .hr::after { left: calc(100% - var(--gutter)); }
+.pg .col { padding-left: var(--gutter); padding-right: var(--gutter); }
+
+/* ---------- Shared ---------- */
+.pg .label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+.pg .display { font-family: var(--display); font-weight: 700; letter-spacing: -0.03em; text-transform: uppercase; color: #fafafa; }
+.pg .mark { background: var(--accent); color: #ffffff; padding: 0 0.1em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+
+/* ---------- Nav ---------- */
+.pg .nav { position: relative; z-index: 7; display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 64px; }
+.pg .brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: 0.22em; }
+
+/* ---------- Box bands ---------- */
+/* Bands sit above the rails (z-index 6) on the page color, so each vertical guide stops at a
+   band's top line and carries on under its bottom line instead of crossing it. */
+.pg .band { position: relative; z-index: 7; background-color: var(--night); }
+.pg .band__row { position: relative; height: 8px; background-image: var(--dash-x); background-size: 8px 1px; background-repeat: repeat-x; background-position: left bottom; }
+.pg .band--top { background-image: var(--dash-x); background-size: 8px 1px; background-repeat: repeat-x; }
+
+/* Cells start folded. `Band` (components/marketing/band.tsx) fills them in from a random end
+   when the band scrolls into view. */
+.pg .cell { position: absolute; top: 0; bottom: 1px; transform: scaleX(0); transform-origin: 0% 50%; }
+.pg .c-blue { background: #3d7bff; }
+.pg .c-deep { background: #2453c9; }
+.pg .c-ice { background: #9cc2ff; }
+.pg .c-pale { background: rgba(156, 194, 255, 0.08); }
+.pg .c-lav { background: #c4a1ff; }
+
+/* ---------- Footer ---------- */
+.pg .foot { position: relative; overflow: hidden; isolation: isolate; background: #050505; }
+.pg .foot .hr::before, .pg .foot .hr::after { background: #050505; }
+.pg .foot__grid { display: grid; grid-template-columns: 1.3fr repeat(5, minmax(0, 1fr)); gap: 40px; padding: 72px 32px 40px; }
+.pg .foot__logo { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: 0.22em; color: #fafafa; }
+.pg .foot__col { display: flex; flex-direction: column; gap: 12px; }
+.pg .foot__col .label { margin-bottom: 6px; }
+.pg .foot__col a { font-size: 14px; color: #c7c7c7; width: fit-content; }
+.pg .foot__base { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 22px 32px 26px; }
+.pg .status { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border: 1px solid rgba(127, 214, 160, 0.5); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: #7fd6a0; }
+.pg .status i { width: 6px; height: 6px; background: #7fd6a0; animation: mk-blink 1.6s steps(1) infinite; }
+.pg .foot__mark { position: relative; height: clamp(120px, 16vw, 250px); overflow: hidden; }
+.pg .foot__mark span { position: absolute; left: 50%; top: 0; transform: translateX(-50%); font-family: var(--display); font-weight: 700; font-size: min(26vw, 380px); line-height: 0.8; letter-spacing: -0.05em; color: rgba(255, 255, 255, 0.05); white-space: nowrap; user-select: none; }
+@media (max-width: 1100px) {
+  .pg .foot__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .pg .foot__grid { grid-template-columns: minmax(0, 1fr); padding: 48px 16px 32px; }
+  .pg .foot__base { flex-direction: column; align-items: flex-start; padding: 20px 16px; }
+}
+
+@keyframes mk-ab-sync { 0%, 8% { background: #0b1020; box-shadow: none; } 18%, 82% { background: var(--accent); box-shadow: 0 0 12px rgba(61, 123, 255, 0.7); } 100% { background: #0b1020; box-shadow: none; } }
+@keyframes mk-back { 0% { left: calc(100% - 5px); opacity: 0; } 10%, 88% { opacity: 1; } 100% { left: 0; opacity: 0; } }
+@keyframes mk-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes mk-bob { 0%, 100% { transform: rotate(45deg) translateY(0); } 50% { transform: rotate(45deg) translateY(-6px); } }
+@keyframes mk-cxmenu-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes mk-ember { 0% { opacity: 0; transform: translateY(0); } 15% { opacity: 0.9; } 100% { opacity: 0; transform: translateY(-90px); } }
+@keyframes mk-engine { from { opacity: 0.75; transform: translate(-50%, -50%) scale(0.85); } to { opacity: 1; transform: translate(-50%, -50%) scale(1.12); } }
+@keyframes mk-out { 0% { left: 0; opacity: 0; } 10%, 88% { opacity: 1; } 100% { left: calc(100% - 5px); opacity: 0; } }
+@keyframes mk-ping { 0%, 70%, 100% { border-color: rgba(255, 255, 255, 0.16); background: transparent; } 80% { border-color: #3d7bff; background: rgba(61, 123, 255, 0.14); } }
+@keyframes mk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@keyframes mk-ring {
+  0% { width: 6px; height: 6px; opacity: 0; }
+  12% { opacity: 0.9; }
+  100% { width: 440px; height: 440px; opacity: 0; }
+}
+@keyframes mk-runx { from { left: 0%; } to { left: 100%; } }
+@keyframes mk-runy { from { top: 0%; } to { top: 100%; } }
+@keyframes mk-walk { 0% { top: 0; } 100% { top: calc(100% - 7px); } }

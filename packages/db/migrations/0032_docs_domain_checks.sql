@@ -1,0 +1,2 @@
+ALTER TABLE "docs_domains" ADD COLUMN "last_checked_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "docs_domains_status_check_idx" ON "docs_domains" USING btree ("verification_status","last_checked_at") WHERE "docs_domains"."kind" = 'custom_domain' AND "docs_domains"."provider_hostname_id" IS NOT NULL;

@@ -1,0 +1,969 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`issue model and schema output > emits stable JSON Schemas 1`] = `
+{
+  "$id": "https://doxa.so/schemas/site-config/v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "https://doxa.so/schemas/site-config/v1.json",
+      "default": "https://doxa.so/schemas/site-config/v1.json",
+      "type": "string",
+    },
+    "branding": {
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "favicon": {
+          "default": null,
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "logo": {
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "dark": {
+              "default": null,
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "href": {
+              "type": "string",
+            },
+            "light": {
+              "default": null,
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+          },
+          "type": "object",
+        },
+        "ogImage": {
+          "default": null,
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "poweredBy": {
+          "default": true,
+          "type": "boolean",
+        },
+      },
+      "type": "object",
+    },
+    "description": {
+      "default": "",
+      "maxLength": 300,
+      "type": "string",
+    },
+    "features": {
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "AgressiveNavPrefetch": {
+          "default": true,
+          "type": "boolean",
+        },
+        "ai": {
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "chat": {
+              "default": false,
+              "type": "boolean",
+            },
+            "chatWithPage": {
+              "default": false,
+              "type": "boolean",
+            },
+            "floatingInput": {
+              "default": false,
+              "type": "boolean",
+            },
+          },
+          "type": "object",
+        },
+        "apiPlayground": {
+          "default": true,
+          "type": "boolean",
+        },
+        "branding": {
+          "default": true,
+          "type": "boolean",
+        },
+        "copyPage": {
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "markdown": {
+              "default": true,
+              "type": "boolean",
+            },
+            "rawText": {
+              "default": true,
+              "type": "boolean",
+            },
+          },
+          "type": "object",
+        },
+        "feedbackEdit": {
+          "default": false,
+          "type": "boolean",
+        },
+        "loadFromGithub": {
+          "default": false,
+          "type": "boolean",
+        },
+        "rawMarkdown": {
+          "default": true,
+          "type": "boolean",
+        },
+        "rightSidebar": {
+          "default": true,
+          "type": "boolean",
+        },
+        "scrollToTop": {
+          "default": true,
+          "type": "boolean",
+        },
+        "tableOfContents": {
+          "default": true,
+          "type": "boolean",
+        },
+      },
+      "type": "object",
+    },
+    "footer": {
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "groups": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "links": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "href": {
+                      "type": "string",
+                    },
+                    "label": {
+                      "maxLength": 40,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "newTab": {
+                      "default": false,
+                      "type": "boolean",
+                    },
+                  },
+                  "required": [
+                    "label",
+                    "href",
+                  ],
+                  "type": "object",
+                },
+                "maxItems": 12,
+                "type": "array",
+              },
+              "title": {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string",
+              },
+            },
+            "required": [
+              "title",
+            ],
+            "type": "object",
+          },
+          "maxItems": 6,
+          "type": "array",
+        },
+        "socials": {
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "discord": {
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "github": {
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "linkedin": {
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "x": {
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "youtube": {
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+          },
+          "type": "object",
+        },
+      },
+      "type": "object",
+    },
+    "homePage": {
+      "type": "string",
+    },
+    "layout": {
+      "additionalProperties": false,
+      "properties": {
+        "collapsibleGroups": {
+          "default": false,
+          "type": "boolean",
+        },
+        "sidebar": {
+          "default": "beside-content",
+          "enum": [
+            "beside-content",
+            "page-edge",
+          ],
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "name": {
+      "default": "Documentation",
+      "maxLength": 80,
+      "type": "string",
+    },
+    "navbar": {
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "cta": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "href": {
+                  "type": "string",
+                },
+                "label": {
+                  "maxLength": 30,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "newTab": {
+                  "default": false,
+                  "type": "boolean",
+                },
+                "variant": {
+                  "default": "primary",
+                  "enum": [
+                    "primary",
+                    "outline",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "label",
+                "href",
+              ],
+              "type": "object",
+            },
+            {
+              "type": "null",
+            },
+          ],
+        },
+        "github": {
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "links": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "href": {
+                "type": "string",
+              },
+              "label": {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string",
+              },
+              "newTab": {
+                "default": false,
+                "type": "boolean",
+              },
+            },
+            "required": [
+              "label",
+              "href",
+            ],
+            "type": "object",
+          },
+          "maxItems": 8,
+          "type": "array",
+        },
+      },
+      "type": "object",
+    },
+    "seo": {
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "keywords": {
+          "default": [],
+          "items": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string",
+          },
+          "maxItems": 20,
+          "type": "array",
+        },
+        "twitterHandle": {
+          "default": "",
+          "maxLength": 80,
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "theme": {
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "colorMode": {
+          "enum": [
+            "light-dark",
+            "dark-only",
+          ],
+          "type": "string",
+        },
+        "defaultMode": {
+          "default": "system",
+          "enum": [
+            "system",
+            "light",
+            "dark",
+          ],
+          "type": "string",
+        },
+        "fonts": {
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "body": {
+              "enum": [
+                "Inter",
+                "JetBrains Mono",
+                "Sora",
+                "Fira Code",
+                "system-ui",
+                "ui-monospace",
+              ],
+              "type": "string",
+            },
+            "code": {
+              "enum": [
+                "Inter",
+                "JetBrains Mono",
+                "Sora",
+                "Fira Code",
+                "system-ui",
+                "ui-monospace",
+              ],
+              "type": "string",
+            },
+          },
+          "type": "object",
+        },
+        "preset": {
+          "default": "default",
+          "enum": [
+            "default",
+            "brutalist",
+          ],
+          "type": "string",
+        },
+        "primary": {
+          "default": null,
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "radius": {
+          "type": "string",
+        },
+        "tokens": {
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "dark": {
+              "additionalProperties": false,
+              "default": {},
+              "properties": {
+                "accent": {
+                  "type": "string",
+                },
+                "accentForeground": {
+                  "type": "string",
+                },
+                "background": {
+                  "type": "string",
+                },
+                "border": {
+                  "type": "string",
+                },
+                "card": {
+                  "type": "string",
+                },
+                "cardForeground": {
+                  "type": "string",
+                },
+                "chart1": {
+                  "type": "string",
+                },
+                "chart2": {
+                  "type": "string",
+                },
+                "chart3": {
+                  "type": "string",
+                },
+                "chart4": {
+                  "type": "string",
+                },
+                "chart5": {
+                  "type": "string",
+                },
+                "codeBg": {
+                  "type": "string",
+                },
+                "codeBorder": {
+                  "type": "string",
+                },
+                "codeFg": {
+                  "type": "string",
+                },
+                "destructive": {
+                  "type": "string",
+                },
+                "destructiveForeground": {
+                  "type": "string",
+                },
+                "foreground": {
+                  "type": "string",
+                },
+                "input": {
+                  "type": "string",
+                },
+                "muted": {
+                  "type": "string",
+                },
+                "mutedForeground": {
+                  "type": "string",
+                },
+                "popover": {
+                  "type": "string",
+                },
+                "popoverForeground": {
+                  "type": "string",
+                },
+                "primary": {
+                  "type": "string",
+                },
+                "primaryForeground": {
+                  "type": "string",
+                },
+                "radius": {
+                  "type": "string",
+                },
+                "ring": {
+                  "type": "string",
+                },
+                "secondary": {
+                  "type": "string",
+                },
+                "secondaryForeground": {
+                  "type": "string",
+                },
+                "sidebar": {
+                  "type": "string",
+                },
+                "sidebarAccent": {
+                  "type": "string",
+                },
+                "sidebarAccentForeground": {
+                  "type": "string",
+                },
+                "sidebarBorder": {
+                  "type": "string",
+                },
+                "sidebarForeground": {
+                  "type": "string",
+                },
+                "sidebarPrimary": {
+                  "type": "string",
+                },
+                "sidebarPrimaryForeground": {
+                  "type": "string",
+                },
+                "sidebarRing": {
+                  "type": "string",
+                },
+              },
+              "type": "object",
+            },
+            "light": {
+              "additionalProperties": false,
+              "default": {},
+              "properties": {
+                "accent": {
+                  "type": "string",
+                },
+                "accentForeground": {
+                  "type": "string",
+                },
+                "background": {
+                  "type": "string",
+                },
+                "border": {
+                  "type": "string",
+                },
+                "card": {
+                  "type": "string",
+                },
+                "cardForeground": {
+                  "type": "string",
+                },
+                "chart1": {
+                  "type": "string",
+                },
+                "chart2": {
+                  "type": "string",
+                },
+                "chart3": {
+                  "type": "string",
+                },
+                "chart4": {
+                  "type": "string",
+                },
+                "chart5": {
+                  "type": "string",
+                },
+                "codeBg": {
+                  "type": "string",
+                },
+                "codeBorder": {
+                  "type": "string",
+                },
+                "codeFg": {
+                  "type": "string",
+                },
+                "destructive": {
+                  "type": "string",
+                },
+                "destructiveForeground": {
+                  "type": "string",
+                },
+                "foreground": {
+                  "type": "string",
+                },
+                "input": {
+                  "type": "string",
+                },
+                "muted": {
+                  "type": "string",
+                },
+                "mutedForeground": {
+                  "type": "string",
+                },
+                "popover": {
+                  "type": "string",
+                },
+                "popoverForeground": {
+                  "type": "string",
+                },
+                "primary": {
+                  "type": "string",
+                },
+                "primaryForeground": {
+                  "type": "string",
+                },
+                "radius": {
+                  "type": "string",
+                },
+                "ring": {
+                  "type": "string",
+                },
+                "secondary": {
+                  "type": "string",
+                },
+                "secondaryForeground": {
+                  "type": "string",
+                },
+                "sidebar": {
+                  "type": "string",
+                },
+                "sidebarAccent": {
+                  "type": "string",
+                },
+                "sidebarAccentForeground": {
+                  "type": "string",
+                },
+                "sidebarBorder": {
+                  "type": "string",
+                },
+                "sidebarForeground": {
+                  "type": "string",
+                },
+                "sidebarPrimary": {
+                  "type": "string",
+                },
+                "sidebarPrimaryForeground": {
+                  "type": "string",
+                },
+                "sidebarRing": {
+                  "type": "string",
+                },
+              },
+              "type": "object",
+            },
+          },
+          "type": "object",
+        },
+      },
+      "type": "object",
+    },
+    "version": {
+      "const": 1,
+      "default": 1,
+      "type": "number",
+    },
+  },
+  "type": "object",
+}
+`;
+
+exports[`issue model and schema output > emits stable JSON Schemas 2`] = `
+{
+  "$id": "https://doxa.so/schemas/theme/v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "https://doxa.so/schemas/theme/v1.json",
+      "type": "string",
+    },
+    "colorMode": {
+      "default": "light-dark",
+      "enum": [
+        "light-dark",
+        "dark-only",
+      ],
+      "type": "string",
+    },
+    "fonts": {
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "body": {
+          "enum": [
+            "Inter",
+            "JetBrains Mono",
+            "Sora",
+            "Fira Code",
+            "system-ui",
+            "ui-monospace",
+          ],
+          "type": "string",
+        },
+        "code": {
+          "enum": [
+            "Inter",
+            "JetBrains Mono",
+            "Sora",
+            "Fira Code",
+            "system-ui",
+            "ui-monospace",
+          ],
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "name": {
+      "default": "Custom theme",
+      "maxLength": 80,
+      "type": "string",
+    },
+    "radius": {
+      "type": "string",
+    },
+    "tokens": {
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "dark": {
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "accent": {
+              "type": "string",
+            },
+            "accentForeground": {
+              "type": "string",
+            },
+            "background": {
+              "type": "string",
+            },
+            "border": {
+              "type": "string",
+            },
+            "card": {
+              "type": "string",
+            },
+            "cardForeground": {
+              "type": "string",
+            },
+            "chart1": {
+              "type": "string",
+            },
+            "chart2": {
+              "type": "string",
+            },
+            "chart3": {
+              "type": "string",
+            },
+            "chart4": {
+              "type": "string",
+            },
+            "chart5": {
+              "type": "string",
+            },
+            "codeBg": {
+              "type": "string",
+            },
+            "codeBorder": {
+              "type": "string",
+            },
+            "codeFg": {
+              "type": "string",
+            },
+            "destructive": {
+              "type": "string",
+            },
+            "destructiveForeground": {
+              "type": "string",
+            },
+            "foreground": {
+              "type": "string",
+            },
+            "input": {
+              "type": "string",
+            },
+            "muted": {
+              "type": "string",
+            },
+            "mutedForeground": {
+              "type": "string",
+            },
+            "popover": {
+              "type": "string",
+            },
+            "popoverForeground": {
+              "type": "string",
+            },
+            "primary": {
+              "type": "string",
+            },
+            "primaryForeground": {
+              "type": "string",
+            },
+            "radius": {
+              "type": "string",
+            },
+            "ring": {
+              "type": "string",
+            },
+            "secondary": {
+              "type": "string",
+            },
+            "secondaryForeground": {
+              "type": "string",
+            },
+            "sidebar": {
+              "type": "string",
+            },
+            "sidebarAccent": {
+              "type": "string",
+            },
+            "sidebarAccentForeground": {
+              "type": "string",
+            },
+            "sidebarBorder": {
+              "type": "string",
+            },
+            "sidebarForeground": {
+              "type": "string",
+            },
+            "sidebarPrimary": {
+              "type": "string",
+            },
+            "sidebarPrimaryForeground": {
+              "type": "string",
+            },
+            "sidebarRing": {
+              "type": "string",
+            },
+          },
+          "type": "object",
+        },
+        "light": {
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "accent": {
+              "type": "string",
+            },
+            "accentForeground": {
+              "type": "string",
+            },
+            "background": {
+              "type": "string",
+            },
+            "border": {
+              "type": "string",
+            },
+            "card": {
+              "type": "string",
+            },
+            "cardForeground": {
+              "type": "string",
+            },
+            "chart1": {
+              "type": "string",
+            },
+            "chart2": {
+              "type": "string",
+            },
+            "chart3": {
+              "type": "string",
+            },
+            "chart4": {
+              "type": "string",
+            },
+            "chart5": {
+              "type": "string",
+            },
+            "codeBg": {
+              "type": "string",
+            },
+            "codeBorder": {
+              "type": "string",
+            },
+            "codeFg": {
+              "type": "string",
+            },
+            "destructive": {
+              "type": "string",
+            },
+            "destructiveForeground": {
+              "type": "string",
+            },
+            "foreground": {
+              "type": "string",
+            },
+            "input": {
+              "type": "string",
+            },
+            "muted": {
+              "type": "string",
+            },
+            "mutedForeground": {
+              "type": "string",
+            },
+            "popover": {
+              "type": "string",
+            },
+            "popoverForeground": {
+              "type": "string",
+            },
+            "primary": {
+              "type": "string",
+            },
+            "primaryForeground": {
+              "type": "string",
+            },
+            "radius": {
+              "type": "string",
+            },
+            "ring": {
+              "type": "string",
+            },
+            "secondary": {
+              "type": "string",
+            },
+            "secondaryForeground": {
+              "type": "string",
+            },
+            "sidebar": {
+              "type": "string",
+            },
+            "sidebarAccent": {
+              "type": "string",
+            },
+            "sidebarAccentForeground": {
+              "type": "string",
+            },
+            "sidebarBorder": {
+              "type": "string",
+            },
+            "sidebarForeground": {
+              "type": "string",
+            },
+            "sidebarPrimary": {
+              "type": "string",
+            },
+            "sidebarPrimaryForeground": {
+              "type": "string",
+            },
+            "sidebarRing": {
+              "type": "string",
+            },
+          },
+          "type": "object",
+        },
+      },
+      "type": "object",
+    },
+  },
+  "type": "object",
+}
+`;

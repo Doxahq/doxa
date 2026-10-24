@@ -1,0 +1,143 @@
+{
+  "ok": true,
+  "data": {
+    "type": "page",
+    "slug": "quickstart",
+    "href": "/quickstart",
+    "homeHref": "/",
+    "site": {
+      "name": "frozen-showcase",
+      "description": "Documentation for frozen-showcase.",
+      "url": "https://frozen.doxa.page"
+    },
+    "features": {
+      "branding": true,
+      "rightSidebar": true,
+      "feedbackEdit": false,
+      "tableOfContents": true,
+      "scrollToTop": true,
+      "ai": {
+        "chat": false,
+        "chatWithPage": false,
+        "floatingInput": false
+      },
+      "copyPage": {
+        "markdown": true,
+        "rawText": true
+      },
+      "apiPlayground": true,
+      "rawMarkdown": true,
+      "loadFromGithub": false
+    },
+    "sections": [
+      {
+        "slug": "default",
+        "label": "Documentation",
+        "default": true,
+        "kind": "documentation",
+        "layout": "docs"
+      },
+      {
+        "slug": "api",
+        "label": "API Reference",
+        "kind": "reference",
+        "layout": "reference",
+        "default": false
+      }
+    ],
+    "currentSection": {
+      "slug": "default",
+      "label": "Documentation",
+      "default": true,
+      "kind": "documentation",
+      "layout": "docs"
+    },
+    "sectionHomeHrefs": {
+      "default": "/",
+      "api": "/api/messages/create"
+    },
+    "sectionNavigation": [
+      {
+        "heading": "Start Here"
+      },
+      {
+        "title": "Overview",
+        "href": "/",
+        "icon": "book"
+      },
+      {
+        "title": "Quickstart",
+        "href": "/quickstart",
+        "icon": "rocket"
+      },
+      {
+        "spacer": true
+      },
+      {
+        "heading": "Authoring"
+      },
+      {
+        "title": "MDX Components",
+        "href": "/components"
+      },
+      {
+        "title": "Diagrams And Trees",
+        "href": "/diagrams",
+        "badge": "New"
+      }
+    ],
+    "sectionRoutes": [
+      {
+        "title": "Overview",
+        "href": "/",
+        "icon": "book"
+      },
+      {
+        "title": "Quickstart",
+        "href": "/quickstart",
+        "icon": "rocket"
+      },
+      {
+        "title": "MDX Components",
+        "href": "/components"
+      },
+      {
+        "title": "Diagrams And Trees",
+        "href": "/diagrams",
+        "badge": "New"
+      }
+    ],
+    "routeTitle": "Quickstart",
+    "sectionHeading": "Start Here",
+    "previous": {
+      "title": "Overview",
+      "href": "/",
+      "icon": "book"
+    },
+    "next": {
+      "title": "MDX Components",
+      "href": "/components"
+    },
+    "page": {
+      "slug": "quickstart",
+      "href": "/quickstart",
+      "title": "Quickstart",
+      "description": "Run the showcase docs site locally in three steps.",
+      "sourcePath": "source/quickstart/index.mdx",
+      "body": "---\ntitle: Quickstart\ndescription: Run the showcase docs site locally in three steps.\nkeywords: [\"quickstart\", \"install\", \"dev server\"]\nicon: rocket\n---\n\nFollow these steps to run the site.\n\n<Step>\n  <StepItem title=\"Install dependencies\">\n\n```bash\npnpm install\n```\n\n  </StepItem>\n\n  <StepItem title=\"Start the dev server\">\n\n```bash\npnpm dev\n```\n\n  </StepItem>\n\n  <StepItem title=\"Open the site\">\n    Open `http://localhost:3000` in the browser.\n  </StepItem>\n</Step>\n\n## Choose a deployment target\n\n<Tabs defaultValue=\"cloudflare\" className=\"pt-5 pb-1\">\n  <TabsList>\n    <TabsTrigger value=\"cloudflare\">Cloudflare</TabsTrigger>\n    <TabsTrigger value=\"vercel\">Vercel</TabsTrigger>\n  </TabsList>\n  <TabsContent value=\"cloudflare\">\n\n```bash\npnpm build:cloudflare\n```\n\n  </TabsContent>\n  <TabsContent value=\"vercel\">\n\n```bash\npnpm build:vercel\n```\n\n  </TabsContent>\n</Tabs>\n\n<Note title=\"Success\" type=\"success\">\n  The local docs site is running.\n</Note>\n",
+      "keywords": [
+        "[\"quickstart\"",
+        "\"install\"",
+        "\"dev server\"]"
+      ],
+      "sectionSlug": "default",
+      "headings": [
+        {
+          "level": 2,
+          "text": "Choose a deployment target",
+          "href": "#choose-a-deployment-target"
+        }
+      ]
+    }
+  }
+}

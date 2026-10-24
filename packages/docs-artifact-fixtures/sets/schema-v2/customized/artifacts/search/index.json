@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "contentVersion": "version-frozen-customized-2",
+  "documents": [
+    {
+      "id": "/overview",
+      "slug": "/overview",
+      "title": "Overview",
+      "description": "Customized site overview",
+      "breadcrumb": [],
+      "section": "default",
+      "headings": [],
+      "keywords": [],
+      "content": "Overview Welcome to the customized documentation fixture.",
+      "lines": [
+        {
+          "text": "Overview"
+        },
+        {
+          "text": "Welcome to the customized documentation fixture."
+        }
+      ]
+    }
+  ]
+}

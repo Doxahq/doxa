@@ -1,0 +1,77 @@
+flowchart TB
+
+%% docs-preview-update-pipeline
+%% The incremental PR-preview path: GitHub webhook -> admission -> workflow ->
+%% source diffing -> revision-aware planning -> selective page writing -> publish.
+%% Companion narrative: ./docs-preview-update-pipeline.md
+%% Complements generation-pipeline-v1.mmd, which covers all generation modes.
+%% Primary source map:
+%% - apps/api/src/routes/github.ts
+%% - apps/api/src/services/doxabot/webhook-orchestrator.ts
+%% - apps/api/src/services/doxabot/queue-outbox.ts
+%% - apps/agent-worker/src/index.ts
+%% - apps/agent-worker/src/generation-workflow-runtime.ts
+%% - apps/agent-worker/src/generation-state-store.ts
+%% - apps/agent-worker/src/generation-page-cache.ts
+%% - apps/agent-container/src/staged-generation.ts
+%% - apps/agent-container/src/source-state.ts
+%% - apps/agent-container/src/source-delta.ts
+%% - apps/agent-container/src/incremental-generation.ts
+%% - packages/agent/src/state/planning.ts
+%% - packages/agent/src/state/source-changes.ts
+
+subgraph GH["GitHub"]
+  PR["Pull request opened<br/>or synchronized"]
+end
+
+subgraph API["apps/api - control plane"]
+  Hook["POST /github/webhook<br/>signature verify"]
+  Dedupe["Delivery claim<br/>duplicate delivery ignored"]
+  Filter["Eligibility filters<br/>base must be default branch<br/>open, non-draft"]
+  Baseline["Resolve baseline<br/>1 prior successful preview for same PR<br/>2 else project published version"]
+  Admit["Admission + idempotency key<br/>create job + change proposal"]
+  Q["Publish to GENERATION_QUEUE"]
+end
+
+subgraph WK["apps/agent-worker - durable orchestration"]
+  Consume["Queue consumer<br/>create Workflow instance"]
+  StepPlan["step: plan documentation"]
+  StepWrite["step: write page batches<br/>DOXA_WRITE_BATCH_PARALLELISM = 2"]
+  Cache["Two-tier R2 page cache<br/>exact + optional cross-model"]
+  StepPub["step: assemble, upload, publish"]
+end
+
+subgraph CT["apps/agent-container - plan stage"]
+  Snap["Checkout PR merge revision"]
+  Hash["captureGenerationSourceState<br/>SHA-256 every file"]
+  Delta["resolveSnapshotSourceDelta<br/>compare against baseline hashes<br/>added / modified / deleted / renamed"]
+  Prelim["planRevisionAwareGeneration<br/>preliminary plan"]
+  Analyze["Analysis<br/>full = explore + synthesize<br/>incremental = seeded, no exploration"]
+  Struct["Structure<br/>reuse published, or regenerate<br/>anchored to published structure"]
+  Final["finalizeIncrementalPlan<br/>per-page diff vs baseline"]
+end
+
+subgraph CW["apps/agent-container - write stage"]
+  Batch["Write only regeneratePageIds<br/>6 pages per batch"]
+  Reuse["Reused pages materialized<br/>from baseline R2 artifacts"]
+end
+
+R2[("Cloudflare R2<br/>artifacts + generation state")]
+DB[("Postgres<br/>jobs, events, versions")]
+
+PR --> Hook --> Dedupe --> Filter --> Baseline --> Admit --> Q
+Admit --> DB
+Q --> Consume --> StepPlan
+StepPlan --> Snap --> Hash --> Delta --> Prelim
+Prelim --> Analyze --> Struct --> Final
+Final --> StepWrite
+StepWrite --> Cache
+Cache --> Batch
+Final -.reusePageIds.-> Reuse
+Batch --> StepPub
+Reuse --> StepPub
+StepPub --> R2
+StepPub --> DB
+Delta -.reads baseline state.-> R2
+Reuse -.reads baseline pages.-> R2
+StepPub --> Preview["Preview published<br/>reusedPageCount / regeneratedPageCount"]

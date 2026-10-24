@@ -1,0 +1,36 @@
+---
+title: "Flags"
+description: "Manage flags, variations, and targeting rules via the REST API"
+keywords: ["flags", "api", "configuration"]
+icon: "flag"
+---
+
+## Create a flag
+
+```http
+POST /v1/projects/:projectId/flags
+```
+
+### Path parameters
+
+| Name      | Type   | Required | Description        |
+|-----------|--------|----------|--------------------|
+| projectId | string | yes      | Project identifier |
+
+### Request body
+
+```json
+{
+  "key": "new-feature",
+  "name": "New Feature",
+  "type": "boolean"
+}
+```
+
+### Responses
+
+- `201` – Flag created with default disabled configuration in every environment.
+- `404` – Project not found.
+- `409` – Flag key already exists.
+
+See the OpenAPI UI at `/docs` after starting the API for full request and response schemas.

@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "data": [
+    {
+      "kind": "page",
+      "pathname": "/"
+    },
+    {
+      "kind": "page",
+      "pathname": "/getting-started"
+    }
+  ]
+}

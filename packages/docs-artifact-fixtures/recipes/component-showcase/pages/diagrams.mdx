@@ -1,0 +1,26 @@
+---
+title: Diagrams And Trees
+description: Mermaid diagrams and file trees rendered from frozen content.
+keywords: ["mermaid", "diagram", "file tree"]
+---
+
+## Request flow
+
+<Mermaid
+  chart={`graph TD;
+    Visitor[Visitor] --> Dispatcher[doxa-docs-renderer];
+    Dispatcher --> Worker[Dynamic Worker];
+    Worker --> Runtime[docs-runtime];
+    Runtime --> R2[(R2 artifacts)];`}
+/>
+
+## Project layout
+
+<FileTree>
+  <Folder name="src" label="Source" defaultOpen>
+    <Folder name="contents" label="Docs content">
+      <File name="docs/overview/index.mdx" label="Overview page" />
+    </Folder>
+    <File name="router.tsx" />
+  </Folder>
+</FileTree>

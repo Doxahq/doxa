@@ -1,0 +1,60 @@
+---
+title: "Create Message"
+description: "Reference for POST /v1/messages, including request fields and responses."
+keywords: ["post", "messages", "rest-api"]
+icon: "server"
+apiMethod: "POST"
+apiPath: "/v1/messages"
+---
+
+Creates a message record and returns the stored message with its generated identifier.
+
+<ApiEndpoint method="POST" path="/v1/messages" baseUrl="https://api.example.com/v1">
+
+<ApiRequestExample client="curl" lang="bash" label="Create a message">
+
+```bash
+curl -X POST "https://api.example.com/v1/messages" \
+  -H "Authorization: Bearer doxa_test_token" \
+  -H "Content-Type: application/json" \
+  -d '{"body":"Ship reference docs as a separate section."}'
+```
+
+</ApiRequestExample>
+
+<ApiRequestExample client="node-fetch" lang="js" label="Create a message">
+
+```js
+const response = await fetch("https://api.example.com/v1/messages", {
+  method: "POST",
+  headers: {
+    Authorization: "Bearer doxa_test_token",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ body: "Ship reference docs as a separate section." }),
+});
+```
+
+</ApiRequestExample>
+
+<ApiResponseExample status="201" contentType="application/json">
+
+```json
+{ "id": "msg_123", "body": "Ship reference docs as a separate section." }
+```
+
+</ApiResponseExample>
+
+<ApiParams title="Body" detail="application/json">
+  <ApiParam name="body" type="string" location="body" required>
+    The message text.
+  </ApiParam>
+</ApiParams>
+
+<ApiParams title="Response" detail="application/json">
+  <ApiParam name="id" type="string" location="response" required>
+    The stable message identifier.
+  </ApiParam>
+</ApiParams>
+
+</ApiEndpoint>

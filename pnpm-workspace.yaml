@@ -1,0 +1,19 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+  - "apps/utility-jobs/*"
+
+onlyBuiltDependencies:
+  - "@openrouter/sdk"
+  - esbuild
+  - sharp
+  - workerd
+
+# core-js-pure's postinstall only prints a funding message.
+ignoredBuiltDependencies:
+  - core-js-pure
+
+# One version for packages that share schemas across Workers. Two versions
+# in one bundle double the Zod code and its start-up work.
+catalog:
+  zod: ^4.6.5

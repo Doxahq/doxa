@@ -1,0 +1,173 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doxa-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "BETTER_AUTH_URL": "http://localhost:8787",
+    "WEB_ORIGIN": "http://localhost:3001",
+    "DOCS_RUNTIME_URL": "http://localhost:8788",
+    "DOCS_BASE_DOMAIN": "localhost",
+    "DOCS_RENDERER_BASE_URL": "http://localhost:3002",
+    "DATABASE_URL": "postgresql://doxa:doxa@localhost:5432/doxa",
+    "GENERATION_MODE": "queue",
+    "AGENT_CONTAINER_URL": "http://localhost:8789",
+    "DOXA_PLANNER_MODEL": "claude-sonnet-5-5",
+    "DOXA_WRITER_MODEL": "claude-haiku-5-5",
+    "DOXA_PLANNER_MODEL_OPENROUTER": "anthropic/claude-sonnet-5.5",
+    "DOXA_WRITER_MODEL_OPENROUTER": "anthropic/claude-haiku-5.5",
+    "DOXA_PLANNER_MODEL_PREVIOUS": "x-ai/grok-4.5:nitro",
+    "DOXA_WRITER_MODEL_PREVIOUS": "openai/gpt-5.6-luna",
+    "DOXA_GENERATION_PROFILE": "fast-mvp",
+    "DOXA_AGENT_PAGE_CONCURRENCY": "6",
+    "DOXA_AGENT_MAX_PAGES": "120",
+    "DOXABOT_ENABLED": "false",
+    "DOXABOT_PUBLIC_REPOSITORIES_ENABLED": "false",
+    "GENERATION_TIMEOUT_MS": "720000",
+    "GENERATION_IDLE_TIMEOUT_MS": "90000",
+    "GENERATION_OVERALL_TIMEOUT_MS": "10800000",
+    "ANALYSIS_STAGE_TIMEOUT_MS": "2700000",
+    "STRUCTURE_STAGE_TIMEOUT_MS": "1800000",
+    "PAGE_BATCH_TIMEOUT_MS": "1800000",
+    "FINALIZATION_TIMEOUT_MS": "600000",
+    "ALLOW_INTERNAL_HTTP": "true",
+    "LOCAL_DEV_USER_ID": "local-dev-user",
+    "DEV_ADMIN_ENABLED": "true",
+    "ADMIN_EMAILS": "",
+    "OAUTH_ISSUER": "http://localhost:8787",
+    "MCP_RESOURCE_URL": "http://localhost:8791/mcp"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "local-oauth-kv"
+    }
+  ],
+  "services": [
+    {
+      "binding": "AGENT_CONTAINER",
+      "service": "doxa-agent-container"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DOCS_BUCKET",
+      "bucket_name": "doxa-docs-artifacts"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "GENERATION_QUEUE",
+        "queue": "doxa-generation-jobs"
+      },
+      {
+        "binding": "EMAIL_QUEUE",
+        "queue": "doxa-email-deliveries"
+      }
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "env": {
+    "production": {
+      "placement": { "region": "aws:us-east-1" },
+      "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+      "vars": {
+        "BETTER_AUTH_URL": "https://api.doxa.so",
+        "AUTH_COOKIE_DOMAIN": ".doxa.so",
+        "WEB_ORIGIN": "https://doxa.so",
+        "DOCS_RUNTIME_URL": "https://preview.doxa.so",
+        "DOCS_BASE_DOMAIN": "doxa.page",
+        "DOCS_CUSTOM_DOMAIN_CNAME_TARGET": "cname.doxa.page",
+        "DOXA_RENDERER_RELEASE_ID": "unconfigured",
+        "CLOUDFLARE_ZONE_ID": "${CF_DOCS_ZONE_ID}",
+        "GENERATION_MODE": "queue",
+        "DATABASE_URL": "",
+        "AGENT_CONTAINER_URL": "",
+        "DOXA_PLANNER_MODEL": "x-ai/grok-4.5:nitro",
+        "DOXA_WRITER_MODEL": "openai/gpt-5.6-luna",
+        "DOXA_GENERATION_PROFILE": "fast-mvp",
+        "DOXA_AGENT_PAGE_CONCURRENCY": "6",
+        "DOXA_AGENT_MAX_PAGES": "120",
+        "DOXABOT_ENABLED": "false",
+        "DOXABOT_PUBLIC_REPOSITORIES_ENABLED": "false",
+        "GENERATION_TIMEOUT_MS": "720000",
+        "GENERATION_IDLE_TIMEOUT_MS": "90000",
+        "GENERATION_OVERALL_TIMEOUT_MS": "10800000",
+        "ANALYSIS_STAGE_TIMEOUT_MS": "2700000",
+        "STRUCTURE_STAGE_TIMEOUT_MS": "1800000",
+        "PAGE_BATCH_TIMEOUT_MS": "1800000",
+        "FINALIZATION_TIMEOUT_MS": "600000",
+        "ALLOW_INTERNAL_HTTP": "false",
+        "LOCAL_DEV_USER_ID": "",
+        "DEV_ADMIN_ENABLED": "false",
+        "ADMIN_EMAILS": "${OPS_ADMIN_EMAILS}",
+        "OAUTH_ISSUER": "https://api.doxa.so",
+        "MCP_RESOURCE_URL": "https://mcp.doxa.so/mcp"
+      },
+      "services": [
+        {
+          "binding": "DOCS_CACHE_INVALIDATOR",
+          "service": "doxa-docs-renderer",
+          "entrypoint": "DocsHostCache"
+        },
+        {
+          "binding": "AGENT_CONTAINER",
+          "service": "doxa-agent-container-production"
+        },
+        {
+          "binding": "PRERENDER_QUEUE",
+          "service": "doxa-docs-prerenderer-production",
+          "entrypoint": "PrerenderQueue"
+        }
+      ],
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE",
+          "id": "${CF_HYPERDRIVE_ID}"
+        },
+        {
+          "binding": "HYPERDRIVE_CACHE_DISABLED",
+          "id": "${CF_HYPERDRIVE_CACHE_DISABLED_ID}"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "DOCS_BUCKET",
+          "bucket_name": "doxa-docs-artifacts-enam"
+        }
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "GENERATION_QUEUE",
+            "queue": "doxa-generation-jobs"
+          },
+          {
+            "binding": "EMAIL_QUEUE",
+            "queue": "doxa-email-deliveries"
+          }
+        ]
+      },
+      "kv_namespaces": [
+        {
+          "binding": "AUTH_KV",
+          "id": "${CF_AUTH_KV_ID}"
+        },
+        {
+          "binding": "OAUTH_KV",
+          "id": "${CF_OAUTH_KV_ID}"
+        }
+      ],
+      "triggers": {
+        "crons": ["*/5 * * * *"]
+      }
+    }
+  }
+}

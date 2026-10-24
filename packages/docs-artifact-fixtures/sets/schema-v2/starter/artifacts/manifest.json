@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "siteConfig": {
+    "path": "settings/site.json",
+    "sha256": "ac1858a62b28b862fdcea3be955c08a236e44e84541829995c45d8424023d476"
+  },
+  "siteId": "site-frozen-starter",
+  "versionId": "version-frozen-starter-1",
+  "projectSlug": "frozen-starter",
+  "generatedAt": "2026-09-23T00:00:00.000Z",
+  "pages": [
+    {
+      "title": "Frozen Starter",
+      "href": "/",
+      "sourcePath": "source/index.mdx"
+    },
+    {
+      "title": "Getting Started",
+      "href": "/getting-started",
+      "sourcePath": "source/getting-started/index.mdx"
+    }
+  ]
+}

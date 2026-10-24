@@ -1,0 +1,18 @@
+{
+  "siteId": "site-frozen-legacy",
+  "versionId": "version-frozen-legacy-1",
+  "projectSlug": "frozen-legacy",
+  "generatedAt": "2026-06-01T00:00:00.000Z",
+  "pages": [
+    {
+      "title": "Frozen Legacy",
+      "href": "/",
+      "sourcePath": "source/index.mdx"
+    },
+    {
+      "title": "Usage",
+      "href": "/usage",
+      "sourcePath": "source/usage/index.mdx"
+    }
+  ]
+}

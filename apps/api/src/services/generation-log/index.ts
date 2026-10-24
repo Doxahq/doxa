@@ -1,0 +1,408 @@
+import type { GenerationLogPhase, JobEventDto } from "@doxahq/contracts";
+import {
+  attemptText,
+  hidden,
+  line,
+  numberField,
+  pageCount,
+  quoted,
+  shortCommit,
+  stringField,
+  type GenerationLogLine,
+} from "./lines";
+import { progressLine } from "./progress-lines";
+
+/**
+ * The generation log that people see: the stored job events, rewritten. The
+ * stored events stay as they are, with the models, budgets, fingerprints and
+ * ids that the pipeline records. This view keeps only what a person needs
+ * from a run: its steps, retries, cache reuse, warnings and the outcome.
+ *
+ * Each kept event keeps its id, sequence and type. Its message is rewritten,
+ * its `data` is dropped, and it gets a `phase` and a `level`. An event type
+ * that no rule names is hidden, so a new internal event never reaches people.
+ */
+export function toGenerationLog(events: readonly JobEventDto[]): JobEventDto[] {
+  return events.flatMap((event) => {
+    const logEvent = toGenerationLogEvent(event);
+    return logEvent ? [logEvent] : [];
+  });
+}
+
+/** The generation log line of one stored event, or null when the log hides it. */
+export function toGenerationLogEvent(event: JobEventDto): JobEventDto | null {
+  const rule = EVENT_RULES[event.type];
+  const logLine = rule ? rule(event.data ?? {}, event.message) : hidden;
+  if (!logLine) return null;
+  const elapsedMs = numberField(event.data ?? {}, "elapsedMs");
+  return {
+    id: event.id,
+    jobId: event.jobId,
+    sequence: event.sequence,
+    source: event.source,
+    type: event.type,
+    message: logLine.message,
+    data: elapsedMs === null ? null : { elapsedMs },
+    createdAt: event.createdAt,
+    phase: logLine.phase,
+    level: logLine.level,
+  };
+}
+
+type EventRule = (data: Record<string, unknown>, message: string) => GenerationLogLine | null;
+
+const EVENT_RULES: Record<string, EventRule> = {
+  // The run
+  queued: () => line("run", "Generation queued."),
+  doxabot_queued: (data) => {
+    if (stringField(data, "rerunOfJobId")) {
+      return line("run", "Doxabot queued the preview again from an earlier run.");
+    }
+    const revision = stringField(data, "targetRevision");
+    return line(
+      "run",
+      revision
+        ? `Doxabot queued a preview for commit ${shortCommit(revision)}.`
+        : "Doxabot queued a preview.",
+    );
+  },
+  running: () => line("run", "Generation started."),
+  failed: () => line("run", "Generation failed.", "error"),
+  user_cancel_requested: (_, message) =>
+    line("run", message === "Cancelled by an agent." ? message : "Cancelled by a user.", "warning"),
+  admin_cancel_requested: () => line("run", "Cancelled by the Doxa team.", "warning"),
+  generation_cancelled: () => line("run", "Generation cancelled.", "warning"),
+  generation_paused: () => line("run", "New generations are paused for now.", "warning"),
+  doxabot_superseded: () =>
+    line("run", "A newer push to the pull request replaced this preview."),
+  watchdog_cancelled: () =>
+    line("run", "The generation waited too long to start and was cancelled.", "error"),
+  watchdog_failed: () =>
+    line("run", "The generation took too long and was stopped.", "error"),
+  container_timed_out: timedOut,
+  container_idle_timed_out: timedOut,
+  container_stage_timed_out: timedOut,
+  workflow_step_failed: (data) =>
+    line(
+      "run",
+      data.resumable === true
+        ? "The run stopped. You can continue it from where it stopped."
+        : "The run stopped.",
+      "error",
+    ),
+  generation_resumed: () => line("run", "Continuing the run from where it stopped."),
+  generation_resume_failed: () =>
+    line("run", "The run could not continue from where it stopped.", "error"),
+  rerun_started: () => line("run", "This generation was started again as a new run."),
+  rerun_of: () => line("run", "Started again from an earlier generation."),
+  generation_stage_attempt_retrying: (data) =>
+    line(stagePhase(data.stage), `${stageStep(data.stage)} failed. Trying it again.`, "warning"),
+  generation_stage_attempt_failed: (data) =>
+    line(stagePhase(data.stage), `${stageStep(data.stage)} failed.`, "error"),
+  review_run_create_failed: () =>
+    line(
+      "run",
+      "Doxabot could not create the check on the pull request. The preview continues.",
+      "warning",
+    ),
+  review_run_update_failed: () =>
+    line("run", "Doxabot could not update the check on the pull request.", "warning"),
+
+  // Setup
+  preview_workflow_started: (data) =>
+    line(
+      "setup",
+      data.baselineVersionId
+        ? "Updating the preview from the published docs."
+        : "Generating a preview of the docs.",
+    ),
+  production_workflow_started: (data) =>
+    line(
+      "setup",
+      data.baselineVersionId
+        ? "Updating the published docs."
+        : "Generating the docs for the first time.",
+    ),
+  snapshot_started: (data, message) => {
+    if (!isFirstStage(data)) return hidden;
+    const repository = /for (.+)\.$/.exec(message)?.[1];
+    const revision = stringField(data, "targetRevision");
+    const source = repository ? `the source code of ${repository}` : "the source code";
+    return line(
+      "setup",
+      revision
+        ? `Getting ${source} at commit ${shortCommit(revision)}.`
+        : `Getting ${source}.`,
+    );
+  },
+  snapshot_complete: (data) => (isFirstStage(data) ? line("setup", "Source code ready.") : hidden),
+  snapshot_retrying: (data) => {
+    const attempt = numberField(data, "nextAttempt");
+    const max = numberField(data, "maxAttempts");
+    return line(
+      "setup",
+      attempt !== null && max !== null
+        ? `Getting the source code failed. Trying again (${attemptText(attempt, max)}).`
+        : "Getting the source code failed. Trying again.",
+      "warning",
+    );
+  },
+  snapshot_merge_conflict: () =>
+    line(
+      "setup",
+      "The pull request cannot be merged cleanly with its base branch. Resolve the conflicts and push again.",
+      "error",
+    ),
+  clone_started: (data, message) => {
+    if (!isFirstStage(data)) return hidden;
+    const repository = stringField(data, "repositoryFullName") ?? /^Cloning (.+)\.$/.exec(message)?.[1];
+    return line("setup", repository ? `Getting the source code of ${repository}.` : "Getting the source code.");
+  },
+  clone_complete: (data) => (isFirstStage(data) ? line("setup", "Source code ready.") : hidden),
+
+  // Analysis
+  analysis_started: () => line("analyze", "Analyzing the repository."),
+  analysis_progress: (data, message) => progressLine(message, data),
+  repo_map_ready: (data) => {
+    const files = numberField(data, "fileCount");
+    if (files === null) return hidden;
+    return line(
+      "analyze",
+      data.cacheHit === true
+        ? `Reused the file map of an earlier run (${files} files).`
+        : `Mapped ${files} files of the repository.`,
+    );
+  },
+  analysis_complete: (data) => {
+    const reason = planReason(stringField(data, "reason"));
+    return line("analyze", reason ? `Analysis done. ${reason}` : "Analysis done.");
+  },
+  api_reference_source: (_, message) =>
+    line("analyze", message),
+
+  // Plan
+  plan_cache_hit: () => line("plan", "Reused the plan of an earlier run of the same code and settings."),
+  structure_started: () => line("plan", "Planning the documentation structure."),
+  structure_reused: (data) => {
+    const pages = numberField(data, "pageCount");
+    return line(
+      "plan",
+      pages === null
+        ? "Reused the published structure."
+        : `Reused the published structure: ${pageCount(pages)}.`,
+    );
+  },
+  structure_patched: (data) => {
+    const added = numberField(data, "addedPageCount") ?? 0;
+    const removed = numberField(data, "removedPageCount") ?? 0;
+    return line(
+      "plan",
+      `Updated the published structure for the new reference pages: ${added} added, ${removed} removed.`,
+    );
+  },
+  structure_review_started: (data) => {
+    const pages = numberField(data, "proposedPageCount");
+    return line(
+      "plan",
+      pages === null
+        ? "Reviewing the plan for readers."
+        : `Reviewing the plan of ${pageCount(pages)} for readers.`,
+    );
+  },
+  structure_review_degraded: () =>
+    line("plan", "The plan review did not finish. Using the best plan so far.", "warning"),
+  structure_review_decided: (data) => line("plan", reviewDecisionText(data)),
+  structure_reviewed: (data) => line("plan", reviewDecisionText(data)),
+  structure_created: (data) => {
+    const pages = numberField(data, "pageCount");
+    const sections = numberField(data, "sectionCount");
+    const structure = pages === null
+      ? "Structure ready."
+      : `Structure ready: ${pageCount(pages)}${sections === null ? "" : ` in ${sections} ${sections === 1 ? "section" : "sections"}`}.`;
+    const written = numberField(data, "regeneratePageCount");
+    const reused = numberField(data, "reusePageCount");
+    if (written === null || reused === null || reused === 0) return line("plan", structure);
+    return line(
+      "plan",
+      `${structure} ${capitalize(pageCount(written))} to write. ${capitalize(pageCount(reused))} stay as they are.`,
+    );
+  },
+  stage_progress: (data, message) => progressLine(message, data),
+
+  // Writing
+  writing_started: (data) => {
+    const pages = numberField(data, "pageCount");
+    return line("write", pages === null ? "Writing the pages." : `Writing ${pageCount(pages)}.`);
+  },
+  page_write_completed: (data, message) => progressLine(message, data),
+  page_written: (data) => {
+    const title = stringField(data, "title");
+    return title ? line("write", `Wrote ${quoted(title)}.`) : hidden;
+  },
+  page_write_failed: (data) => {
+    const title = stringField(data, "title");
+    return line(
+      "write",
+      title ? `${quoted(title)} could not be written.` : "A page could not be written.",
+      "warning",
+    );
+  },
+  page_cache_cross_model_hit: () => line("write", "Reused a page from an earlier run."),
+  pages_written: (data) => {
+    const pages = numberField(data, "pageCount");
+    const failed = numberField(data, "failedPageCount") ?? 0;
+    if (pages === null) return line("write", "Finished writing.");
+    return line(
+      "write",
+      failed > 0
+        ? `Finished: ${pageCount(pages)} written, ${failed} failed.`
+        : `Finished: ${pageCount(pages)} written.`,
+      failed > 0 ? "warning" : "info",
+    );
+  },
+  generation_page_flagged: (_, message) => line("write", message, "warning"),
+
+  // Publication
+  artifact_link_warning: (data) => {
+    const page = stringField(data, "page");
+    const route = stringField(data, "route");
+    if (!page || !route) return hidden;
+    return line(
+      "publish",
+      `The page ${page} links to ${route}, which is not in the navigation.`,
+      "warning",
+    );
+  },
+  published: (data) => line("publish", `Docs published${publishedCounts(data)}.`),
+  preview_published: (data) => line("publish", `Preview published${publishedCounts(data)}.`),
+  promoted: () => line("publish", "Promoted to production."),
+
+  // Review
+  staged_for_review: (data) => line("review", `The docs are ready for review${publishedCounts(data)}.`),
+  review_ready: (data) => {
+    const pages = numberField(data, "pageCount");
+    return line(
+      "review",
+      pages === null
+        ? "The review is ready."
+        : `The review is ready: ${pageCount(pages)} changed.`,
+    );
+  },
+  review_skipped: () =>
+    line("review", "The generation changed no page, so there is nothing to review."),
+};
+
+function timedOut(): GenerationLogLine {
+  return line("run", "A step took too long and was stopped.", "error");
+}
+
+/**
+ * True for the events of the first container stage. Every write group starts
+ * its own container and prepares the same source again, so only the first
+ * preparation is shown.
+ */
+function isFirstStage(data: Record<string, unknown>): boolean {
+  return data.stage === undefined || data.stage === "plan" || data.stage === "analysis";
+}
+
+function stagePhase(stage: unknown): GenerationLogPhase {
+  switch (stage) {
+    case "analysis":
+      return "analyze";
+    case "plan":
+    case "structure":
+      return "plan";
+    case "write":
+      return "write";
+    default:
+      return "run";
+  }
+}
+
+function stageStep(stage: unknown): string {
+  switch (stage) {
+    case "analysis":
+      return "The analysis step";
+    case "plan":
+    case "structure":
+      return "The planning step";
+    case "write":
+      return "A writing step";
+    default:
+      return "A step";
+  }
+}
+
+function reviewDecisionText(data: Record<string, unknown>): string {
+  const counts: [string, number | null][] = [
+    ["kept", numberField(data, "keepCount")],
+    ["merged", numberField(data, "mergeCount")],
+    ["moved", numberField(data, "moveCount")],
+    ["removed", numberField(data, "dropCount")],
+  ];
+  const parts = counts.flatMap(([verb, count]) =>
+    count !== null && count > 0 ? [`${verb} ${pageCount(count)}`] : [],
+  );
+  if (parts.length === 0) return "The review checked every page.";
+  return `The review ${joinWords(parts)}.`;
+}
+
+function publishedCounts(data: Record<string, unknown>): string {
+  const written = numberField(data, "regeneratedPageCount");
+  const reused = numberField(data, "reusedPageCount");
+  if (written === null) return "";
+  return reused === null
+    ? `: ${pageCount(written)} written`
+    : `: ${pageCount(written)} written, ${reused} reused`;
+}
+
+/**
+ * The reasons that the revision-aware planner gives for how much of a run it
+ * reuses (`packages/agent/src/state/planning.ts` and the agent container), in
+ * words for people. A reason that is not here is left out.
+ */
+const PLAN_REASONS: readonly [RegExp, (match: RegExpExecArray) => string][] = [
+  [/^No compatible published generation state is available\.$/, () =>
+    "There are no published docs to reuse, so the full repository was analyzed."],
+  [/^The documentation planning contract changed\.$/, () =>
+    "Doxa changed how it plans docs, so the docs are planned again."],
+  [/^The writer contract changed/, () =>
+    "Doxa changed how it writes pages, so every page is written again."],
+  [/^Documentation-relevant source changes are not mapped to prior page dependencies\.$/, () =>
+    "The source changes do not map to known pages, so the docs are planned again."],
+  [/^The reusable analysis cache cannot/, () =>
+    "The earlier analysis cannot be reused, so the repository is analyzed again."],
+  [/^(\d+) page\(s\) have new page inputs; source changes do not affect the others\.$/, ([, count]) =>
+    `${capitalize(pageCount(count))} have new inputs. The source changes do not affect the other pages.`],
+  [/^All current pages match the published page inputs and dependencies\.$/, () =>
+    "All pages match the published docs."],
+  [/^Source changes do not affect published documentation\.$/, () =>
+    "The source changes do not affect the published docs."],
+  [/^Routes or schemas changed/, () =>
+    "Routes or schemas changed, so the published structure gets an update."],
+  [/^A package was added or removed/, () =>
+    "The project layout changed, so the docs are planned again."],
+  [/^The structural source fingerprint changed\.$/, () =>
+    "The project layout changed, so the docs are planned again."],
+  [/^Page .+ is new\.$/, () => "New pages were added to the plan."],
+  [/^Page .+ inputs changed\.$/, () => "Some pages have new inputs."],
+  [/^Page .+ depends on changed source/, () => "Some pages depend on source code that changed."],
+];
+
+function planReason(reason: string | null): string | null {
+  if (!reason) return null;
+  for (const [pattern, text] of PLAN_REASONS) {
+    const match = pattern.exec(reason);
+    if (match) return text(match);
+  }
+  return null;
+}
+
+function joinWords(parts: readonly string[]): string {
+  if (parts.length <= 1) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}

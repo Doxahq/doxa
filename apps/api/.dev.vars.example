@@ -1,0 +1,62 @@
+BETTER_AUTH_SECRET=replace-with-a-long-random-local-secret
+BETTER_AUTH_URL=https://replace-with-api-tunnel-or-dev-api-domain
+BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3001,https://replace-with-web-preview-domain
+# Isolate local/tunnel authentication from production cookies on .doxa.so.
+AUTH_COOKIE_PREFIX=doxa-dev
+# Set a domain only when the API and dashboard need to share cookies.
+# Never use the production parent domain for development cookies.
+# AUTH_COOKIE_DOMAIN=dev.doxa.so
+GOOGLE_CLIENT_ID=replace-with-google-oauth-client-id
+GOOGLE_CLIENT_SECRET=replace-with-google-oauth-client-secret
+GITHUB_CLIENT_ID=replace-with-github-oauth-client-id
+GITHUB_CLIENT_SECRET=replace-with-github-oauth-client-secret
+OPENROUTER_API_KEY=replace-with-openrouter-api-key
+# Needed when DOXA_MODEL_PROVIDER is "anthropic" in apps/agent-worker/wrangler.json.
+ANTHROPIC_API_KEY=replace-with-anthropic-api-key
+DOXA_PLANNER_MODEL=x-ai/grok-4.5:nitro
+DOXA_WRITER_MODEL=openai/gpt-5.6-luna
+DOXA_GENERATION_PROFILE=fast-mvp
+DOXABOT_ENABLED=false
+DOXABOT_PUBLIC_REPOSITORIES_ENABLED=false
+DOXA_AGENT_PAGE_CONCURRENCY=6
+DOXA_AGENT_MAX_PAGES=120
+GENERATION_TIMEOUT_MS=720000
+GENERATION_IDLE_TIMEOUT_MS=90000
+GENERATION_OVERALL_TIMEOUT_MS=10800000
+ANALYSIS_STAGE_TIMEOUT_MS=2700000
+STRUCTURE_STAGE_TIMEOUT_MS=1800000
+PAGE_BATCH_TIMEOUT_MS=1800000
+FINALIZATION_TIMEOUT_MS=600000
+
+# Required for real GitHub App repo generation.
+GITHUB_APP_ID=replace-with-github-app-id
+GITHUB_APP_SLUG=replace-with-github-app-slug
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\nreplace-with-github-app-private-key\n-----END RSA PRIVATE KEY-----"
+
+# Use https://dev.doxa.so while testing through the Cloudflare Tunnel.
+WEB_ORIGIN=https://dev.doxa.so
+DOCS_RUNTIME_URL=http://localhost:8788
+DOCS_BASE_DOMAIN=localhost
+DOCS_RENDERER_BASE_URL=http://localhost:3002
+DOCS_PREVIEW_GATE_ENABLED=false
+
+# Optional: CNAME target shown to customers for custom docs domains.
+# This should point at the shared apps/docs-template Worker route, not apps/docs-runtime.
+# DOCS_CUSTOM_DOMAIN_CNAME_TARGET=cname.doxa.page
+
+# Optional: enable real Cloudflare for SaaS custom hostname provisioning.
+# CLOUDFLARE_API_TOKEN must be stored as a secret in deployed environments.
+# CLOUDFLARE_API_TOKEN=replace-with-cloudflare-api-token
+# CLOUDFLARE_ZONE_ID=replace-with-cloudflare-zone-id
+# CLOUDFLARE_CUSTOM_HOSTNAME_SSL_METHOD=http
+# CLOUDFLARE_CUSTOM_HOSTNAME_MIN_TLS_VERSION=1.2
+
+# Optional local bypass for local/* installation generation.
+LOCAL_GITHUB_TOKEN=replace-with-local-github-token
+
+# Optional for testing GitHub App webhooks later.
+GITHUB_WEBHOOK_SECRET=replace-with-github-webhook-secret
+
+# Development-only emergency bypass. Keep false when a webhook secret is configured.
+DOXA_RUNTIME_ENVIRONMENT=development
+ALLOW_INSECURE_GITHUB_WEBHOOKS=false

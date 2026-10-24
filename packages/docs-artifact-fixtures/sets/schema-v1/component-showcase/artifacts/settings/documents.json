@@ -1,0 +1,30 @@
+[
+  {
+    "heading": "Start Here"
+  },
+  {
+    "title": "Overview",
+    "href": "/",
+    "icon": "book"
+  },
+  {
+    "title": "Quickstart",
+    "href": "/quickstart",
+    "icon": "rocket"
+  },
+  {
+    "spacer": true
+  },
+  {
+    "heading": "Authoring"
+  },
+  {
+    "title": "MDX Components",
+    "href": "/components"
+  },
+  {
+    "title": "Diagrams And Trees",
+    "href": "/diagrams",
+    "badge": "New"
+  }
+]

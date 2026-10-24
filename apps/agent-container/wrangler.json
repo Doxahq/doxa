@@ -1,0 +1,91 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doxa-agent-container",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-06-12",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "containers": [
+    {
+      "name": "agent-container",
+      "class_name": "AgentContainer",
+      "image": "./Dockerfile",
+      "image_build_context": "../..",
+      "max_instances": 5,
+      "instance_type": "standard-3"
+    },
+    {
+      "name": "utility-spec-reader",
+      "class_name": "SpecReaderJob",
+      "image": "../utility-jobs/spec-reader/Dockerfile",
+      "image_build_context": "../..",
+      "max_instances": 10,
+      "instance_type": "basic"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "AGENT_CONTAINER",
+        "class_name": "AgentContainer"
+      },
+      {
+        "name": "UTILITY_SPEC_READER",
+        "class_name": "SpecReaderJob"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "AgentContainer"
+      ]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": [
+        "SpecReaderJob"
+      ]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "env": {
+    "production": {
+      "workers_dev": false,
+      "containers": [
+        {
+          "name": "agent-container",
+          "class_name": "AgentContainer",
+          "image": "./Dockerfile",
+          "image_build_context": "../..",
+          "max_instances": 5,
+          "instance_type": "standard-3"
+        },
+        {
+          "name": "utility-spec-reader",
+          "class_name": "SpecReaderJob",
+          "image": "../utility-jobs/spec-reader/Dockerfile",
+          "image_build_context": "../..",
+          "max_instances": 10,
+          "instance_type": "basic"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "AGENT_CONTAINER",
+            "class_name": "AgentContainer"
+          },
+          {
+            "name": "UTILITY_SPEC_READER",
+            "class_name": "SpecReaderJob"
+          }
+        ]
+      }
+    }
+  }
+}

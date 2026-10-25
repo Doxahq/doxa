@@ -96,6 +96,39 @@ export function withEnvironment(current, overrides) {
   return [...byName].sort(([a], [b]) => a.localeCompare(b)).map(([name, value]) => ({ name, value }));
 }
 
+/**
+ * Variables that each deploy sets, not Terraform. A Terraform change registers
+ * a revision without them, and the next deploy starts from that revision, so
+ * the deploy carries their running values over.
+ */
+export const DEPLOY_VARIABLES = Object.freeze(["DOXA_RENDERER_RELEASE_ID"]);
+
+/**
+ * The deploy variables to carry from the running revision into the next one:
+ * those that the running container has, the base container lacks, and the
+ * deploy does not set itself.
+ *
+ * @param {{ containerDefinitions: ContainerDefinition[] }} base the revision the deploy starts from
+ * @param {{ containerDefinitions: ContainerDefinition[] } | null} running the revision the service runs
+ * @param {string} containerName
+ * @param {Record<string, string>} environment the variables that the deploy sets
+ * @returns {Record<string, string>}
+ */
+export function carriedDeployVariables(base, running, containerName, environment) {
+  if (!running) return {};
+  const valuesOf = (taskDefinition) =>
+    new Map((taskDefinition.containerDefinitions.find((container) => container.name === containerName)?.environment ?? []).map((variable) => [variable.name, variable.value]));
+  const baseValues = valuesOf(base);
+  const runningValues = valuesOf(running);
+  /** @type {Record<string, string>} */
+  const carried = {};
+  for (const name of DEPLOY_VARIABLES) {
+    const value = runningValues.get(name);
+    if (value !== undefined && !baseValues.has(name) && !(name in environment)) carried[name] = value;
+  }
+  return carried;
+}
+
 const ENV_ASSIGNMENT = /^([A-Z][A-Z0-9_]*)=(.*)$/s;
 
 /**

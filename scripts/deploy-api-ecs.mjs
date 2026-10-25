@@ -19,7 +19,7 @@
 
 import { spawnSync } from "node:child_process";
 import process from "node:process";
-import { assertPinnedImage, nextRevisionWithImage, parseEnvironmentAssignments } from "./lib/ecs-task-definition.mjs";
+import { assertPinnedImage, carriedDeployVariables, nextRevisionWithImage, parseEnvironmentAssignments } from "./lib/ecs-task-definition.mjs";
 
 const DEFAULTS = Object.freeze({
   cluster: "doxa-api-production",
@@ -36,7 +36,7 @@ const aws = createAwsCli(options.region);
 
 const startedAt = Date.now();
 const previousRevision = currentServiceRevision();
-const targetRevision = options.revision ?? registerRevisionWithImage(options.image);
+const targetRevision = options.revision ?? registerRevisionWithImage(options.image, previousRevision);
 
 log(`Updating ${options.service} from ${revisionName(previousRevision)} to ${revisionName(targetRevision)}.`);
 aws.json(["ecs", "update-service", "--cluster", options.cluster, "--service", options.service, "--task-definition", targetRevision]);
@@ -50,13 +50,20 @@ if (options.wait) {
 log(`Done in ${Math.round((Date.now() - startedAt) / 1000)}s.`);
 log(`Roll back with: node scripts/deploy-api-ecs.mjs --revision ${previousRevision}`);
 
-function registerRevisionWithImage(image) {
+function registerRevisionWithImage(image, runningRevision) {
   const described = aws.json(["ecs", "describe-task-definition", "--task-definition", options.family, "--include", "TAGS"]);
+  // A Terraform change leaves the newest revision without the deploy variables.
+  const running =
+    runningRevision === described.taskDefinition.taskDefinitionArn
+      ? described.taskDefinition
+      : aws.json(["ecs", "describe-task-definition", "--task-definition", runningRevision]).taskDefinition;
+  const carried = carriedDeployVariables(described.taskDefinition, running, options.container, options.environment);
+  for (const name of Object.keys(carried)) log(`Keeping ${name} of the running revision ${revisionName(runningRevision)}.`);
   const input = attempt(() =>
     nextRevisionWithImage(described.taskDefinition, {
       containerName: options.container,
       image,
-      environment: options.environment,
+      environment: { ...carried, ...options.environment },
       tags: described.tags,
     }),
   );

@@ -205,8 +205,9 @@ next deploy ships it.
 
 `--env NAME=VALUE` sets a plain variable on the new revision. The renderer
 release uses it for `DOXA_RENDERER_RELEASE_ID`, which changes with every
-renderer deploy. A Terraform revision does not hold that variable, so every
-deploy after a Terraform change must pass it again.
+renderer deploy. A Terraform revision does not hold that variable, so a
+deploy that does not set it keeps the value of the running revision
+(`DEPLOY_VARIABLES` in `scripts/lib/ecs-task-definition.mjs`).
 
 ## Day to day
 

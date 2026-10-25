@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   REGISTERABLE_FIELDS,
   assertPinnedImage,
+  carriedDeployVariables,
   nextRevisionWithImage,
   parseEnvironmentAssignments,
 } from "./lib/ecs-task-definition.mjs";
@@ -111,4 +112,32 @@ test("parses NAME=VALUE assignments and refuses anything else", () => {
   });
   assert.throws(() => parseEnvironmentAssignments(["lower=x"]), /UPPER_SNAKE_CASE/);
   assert.throws(() => parseEnvironmentAssignments(["NO_VALUE"]), /NAME=VALUE/);
+});
+
+/** A described revision whose api container has these variables. */
+function revisionWith(variables) {
+  const described = describedTaskDefinition();
+  described.containerDefinitions[0].environment = Object.entries(variables).map(([name, value]) => ({ name, value }));
+  return described;
+}
+
+test("carries the renderer release from the running revision when a Terraform revision lacks it", () => {
+  const terraformRevision = revisionWith({ PORT: "8786" });
+  const running = revisionWith({ PORT: "8786", DOXA_RENDERER_RELEASE_ID: "release-1" });
+
+  assert.deepEqual(carriedDeployVariables(terraformRevision, running, "api", {}), { DOXA_RENDERER_RELEASE_ID: "release-1" });
+});
+
+test("does not carry a deploy variable that the deploy sets or the base already has", () => {
+  const running = revisionWith({ DOXA_RENDERER_RELEASE_ID: "release-1" });
+
+  assert.deepEqual(carriedDeployVariables(revisionWith({}), running, "api", { DOXA_RENDERER_RELEASE_ID: "release-2" }), {});
+  assert.deepEqual(carriedDeployVariables(revisionWith({ DOXA_RENDERER_RELEASE_ID: "release-0" }), running, "api", {}), {});
+  assert.deepEqual(carriedDeployVariables(revisionWith({}), null, "api", {}), {});
+});
+
+test("carries only deploy variables, never Terraform settings", () => {
+  const running = revisionWith({ DOXA_RENDERER_RELEASE_ID: "release-1", BETTER_AUTH_URL: "https://old.example" });
+
+  assert.deepEqual(carriedDeployVariables(revisionWith({}), running, "api", {}), { DOXA_RENDERER_RELEASE_ID: "release-1" });
 });

@@ -26,8 +26,8 @@ describe("model provider runtimes", () => {
     expect(modelProviderRuntime("anthropic").modelOptions({})).toEqual({});
   });
 
-  test("defaults to OpenRouter", () => {
-    expect(modelProviderRuntime()).toBe(modelProviderRuntime("openrouter"));
+  test("defaults to Anthropic", () => {
+    expect(modelProviderRuntime()).toBe(modelProviderRuntime("anthropic"));
   });
 });
 

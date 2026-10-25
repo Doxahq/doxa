@@ -2,7 +2,10 @@ import { describe, expect, test } from "vitest";
 
 import type { DocumentationCollection, DocumentationStructure, ProjectAnalysis } from "../src";
 import { validateDocumentationStructureForProfile } from "../src/doxa-agent/prompts/dynamic";
-import { applyCollectionsToStructure } from "../src/utils/documentation-collections";
+import {
+  applyCollectionsToStructure,
+  mergeDocumentationCollections,
+} from "../src/utils/documentation-collections";
 import { analysisFixture } from "./fixtures";
 
 function collection(): DocumentationCollection {
@@ -177,5 +180,108 @@ describe("collection page identity", () => {
         error.includes("weak or missing description")
       ),
     ).toEqual([]);
+  });
+});
+
+function withItems(
+  base: DocumentationCollection,
+  id: string,
+  path: string,
+  items: Array<[slug: string, title: string]>,
+): DocumentationCollection {
+  return {
+    ...base,
+    id,
+    title: id,
+    sourceEvidence: [{ path, kind: "source" }],
+    items: items.map(([slug, title]) => ({
+      id: `${id}/${slug}`,
+      slug,
+      title,
+      sourceEvidence: [{ path, kind: "source" }],
+    })),
+  };
+}
+
+function duplicateTitleErrors(merged: ProjectAnalysis): string[] {
+  const enriched = applyCollectionsToStructure(structure([]), merged);
+  return validateDocumentationStructureForProfile(enriched, merged).errors.filter((error) =>
+    error.startsWith("Duplicate page title")
+  );
+}
+
+describe("overlapping collections from the model", () => {
+  test("keeps one of two collections with the same items when the repository scan finds none", () => {
+    // flagforge lists its operators twice (a core type and an API schema). The
+    // model proposed one collection per list, and injection doubled every page.
+    const fromSchema = withItems(collection(), "targeting-operators", "apps/api/src/schemas/common.ts",
+      collection().items.map((item) => [item.slug, item.title]));
+    const merged = mergeDocumentationCollections(
+      { ...analysisFixture, documentationCollections: [collection(), fromSchema] },
+      [],
+    );
+
+    expect(merged.documentationCollections).toHaveLength(1);
+    expect(duplicateTitleErrors(merged)).toEqual([]);
+  });
+
+  test("drops the repeated items of a collection that overlaps too little to remove", () => {
+    const larger = withItems(collection(), "condition-operators", "src/operators.ts", [
+      ["equals", "Equals"],
+      ["contains", "Contains"],
+      ["starts-with", "Starts with"],
+      ["ends-with", "Ends with"],
+      ["matches-regex", "Matches regex"],
+    ]);
+    const smaller = withItems(collection(), "string-checks", "src/strings.ts", [
+      ["equals", "Equals"],
+      ["is-empty", "Is empty"],
+      ["is-email", "Is email"],
+      ["is-url", "Is URL"],
+      ["is-uuid", "Is UUID"],
+    ]);
+    const merged = mergeDocumentationCollections(
+      { ...analysisFixture, documentationCollections: [larger, smaller] },
+      [],
+    );
+
+    const titles = Object.fromEntries((merged.documentationCollections ?? []).map((entry) =>
+      [entry.id, entry.items.map((item) => item.title)]
+    ));
+    expect(titles).toEqual({
+      "condition-operators": ["Equals", "Contains", "Starts with", "Ends with", "Matches regex"],
+      "string-checks": ["Is empty", "Is email", "Is URL", "Is UUID"],
+    });
+    expect(duplicateTitleErrors(merged)).toEqual([]);
+  });
+
+  test("keeps two different collections that come from one source file", () => {
+    const operators = withItems(collection(), "condition-operators", "src/types.ts", [
+      ["equals", "Equals"],
+      ["contains", "Contains"],
+      ["starts-with", "Starts with"],
+      ["ends-with", "Ends with"],
+    ]);
+    const flagTypes = withItems(collection(), "flag-types", "src/types.ts", [
+      ["boolean", "Boolean"],
+      ["string", "String"],
+      ["number", "Number"],
+      ["json", "JSON"],
+    ]);
+    const merged = mergeDocumentationCollections(
+      { ...analysisFixture, documentationCollections: [operators, flagTypes] },
+      [],
+    );
+
+    expect(merged.documentationCollections?.map((entry) => entry.id)).toEqual([
+      "condition-operators",
+      "flag-types",
+    ]);
+  });
+
+  test("returns an analysis without collections unchanged", () => {
+    const input = { ...analysisFixture, documentationCollections: undefined };
+
+    expect(mergeDocumentationCollections(input, [])).toBe(input);
   });
 });

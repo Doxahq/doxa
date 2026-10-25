@@ -272,40 +272,62 @@ function mergePackageCandidates(
   }
 }
 
+function collectionItemKeys(collection: DocumentationCollection): Set<string> {
+  return new Set(collection.items.flatMap((item) => [
+    item.slug,
+    slugify(item.title),
+    item.packageName ? slugify(item.packageName) : "",
+  ].filter(Boolean)));
+}
+
+function collectionEvidencePaths(collection: DocumentationCollection): Set<string> {
+  return new Set(collection.items.flatMap((item) =>
+    item.sourceEvidence.map((evidence) => evidence.path)
+  ));
+}
+
+function overlapRatio(a: Set<string>, b: Set<string>): number {
+  const smallerSize = Math.min(a.size, b.size);
+  if (smallerSize === 0) return 0;
+  return Array.from(a).filter((key) => b.has(key)).length / smallerSize;
+}
+
+/**
+ * Evidence paths identify items only when the items come from many files, as
+ * in a docs folder. Two collections that the model reads from one source file
+ * (two enums in types.ts) share their paths and still list different items.
+ */
+function evidencePathOverlap(a: Set<string>, b: Set<string>): number {
+  if (Math.min(a.size, b.size) < MIN_DOCUMENTATION_COLLECTION_ITEMS) return 0;
+  return overlapRatio(a, b);
+}
+
+/**
+ * Keeps one collection per group of overlapping collections, the largest. A
+ * collection that overlaps less still loses the items whose titles an accepted
+ * collection already has: injection gives every item a page, and two pages
+ * with one title fail structure validation.
+ */
 function removeOverlappingCollections(
   collections: DocumentationCollection[],
 ): DocumentationCollection[] {
   const sorted = [...collections].sort((a, b) => b.items.length - a.items.length);
   const accepted: DocumentationCollection[] = [];
+  const acceptedItemTitles = new Set<string>();
 
   for (const collection of sorted) {
-    const collectionPaths = new Set(collection.items.flatMap((item) =>
-      item.sourceEvidence.map((evidence) => evidence.path)
-    ));
-    const collectionItemKeys = new Set(collection.items.flatMap((item) => [
-      item.slug,
-      slugify(item.title),
-      item.packageName ? slugify(item.packageName) : "",
-    ].filter(Boolean)));
-    const overlapsAccepted = accepted.some((existing) => {
-      const existingPaths = new Set(existing.items.flatMap((item) =>
-        item.sourceEvidence.map((evidence) => evidence.path)
-      ));
-      const overlapCount = Array.from(collectionPaths).filter((path) => existingPaths.has(path)).length;
-      const smallerSize = Math.min(collectionPaths.size, existingPaths.size);
-      if (smallerSize > 0 && overlapCount / smallerSize >= 0.6) return true;
+    const paths = collectionEvidencePaths(collection);
+    const itemKeys = collectionItemKeys(collection);
+    const overlapsAccepted = accepted.some((existing) =>
+      evidencePathOverlap(paths, collectionEvidencePaths(existing)) >= 0.6 ||
+      overlapRatio(itemKeys, collectionItemKeys(existing)) >= 0.6
+    );
+    if (overlapsAccepted) continue;
 
-      const existingItemKeys = new Set(existing.items.flatMap((item) => [
-        item.slug,
-        slugify(item.title),
-        item.packageName ? slugify(item.packageName) : "",
-      ].filter(Boolean)));
-      const itemOverlapCount = Array.from(collectionItemKeys).filter((key) => existingItemKeys.has(key)).length;
-      const smallerItemSize = Math.min(collectionItemKeys.size, existingItemKeys.size);
-      return smallerItemSize > 0 && itemOverlapCount / smallerItemSize >= 0.6;
-    });
-
-    if (!overlapsAccepted) accepted.push(collection);
+    const items = collection.items.filter((item) => !acceptedItemTitles.has(slugify(item.title)));
+    if (items.length === 0) continue;
+    for (const item of items) acceptedItemTitles.add(slugify(item.title));
+    accepted.push(items.length === collection.items.length ? collection : { ...collection, items });
   }
 
   return accepted.sort((a, b) => a.title.localeCompare(b.title));
@@ -329,7 +351,9 @@ export function mergeDocumentationCollections(
   analysis: ProjectAnalysis,
   discovered: DocumentationCollection[],
 ): ProjectAnalysis {
-  if (discovered.length === 0) return analysis;
+  // The model can propose overlapping collections too, so the overlap check
+  // runs even when the repository scan finds no collection.
+  if (discovered.length === 0 && !analysis.documentationCollections?.length) return analysis;
 
   const existing = new Map((analysis.documentationCollections ?? []).map((collection) => [collection.id, collection]));
   for (const collection of discovered) {

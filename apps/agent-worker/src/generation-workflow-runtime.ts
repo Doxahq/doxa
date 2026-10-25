@@ -1,4 +1,5 @@
 import {
+  DEFAULT_DOXA_PLANNER_MODEL,
   DEFAULT_DOXA_WRITER_MODEL,
   GENERATION_STATE_SCHEMA_VERSION,
   MAX_WRITE_GROUP_PAGES,
@@ -2546,7 +2547,7 @@ async function createStageRequest(
   const plannerModel =
     env.DOXA_PLANNER_MODEL?.trim() ||
     legacyModel ||
-    "x-ai/grok-4.5:nitro";
+    DEFAULT_DOXA_PLANNER_MODEL;
   const writerModel =
     env.DOXA_WRITER_MODEL?.trim() ||
     legacyModel ||

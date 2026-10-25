@@ -347,17 +347,17 @@ function createJob(id: string): GenerationJobDto {
 }
 
 describe("Doxabot webhook orchestrator", () => {
-  test("defaults new generation jobs to Nitro planning and GPT-5.6 Luna writing", () => {
+  test("defaults new generation jobs to Sonnet 5.5 planning and Haiku 5.5 writing", () => {
     expect(resolveDoxabotExecutionConfig({})).toEqual({
-      plannerModel: "x-ai/grok-4.5:nitro",
-      writerModel: "openai/gpt-5.6-luna",
+      plannerModel: "claude-sonnet-5-5",
+      writerModel: "claude-haiku-5-5",
       generationProfile: "fast-mvp",
       planningFingerprint:
         "doxabot-planning-v6:fast-mvp",
       writingFingerprint:
-        "doxabot-writing-v1:openai/gpt-5.6-luna:writer-handoff-v1",
+        "doxabot-writing-v1:claude-haiku-5-5:writer-handoff-v1",
       generatorFingerprint:
-        "doxabot-v2:doxabot-planning-v6:fast-mvp:doxabot-writing-v1:openai/gpt-5.6-luna:writer-handoff-v1",
+        "doxabot-v2:doxabot-planning-v6:fast-mvp:doxabot-writing-v1:claude-haiku-5-5:writer-handoff-v1",
     });
   });
 

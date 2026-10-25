@@ -76,6 +76,9 @@
   },
   "env": {
     "production": {
+      "build": {
+        "command": "node ../../scripts/refuse-api-worker-deploy.mjs"
+      },
       "placement": { "region": "aws:us-east-1" },
       "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
       "vars": {
@@ -90,8 +93,8 @@
         "GENERATION_MODE": "queue",
         "DATABASE_URL": "",
         "AGENT_CONTAINER_URL": "",
-        "DOXA_PLANNER_MODEL": "x-ai/grok-4.5:nitro",
-        "DOXA_WRITER_MODEL": "openai/gpt-5.6-luna",
+        "DOXA_PLANNER_MODEL": "claude-sonnet-5-5",
+        "DOXA_WRITER_MODEL": "claude-haiku-5-5",
         "DOXA_GENERATION_PROFILE": "fast-mvp",
         "DOXA_AGENT_PAGE_CONCURRENCY": "6",
         "DOXA_AGENT_MAX_PAGES": "120",

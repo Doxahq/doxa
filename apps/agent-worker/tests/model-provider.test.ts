@@ -11,8 +11,15 @@ const OPENROUTER_KEY = "sk-or-v1-real";
 const ANTHROPIC_KEY = "sk-ant-real";
 
 describe("resolveModelCredentials", () => {
-  test("defaults to OpenRouter", () => {
-    expect(resolveModelCredentials({ OPENROUTER_API_KEY: OPENROUTER_KEY })).toEqual({
+  test("defaults to Anthropic", () => {
+    expect(resolveModelCredentials({ ANTHROPIC_API_KEY: ANTHROPIC_KEY, OPENROUTER_API_KEY: OPENROUTER_KEY })).toEqual({
+      modelProvider: "anthropic",
+      modelApiKey: ANTHROPIC_KEY,
+    });
+  });
+
+  test("uses the OpenRouter key when OpenRouter is selected", () => {
+    expect(resolveModelCredentials({ DOXA_MODEL_PROVIDER: "openrouter", OPENROUTER_API_KEY: OPENROUTER_KEY })).toEqual({
       modelProvider: "openrouter",
       modelApiKey: OPENROUTER_KEY,
     });
@@ -33,7 +40,7 @@ describe("resolveModelCredentials", () => {
     })).toThrow(new GenerationNonRetryableError(
       "ANTHROPIC_API_KEY must be configured with a real Anthropic API key.",
     ));
-    expect(() => resolveModelCredentials({ OPENROUTER_API_KEY: "your_key" })).toThrow(
+    expect(() => resolveModelCredentials({ DOXA_MODEL_PROVIDER: "openrouter", OPENROUTER_API_KEY: "your_key" })).toThrow(
       "OPENROUTER_API_KEY must be configured with a real OpenRouter API key.",
     );
   });
@@ -52,7 +59,7 @@ describe("resolveModelCredentialsFor", () => {
     expect(resolveModelCredentialsFor(anthropicEnv, ["claude-sonnet-5-5", "claude-haiku-5-5"]).modelProvider)
       .toBe("anthropic");
     expect(resolveModelCredentialsFor(
-      { OPENROUTER_API_KEY: OPENROUTER_KEY },
+      { DOXA_MODEL_PROVIDER: "openrouter", OPENROUTER_API_KEY: OPENROUTER_KEY },
       ["x-ai/grok-4.5:nitro", "anthropic/claude-haiku-5.5"],
     ).modelProvider).toBe("openrouter");
   });
@@ -62,7 +69,7 @@ describe("resolveModelCredentialsFor", () => {
       .toThrow(
         'Model "anthropic/claude-haiku-5.5" is not a model ID for Anthropic (for example "claude-haiku-5-5").',
       );
-    expect(() => resolveModelCredentialsFor({ OPENROUTER_API_KEY: OPENROUTER_KEY }, ["claude-haiku-5-5"]))
+    expect(() => resolveModelCredentialsFor({ DOXA_MODEL_PROVIDER: "openrouter", OPENROUTER_API_KEY: OPENROUTER_KEY }, ["claude-haiku-5-5"]))
       .toThrow(GenerationNonRetryableError);
   });
 });

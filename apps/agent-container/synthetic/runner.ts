@@ -143,6 +143,9 @@ export async function runSyntheticGenerationPipeline(
       GENERATION_WORKFLOW: {} as Env["GENERATION_WORKFLOW"],
       AGENT_CONTAINER: binding,
       DOCS_BUCKET: bucket as unknown as R2Bucket,
+      // The synthetic models use OpenRouter-style IDs ("synthetic/planner"),
+      // so the run names its provider instead of using the default.
+      DOXA_MODEL_PROVIDER: "openrouter",
       OPENROUTER_API_KEY:
         "sk-or-v1-synthetic-generation-key-never-sent",
       DOXA_AGENT_PAGE_CONCURRENCY: "2",

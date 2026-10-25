@@ -64,7 +64,9 @@ export const PLANNING_FINGERPRINT_VERSION = "doxabot-planning-v6";
 export const PLANNER_OUTPUT_SCHEMA_HASH =
   "6d6ce0464bda23d6f05f906a43b37822676ba97f523bbc3e3ceb0558c132e73b";
 export const WRITER_HANDOFF_CONTRACT_VERSION = "writer-handoff-v1";
-export const DEFAULT_DOXA_WRITER_MODEL = "openai/gpt-5.6-luna";
+/** The default models call the Anthropic API (DEFAULT_MODEL_PROVIDER). */
+export const DEFAULT_DOXA_PLANNER_MODEL = "claude-sonnet-5-5";
+export const DEFAULT_DOXA_WRITER_MODEL = "claude-haiku-5-5";
 export const PUBLIC_DOCUMENTATION_POLICY_VERSION = "public-v1" as const;
 /** The model-independent part of the hosted writer contract. */
 export const WRITING_CONTRACT_VERSION = `${WRITING_FINGERPRINT_VERSION}:${WRITER_HANDOFF_CONTRACT_VERSION}`;

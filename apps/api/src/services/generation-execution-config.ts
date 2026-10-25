@@ -1,4 +1,5 @@
 import {
+  DEFAULT_DOXA_PLANNER_MODEL,
   DEFAULT_DOXA_WRITER_MODEL,
   PLANNING_FINGERPRINT_VERSION,
   WRITER_HANDOFF_CONTRACT_VERSION,
@@ -8,7 +9,6 @@ import {
 import type { Env } from "../env";
 
 const DEFAULT_GENERATOR_FINGERPRINT_VERSION = "doxabot-v2";
-const DEFAULT_DOXA_PLANNER_MODEL = "x-ai/grok-4.5:nitro";
 
 type GenerationExecutionConfigEnv = Pick<
   Env,

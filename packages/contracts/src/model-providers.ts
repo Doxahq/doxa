@@ -10,4 +10,4 @@ export const MODEL_PROVIDERS = ["openrouter", "anthropic"] as const;
 export const modelProviderSchema = z.enum(MODEL_PROVIDERS);
 export type ModelProvider = z.infer<typeof modelProviderSchema>;
 
-export const DEFAULT_MODEL_PROVIDER: ModelProvider = "openrouter";
+export const DEFAULT_MODEL_PROVIDER: ModelProvider = "anthropic";

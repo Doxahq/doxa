@@ -6,15 +6,15 @@ import {
 import { resolveGenerationExecutionConfig } from "../../src/services/generation-execution-config";
 
 describe("generation execution config", () => {
-  test("uses GPT-5.6 Luna for writing without changing the planner default", () => {
+  test("defaults to Sonnet 5.5 for planning and Haiku 5.5 for writing", () => {
     const config = resolveGenerationExecutionConfig({});
 
-    expect(config.plannerModel).toBe("x-ai/grok-4.5:nitro");
-    expect(config.writerModel).toBe("openai/gpt-5.6-luna");
+    expect(config.plannerModel).toBe("claude-sonnet-5-5");
+    expect(config.writerModel).toBe("claude-haiku-5-5");
     expect(config.planningFingerprint).toBe(
       "doxabot-planning-v6:fast-mvp",
     );
-    expect(config.writingFingerprint).toContain("openai/gpt-5.6-luna");
+    expect(config.writingFingerprint).toContain("claude-haiku-5-5");
   });
 
   test("preserves explicit planner and writer overrides", () => {

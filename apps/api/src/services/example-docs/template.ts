@@ -1,3 +1,4 @@
+import type { ExampleDocsTemplate } from "@doxahq/contracts";
 import type {
   RuntimeDocsNavigationInput,
   RuntimeDocsPageInput,
@@ -26,7 +27,12 @@ const EXAMPLE_DOCS_PAGES: readonly ExampleDocsPage[] = [
   { title: "Create a note", route: "/api/notes/create", navigationPath: "api/notes/create/index.mdx", file: "api-create-note.mdx" },
 ];
 
-export const EXAMPLE_DOCS_NAVIGATION: RuntimeDocsNavigationInput = {
+/** The empty site: one introduction page to replace. */
+const EMPTY_DOCS_PAGES: readonly ExampleDocsPage[] = [
+  { title: "Introduction", route: "/", navigationPath: "introduction/index.mdx", file: "empty-introduction.mdx" },
+];
+
+const EXAMPLE_DOCS_NAVIGATION: RuntimeDocsNavigationInput = {
   sections: [
     {
       slug: "default",
@@ -73,11 +79,42 @@ export const EXAMPLE_DOCS_NAVIGATION: RuntimeDocsNavigationInput = {
   },
 };
 
-/** The example pages, with the project name written into the home page. */
+const EMPTY_DOCS_NAVIGATION: RuntimeDocsNavigationInput = {
+  sections: [
+    {
+      slug: "default",
+      items: [],
+      groups: [{ heading: "Get Started", items: ["introduction/index.mdx"] }],
+    },
+  ],
+  icons: { "introduction/index.mdx": "book" },
+  navTitles: { "introduction/index.mdx": "Introduction" },
+  sectionMetadata: {
+    default: { label: "Documentation", kind: "documentation", layout: "docs" },
+  },
+};
+
+const TEMPLATES: Record<
+  ExampleDocsTemplate,
+  { pages: readonly ExampleDocsPage[]; navigation: RuntimeDocsNavigationInput }
+> = {
+  starter: { pages: EXAMPLE_DOCS_PAGES, navigation: EXAMPLE_DOCS_NAVIGATION },
+  empty: { pages: EMPTY_DOCS_PAGES, navigation: EMPTY_DOCS_NAVIGATION },
+};
+
+/** The navigation of a template. */
+export function getExampleDocsNavigation(
+  template: ExampleDocsTemplate = "starter",
+): RuntimeDocsNavigationInput {
+  return TEMPLATES[template].navigation;
+}
+
+/** The pages of a template, with the project name written into the home page. */
 export function createExampleDocsPages(
   projectName: string,
+  template: ExampleDocsTemplate = "starter",
 ): RuntimeDocsPageInput[] {
-  return EXAMPLE_DOCS_PAGES.map((page) => {
+  return TEMPLATES[template].pages.map((page) => {
     const source = EXAMPLE_DOCS_PAGE_SOURCES[page.file];
     if (source === undefined) {
       throw new Error(`Example docs page ${page.file} is missing.`);

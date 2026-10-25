@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import type { ProjectDto } from "@doxahq/contracts"
+import type { CreateExampleProjectInput, ProjectDto } from "@doxahq/contracts"
 
 import { mergeProjectIntoList } from "~/lib/dashboard/cache"
 import { getErrorMessage } from "~/lib/errors"
@@ -20,7 +20,7 @@ function cacheProject(queryClient: ReturnType<typeof useQueryClient>, project: P
   )
 }
 
-/** Creates a project without a repository, with the example docs published. */
+/** Creates a project without a repository, with the starter docs or an empty site published. */
 export function useCreateExampleProject() {
   const queryClient = useQueryClient()
   const mutation = useMutation({
@@ -32,9 +32,10 @@ export function useCreateExampleProject() {
   })
 
   return {
-    createExampleProject: (input: { name: string }) => mutation.mutateAsync(input),
+    createExampleProject: (input: CreateExampleProjectInput) => mutation.mutateAsync(input),
     isCreating: mutation.isPending,
     error: mutation.error ? getErrorMessage(mutation.error, "Failed to create project.") : null,
+    reset: mutation.reset,
   }
 }
 

@@ -296,6 +296,38 @@ describe("project routes docs URLs", () => {
     });
   });
 
+  test("passes the empty template to an example project", async () => {
+    mocks.createExampleProject.mockResolvedValue(
+      createProject({ githubRepositoryId: null, publishedVersionId: "v-1" }),
+    );
+    const response = await worker.fetch(
+      createMutationRequest("/projects/example", {
+        body: JSON.stringify({ name: "My Docs", template: "empty" }),
+      }),
+      createEnv({ DOCS_BASE_DOMAIN: "doxa.page" }),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(201);
+    expect(mocks.createExampleProject).toHaveBeenCalledWith(
+      expect.anything(),
+      { userId: "user-1", name: "My Docs", template: "empty" },
+    );
+  });
+
+  test("rejects an unknown example template", async () => {
+    const response = await worker.fetch(
+      createMutationRequest("/projects/example", {
+        body: JSON.stringify({ name: "My Docs", template: "blog" }),
+      }),
+      createEnv(),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.createExampleProject).not.toHaveBeenCalled();
+  });
+
   test("rejects an example project without a name", async () => {
     const response = await worker.fetch(
       createMutationRequest("/projects/example", {

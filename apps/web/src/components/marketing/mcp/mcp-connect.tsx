@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { ClientPicker } from "~/components/marketing/mcp/client-picker"
 import { ConnectStep } from "~/components/marketing/mcp/connect-step"
 import { ConnectHelp } from "~/components/marketing/mcp/connect-help"
@@ -8,22 +7,14 @@ import { StepCheck } from "~/components/marketing/mcp/step-check"
 import { StepFirstTask } from "~/components/marketing/mcp/step-first-task"
 import { StepSignIn } from "~/components/marketing/mcp/step-sign-in"
 import { GET_STARTED_URL } from "~/lib/marketing/links"
-import { DEFAULT_CLIENT_ID, findClient, type McpClient } from "~/lib/marketing/mcp"
-import type { CopyState } from "~/lib/marketing/mcp-copy"
+import type { CopyState } from "~/lib/mcp/copied"
+import { useMcpClientPicker } from "~/lib/mcp/use-client-picker"
 
 const RAIL = ["Choose client", "Add Doxa", "Sign in", "Check", "First task"]
 
 /** Section 01: the connect console, from choosing a client to a first task. */
 export function McpConnect({ copyState }: { copyState: CopyState }) {
-  const [tab, setTab] = useState(DEFAULT_CLIENT_ID)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const active = findClient(tab)
-
-  const pick = (client: McpClient) => {
-    setTab(client.id)
-    setMenuOpen(false)
-    copyState.reset()
-  }
+  const { active, menuOpen, pick, toggleMenu, closeMenu } = useMcpClientPicker(copyState.reset)
 
   return (
     <section className="col cx" id="connect" aria-labelledby="cx-title">
@@ -109,8 +100,8 @@ export function McpConnect({ copyState }: { copyState: CopyState }) {
               active={active}
               menuOpen={menuOpen}
               onPick={pick}
-              onToggleMenu={() => setMenuOpen((open) => !open)}
-              onCloseMenu={() => setMenuOpen(false)}
+              onToggleMenu={toggleMenu}
+              onCloseMenu={closeMenu}
             />
           </ConnectStep>
           <StepAdd active={active} copyState={copyState} />

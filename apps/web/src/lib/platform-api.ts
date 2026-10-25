@@ -5,6 +5,7 @@ import type {
   ApplyDocsContentEditsInput,
   ApplyDocsContentEditsResult,
   CreateDocsDomainInput,
+  CreateExampleProjectInput,
   DocsContentMdxReport,
   DocsContentOverviewDto,
   DocsContentPageDetailDto,
@@ -133,8 +134,11 @@ export async function createProject(input: { githubRepositoryId: string; name?: 
   return result.project;
 }
 
-/** Creates a project without a repository. It starts with the example docs site. */
-export async function createExampleProject(input: { name: string }) {
+/**
+ * Creates a project without a repository. It starts with the starter docs, or
+ * with one empty page when `template` is "empty".
+ */
+export async function createExampleProject(input: CreateExampleProjectInput) {
   const result = await apiFetch<{ project: ProjectDto }>("/projects/example", {
     method: "POST",
     json: input,

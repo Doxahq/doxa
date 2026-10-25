@@ -2,7 +2,7 @@ import { useRef } from "react"
 import { ClientLogo } from "~/components/marketing/mcp/client-logo"
 import { ClientMenu } from "~/components/marketing/mcp/client-menu"
 import { CheckIcon } from "~/components/marketing/mcp/copy-icon"
-import { ANY_CLIENT, MAIN_CLIENTS, isMoreClient, moreButtonText, moreStack, type McpClient } from "~/lib/marketing/mcp"
+import { ANY_CLIENT, MAIN_CLIENTS, isMoreClient, moreButtonText, moreStack, type McpClient } from "~/lib/mcp/clients"
 
 interface ClientPickerProps {
   active: McpClient

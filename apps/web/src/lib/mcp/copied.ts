@@ -3,8 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 const COPIED_MS = 1600
 
 /**
- * One "Copied" state for the whole MCP page: copying another value moves the
- * label to its button, as in the design.
+ * One "Copied" state for a group of copy buttons, such as the whole MCP page:
+ * copying another value moves the label to its button.
  */
 export function useCopied() {
   const [copied, setCopied] = useState<string | null>(null)

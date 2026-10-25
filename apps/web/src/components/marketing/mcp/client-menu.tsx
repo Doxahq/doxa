@@ -1,6 +1,6 @@
 import { useState, type KeyboardEvent } from "react"
 import { ClientLogo } from "~/components/marketing/mcp/client-logo"
-import { menuCountLabel, menuGroups, type McpClient } from "~/lib/marketing/mcp"
+import { menuCountLabel, menuGroups, type McpClient } from "~/lib/mcp/clients"
 
 interface ClientMenuProps {
   activeId: string

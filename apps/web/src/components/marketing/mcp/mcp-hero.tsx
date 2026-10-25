@@ -2,7 +2,7 @@ import { Hr, Ticks } from "~/components/marketing/guides"
 import { CopyIcon } from "~/components/marketing/mcp/copy-icon"
 import { SiteNav } from "~/components/marketing/site-nav"
 import { DOCS_URL, MCP_SERVER_URL } from "~/lib/marketing/links"
-import type { CopyState } from "~/lib/marketing/mcp-copy"
+import type { CopyState } from "~/lib/mcp/copied"
 
 export function McpHero({ copyState }: { copyState: CopyState }) {
   const { copied, copy } = copyState

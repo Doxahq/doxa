@@ -1,8 +1,8 @@
 import { ConnectStep } from "~/components/marketing/mcp/connect-step"
 import { CopyIcon } from "~/components/marketing/mcp/copy-icon"
-import type { McpClient } from "~/lib/marketing/mcp"
+import type { McpClient } from "~/lib/mcp/clients"
 import { TEST_PROMPT } from "~/lib/marketing/mcp-content"
-import type { CopyState } from "~/lib/marketing/mcp-copy"
+import type { CopyState } from "~/lib/mcp/copied"
 
 /** Step 04: where the connection shows, and a first prompt to test it. */
 export function StepCheck({ active, copyState }: { active: McpClient; copyState: CopyState }) {

@@ -1,7 +1,7 @@
 import { ClientLogo } from "~/components/marketing/mcp/client-logo"
 import { CheckIcon } from "~/components/marketing/mcp/copy-icon"
 import { DoxaMark } from "~/components/marketing/doxa-mark"
-import type { McpClient } from "~/lib/marketing/mcp"
+import type { McpClient } from "~/lib/mcp/clients"
 
 const PROJECTS = [
   { name: "All projects", on: false },

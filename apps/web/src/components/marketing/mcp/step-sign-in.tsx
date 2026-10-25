@@ -1,6 +1,6 @@
 import { ConnectStep } from "~/components/marketing/mcp/connect-step"
 import { ConsentMock } from "~/components/marketing/mcp/consent-mock"
-import type { McpClient } from "~/lib/marketing/mcp"
+import type { McpClient } from "~/lib/mcp/clients"
 
 /** Step 03: the OAuth consent screen and what happens on it. */
 export function StepSignIn({ active }: { active: McpClient }) {

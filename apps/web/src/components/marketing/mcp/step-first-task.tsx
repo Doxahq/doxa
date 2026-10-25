@@ -1,7 +1,7 @@
 import { ConnectStep } from "~/components/marketing/mcp/connect-step"
 import { CopyIcon } from "~/components/marketing/mcp/copy-icon"
 import { STARTER_PROMPTS } from "~/lib/marketing/mcp-content"
-import type { CopyState } from "~/lib/marketing/mcp-copy"
+import type { CopyState } from "~/lib/mcp/copied"
 
 /** Step 05: the starter prompts, one per server workflow. */
 export function StepFirstTask({ copyState }: { copyState: CopyState }) {

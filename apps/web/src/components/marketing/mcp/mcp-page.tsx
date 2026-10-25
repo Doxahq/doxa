@@ -11,7 +11,7 @@ import { McpSignal } from "~/components/marketing/mcp/mcp-signal"
 import { McpWorkflow } from "~/components/marketing/mcp/mcp-workflow"
 import { SiteFooter } from "~/components/marketing/site-footer"
 import { BANDS } from "~/lib/marketing/bands"
-import { useCopied } from "~/lib/marketing/mcp-copy"
+import { useCopied } from "~/lib/mcp/copied"
 
 export function McpPage() {
   const copyState = useCopied()

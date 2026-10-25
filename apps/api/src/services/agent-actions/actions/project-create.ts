@@ -40,19 +40,31 @@ export const projectCreateAction = definePrincipalAction({
     name: payload.name ?? null,
     slug: payload.slug ?? null,
     githubRepositoryId: payload.source === "repository" ? payload.githubRepositoryId : null,
+    template: payload.source === "example" ? (payload.template ?? "starter") : null,
   }),
   describe: (payload) => ({
     headline: `Create the project ${projectLabel(payload)}`,
     effects: [
       "A new project is added to your account.",
-      ...(payload.source === "example" ? ["The project starts with example docs that go live at once."] : []),
+      ...(payload.source === "example"
+        ? [
+            payload.template === "empty"
+              ? "The project starts with one empty page that goes live at once."
+              : "The project starts with example docs that go live at once.",
+          ]
+        : []),
     ],
   }),
   capture: async () => ({}),
   checkFresh: async () => FRESH,
   execute({ target, services }, payload) {
     if (payload.source === "example") {
-      return services.projects.createExample({ userId: target.userId, name: payload.name, slug: payload.slug });
+      return services.projects.createExample({
+        userId: target.userId,
+        name: payload.name,
+        slug: payload.slug,
+        template: payload.template,
+      });
     }
     return services.projects.createForRepository({
       userId: target.userId,

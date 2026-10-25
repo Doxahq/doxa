@@ -1,6 +1,7 @@
 import type {
   DocsDomainDto,
   DocsPageMdxIssues,
+  ExampleDocsTemplate,
   GenerationDetailDto,
   ProjectDto,
 } from "@doxahq/contracts";
@@ -77,7 +78,12 @@ export interface DomainsPort {
 
 export interface ProjectsPort {
   find(input: ProjectScopedInput): Promise<{ id: string; name: string } | null>;
-  createExample(input: { userId: string; name: string; slug?: string }): Promise<ProjectDto>;
+  createExample(input: {
+    userId: string;
+    name: string;
+    slug?: string;
+    template?: ExampleDocsTemplate;
+  }): Promise<ProjectDto>;
   createForRepository(input: {
     userId: string;
     githubRepositoryId: string;

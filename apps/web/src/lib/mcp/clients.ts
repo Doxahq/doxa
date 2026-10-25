@@ -1,5 +1,6 @@
-// The client catalog of the MCP page: one entry per MCP client, with its
-// setup snippet and the copy for each setup step.
+// The MCP client catalog: one entry per MCP client, with its setup snippet and
+// the copy for each setup step. The MCP page and the dashboard "Connect your
+// agent" card both read it, so a client changes in one place for both.
 
 import { MCP_SERVER_URL as SERVER_URL } from "~/lib/marketing/links"
 import {
@@ -10,7 +11,7 @@ import {
   stepsSnippet,
   token,
   type Snippet,
-} from "~/lib/marketing/mcp-snippet"
+} from "~/lib/mcp/snippet"
 
 export type McpClientGroup = "chat" | "ide" | "cli"
 

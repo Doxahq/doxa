@@ -70,6 +70,13 @@ describe("example docs template", () => {
     expect(home.content).toContain('title: "Acme \\"Cloud\\": API"');
     expect(home.content).not.toContain("{{projectName}}");
   });
+
+  test("the empty template has one home page with the project name", () => {
+    const pages = createExampleDocsPages("Acme", "empty");
+    expect(pages).toHaveLength(1);
+    expect(pages[0]?.route).toBe("/");
+    expect(pages[0]?.content).toContain('title: "Acme"');
+  });
 });
 
 describe("createExampleProject", () => {
@@ -125,6 +132,34 @@ describe("createExampleProject", () => {
       await store.listKeys(`${seed.artifactPrefix}/source/`),
     ).toHaveLength(10);
     expect(mocks.deleteForUser).not.toHaveBeenCalled();
+  });
+
+  test("the empty template publishes one introduction page", async () => {
+    const storage = createMemoryR2Bucket();
+
+    await createExampleProject({ DOCS_BUCKET: storage.bucket } as never, {
+      userId: "user-1",
+      name: "Acme",
+      template: "empty",
+    });
+
+    expect(mocks.createWithoutRepository).toHaveBeenCalledWith({
+      userId: "user-1",
+      name: "Acme",
+    });
+    const [seed] = mocks.publishSeedVersion.mock.calls[0];
+    const store = createR2DocsContentStore(storage.bucket);
+    const manifest = parseDocsManifestText(
+      (await store.read(seed.manifestPath)) ?? "",
+    );
+    if (!manifest.ok || manifest.manifest.schemaVersion !== 2) {
+      throw new Error("Expected a v2 manifest");
+    }
+    expect(manifest.manifest.pages.map((page) => page.href)).toEqual(["/"]);
+    expect(manifest.manifest.pages[0]?.title).toBe("Acme");
+    expect(
+      await store.listKeys(`${seed.artifactPrefix}/source/`),
+    ).toHaveLength(1);
   });
 
   test("removes the project when the example cannot be published", async () => {

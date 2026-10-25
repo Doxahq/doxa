@@ -111,9 +111,14 @@ export const createProjectInputSchema = z.object({
 });
 
 /** A project with no repository that starts with the example docs site. */
+/** How a project without a repository starts: the starter docs or an empty site. */
+export const exampleDocsTemplateSchema = z.enum(["starter", "empty"]);
+
 export const createExampleProjectInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
   slug: projectSlugInputSchema.optional(),
+  /** The starter docs when left out. */
+  template: exampleDocsTemplateSchema.optional(),
 });
 
 export const connectProjectRepositoryInputSchema = z.object({
@@ -1054,6 +1059,7 @@ export interface GenerateJobMessage {
 export type GitHubRepositoryDto = z.infer<typeof githubRepositorySchema>;
 export type ProjectDto = z.infer<typeof projectSchema>;
 export type CreateProjectInput = z.infer<typeof createProjectInputSchema>;
+export type ExampleDocsTemplate = z.infer<typeof exampleDocsTemplateSchema>;
 export type CreateExampleProjectInput = z.infer<
   typeof createExampleProjectInputSchema
 >;

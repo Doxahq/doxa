@@ -1,8 +1,8 @@
 import { ConnectStep } from "~/components/marketing/mcp/connect-step"
 import { CopyIcon, InfoIcon } from "~/components/marketing/mcp/copy-icon"
-import { SnippetLines } from "~/components/marketing/mcp/snippet-lines"
-import type { McpClient } from "~/lib/marketing/mcp"
-import type { CopyState } from "~/lib/marketing/mcp-copy"
+import { SnippetLines } from "~/components/mcp/snippet-lines"
+import type { McpClient } from "~/lib/mcp/clients"
+import type { CopyState } from "~/lib/mcp/copied"
 
 /** Step 02: the setup snippet of the active client. */
 export function StepAdd({ active, copyState }: { active: McpClient; copyState: CopyState }) {

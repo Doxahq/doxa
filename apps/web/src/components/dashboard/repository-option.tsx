@@ -21,6 +21,7 @@ export function RepositoryOption({
   return (
     <button
       type="button"
+      aria-pressed={isSelected}
       onClick={onSelect}
       className={cn(
         "flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors",

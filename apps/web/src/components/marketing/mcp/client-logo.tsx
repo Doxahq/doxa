@@ -1,4 +1,4 @@
-import type { McpClient } from "~/lib/marketing/mcp"
+import type { McpClient } from "~/lib/mcp/clients"
 
 /** A client mark in a square tile, or its letters when it has no logo. */
 export function ClientLogo({ client, small = false }: { client: Pick<McpClient, "logo" | "mono">; small?: boolean }) {

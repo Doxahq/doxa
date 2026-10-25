@@ -13,10 +13,14 @@ import { useProjectsSummary } from "~/lib/dashboard/use-projects-summary"
  * `/dashboard` has no page of its own. It opens the last project the user
  * opened, else the first project, else the new project flow.
  *
+ * A user with no project lands on the new project page, which is the
+ * onboarding screen. A returning user keeps landing in a project.
+ *
  * GitHub sends the user back to `/dashboard?github=connected` after the app
- * install, which starts from the new project flow, so that case returns there.
- * When the install started from a project without a repository, it returns to
- * that project instead, where the overview finishes the connection.
+ * install, which starts from the "Generate from a repository" dialog, so that
+ * case reopens it. When the install started from a project without a
+ * repository, it returns to that project instead, where the overview finishes
+ * the connection.
  */
 export function DashboardLanding() {
   const navigate = useNavigate()
@@ -32,7 +36,11 @@ export function DashboardLanding() {
     if (projectId) {
       void navigate({ to: "/dashboard/projects/$projectId/project", params: { projectId }, replace: true })
     } else {
-      void navigate({ to: "/dashboard/projects/new", replace: true })
+      void navigate({
+        to: "/dashboard/projects/new",
+        search: githubConnected ? { start: "repository" } : {},
+        replace: true,
+      })
     }
   }, [error, githubConnected, isPending, navigate, projects])
 

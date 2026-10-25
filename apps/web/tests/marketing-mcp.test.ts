@@ -11,8 +11,8 @@ import {
   menuGroups,
   moreButtonText,
   moreStack,
-} from "~/lib/marketing/mcp"
-import { commandSnippet, jsonSnippet, stepsSnippet, type SnippetLine } from "~/lib/marketing/mcp-snippet"
+} from "~/lib/mcp/clients"
+import { commandSnippet, jsonSnippet, stepsSnippet, type SnippetLine } from "~/lib/mcp/snippet"
 
 const text = (line: SnippetLine) => line.map((t) => t.text).join("")
 

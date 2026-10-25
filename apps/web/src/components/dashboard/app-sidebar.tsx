@@ -101,7 +101,7 @@ function NoProjectView() {
     <>
       <div className="flex min-h-0 flex-1 flex-col items-start gap-3 px-4 py-6">
         <p className="text-[13px] leading-6 text-muted-foreground">
-          Start with example docs, or connect a repository to generate docs with AI.
+          Generate docs from a GitHub repository, or start from the starter docs or an empty site.
         </p>
         <Link
           to="/dashboard/projects/new"

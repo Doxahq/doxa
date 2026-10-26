@@ -8,6 +8,7 @@ import {
 import { siteConfigSchema } from "@doxahq/site-config";
 import { projectEntitlementsSchema } from "./entitlements";
 import { generationInstructionsSchema } from "./doxabot-instructions";
+import type { ModelAccessToken } from "./model-access";
 import {
   pageDependencyStateSchema,
   generationAnalysisStateSchema,
@@ -48,6 +49,7 @@ export * from "./doxabot";
 export * from "./doxabot-instructions";
 export * from "./doxabot-instruction-screening";
 export * from "./doxabot-instruction-prompt";
+export * from "./model-access";
 export * from "./instruction-text";
 export * from "./generation-observability";
 export * from "./generation-resume";
@@ -771,8 +773,13 @@ export const containerGenerateRequestSchema = z.object({
   defaultBranch: z.string().optional(),
   installationAccessToken: z.string(),
   modelProvider: modelProviderSchema.default(DEFAULT_MODEL_PROVIDER),
-  /** The API key of `modelProvider`. */
-  modelApiKey: z.string(),
+  /** The API key of `modelProvider`. A request carries this or `modelAuthToken`. */
+  modelApiKey: z.string().min(1).optional(),
+  /**
+   * A short-lived Anthropic bearer token (Workload Identity Federation), in
+   * place of `modelApiKey`. It lasts longer than any stage.
+   */
+  modelAuthToken: z.string().min(1).optional(),
   model: z.string().optional(),
   modelConfig: generationModelConfigSchema.optional(),
   stageExecutionId: uuidSchema.optional(),
@@ -1239,6 +1246,11 @@ export interface InternalApiRpc {
    * metadata). The API resolves the installation and repository itself.
    */
   createRepositoryReadToken(projectId: string): Promise<string>;
+  /**
+   * A short-lived Anthropic token for one generation stage, or null when the
+   * API has no federation set up (local development, Workers).
+   */
+  createModelAccessToken(): Promise<ModelAccessToken | null>;
   markJobRunning(jobId: string): Promise<void>;
   markJobFailed(jobId: string, message: string): Promise<void>;
   markJobCancelled(jobId: string, message: string): Promise<void>;

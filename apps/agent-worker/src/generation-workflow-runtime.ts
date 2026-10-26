@@ -68,8 +68,7 @@ import {
   generationModelIds,
   modelApiKeySecrets,
   resolveGenerationModels,
-  resolveModelCredentials,
-  resolveModelCredentialsFor,
+  resolveStageModelAuth,
 } from "./model-provider";
 import { pageBriefFingerprints, pageSourcesOf } from "./review-evidence";
 import { syncReusableStateWithLive } from "./live-state-sync";
@@ -460,7 +459,8 @@ export class GenerationWorkflowRunner {
             await this.env.API.markJobCancelled(input.jobId, message);
             throw new NonRetryableError(message);
           }
-          resolveModelCredentials(this.env);
+          // Fails before the job runs when no token and no key is available.
+          await resolveStageModelAuth(this.env, this.env.API, []);
           await this.env.API.markJobRunning(input.jobId);
           const context = await this.env.API.getGenerationContext(input.projectId);
           if (!context) throw new NonRetryableError("Generation context not found for project.");
@@ -886,7 +886,7 @@ export class GenerationWorkflowRunner {
           }
           assertRevisionAwareExecutionContext(context);
           const executionConfig = resolveGenerationExecutionConfig(context);
-          const { modelProvider } = resolveModelCredentialsFor(this.env, [
+          const { modelProvider } = await resolveStageModelAuth(this.env, this.env.API, [
             executionConfig.plannerModel,
             executionConfig.writerModel,
           ]);
@@ -1931,7 +1931,7 @@ async function createRevisionAwareStageRequest(
     repositoryFullName: context.repository.fullName,
     defaultBranch: context.repository.defaultBranch,
     installationAccessToken,
-    ...resolveModelCredentialsFor(env, generationModelIds(models)),
+    ...(await resolveStageModelAuth(env, env.API, generationModelIds(models))),
     model: modelForGenerationStage(executionConfig, stage.stage),
     modelConfig: models,
     stageExecutionId: crypto.randomUUID(),
@@ -2557,7 +2557,7 @@ async function createStageRequest(
     repositoryFullName: prepared.context.repository.fullName,
     defaultBranch: prepared.context.repository.defaultBranch,
     installationAccessToken,
-    ...resolveModelCredentialsFor(env, generationModelIds(models)),
+    ...(await resolveStageModelAuth(env, env.API, generationModelIds(models))),
     model: stage.stage === "write" ? writerModel : plannerModel,
     modelConfig: models,
     stageExecutionId: crypto.randomUUID(),
@@ -2613,7 +2613,8 @@ async function invokeStage(
     onPageCheckpoint?: (page: StagedRuntimePage) => Promise<void>;
   } = {},
 ): Promise<ContainerGenerationStageResult> {
-  const secrets = [request.installationAccessToken, request.modelApiKey];
+  const secrets = [request.installationAccessToken, request.modelApiKey, request.modelAuthToken]
+    .filter((secret): secret is string => secret !== undefined);
   let status = "completed";
   const usageRecords = new Map<string, Parameters<typeof persistGenerationUsage>[1]>();
   try {

@@ -81,6 +81,10 @@ export class InternalApi extends WorkerEntrypoint<Env> implements InternalApiRpc
     return access.token;
   }
 
+  createModelAccessToken() {
+    return this.env.MODEL_TOKEN_BROKER?.getToken() ?? Promise.resolve(null);
+  }
+
   markJobRunning(jobId: string) {
     return markJobRunning(this.env, jobId);
   }

@@ -6,8 +6,16 @@ export interface ContainerLogger {
   error(message: string, data?: Record<string, unknown>): void;
 }
 
+type RequestCredentials = Pick<ContainerGenerateRequest, "installationAccessToken" | "modelApiKey" | "modelAuthToken">;
+
+/** Every credential a request carries, so that no log, event or error shows one. */
+export function requestSecrets(input: RequestCredentials): string[] {
+  return [input.installationAccessToken, input.modelApiKey, input.modelAuthToken]
+    .filter((secret): secret is string => typeof secret === "string" && secret.length > 0);
+}
+
 export function createContainerLogger(input: ContainerGenerateRequest, startedAt: number): ContainerLogger {
-  const secrets = [input.installationAccessToken, input.modelApiKey].filter(Boolean);
+  const secrets = requestSecrets(input);
 
   return {
     event(event) {
@@ -35,12 +43,8 @@ export function createContainerLogger(input: ContainerGenerateRequest, startedAt
   };
 }
 
-export function createWriterDiagnosticLogger(input: {
-  jobId: string;
-  installationAccessToken: string;
-  modelApiKey: string;
-}): WriterDiagnosticCallback {
-  const secrets = [input.installationAccessToken, input.modelApiKey].filter(Boolean);
+export function createWriterDiagnosticLogger(input: RequestCredentials & { jobId: string }): WriterDiagnosticCallback {
+  const secrets = requestSecrets(input);
 
   return (event) => {
     console.log(JSON.stringify({

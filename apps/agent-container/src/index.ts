@@ -42,7 +42,7 @@ import {
   resolvedPageConcurrency,
   resolvedRestExtractionModel,
 } from "./generation-profile";
-import { createContainerLogger, sanitizeText, sanitizeValue } from "./logging";
+import { createContainerLogger, requestSecrets, sanitizeText, sanitizeValue } from "./logging";
 import { resolveSpecReaderClient } from "./utility/spec-reader-client";
 import { createLocalAgentServer } from "./local-http-server";
 import { startGenerationHeartbeat } from "./generation-heartbeat";
@@ -98,7 +98,7 @@ async function streamGeneration(
   input: ContainerGenerateRequest,
   abortController: AbortController,
 ): Promise<void> {
-  const secrets = [input.installationAccessToken, input.modelApiKey].filter(Boolean);
+  const secrets = requestSecrets(input);
   response.writeHead(200, {
     "content-type": "application/x-ndjson; charset=utf-8",
     "cache-control": "no-store",
@@ -139,7 +139,7 @@ async function streamGenerationStage(
   input: ContainerGenerationStageRequest,
   abortController: AbortController,
 ): Promise<void> {
-  const secrets = [input.installationAccessToken, input.modelApiKey].filter(Boolean);
+  const secrets = requestSecrets(input);
   const startedAt = Date.now();
   const logger = createContainerLogger(input, startedAt);
   let sequence = 0;
@@ -331,6 +331,7 @@ async function runGenerationInWorkspace(
     outputDir: workspace.outputDir,
     modelProvider: input.modelProvider,
     apiKey: input.modelApiKey,
+    authToken: input.modelAuthToken,
     model: input.model,
     abortController,
     concurrency: resolvedPageConcurrency(input),

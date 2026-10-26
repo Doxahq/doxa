@@ -59,6 +59,7 @@ vi.mock("../../src/services/container-generation", () => ({
 vi.mock("../../src/services/github-app", () => ({
   createInstallationAccessToken: vi.fn(),
   createRepositoryReadToken: vi.fn(),
+  createModelAccessToken: vi.fn(async () => null),
   listInstallationRepositories: vi.fn(),
 }));
 

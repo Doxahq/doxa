@@ -8,12 +8,16 @@ export function createProviderFromConfig(config: AgentConfig): Provider {
   const model = config.model || DEFAULT_MODEL;
   // Without a provider name, keep the OpenRouter default and its environment key fallback.
   if (!config.modelProvider) return openrouter({ apiKey: config.apiKey, model });
-  if (!config.apiKey) {
+  if (config.authToken && config.modelProvider !== "anthropic") {
+    throw new Error(`A bearer token works only with the anthropic model provider, not ${config.modelProvider}.`);
+  }
+  if (!config.apiKey && !config.authToken) {
     throw new Error(`An API key is required for the ${config.modelProvider} model provider.`);
   }
   return modelProvider({
     provider: config.modelProvider,
     apiKey: config.apiKey,
+    authToken: config.authToken,
     model,
     promptCache: config.promptCache,
     onModelCallRetry: config.onModelCallRetry,

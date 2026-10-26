@@ -628,6 +628,8 @@ export interface AgentConfig {
   modelProvider?: ModelProvider;
   /** API key of `modelProvider`. */
   apiKey?: string;
+  /** A short-lived Anthropic bearer token, in place of `apiKey`. Anthropic only. */
+  authToken?: string;
   /** Model id — defaults to the agent's recommended model. */
   model?: string;
   /** Optional provider injection for tests and advanced embedded use. */

@@ -85,6 +85,24 @@ describe("provider creation", () => {
     });
   });
 
+  test("an Anthropic bearer token works in place of the key", () => {
+    const provider = createProviderFromConfig({
+      cwd: "/tmp",
+      toolPolicy: "read_only",
+      modelProvider: "anthropic",
+      authToken: "sk-ant-oat01-short",
+      model: "claude-sonnet-5-5",
+    });
+
+    expect(provider.config).toMatchObject({ name: "anthropic", authToken: "sk-ant-oat01-short", apiKey: "" });
+    expect(() => createProviderFromConfig({
+      cwd: "/tmp",
+      toolPolicy: "read_only",
+      modelProvider: "openrouter",
+      authToken: "sk-ant-oat01-short",
+    })).toThrow("A bearer token works only with the anthropic model provider, not openrouter.");
+  });
+
   test("the agent config picks the provider and requires its key", () => {
     const provider = createProviderFromConfig({
       cwd: "/tmp",

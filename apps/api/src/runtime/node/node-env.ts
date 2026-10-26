@@ -3,6 +3,7 @@ import type { Env } from "../../env";
 import { BridgeClient, createBridgedBindings } from "./bindings/bridge-bindings";
 import { S3R2Bucket, createR2S3Client } from "./bindings/r2-s3-bucket";
 import { ValkeyKvNamespace } from "./bindings/valkey-kv-namespace";
+import { modelTokenBrokerFromVars } from "./model-access/model-token-broker-from-vars";
 import { readApiVars, type DocsBucketSource, type NodeServerConfig } from "./config";
 
 /** The API env on Node, and what must close at shutdown. */
@@ -17,6 +18,7 @@ export interface NodeEnv {
  *   DOCS_BUCKET         R2 over S3, or the local Wrangler state in development
  *   AUTH_KV, OAUTH_KV   Valkey
  *   queues, services    the bridge to the edge Worker
+ *   MODEL_TOKEN_BROKER  Anthropic tokens from the task role, when federation is set up
  *
  * `vars` holds the string variables, as the Worker gets them.
  */
@@ -32,6 +34,7 @@ export async function createNodeEnv(config: NodeServerConfig, vars: Record<strin
 
   const docsBucket = await openDocsBucket(config.docsBucket);
   const bridge = new BridgeClient(config.bridge);
+  const modelTokenBroker = modelTokenBrokerFromVars(vars);
 
   const env: Env = {
     ...readApiVars(vars),
@@ -39,6 +42,7 @@ export async function createNodeEnv(config: NodeServerConfig, vars: Record<strin
     AUTH_KV: new ValkeyKvNamespace(valkey, "auth"),
     OAUTH_KV: new ValkeyKvNamespace(valkey, "oauth"),
     ...createBridgedBindings(bridge),
+    ...(modelTokenBroker ? { MODEL_TOKEN_BROKER: modelTokenBroker } : {}),
   };
 
   return {

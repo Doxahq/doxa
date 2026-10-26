@@ -1,6 +1,7 @@
 import {
   DEFAULT_MODEL_PROVIDER,
   modelProviderSchema,
+  type InternalApiRpc,
   type ModelProvider,
 } from "@doxahq/contracts";
 import { GenerationNonRetryableError as NonRetryableError } from "./generation-errors";
@@ -18,6 +19,11 @@ export interface ModelCredentials {
   modelProvider: ModelProvider;
   modelApiKey: string;
 }
+
+/** What one stage authenticates with: a short-lived Anthropic token, or the provider's API key. */
+export type StageModelAuth =
+  | ModelCredentials
+  | { modelProvider: "anthropic"; modelAuthToken: string };
 
 interface ModelProviderSettings {
   label: string;
@@ -93,6 +99,25 @@ export function resolveModelCredentialsFor(
   const credentials = resolveModelCredentials(env);
   assertModelsMatchProvider(credentials.modelProvider, models);
   return credentials;
+}
+
+/**
+ * The credentials of one stage. With Anthropic, the API mints a short-lived
+ * token when it has federation set up (production); otherwise, as in local
+ * development or with another provider, the stage uses the static API key.
+ */
+export async function resolveStageModelAuth(
+  env: ModelProviderEnv,
+  api: Pick<InternalApiRpc, "createModelAccessToken">,
+  models: readonly string[],
+): Promise<StageModelAuth> {
+  const modelProvider = resolveModelProvider(env);
+  assertModelsMatchProvider(modelProvider, models);
+  if (modelProvider === "anthropic") {
+    const accessToken = await api.createModelAccessToken();
+    if (accessToken) return { modelProvider, modelAuthToken: accessToken.token };
+  }
+  return resolveModelCredentials(env);
 }
 
 /** Every configured provider key, so that error messages never show one. */

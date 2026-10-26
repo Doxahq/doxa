@@ -977,6 +977,10 @@ class SyntheticInternalApi {
     return this.createInstallationAccessToken();
   }
 
+  async createModelAccessToken() {
+    return null;
+  }
+
   async addJobEvent(
     _jobId: string,
     input: {

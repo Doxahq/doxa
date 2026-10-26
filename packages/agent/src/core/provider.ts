@@ -94,7 +94,9 @@ export function createProvider(config: ProviderConfig): Provider {
 /** Creates a provider for `provider` with its default API URL. */
 export function modelProvider(opts: {
   provider?: ModelProvider;
-  apiKey: string;
+  /** One of `apiKey` and `authToken` is required. */
+  apiKey?: string;
+  authToken?: string;
   model?: string;
   promptCache?: PromptCacheSetting;
   onModelCallRetry?: (retry: ModelCallRetryEvent) => void;
@@ -102,7 +104,8 @@ export function modelProvider(opts: {
   return createProvider({
     name: opts.provider,
     baseUrl: modelProviderRuntime(opts.provider).defaultBaseUrl,
-    apiKey: opts.apiKey,
+    apiKey: opts.apiKey ?? "",
+    ...(opts.authToken ? { authToken: opts.authToken } : {}),
     model: opts.model || DEFAULT_DOXA_WRITER_MODEL,
     promptCache: opts.promptCache,
     onModelCallRetry: opts.onModelCallRetry,

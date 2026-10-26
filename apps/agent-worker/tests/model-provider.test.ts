@@ -1,10 +1,11 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { GenerationNonRetryableError } from "../src/generation-errors";
 import {
   modelApiKeySecrets,
   resolveModelCredentials,
   resolveModelCredentialsFor,
+  resolveStageModelAuth,
 } from "../src/model-provider";
 
 const OPENROUTER_KEY = "sk-or-v1-real";
@@ -78,4 +79,50 @@ test("modelApiKeySecrets lists every configured key", () => {
   expect(modelApiKeySecrets({ OPENROUTER_API_KEY: OPENROUTER_KEY, ANTHROPIC_API_KEY: ANTHROPIC_KEY }))
     .toEqual([OPENROUTER_KEY, ANTHROPIC_KEY]);
   expect(modelApiKeySecrets({})).toEqual([]);
+});
+
+describe("resolveStageModelAuth", () => {
+  const MODELS = ["claude-sonnet-5-5", "claude-haiku-5-5"];
+  const tokenApi = (token: string | null) => ({
+    createModelAccessToken: vi.fn(async () => token ? { token, expiresAt: "2026-10-26T13:00:00.000Z" } : null),
+  });
+
+  test("production: Anthropic stages use the short-lived token, not the key", async () => {
+    const api = tokenApi("sk-ant-oat01-short");
+
+    await expect(resolveStageModelAuth({ ANTHROPIC_API_KEY: ANTHROPIC_KEY }, api, MODELS)).resolves.toEqual({
+      modelProvider: "anthropic",
+      modelAuthToken: "sk-ant-oat01-short",
+    });
+  });
+
+  test("production needs no static key once federation works", async () => {
+    await expect(resolveStageModelAuth({}, tokenApi("sk-ant-oat01-short"), MODELS)).resolves.toMatchObject({
+      modelAuthToken: "sk-ant-oat01-short",
+    });
+  });
+
+  test("local development: without federation the stage keeps the static key", async () => {
+    await expect(resolveStageModelAuth({ ANTHROPIC_API_KEY: ANTHROPIC_KEY }, tokenApi(null), MODELS)).resolves.toEqual({
+      modelProvider: "anthropic",
+      modelApiKey: ANTHROPIC_KEY,
+    });
+  });
+
+  test("OpenRouter never asks for an Anthropic token", async () => {
+    const api = tokenApi("sk-ant-oat01-short");
+
+    const auth = await resolveStageModelAuth(
+      { DOXA_MODEL_PROVIDER: "openrouter", OPENROUTER_API_KEY: OPENROUTER_KEY },
+      api,
+      ["anthropic/claude-sonnet-5.5"],
+    );
+
+    expect(auth).toEqual({ modelProvider: "openrouter", modelApiKey: OPENROUTER_KEY });
+    expect(api.createModelAccessToken).not.toHaveBeenCalled();
+  });
+
+  test("no token and no key fails before the stage runs", async () => {
+    await expect(resolveStageModelAuth({}, tokenApi(null), MODELS)).rejects.toBeInstanceOf(GenerationNonRetryableError);
+  });
 });

@@ -79,3 +79,21 @@ resource "aws_iam_role_policy" "task_execute_command" {
   role   = aws_iam_role.task.id
   policy = data.aws_iam_policy_document.execute_command.json
 }
+
+# The origin trades an AWS-signed identity token for a short-lived Anthropic
+# token (Workload Identity Federation), so no static model key is stored.
+# The Anthropic federation rule accepts tokens from this role only. The
+# account-level "Outbound web identity federation" setting must be on.
+data "aws_iam_policy_document" "web_identity_token" {
+  statement {
+    sid       = "GetWebIdentityToken"
+    actions   = ["sts:GetWebIdentityToken"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_web_identity_token" {
+  name   = "get-web-identity-token"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.web_identity_token.json
+}

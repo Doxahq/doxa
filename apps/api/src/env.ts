@@ -3,6 +3,7 @@ import type { DocsCacheInvalidationRpc, GenerateJobMessage } from "@doxahq/contr
 import type { AgentContainerBinding, GenerationMode } from "@doxahq/generation";
 import type { PrerenderQueueRpc } from "@doxahq/contracts/docs-prerender-tasks";
 import type { EmailQueueMessage } from "@doxahq/email";
+import type { ModelTokenBroker } from "./services/model-access/model-token-broker";
 
 export interface Env extends AuthEnv {
   DOCS_CACHE_INVALIDATOR?: DocsCacheInvalidationRpc;
@@ -16,6 +17,11 @@ export interface Env extends AuthEnv {
   /** Secret: an API token with read access to Email Sending suppressions. */
   CLOUDFLARE_EMAIL_API_TOKEN?: string;
   AGENT_CONTAINER?: AgentContainerBinding;
+  /**
+   * Mints short-lived Anthropic tokens for generations. Only the Node origin
+   * has it, from its AWS role; elsewhere generations use the static key.
+   */
+  MODEL_TOKEN_BROKER?: ModelTokenBroker;
   DATABASE_URL?: string;
   GENERATION_MODE?: GenerationMode;
   AGENT_CONTAINER_URL?: string;

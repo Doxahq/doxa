@@ -827,6 +827,7 @@ function createAgentConfig(
     outputDir: workspace.outputDir,
     modelProvider: input.modelProvider,
     apiKey: input.modelApiKey,
+    authToken: input.modelAuthToken,
     model: input.model,
     modelCallTimeoutMs: positiveIntFromEnv(
       "DOXA_MODEL_CALL_IDLE_TIMEOUT_MS",

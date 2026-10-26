@@ -23,6 +23,7 @@ const VOLATILE_REQUEST_FIELDS = new Set([
   "versionId",
   "installationAccessToken",
   "modelApiKey",
+  "modelAuthToken",
 ]);
 
 export type CachedPlanResult = Extract<

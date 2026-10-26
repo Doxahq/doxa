@@ -116,6 +116,7 @@ vi.mock("../../src/services/production-generation-admission", () => ({
 vi.mock("../../src/services/github-app", () => ({
   createInstallationAccessToken: vi.fn(),
   createRepositoryReadToken: vi.fn(),
+  createModelAccessToken: vi.fn(async () => null),
   listInstallationRepositories: vi.fn(),
 }));
 

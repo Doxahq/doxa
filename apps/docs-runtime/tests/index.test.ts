@@ -1291,6 +1291,7 @@ function createEnv(input: {
       getCurrentChangeProposalState: async () => null,
       createInstallationAccessToken: async () => "",
       createRepositoryReadToken: async () => "",
+      createModelAccessToken: vi.fn(async () => null),
       markJobRunning: async () => undefined,
       markJobFailed: async () => undefined,
       markJobCancelled: async () => undefined,

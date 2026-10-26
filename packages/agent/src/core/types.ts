@@ -16,8 +16,13 @@ export interface ProviderConfig {
   name?: ModelProvider;
   /** Base URL of the provider API */
   baseUrl: string;
-  /** API key of the provider */
+  /** API key of the provider. Empty when `authToken` is set. */
   apiKey: string;
+  /**
+   * A short-lived bearer token (Anthropic Workload Identity Federation). When
+   * set, the provider sends it instead of the API key.
+   */
+  authToken?: string;
   /** Default model ID */
   model: string;
   /** Prompt caching for providers that support it. Defaults to the shared policy. */

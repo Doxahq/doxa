@@ -40,6 +40,15 @@ function isResponseSchemaRejection(error: unknown): boolean {
 }
 
 /**
+ * A short-lived token goes in `Authorization: Bearer`. The SDK applies its
+ * default headers after the auth headers, so a null `x-api-key` drops the
+ * empty key header that the adapter's required `apiKey` would add.
+ */
+function bearerAuth(authToken: string | undefined) {
+  return authToken ? { authToken, defaultHeaders: { "x-api-key": null } } : {};
+}
+
+/**
  * Anthropic has no plain JSON mode, so `responseFormat` alone is not sent.
  * A call with a `responseSchema` uses structured outputs
  * (`output_config.format`) instead, which the adapter passes through.
@@ -52,6 +61,7 @@ export const anthropicRuntime: ModelProviderRuntime = {
       baseURL: config.baseUrl,
       // Doxa retries in one place, `withModelCallRetry`, with its error classes.
       maxRetries: 0,
+      ...bearerAuth(config.authToken),
     }) as unknown as AnyTextAdapter,
   modelOptions: (call) => ({
     ...(call.temperature !== undefined && { temperature: call.temperature }),

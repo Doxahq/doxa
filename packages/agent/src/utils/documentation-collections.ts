@@ -272,6 +272,36 @@ function mergePackageCandidates(
   }
 }
 
+/**
+ * One item per slug and per title, each with its own id. Injection gives every
+ * item a page, so two items for one thing would give two pages with one title.
+ * The model sometimes repeats an item id (or copies the template's); the later
+ * item then gets the canonical `collection/slug` id.
+ */
+function withUniqueItems(collection: DocumentationCollection): DocumentationCollection {
+  const ids = new Set<string>();
+  const slugs = new Set<string>();
+  const titles = new Set<string>();
+  const items: DocumentationCollectionItem[] = [];
+  let changed = false;
+
+  for (const item of collection.items) {
+    const titleKey = slugify(item.title);
+    const id = ids.has(item.id) ? `${collection.id}/${item.slug}` : item.id;
+    if (slugs.has(item.slug) || titles.has(titleKey) || ids.has(id)) {
+      changed = true;
+      continue;
+    }
+    ids.add(id);
+    slugs.add(item.slug);
+    titles.add(titleKey);
+    changed ||= id !== item.id;
+    items.push(id === item.id ? item : { ...item, id });
+  }
+
+  return changed ? { ...collection, items } : collection;
+}
+
 function collectionItemKeys(collection: DocumentationCollection): Set<string> {
   return new Set(collection.items.flatMap((item) => [
     item.slug,
@@ -311,7 +341,7 @@ function evidencePathOverlap(a: Set<string>, b: Set<string>): number {
 function removeOverlappingCollections(
   collections: DocumentationCollection[],
 ): DocumentationCollection[] {
-  const sorted = [...collections].sort((a, b) => b.items.length - a.items.length);
+  const sorted = collections.map(withUniqueItems).sort((a, b) => b.items.length - a.items.length);
   const accepted: DocumentationCollection[] = [];
   const acceptedItemTitles = new Set<string>();
 
@@ -525,32 +555,77 @@ function collectionPages(
   });
 }
 
+/**
+ * The planner sees collection titles, not always their ids, and can tag a page
+ * with an id it made up. Only a real id keeps a page away from the other
+ * collections; an unknown one is dropped, so the page is matched by identity.
+ */
+function withKnownCollectionId(page: DocPage, collectionIds: ReadonlySet<string>): DocPage {
+  if (!page.collectionId || collectionIds.has(page.collectionId)) return page;
+  const { collectionId: _unknown, collectionItemId: _unknownItem, ...untagged } = page;
+  return untagged;
+}
+
+/**
+ * Injected item pages own their ids and titles. A page that the claim step
+ * kept and that still has one of them (it names another collection, for
+ * example) would fail validation, so it gives way to the item page.
+ */
+function removeShadowedPages(
+  sections: DocSection[],
+  defaultSection: DocSection,
+  injected: readonly DocPage[],
+): void {
+  const injectedPages = new Set(injected);
+  const injectedIds = new Set(injected.map((page) => page.id));
+  const injectedTitles = new Set(injected.map((page) => slugify(page.title)));
+
+  for (const section of sections) {
+    section.pages = section.pages.filter((page) =>
+      injectedPages.has(page) ||
+      !(injectedTitles.has(slugify(page.title)) || (section === defaultSection && injectedIds.has(page.id)))
+    );
+  }
+}
+
+/**
+ * Gives every collection item one page in the default section. This runs on
+ * model output, so it must never add a page id or title that is already used:
+ * the structure runner fails the run when injection adds a validation error.
+ */
 export function applyCollectionsToStructure(
   structure: DocumentationStructure,
   analysis: ProjectAnalysis,
 ): DocumentationStructure {
-  const collections = (analysis.documentationCollections ?? [])
+  // A reused analysis from an earlier run never went through the merge, so
+  // the overlap and item checks run here too.
+  const collections = removeOverlappingCollections(analysis.documentationCollections ?? [])
     .filter((collection) =>
       collection.items.length >= MIN_DOCUMENTATION_COLLECTION_ITEMS
     );
   if (collections.length === 0) return structure;
 
+  const collectionIds = new Set((analysis.documentationCollections ?? []).map((collection) => collection.id));
   const sections = structure.sections.map((section) => ({
     ...section,
     pages: section.pages.map((page) => {
       const { subPages: _legacyChildren, ...flatPage } = page as DocPage & {
         subPages?: unknown;
       };
-      return flatPage;
+      return withKnownCollectionId(flatPage, collectionIds);
     }),
   }));
 
   const defaultSection = sections.find((section) => section.default) ?? sections[0];
   if (!defaultSection) return structure;
+  const injected: DocPage[] = [];
   for (const collection of collections) {
     const { itemPages, insertionIndex } = claimCollectionPages(sections, defaultSection, collection);
-    defaultSection.pages.splice(insertionIndex, 0, ...collectionPages(collection, itemPages));
+    const pages = collectionPages(collection, itemPages);
+    defaultSection.pages.splice(insertionIndex, 0, ...pages);
+    injected.push(...pages);
   }
+  removeShadowedPages(sections, defaultSection, injected);
 
   return { sections };
 }

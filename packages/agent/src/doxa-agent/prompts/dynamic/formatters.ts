@@ -111,9 +111,9 @@ ${normalized.externalIntegrations.map((integration) => `- ${integration}`).join(
   }
 
   if (normalized.documentationCollections?.length) {
-    sections.push(`DOCUMENTATION COLLECTIONS:
+    sections.push(`DOCUMENTATION COLLECTIONS (a page about a collection or one of its items uses the collection id below as its collectionId, never another value):
 ${normalized.documentationCollections.map((collection) => [
-  `- ${collection.title} (${collection.items.length} items)`,
+  `- ${collection.title} [collectionId: ${collection.id}] (${collection.items.length} items)`,
   collection.description ? `  Description: ${collection.description}` : undefined,
   `  Items: ${collection.items.map((item) => item.title).join(", ")}`,
 ].filter((line): line is string => Boolean(line)).join("\n")).join("\n")}`);

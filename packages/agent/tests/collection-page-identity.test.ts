@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import type { DocumentationCollection, DocumentationStructure, ProjectAnalysis } from "../src";
+import type { DocPage, DocSection, DocumentationCollection, DocumentationStructure, ProjectAnalysis } from "../src";
+import { slugify, validateGlobalPageIds } from "../src/doxa-agent/structure-utils";
 import { validateDocumentationStructureForProfile } from "../src/doxa-agent/prompts/dynamic";
 import {
   applyCollectionsToStructure,
@@ -100,12 +101,21 @@ describe("collection page identity", () => {
       ...collection(),
       id: "control-plane-operators",
       title: "Control Plane Operators",
+      sourceEvidence: [{ path: "src/control-plane.ts", kind: "source" }],
       items: collection().items.map((item) => ({
         ...item,
-        id: item.id.replace("condition-operators", "control-plane-operators"),
+        id: item.id.replace("condition-operators", "control-plane-operators-control"),
+        slug: `control-${item.slug}`,
+        title: `Control plane ${item.title.toLowerCase()}`,
+        sourceEvidence: [{ path: "src/control-plane.ts", kind: "source" }],
       })),
     };
-    const enriched = applyCollectionsToStructure(structure([]), {
+    const enriched = applyCollectionsToStructure(structure([{
+      id: "starts-with",
+      title: "Starts with",
+      description: "Model prose for the condition operator page.",
+      collectionId: "condition-operators",
+    }]), {
       ...analysisFixture,
       documentationCollections: [collection(), second],
     });
@@ -283,5 +293,170 @@ describe("overlapping collections from the model", () => {
     const input = { ...analysisFixture, documentationCollections: undefined };
 
     expect(mergeDocumentationCollections(input, [])).toBe(input);
+  });
+});
+
+describe("planner pages that do not match the analysis", () => {
+  const description = "Runs one command of the extension from the command palette in the editor.";
+  const commands: Array<[slug: string, title: string]> = [
+    ["start-mcp-server", "AI Memory: Start MCP Server"],
+    ["stop-mcp-server", "AI Memory: Stop MCP Server"],
+    ["open-dashboard", "AI Memory: Open Dashboard"],
+    ["update-cursor-mcp-config", "AI Memory: Update Cursor MCP Config"],
+  ];
+
+  function commandAnalysis(itemId: (slug: string) => string): ProjectAnalysis {
+    const commandCollection = withItems(collection(), "vscode-commands", "package.json", commands);
+    return {
+      ...analysisFixture,
+      documentationCollections: [{
+        ...commandCollection,
+        items: commandCollection.items.map((item) => ({ ...item, id: itemId(item.slug), description })),
+      }],
+    };
+  }
+
+  function commandPages(extra: Partial<DocPage> = {}): DocPage[] {
+    return commands.map(([slug, title]) => ({ id: `commands/${slug}`, title, description, ...extra }));
+  }
+
+  function injectionErrors(input: DocumentationStructure, merged: ProjectAnalysis): string[] {
+    const before = new Set(validateDocumentationStructureForProfile(input, merged).errors);
+    const enriched = applyCollectionsToStructure(input, merged);
+    return [
+      ...validateGlobalPageIds(enriched),
+      ...validateDocumentationStructureForProfile(enriched, merged).errors.filter((error) => !before.has(error)),
+    ];
+  }
+
+  // PRODUCTION INCIDENT REGRESSION GUARDRAIL: generation c5cdad62 (aimemory,
+  // 2026-10-26) failed with "Duplicate page title: AI Memory: Start MCP Server"
+  // and three more. The planner tagged its command pages with a collection id
+  // it made up, so injection kept them next to the item pages.
+  test("claims item pages tagged with a collection id the planner made up", () => {
+    const merged = commandAnalysis((slug) => `vscode-commands/${slug}`);
+    const input: DocumentationStructure = {
+      sections: [
+        { id: "documentation", title: "Documentation", default: true, pages: [] },
+        { id: "commands", title: "Commands", pages: commandPages({ collectionId: "commands" }) },
+      ],
+    };
+
+    const enriched = applyCollectionsToStructure(input, merged);
+
+    expect(enriched.sections.map((section) => section.pages.map((page) => page.id))).toEqual([
+      commands.map(([slug]) => `vscode-commands/${slug}`),
+      [],
+    ]);
+    expect(injectionErrors(input, merged)).toEqual([]);
+  });
+
+  test("gives every item its own page when the model repeats an item id", () => {
+    const merged = commandAnalysis(() => "collection-id/item-id");
+    const input: DocumentationStructure = {
+      sections: [{ id: "documentation", title: "Documentation", default: true, pages: commandPages() }],
+    };
+
+    const enriched = applyCollectionsToStructure(input, merged);
+
+    expect(enriched.sections[0]!.pages.map((page) => page.title)).toEqual(commands.map(([, title]) => title));
+    expect(new Set(enriched.sections[0]!.pages.map((page) => page.collectionItemId)).size).toBe(commands.length);
+    expect(injectionErrors(input, merged)).toEqual([]);
+  });
+
+  test("a page that names another collection gives way to the item page with its title", () => {
+    const merged: ProjectAnalysis = {
+      ...commandAnalysis((slug) => `vscode-commands/${slug}`),
+      documentationCollections: [
+        ...commandAnalysis((slug) => `vscode-commands/${slug}`).documentationCollections!,
+        collection(),
+      ],
+    };
+    const input: DocumentationStructure = {
+      sections: [
+        { id: "documentation", title: "Documentation", default: true, pages: [] },
+        {
+          id: "guides",
+          title: "Guides",
+          pages: [{ id: "dashboard", title: "AI Memory: Open Dashboard", description, collectionId: "condition-operators" }],
+        },
+      ],
+    };
+
+    expect(injectionErrors(input, merged)).toEqual([]);
+  });
+});
+
+describe("collection injection invariant", () => {
+  // Injection runs on model output, and the structure runner fails the run
+  // when injection adds a validation error. Random planner and analysis shapes
+  // (seeded, so the test is deterministic) must never get one.
+  function random(seed: number): () => number {
+    let state = seed;
+    return () => {
+      state = (state + 0x6d2b79f5) | 0;
+      let value = Math.imul(state ^ (state >>> 15), 1 | state);
+      value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value;
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const TITLES = ["Start server", "Stop server", "Open dashboard", "Sync rules", "Export memory", "Import memory", "Reset cache", "Show logs"];
+  const COLLECTION_IDS = ["commands", "vscode-commands", "providers", "adapters"];
+  const DESCRIPTION = "A page description that is long enough for the structure validator.";
+
+  function generate(seed: number): { analysis: ProjectAnalysis; structure: DocumentationStructure } {
+    const next = random(seed);
+    const pick = <T,>(values: readonly T[]): T => values[Math.floor(next() * values.length)]!;
+    const collections: DocumentationCollection[] = COLLECTION_IDS.slice(0, 1 + Math.floor(next() * 3)).map((id) => {
+      const titles = TITLES.filter(() => next() < 0.6);
+      return {
+        id,
+        title: id,
+        kind: "manifest",
+        sourceEvidence: [{ path: `${id}.json`, kind: "source" }],
+        items: titles.map((title) => ({
+          id: pick([`${id}/${slugify(title)}`, "collection-id/item-id", slugify(title)]),
+          slug: slugify(title),
+          title,
+          description: DESCRIPTION,
+          sourceEvidence: [{ path: `${id}.json`, kind: "source" }],
+        })),
+      };
+    });
+    const sections: DocSection[] = [
+      { id: "documentation", title: "Documentation", default: true, pages: [] },
+      { id: "guides", title: "Guides", pages: [] },
+    ];
+    const usedTitles = new Set<string>();
+    for (const title of TITLES) {
+      if (next() < 0.4 || usedTitles.has(title)) continue;
+      usedTitles.add(title);
+      pick(sections).pages.push({
+        id: pick([slugify(title), `${pick(COLLECTION_IDS)}/${slugify(title)}`, `page-${usedTitles.size}`]),
+        title,
+        description: DESCRIPTION,
+        collectionId: pick([undefined, "made-up", ...COLLECTION_IDS]),
+      });
+    }
+    return { analysis: { ...analysisFixture, documentationCollections: collections }, structure: { sections } };
+  }
+
+  test("never adds a duplicate page id or title", () => {
+    const failures: string[] = [];
+    for (let seed = 1; seed <= 500; seed += 1) {
+      const { analysis: input, structure: planned } = generate(seed);
+      if (validateGlobalPageIds(planned).length > 0) continue;
+      const before = new Set(validateDocumentationStructureForProfile(planned, input).errors);
+      const enriched = applyCollectionsToStructure(planned, input);
+      const added = [
+        ...validateGlobalPageIds(enriched),
+        ...validateDocumentationStructureForProfile(enriched, input).errors
+          .filter((error) => !before.has(error) && error.startsWith("Duplicate")),
+      ];
+      if (added.length > 0) failures.push(`seed ${seed}: ${added.join("; ")}`);
+    }
+
+    expect(failures).toEqual([]);
   });
 });

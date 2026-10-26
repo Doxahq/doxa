@@ -12,10 +12,18 @@ import {
   projectGenerationsQueryOptions,
 } from "~/lib/queries/dashboard"
 import { docsBranchListQueryOptions } from "~/lib/queries/docs-branches"
+import { doxabotInstructionsQueryOptions } from "~/lib/queries/doxabot-instructions"
 import { generationReviewQueryOptions } from "~/lib/queries/generation-review"
 
 /** The project routes whose loaders start requests. */
-export type ProjectPrefetchPage = "workspace" | "overview" | "content" | "generations" | "requests" | "settings"
+export type ProjectPrefetchPage =
+  | "workspace"
+  | "overview"
+  | "content"
+  | "generations"
+  | "doxabot"
+  | "requests"
+  | "settings"
 
 export interface ProjectPrefetchInput {
   projectId: string
@@ -81,10 +89,14 @@ function projectPageRequests(
     case "requests":
       // The page opens on the "all" filter.
       return [queryClient.ensureQueryData(approvalRequestListQueryOptions(projectId))]
-    case "settings":
+    case "doxabot":
       return [
-        queryClient.ensureQueryData(projectGenerationCacheQueryOptions(projectId)),
+        queryClient.ensureQueryData(doxabotInstructionsQueryOptions(projectId)),
         queryClient.ensureQueryData(projectDoxabotQueryOptions(projectId)),
+        queryClient.ensureQueryData(projectGenerationCacheQueryOptions(projectId)),
       ]
+    // Settings reads the project detail, which the project layout loads.
+    case "settings":
+      return []
   }
 }

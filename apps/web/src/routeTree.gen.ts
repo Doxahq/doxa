@@ -30,7 +30,6 @@ import { Route as DashboardProjectsProjectIdRouteRouteImport } from './routes/da
 import { Route as DashboardProjectsProjectIdIndexRouteImport } from './routes/dashboard/projects/$projectId/index'
 import { Route as DashboardProjectsProjectIdReviewRouteImport } from './routes/dashboard/projects/$projectId/review'
 import { Route as DashboardProjectsProjectIdProjectRouteImport } from './routes/dashboard/projects/$projectId/project'
-import { Route as DashboardProjectsProjectIdDoxabotRouteImport } from './routes/dashboard/projects/$projectId/doxabot'
 import { Route as DashboardProjectsProjectIdDomainsRouteImport } from './routes/dashboard/projects/$projectId/domains'
 import { Route as DashboardProjectsProjectIdContentRouteImport } from './routes/dashboard/projects/$projectId/content'
 import { Route as DashboardProjectsProjectIdSiteRouteRouteImport } from './routes/dashboard/projects/$projectId/site/route'
@@ -38,6 +37,7 @@ import { Route as DashboardProjectsProjectIdSiteIndexRouteImport } from './route
 import { Route as DashboardProjectsProjectIdSettingsIndexRouteImport } from './routes/dashboard/projects/$projectId/settings/index'
 import { Route as DashboardProjectsProjectIdRequestsIndexRouteImport } from './routes/dashboard/projects/$projectId/requests/index'
 import { Route as DashboardProjectsProjectIdGenerationsIndexRouteImport } from './routes/dashboard/projects/$projectId/generations/index'
+import { Route as DashboardProjectsProjectIdDoxabotIndexRouteImport } from './routes/dashboard/projects/$projectId/doxabot/index'
 import { Route as DashboardProjectsProjectIdSiteSeoRouteImport } from './routes/dashboard/projects/$projectId/site/seo'
 import { Route as DashboardProjectsProjectIdSiteNavigationRouteImport } from './routes/dashboard/projects/$projectId/site/navigation'
 import { Route as DashboardProjectsProjectIdSiteFeaturesRouteImport } from './routes/dashboard/projects/$projectId/site/features'
@@ -47,6 +47,7 @@ import { Route as DashboardProjectsProjectIdSiteAdvancedRouteImport } from './ro
 import { Route as DashboardProjectsProjectIdSettingsApprovalsRouteImport } from './routes/dashboard/projects/$projectId/settings/approvals'
 import { Route as DashboardProjectsProjectIdRequestsRequestIdRouteImport } from './routes/dashboard/projects/$projectId/requests/$requestId'
 import { Route as DashboardProjectsProjectIdGenerationsGenerationIdRouteImport } from './routes/dashboard/projects/$projectId/generations/$generationId'
+import { Route as DashboardProjectsProjectIdDoxabotInstructionsRouteImport } from './routes/dashboard/projects/$projectId/doxabot/instructions'
 import { Route as DashboardProjectsProjectIdGenerationsGenerationIdChangesRouteImport } from './routes/dashboard/projects/$projectId/generations/$generationId_.changes'
 
 const LoginRoute = LoginRouteImport.update({
@@ -157,12 +158,6 @@ const DashboardProjectsProjectIdProjectRoute =
     path: '/project',
     getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
   } as any)
-const DashboardProjectsProjectIdDoxabotRoute =
-  DashboardProjectsProjectIdDoxabotRouteImport.update({
-    id: '/doxabot',
-    path: '/doxabot',
-    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
-  } as any)
 const DashboardProjectsProjectIdDomainsRoute =
   DashboardProjectsProjectIdDomainsRouteImport.update({
     id: '/domains',
@@ -203,6 +198,12 @@ const DashboardProjectsProjectIdGenerationsIndexRoute =
   DashboardProjectsProjectIdGenerationsIndexRouteImport.update({
     id: '/generations/',
     path: '/generations/',
+    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdDoxabotIndexRoute =
+  DashboardProjectsProjectIdDoxabotIndexRouteImport.update({
+    id: '/doxabot/',
+    path: '/doxabot/',
     getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
   } as any)
 const DashboardProjectsProjectIdSiteSeoRoute =
@@ -259,6 +260,12 @@ const DashboardProjectsProjectIdGenerationsGenerationIdRoute =
     path: '/generations/$generationId',
     getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
   } as any)
+const DashboardProjectsProjectIdDoxabotInstructionsRoute =
+  DashboardProjectsProjectIdDoxabotInstructionsRouteImport.update({
+    id: '/doxabot/instructions',
+    path: '/doxabot/instructions',
+    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
+  } as any)
 const DashboardProjectsProjectIdGenerationsGenerationIdChangesRoute =
   DashboardProjectsProjectIdGenerationsGenerationIdChangesRouteImport.update({
     id: '/generations/$generationId_/changes',
@@ -287,10 +294,10 @@ export interface FileRoutesByFullPath {
   '/dashboard/projects/$projectId/site': typeof DashboardProjectsProjectIdSiteRouteRouteWithChildren
   '/dashboard/projects/$projectId/content': typeof DashboardProjectsProjectIdContentRoute
   '/dashboard/projects/$projectId/domains': typeof DashboardProjectsProjectIdDomainsRoute
-  '/dashboard/projects/$projectId/doxabot': typeof DashboardProjectsProjectIdDoxabotRoute
   '/dashboard/projects/$projectId/project': typeof DashboardProjectsProjectIdProjectRoute
   '/dashboard/projects/$projectId/review': typeof DashboardProjectsProjectIdReviewRoute
   '/dashboard/projects/$projectId/': typeof DashboardProjectsProjectIdIndexRoute
+  '/dashboard/projects/$projectId/doxabot/instructions': typeof DashboardProjectsProjectIdDoxabotInstructionsRoute
   '/dashboard/projects/$projectId/generations/$generationId': typeof DashboardProjectsProjectIdGenerationsGenerationIdRoute
   '/dashboard/projects/$projectId/requests/$requestId': typeof DashboardProjectsProjectIdRequestsRequestIdRoute
   '/dashboard/projects/$projectId/settings/approvals': typeof DashboardProjectsProjectIdSettingsApprovalsRoute
@@ -300,6 +307,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/projects/$projectId/site/features': typeof DashboardProjectsProjectIdSiteFeaturesRoute
   '/dashboard/projects/$projectId/site/navigation': typeof DashboardProjectsProjectIdSiteNavigationRoute
   '/dashboard/projects/$projectId/site/seo': typeof DashboardProjectsProjectIdSiteSeoRoute
+  '/dashboard/projects/$projectId/doxabot/': typeof DashboardProjectsProjectIdDoxabotIndexRoute
   '/dashboard/projects/$projectId/generations/': typeof DashboardProjectsProjectIdGenerationsIndexRoute
   '/dashboard/projects/$projectId/requests/': typeof DashboardProjectsProjectIdRequestsIndexRoute
   '/dashboard/projects/$projectId/settings/': typeof DashboardProjectsProjectIdSettingsIndexRoute
@@ -324,10 +332,10 @@ export interface FileRoutesByTo {
   '/dashboard/teams': typeof DashboardTeamsIndexRoute
   '/dashboard/projects/$projectId/content': typeof DashboardProjectsProjectIdContentRoute
   '/dashboard/projects/$projectId/domains': typeof DashboardProjectsProjectIdDomainsRoute
-  '/dashboard/projects/$projectId/doxabot': typeof DashboardProjectsProjectIdDoxabotRoute
   '/dashboard/projects/$projectId/project': typeof DashboardProjectsProjectIdProjectRoute
   '/dashboard/projects/$projectId/review': typeof DashboardProjectsProjectIdReviewRoute
   '/dashboard/projects/$projectId': typeof DashboardProjectsProjectIdIndexRoute
+  '/dashboard/projects/$projectId/doxabot/instructions': typeof DashboardProjectsProjectIdDoxabotInstructionsRoute
   '/dashboard/projects/$projectId/generations/$generationId': typeof DashboardProjectsProjectIdGenerationsGenerationIdRoute
   '/dashboard/projects/$projectId/requests/$requestId': typeof DashboardProjectsProjectIdRequestsRequestIdRoute
   '/dashboard/projects/$projectId/settings/approvals': typeof DashboardProjectsProjectIdSettingsApprovalsRoute
@@ -337,6 +345,7 @@ export interface FileRoutesByTo {
   '/dashboard/projects/$projectId/site/features': typeof DashboardProjectsProjectIdSiteFeaturesRoute
   '/dashboard/projects/$projectId/site/navigation': typeof DashboardProjectsProjectIdSiteNavigationRoute
   '/dashboard/projects/$projectId/site/seo': typeof DashboardProjectsProjectIdSiteSeoRoute
+  '/dashboard/projects/$projectId/doxabot': typeof DashboardProjectsProjectIdDoxabotIndexRoute
   '/dashboard/projects/$projectId/generations': typeof DashboardProjectsProjectIdGenerationsIndexRoute
   '/dashboard/projects/$projectId/requests': typeof DashboardProjectsProjectIdRequestsIndexRoute
   '/dashboard/projects/$projectId/settings': typeof DashboardProjectsProjectIdSettingsIndexRoute
@@ -366,10 +375,10 @@ export interface FileRoutesById {
   '/dashboard/projects/$projectId/site': typeof DashboardProjectsProjectIdSiteRouteRouteWithChildren
   '/dashboard/projects/$projectId/content': typeof DashboardProjectsProjectIdContentRoute
   '/dashboard/projects/$projectId/domains': typeof DashboardProjectsProjectIdDomainsRoute
-  '/dashboard/projects/$projectId/doxabot': typeof DashboardProjectsProjectIdDoxabotRoute
   '/dashboard/projects/$projectId/project': typeof DashboardProjectsProjectIdProjectRoute
   '/dashboard/projects/$projectId/review': typeof DashboardProjectsProjectIdReviewRoute
   '/dashboard/projects/$projectId/': typeof DashboardProjectsProjectIdIndexRoute
+  '/dashboard/projects/$projectId/doxabot/instructions': typeof DashboardProjectsProjectIdDoxabotInstructionsRoute
   '/dashboard/projects/$projectId/generations/$generationId': typeof DashboardProjectsProjectIdGenerationsGenerationIdRoute
   '/dashboard/projects/$projectId/requests/$requestId': typeof DashboardProjectsProjectIdRequestsRequestIdRoute
   '/dashboard/projects/$projectId/settings/approvals': typeof DashboardProjectsProjectIdSettingsApprovalsRoute
@@ -379,6 +388,7 @@ export interface FileRoutesById {
   '/dashboard/projects/$projectId/site/features': typeof DashboardProjectsProjectIdSiteFeaturesRoute
   '/dashboard/projects/$projectId/site/navigation': typeof DashboardProjectsProjectIdSiteNavigationRoute
   '/dashboard/projects/$projectId/site/seo': typeof DashboardProjectsProjectIdSiteSeoRoute
+  '/dashboard/projects/$projectId/doxabot/': typeof DashboardProjectsProjectIdDoxabotIndexRoute
   '/dashboard/projects/$projectId/generations/': typeof DashboardProjectsProjectIdGenerationsIndexRoute
   '/dashboard/projects/$projectId/requests/': typeof DashboardProjectsProjectIdRequestsIndexRoute
   '/dashboard/projects/$projectId/settings/': typeof DashboardProjectsProjectIdSettingsIndexRoute
@@ -408,10 +418,10 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$projectId/site'
     | '/dashboard/projects/$projectId/content'
     | '/dashboard/projects/$projectId/domains'
-    | '/dashboard/projects/$projectId/doxabot'
     | '/dashboard/projects/$projectId/project'
     | '/dashboard/projects/$projectId/review'
     | '/dashboard/projects/$projectId/'
+    | '/dashboard/projects/$projectId/doxabot/instructions'
     | '/dashboard/projects/$projectId/generations/$generationId'
     | '/dashboard/projects/$projectId/requests/$requestId'
     | '/dashboard/projects/$projectId/settings/approvals'
@@ -421,6 +431,7 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$projectId/site/features'
     | '/dashboard/projects/$projectId/site/navigation'
     | '/dashboard/projects/$projectId/site/seo'
+    | '/dashboard/projects/$projectId/doxabot/'
     | '/dashboard/projects/$projectId/generations/'
     | '/dashboard/projects/$projectId/requests/'
     | '/dashboard/projects/$projectId/settings/'
@@ -445,10 +456,10 @@ export interface FileRouteTypes {
     | '/dashboard/teams'
     | '/dashboard/projects/$projectId/content'
     | '/dashboard/projects/$projectId/domains'
-    | '/dashboard/projects/$projectId/doxabot'
     | '/dashboard/projects/$projectId/project'
     | '/dashboard/projects/$projectId/review'
     | '/dashboard/projects/$projectId'
+    | '/dashboard/projects/$projectId/doxabot/instructions'
     | '/dashboard/projects/$projectId/generations/$generationId'
     | '/dashboard/projects/$projectId/requests/$requestId'
     | '/dashboard/projects/$projectId/settings/approvals'
@@ -458,6 +469,7 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$projectId/site/features'
     | '/dashboard/projects/$projectId/site/navigation'
     | '/dashboard/projects/$projectId/site/seo'
+    | '/dashboard/projects/$projectId/doxabot'
     | '/dashboard/projects/$projectId/generations'
     | '/dashboard/projects/$projectId/requests'
     | '/dashboard/projects/$projectId/settings'
@@ -486,10 +498,10 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$projectId/site'
     | '/dashboard/projects/$projectId/content'
     | '/dashboard/projects/$projectId/domains'
-    | '/dashboard/projects/$projectId/doxabot'
     | '/dashboard/projects/$projectId/project'
     | '/dashboard/projects/$projectId/review'
     | '/dashboard/projects/$projectId/'
+    | '/dashboard/projects/$projectId/doxabot/instructions'
     | '/dashboard/projects/$projectId/generations/$generationId'
     | '/dashboard/projects/$projectId/requests/$requestId'
     | '/dashboard/projects/$projectId/settings/approvals'
@@ -499,6 +511,7 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$projectId/site/features'
     | '/dashboard/projects/$projectId/site/navigation'
     | '/dashboard/projects/$projectId/site/seo'
+    | '/dashboard/projects/$projectId/doxabot/'
     | '/dashboard/projects/$projectId/generations/'
     | '/dashboard/projects/$projectId/requests/'
     | '/dashboard/projects/$projectId/settings/'
@@ -665,13 +678,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjectsProjectIdProjectRouteImport
       parentRoute: typeof DashboardProjectsProjectIdRouteRoute
     }
-    '/dashboard/projects/$projectId/doxabot': {
-      id: '/dashboard/projects/$projectId/doxabot'
-      path: '/doxabot'
-      fullPath: '/dashboard/projects/$projectId/doxabot'
-      preLoaderRoute: typeof DashboardProjectsProjectIdDoxabotRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
-    }
     '/dashboard/projects/$projectId/domains': {
       id: '/dashboard/projects/$projectId/domains'
       path: '/domains'
@@ -719,6 +725,13 @@ declare module '@tanstack/react-router' {
       path: '/generations'
       fullPath: '/dashboard/projects/$projectId/generations/'
       preLoaderRoute: typeof DashboardProjectsProjectIdGenerationsIndexRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
+    }
+    '/dashboard/projects/$projectId/doxabot/': {
+      id: '/dashboard/projects/$projectId/doxabot/'
+      path: '/doxabot'
+      fullPath: '/dashboard/projects/$projectId/doxabot/'
+      preLoaderRoute: typeof DashboardProjectsProjectIdDoxabotIndexRouteImport
       parentRoute: typeof DashboardProjectsProjectIdRouteRoute
     }
     '/dashboard/projects/$projectId/site/seo': {
@@ -782,6 +795,13 @@ declare module '@tanstack/react-router' {
       path: '/generations/$generationId'
       fullPath: '/dashboard/projects/$projectId/generations/$generationId'
       preLoaderRoute: typeof DashboardProjectsProjectIdGenerationsGenerationIdRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
+    }
+    '/dashboard/projects/$projectId/doxabot/instructions': {
+      id: '/dashboard/projects/$projectId/doxabot/instructions'
+      path: '/doxabot/instructions'
+      fullPath: '/dashboard/projects/$projectId/doxabot/instructions'
+      preLoaderRoute: typeof DashboardProjectsProjectIdDoxabotInstructionsRouteImport
       parentRoute: typeof DashboardProjectsProjectIdRouteRoute
     }
     '/dashboard/projects/$projectId/generations/$generationId_/changes': {
@@ -849,13 +869,14 @@ interface DashboardProjectsProjectIdRouteRouteChildren {
   DashboardProjectsProjectIdSiteRouteRoute: typeof DashboardProjectsProjectIdSiteRouteRouteWithChildren
   DashboardProjectsProjectIdContentRoute: typeof DashboardProjectsProjectIdContentRoute
   DashboardProjectsProjectIdDomainsRoute: typeof DashboardProjectsProjectIdDomainsRoute
-  DashboardProjectsProjectIdDoxabotRoute: typeof DashboardProjectsProjectIdDoxabotRoute
   DashboardProjectsProjectIdProjectRoute: typeof DashboardProjectsProjectIdProjectRoute
   DashboardProjectsProjectIdReviewRoute: typeof DashboardProjectsProjectIdReviewRoute
   DashboardProjectsProjectIdIndexRoute: typeof DashboardProjectsProjectIdIndexRoute
+  DashboardProjectsProjectIdDoxabotInstructionsRoute: typeof DashboardProjectsProjectIdDoxabotInstructionsRoute
   DashboardProjectsProjectIdGenerationsGenerationIdRoute: typeof DashboardProjectsProjectIdGenerationsGenerationIdRoute
   DashboardProjectsProjectIdRequestsRequestIdRoute: typeof DashboardProjectsProjectIdRequestsRequestIdRoute
   DashboardProjectsProjectIdSettingsApprovalsRoute: typeof DashboardProjectsProjectIdSettingsApprovalsRoute
+  DashboardProjectsProjectIdDoxabotIndexRoute: typeof DashboardProjectsProjectIdDoxabotIndexRoute
   DashboardProjectsProjectIdGenerationsIndexRoute: typeof DashboardProjectsProjectIdGenerationsIndexRoute
   DashboardProjectsProjectIdRequestsIndexRoute: typeof DashboardProjectsProjectIdRequestsIndexRoute
   DashboardProjectsProjectIdSettingsIndexRoute: typeof DashboardProjectsProjectIdSettingsIndexRoute
@@ -870,19 +891,21 @@ const DashboardProjectsProjectIdRouteRouteChildren: DashboardProjectsProjectIdRo
       DashboardProjectsProjectIdContentRoute,
     DashboardProjectsProjectIdDomainsRoute:
       DashboardProjectsProjectIdDomainsRoute,
-    DashboardProjectsProjectIdDoxabotRoute:
-      DashboardProjectsProjectIdDoxabotRoute,
     DashboardProjectsProjectIdProjectRoute:
       DashboardProjectsProjectIdProjectRoute,
     DashboardProjectsProjectIdReviewRoute:
       DashboardProjectsProjectIdReviewRoute,
     DashboardProjectsProjectIdIndexRoute: DashboardProjectsProjectIdIndexRoute,
+    DashboardProjectsProjectIdDoxabotInstructionsRoute:
+      DashboardProjectsProjectIdDoxabotInstructionsRoute,
     DashboardProjectsProjectIdGenerationsGenerationIdRoute:
       DashboardProjectsProjectIdGenerationsGenerationIdRoute,
     DashboardProjectsProjectIdRequestsRequestIdRoute:
       DashboardProjectsProjectIdRequestsRequestIdRoute,
     DashboardProjectsProjectIdSettingsApprovalsRoute:
       DashboardProjectsProjectIdSettingsApprovalsRoute,
+    DashboardProjectsProjectIdDoxabotIndexRoute:
+      DashboardProjectsProjectIdDoxabotIndexRoute,
     DashboardProjectsProjectIdGenerationsIndexRoute:
       DashboardProjectsProjectIdGenerationsIndexRoute,
     DashboardProjectsProjectIdRequestsIndexRoute:

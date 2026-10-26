@@ -67,6 +67,7 @@ import {
   type GenerationRunReview,
 } from "../services/generation-actions";
 import { nextDocsVersionNumber } from "./docs-version-numbers";
+import { isUniqueViolation } from "./postgres-errors";
 
 const GLOBAL_CONTROL_ID = "global";
 const ACTIVE_JOB_STATUSES = ["queued", "running"] as const;
@@ -2118,23 +2119,6 @@ function toStaleGenerationJobDto(
 
 function secondsBetween(later: Date, earlier: Date): number {
   return Math.max(0, Math.floor((later.getTime() - earlier.getTime()) / 1000));
-}
-
-function isUniqueViolation(error: unknown, constraint?: string): boolean {
-  const visited = new Set<object>();
-  let current = error;
-
-  while (current && typeof current === "object" && !visited.has(current)) {
-    visited.add(current);
-    const hasMatchingCode = Reflect.get(current, "code") === "23505";
-    const hasMatchingConstraint =
-      constraint === undefined ||
-      Reflect.get(current, "constraint") === constraint;
-    if (hasMatchingCode && hasMatchingConstraint) return true;
-    current = Reflect.get(current, "cause");
-  }
-
-  return false;
 }
 
 const REVIEW_RUN_RESERVATION_PREFIX = "pending";

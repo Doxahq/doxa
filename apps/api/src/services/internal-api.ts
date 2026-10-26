@@ -26,6 +26,8 @@ import { generationNotifierFromEnv } from "./email/notifications";
 import { GitHubPullRequestStateResolver } from "./doxabot/github-pull-requests";
 import { withGenerationSiteConfig } from "./generation-site-config";
 import { withRunInputs } from "./generation-run-inputs";
+import { withDoxabotInstructions } from "./doxabot/generation-instructions";
+import { createRepositoryReadAccess } from "./repository-read-access";
 import { GenerationReviewService } from "./generation-reviews/review-service";
 import { PendingMergesRepository } from "../repositories/pending-merges";
 import {
@@ -72,6 +74,11 @@ export class InternalApi extends WorkerEntrypoint<Env> implements InternalApiRpc
   async createInstallationAccessToken(installationId: string) {
     const token = await createInstallationAccessToken(this.env, installationId);
     return token.token;
+  }
+
+  async createRepositoryReadToken(projectId: string) {
+    const access = await createRepositoryReadAccess(this.env, projectId);
+    return access.token;
   }
 
   markJobRunning(jobId: string) {
@@ -195,18 +202,24 @@ function resolveDocsHost(env: Env, hostname: string) {
 }
 
 async function getGenerationContext(env: Env, projectId: string) {
-  return withGenerationSiteConfig(
+  return withDoxabotInstructions(
     env,
-    await new GitHubRepository(env).getGenerationContext(projectId),
+    await withGenerationSiteConfig(
+      env,
+      await new GitHubRepository(env).getGenerationContext(projectId),
+    ),
   );
 }
 
 async function getGenerationExecutionContext(env: Env, jobId: string) {
-  return withGenerationSiteConfig(
+  return withDoxabotInstructions(
     env,
-    await withRunInputs(
+    await withGenerationSiteConfig(
       env,
-      await new JobsRepository(env).getGenerationExecutionContext(jobId),
+      await withRunInputs(
+        env,
+        await new JobsRepository(env).getGenerationExecutionContext(jobId),
+      ),
     ),
   );
 }

@@ -46,12 +46,15 @@ export type { StructureFailureKind } from "./structure-review-errors";
 export {
   MAX_PROJECT_CONTEXT_LENGTH,
   PUBLIC_DOCUMENTATION_POLICY_VERSION,
+  NO_PROJECT_INSTRUCTIONS_FINGERPRINT,
   documentationBriefFingerprint,
+  projectInstructionsFingerprint,
   resolveDocumentationBrief,
   resolveDocumentationPolicy,
 } from "./documentation-policy";
 export type { PublicDocumentationPolicy } from "./documentation-policy";
 export { filterPublicReferenceSurfaces } from "./public-surfaces";
+export { keepPublishedRoutes } from "./published-routes";
 export { PageValidationExhaustedError, runWriterAttempts } from "./writer-pipeline";
 export { DEFAULT_WRITER_MAX_STEPS } from "./constants";
 export { resolveWriterMaxSteps } from "./writer";

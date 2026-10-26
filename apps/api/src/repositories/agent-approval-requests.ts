@@ -15,6 +15,7 @@ import {
   toApprovalRequestId,
   type ApprovalRequestId,
 } from "../services/agent-actions/approval-request-id";
+import { isUniqueViolation } from "./postgres-errors";
 
 export interface ApprovalRequestRecord {
   readonly id: ApprovalRequestId;
@@ -335,15 +336,3 @@ function toRecord(row: Row): ApprovalRequestRecord {
   return { ...row, id: toApprovalRequestId(row.id), error: error.success ? error.data : null };
 }
 
-function isUniqueViolation(error: unknown, constraint: string): boolean {
-  const visited = new Set<object>();
-  let current = error;
-  while (current && typeof current === "object" && !visited.has(current)) {
-    visited.add(current);
-    if (Reflect.get(current, "code") === "23505" && Reflect.get(current, "constraint") === constraint) {
-      return true;
-    }
-    current = Reflect.get(current, "cause");
-  }
-  return false;
-}

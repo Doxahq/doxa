@@ -1,5 +1,9 @@
 import type { DocumentationGenerationBrief, DocumentationStructure, ProjectAnalysis } from "../types";
-import { documentationBriefFingerprint, resolveDocumentationBrief } from "../doxa-agent/documentation-policy";
+import {
+  documentationBriefFingerprint,
+  NO_PROJECT_INSTRUCTIONS_FINGERPRINT,
+  resolveDocumentationBrief,
+} from "../doxa-agent/documentation-policy";
 import { hashValue } from "../utils/hash";
 import { evidencePaths, normalizedBrief } from "./page-input";
 import { flattenStructure } from "./page-targets";
@@ -160,6 +164,8 @@ export async function createDocsPlanningContext(input: {
 export interface PriorRevisionGenerationState {
   planningFingerprint?: string;
   writingFingerprint?: string;
+  /** The project instructions that the published docs were written with. */
+  projectInstructionsFingerprint?: string;
   structuralFingerprint: string;
   pages: Array<{
     pageId: string;
@@ -253,6 +259,11 @@ export function planRevisionAwareGeneration(input: {
   planningFingerprint: string;
   writingFingerprint: string;
   structuralFingerprint: string;
+  /**
+   * The project instructions of this run. A change from the published ones
+   * rewrites everything. A previous state without the field had none.
+   */
+  projectInstructionsFingerprint?: string;
   previous: PriorRevisionGenerationState | null;
   /** Template-rendered pages, which follow their input hash only. */
   templatePageIds?: ReadonlySet<string>;
@@ -285,6 +296,19 @@ export function planRevisionAwareGeneration(input: {
       removedPageIds,
       "The documentation planning contract changed.",
     );
+  }
+  if (
+    input.projectInstructionsFingerprint !== undefined &&
+    (previous.projectInstructionsFingerprint ?? NO_PROJECT_INSTRUCTIONS_FINGERPRINT) !==
+      input.projectInstructionsFingerprint
+  ) {
+    // The instructions steer analysis, structure and writing, so every page
+    // is planned again. The pages the baseline has are edited, not written
+    // again, so they keep their text where the instructions ask nothing.
+    return {
+      ...fullPlan(currentPageIds, removedPageIds, "The project instructions changed."),
+      editReason: "instructions_changed",
+    };
   }
 
   const relevantChanges = input.changes.filter((change) =>
@@ -468,6 +492,8 @@ export interface PageEdit {
   artifactKey: string;
   /** The changed files that the page depends on. Empty when only its brief changed. */
   changedSources: string[];
+  /** The project instructions changed, so the writer updates the page to follow them. */
+  instructionsChanged?: boolean;
 }
 
 /**
@@ -501,6 +527,56 @@ export function planPageEdits(input: {
     };
   }
   return edits;
+}
+
+/**
+ * The page plan after the project instructions changed. Every page that the
+ * baseline has is edited from its published version, marked so the writer
+ * updates it to follow the instructions: a page the plan would reuse moves
+ * to the pages it writes. A page with source edits keeps its changed files.
+ * New pages are written from the source, and template pages, which no
+ * writer edits, keep their plan.
+ */
+export function applyInstructionEdits<TPlan extends RevisionAwareGenerationPlan>(input: {
+  plan: TPlan;
+  /** The page IDs of the new structure, in order. */
+  currentPageIds: readonly string[];
+  previousPages: readonly { pageId: string; artifactKey: string }[];
+  edits: Readonly<Record<string, PageEdit>>;
+  templatePageIds?: ReadonlySet<string>;
+}): TPlan & { pageEdits: Record<string, PageEdit>; editReason: "instructions_changed" } {
+  const previousById = new Map(input.previousPages.map((page) => [page.pageId, page]));
+  const isEditable = (pageId: string) => previousById.has(pageId) && !input.templatePageIds?.has(pageId);
+  const regenerate = new Set([
+    ...input.plan.regeneratePageIds,
+    ...input.plan.reusePageIds.filter(isEditable),
+  ]);
+
+  const pageEdits: Record<string, PageEdit> = { ...input.edits };
+  for (const pageId of regenerate) {
+    const previous = previousById.get(pageId);
+    if (!previous || !isEditable(pageId)) continue;
+    pageEdits[pageId] = {
+      artifactKey: previous.artifactKey,
+      changedSources: input.edits[pageId]?.changedSources ?? [],
+      instructionsChanged: true,
+    };
+  }
+
+  const regeneratePageIds = input.currentPageIds.filter((pageId) => regenerate.has(pageId));
+  const movedFromReuse = regeneratePageIds.length - input.plan.regeneratePageIds.length;
+  return {
+    ...input.plan,
+    ...(input.plan.causes
+      ? { causes: { ...input.plan.causes, instructionsChanged: (input.plan.causes.instructionsChanged ?? 0) + movedFromReuse } }
+      : {}),
+    regeneratePageIds,
+    reusePageIds: input.plan.reusePageIds.filter((pageId) => !regenerate.has(pageId)),
+    modelCallsRequired: input.plan.modelCallsRequired || regeneratePageIds.length > 0,
+    reasons: ["The project instructions changed.", ...input.plan.reasons.filter((reason) => reason !== "The project instructions changed.")],
+    pageEdits,
+    editReason: "instructions_changed",
+  };
 }
 
 function dependencyPaths(dependencies: PageDependencyState): string[] {

@@ -52,6 +52,7 @@ import {
   normalizeStepBlocks,
   type StepProblemKind,
 } from "./step-blocks";
+import { findSecret } from "../reference-specs/secrets";
 
 export { stripAgentCommentary } from "./commentary-patterns";
 
@@ -316,6 +317,30 @@ export function detectRestEndpointDuplicateSection(
  * The last non-empty line should end with sentence-terminal punctuation
  * or a code fence.
  */
+/**
+ * Detect a credential copied into the page, such as a key from the
+ * repository. The snippet masks the value, so the retry prompt does not
+ * repeat it.
+ */
+function detectLeakedSecret(body: string): ContentQualityIssue | null {
+  const secret = findSecret(body);
+  if (!secret) return null;
+
+  const line = body.slice(0, secret.index).split("\n").length - 1;
+  const value = body.slice(secret.index, secret.index + secret.length);
+  const masked = `${value.slice(0, 6)}…`;
+  return {
+    check: "leakedSecret",
+    severity: "hard",
+    message: `The page contains what looks like a real credential (${masked}).`,
+    location: { line, snippet: masked },
+    fixInstruction:
+      "Replace the credential with a clear placeholder such as `YOUR_API_KEY`. " +
+      "Never copy a real key, token, or private key from the repository into the docs.",
+    fixExample: { bad: "Authorization: Bearer sk-ant-api03-…", good: "Authorization: Bearer YOUR_API_KEY" },
+  };
+}
+
 function detectCutoffContent(body: string): ContentQualityIssue | null {
   const lines = body.split("\n");
   let lastNonEmpty = "";
@@ -788,6 +813,7 @@ function trimToLastCompleteSentence(body: string): string {
 // ─── Public Entry Points ───────────────────────────────────────────────
 
 const DETECTORS: ReadonlyArray<(body: string) => ContentQualityIssue | null> = [
+  detectLeakedSecret,
   detectSkeletonPage,
   detectCutoffContent,
   detectUnclosedCodeBlocks,

@@ -1,3 +1,4 @@
+import type { ComponentType, SVGProps } from "react"
 import { useNavigate, useRouter } from "@tanstack/react-router"
 import {
   Activity,
@@ -15,9 +16,9 @@ import {
   Settings,
   UserRound,
   Users,
-  type LucideIcon,
 } from "lucide-react"
 
+import { DoxabotIcon } from "~/components/dashboard/doxabot/doxabot-icon"
 import { useSidebar } from "~/components/ui/sidebar"
 import { useDashboardAuth } from "~/lib/auth/dashboard-auth-context"
 import { DOXA_DOCS_URL, DOXA_GITHUB_URL } from "~/lib/dashboard/external-links"
@@ -31,7 +32,7 @@ export interface DashboardCommand {
   id: string
   group: CommandGroupId
   label: string
-  icon: LucideIcon
+  icon: CommandIcon
   /** More words that find the command in the search. */
   keywords?: readonly string[]
   /** A G-then-key shortcut. The menu registers it on the whole window. */
@@ -43,10 +44,14 @@ export interface DashboardCommand {
   preload?: () => void
 }
 
+/** A lucide icon, or a Doxa icon drawn the same way. */
+type CommandIcon = ComponentType<SVGProps<SVGSVGElement>>
+
 type ProjectPage =
   | "/dashboard/projects/$projectId/project"
   | "/dashboard/projects/$projectId/content"
   | "/dashboard/projects/$projectId/generations"
+  | "/dashboard/projects/$projectId/doxabot"
   | "/dashboard/projects/$projectId/requests"
   | "/dashboard/projects/$projectId/settings"
 
@@ -72,6 +77,7 @@ export function useDashboardCommands(projectId: string | null): DashboardCommand
         projectPage("overview", "Overview", Info, "o", ...pageActions(projectId, "/dashboard/projects/$projectId/project")),
         projectPage("content", "Content", PenLine, "c", ...pageActions(projectId, "/dashboard/projects/$projectId/content"), ["pages", "editor", "write"]),
         projectPage("generations", "Generations", Activity, "g", ...pageActions(projectId, "/dashboard/projects/$projectId/generations"), ["runs", "generate"]),
+        projectPage("doxabot", "Doxabot", DoxabotIcon, "d", ...pageActions(projectId, "/dashboard/projects/$projectId/doxabot"), ["bot", "instructions", "pull requests", "cache"]),
         projectPage("requests", "Requests", Bot, "r", ...pageActions(projectId, "/dashboard/projects/$projectId/requests"), ["approvals", "agents"]),
         projectPage("settings", "Project settings", Settings, "s", ...pageActions(projectId, "/dashboard/projects/$projectId/settings")),
         projectPage("site-settings", "Site settings", Globe, "w", () => openSiteSettings(projectId), undefined, ["theme", "navigation", "domain"]),
@@ -171,7 +177,7 @@ export function useDashboardCommands(projectId: string | null): DashboardCommand
 function projectPage(
   id: string,
   label: string,
-  icon: LucideIcon,
+  icon: CommandIcon,
   key: string,
   run: () => void,
   preload?: () => void,

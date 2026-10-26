@@ -49,6 +49,7 @@ export {
   canPatchStructure,
   MAX_STRUCTURE_PATCH_CHANGES,
   planPageEdits,
+  applyInstructionEdits,
   isDocumentationStructure,
   evidencePaths,
   normalizedBrief,

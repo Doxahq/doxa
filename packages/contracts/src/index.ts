@@ -7,6 +7,7 @@ import {
 } from "./generation-reviews";
 import { siteConfigSchema } from "@doxahq/site-config";
 import { projectEntitlementsSchema } from "./entitlements";
+import { generationInstructionsSchema } from "./doxabot-instructions";
 import {
   pageDependencyStateSchema,
   generationAnalysisStateSchema,
@@ -44,6 +45,10 @@ import type {
 
 export * from "./docs-content";
 export * from "./doxabot";
+export * from "./doxabot-instructions";
+export * from "./doxabot-instruction-screening";
+export * from "./doxabot-instruction-prompt";
+export * from "./instruction-text";
 export * from "./generation-observability";
 export * from "./generation-resume";
 export * from "./model-providers";
@@ -620,6 +625,11 @@ export const generationContextSchema = z.object({
     installationId: z.string(),
     isPrivate: z.boolean().optional(),
   }),
+  /**
+   * The Doxabot instructions this run follows; null when the project has
+   * none. Optional, so an older API stays readable.
+   */
+  doxabotInstructions: generationInstructionsSchema.nullable().optional(),
 });
 
 export const generationExecutionContextSchema = generationContextSchema.extend({
@@ -788,6 +798,8 @@ export const containerGenerateRequestSchema = z.object({
    * planner's anchor when no generation baseline exists.
    */
   seedSite: seedSiteSchema.optional(),
+  /** The Doxabot instructions of the project, from `GenerationContext`. */
+  doxabotInstructions: generationInstructionsSchema.nullable().optional(),
 });
 
 export const containerAnalyzeStageRequestSchema =
@@ -814,6 +826,7 @@ export const containerStructureStageRequestSchema =
 export const previousPageTextSchema = z.object({
   content: z.string(),
   changedSources: z.array(z.string().min(1)),
+  instructionsChanged: z.boolean().optional(),
 }).strict();
 
 export type PreviousPageText = z.infer<typeof previousPageTextSchema>;
@@ -1221,6 +1234,11 @@ export interface InternalApiRpc {
     jobId: string,
   ): Promise<CurrentChangeProposalState | null>;
   createInstallationAccessToken(installationId: string): Promise<string>;
+  /**
+   * A token that can only read the project's repository (contents and
+   * metadata). The API resolves the installation and repository itself.
+   */
+  createRepositoryReadToken(projectId: string): Promise<string>;
   markJobRunning(jobId: string): Promise<void>;
   markJobFailed(jobId: string, message: string): Promise<void>;
   markJobCancelled(jobId: string, message: string): Promise<void>;

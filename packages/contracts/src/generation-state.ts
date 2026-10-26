@@ -91,6 +91,12 @@ export const generationAnalysisStateSchema = versionedStateSchema.extend({
   analysis: jsonValueSchema,
   analysisHash: sha256Schema,
   documentationBriefFingerprint: z.string().trim().min(1).optional(),
+  /**
+   * The project instructions the analysis was made with ("none" without
+   * instructions). A change rewrites every page. Older states lack it, which
+   * reads as "none".
+   */
+  projectInstructionsFingerprint: z.string().trim().min(1).optional(),
   sourceSummaries: z.array(reusableSourceSummarySchema).superRefine(
     (summaries, context) => {
       if (!isSortedUnique(summaries.map((summary) => summary.path))) {
@@ -193,6 +199,8 @@ export const incrementalGenerationPlanSchema = z.object({
     newPages: z.number().int().nonnegative(),
     inputChanged: z.number().int().nonnegative(),
     dependencyChanged: z.number().int().nonnegative(),
+    /** Pages written again only because the project instructions changed. */
+    instructionsChanged: z.number().int().nonnegative().optional(),
   }).strict().optional(),
   /**
    * Owned pages that the run kept although their sources changed. Each one
@@ -211,7 +219,15 @@ export const incrementalGenerationPlanSchema = z.object({
   pageEdits: z.record(z.string().min(1), z.object({
     artifactKey: z.string().min(1),
     changedSources: z.array(z.string().min(1)),
+    /** The project instructions changed: the writer updates the page to follow them. */
+    instructionsChanged: z.boolean().optional(),
   }).strict()).optional(),
+  /**
+   * Why a plan that rewrites every page still edits the pages the baseline
+   * has: the project instructions changed, so each page keeps its text and
+   * changes only where the instructions ask.
+   */
+  editReason: z.literal("instructions_changed").optional(),
 }).strict().superRefine((plan, context) => {
   const activeIds = [
     ...plan.regeneratePageIds,
@@ -242,7 +258,8 @@ export const incrementalGenerationPlanSchema = z.object({
     const classifiedPageCount =
       plan.causes.newPages +
       plan.causes.inputChanged +
-      plan.causes.dependencyChanged;
+      plan.causes.dependencyChanged +
+      (plan.causes.instructionsChanged ?? 0);
     if (classifiedPageCount !== plan.regeneratePageIds.length) {
       context.addIssue({
         code: "custom",

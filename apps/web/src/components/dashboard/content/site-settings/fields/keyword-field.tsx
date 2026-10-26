@@ -8,10 +8,24 @@ interface KeywordInputProps extends FieldControlProps {
   keywords: readonly string[]
   onChange: (keywords: string[]) => void
   max: number
+  /** What one chip is, for the placeholder and the remove buttons. Default "keyword". */
+  itemNoun?: string
+  placeholder?: string
+  /** Read only: chips show, nothing changes. */
+  disabled?: boolean
 }
 
 /** Keywords as removable chips. Enter or a comma adds the typed keyword. */
-export function KeywordInput({ keywords, onChange, max, onBlur, ...control }: KeywordInputProps) {
+export function KeywordInput({
+  keywords,
+  onChange,
+  max,
+  onBlur,
+  itemNoun = "keyword",
+  placeholder = `Add a ${itemNoun}`,
+  disabled = false,
+  ...control
+}: KeywordInputProps) {
   const [draft, setDraft] = useState("")
   const isFull = keywords.length >= max
 
@@ -43,9 +57,10 @@ export function KeywordInput({ keywords, onChange, max, onBlur, ...control }: Ke
           {keyword}
           <button
             type="button"
+            disabled={disabled}
             onClick={() => onChange(keywords.filter((_, position) => position !== index))}
             className="text-muted-foreground hover:text-foreground"
-            aria-label={`Remove keyword ${keyword}`}
+            aria-label={`Remove ${itemNoun} ${keyword}`}
           >
             <X aria-hidden="true" className="size-3" />
           </button>
@@ -60,8 +75,8 @@ export function KeywordInput({ keywords, onChange, max, onBlur, ...control }: Ke
           commit()
           onBlur()
         }}
-        disabled={isFull}
-        placeholder={isFull ? `${max} keywords` : "Add a keyword"}
+        disabled={disabled || isFull}
+        placeholder={isFull ? `${max} ${itemNoun}s` : placeholder}
         className="min-w-32 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
       />
     </div>

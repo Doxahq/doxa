@@ -1922,9 +1922,7 @@ async function createRevisionAwareStageRequest(
       },
 ): Promise<ContainerGenerationStageRequest> {
   const installationAccessToken =
-    await env.API.createInstallationAccessToken(
-      context.repository.installationId,
-    );
+    await env.API.createRepositoryReadToken(context.project.id);
   const executionConfig =
     resolveGenerationExecutionConfig(context);
   const models = resolveGenerationModels(env, executionConfig);
@@ -1953,6 +1951,7 @@ async function createRevisionAwareStageRequest(
     writingFingerprint:
       executionConfig.writingFingerprint,
     ...(reusableState ? { reusableState } : {}),
+    doxabotInstructions: context.doxabotInstructions ?? null,
   };
   const seed = context.seedVersion
     ? await loadSeedSite(
@@ -2540,8 +2539,8 @@ async function createStageRequest(
         pageIds: string[];
       },
 ): Promise<ContainerGenerationStageRequest> {
-  const installationAccessToken = await env.API.createInstallationAccessToken(
-    prepared.context.repository.installationId,
+  const installationAccessToken = await env.API.createRepositoryReadToken(
+    prepared.context.project.id,
   );
   const legacyModel = env.DOXA_AGENT_MODEL?.trim();
   const plannerModel =
@@ -2568,6 +2567,7 @@ async function createStageRequest(
     versionId: prepared.versionId,
     projectSlug: prepared.context.project.slug,
     projectName: prepared.context.project.name,
+    doxabotInstructions: prepared.context.doxabotInstructions ?? null,
   };
   return { ...base, ...stage };
 }

@@ -26,4 +26,16 @@ describe("previous pages", () => {
   test("reads nothing for a plan without edits", async () => {
     await expect(readPreviousPages(async () => "x", undefined, ["default/projects"])).resolves.toEqual({});
   });
+
+  test("an instructions edit tells the writer that the instructions changed", async () => {
+    const pages = await readPreviousPages(
+      async () => "## Overview",
+      { "default/overview02": { artifactKey: "v1/overview02.mdx", changedSources: [], instructionsChanged: true } },
+      ["default/overview02"],
+    );
+
+    expect(pages).toEqual({
+      "default/overview02": { content: "## Overview", changedSources: [], instructionsChanged: true },
+    });
+  });
 });

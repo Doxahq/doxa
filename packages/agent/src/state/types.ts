@@ -87,12 +87,16 @@ export interface RevisionAwareGenerationPlan {
   modelCallsRequired: boolean;
   reasons: string[];
   causes?: RegenerationCauses;
+  /** Set when every page is rewritten because the project instructions changed: existing pages are edited, not written again. */
+  editReason?: "instructions_changed";
 }
 
 export interface RegenerationCauses {
   newPages: number;
   inputChanged: number;
   dependencyChanged: number;
+  /** Pages written again only because the project instructions changed. */
+  instructionsChanged?: number;
 }
 
 export interface AgentRunState {

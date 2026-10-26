@@ -238,6 +238,8 @@ const READ_FOLLOWERS: readonly Capability[] = ["domains.read", "generation.read"
 function expectedAllowed(role: TeamRole, capability: Capability): boolean {
   if (READ_FOLLOWERS.includes(capability)) return true;
   if (capability === "project.create") return role === "owner" || role === "admin";
+  // Added after the spec table: Doxabot instructions follow the admin rule.
+  if (capability === "instructions.configure") return role === "owner" || role === "admin";
   return SPEC_ROLE_TABLE[role].includes(capability);
 }
 

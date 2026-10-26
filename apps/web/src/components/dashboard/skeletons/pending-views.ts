@@ -7,6 +7,7 @@ import {
   ProjectOverviewSkeleton,
 } from "~/components/dashboard/skeletons/project-skeletons"
 import { ApprovalRequestSkeleton, ProjectRequestsSkeleton } from "~/components/dashboard/skeletons/request-skeletons"
+import { DoxabotInstructionsSkeleton, ProjectDoxabotSkeleton } from "~/components/dashboard/skeletons/doxabot-skeletons"
 import { ProjectApprovalsSkeleton, ProjectSettingsSkeleton } from "~/components/dashboard/skeletons/settings-skeletons"
 import { SiteSettingsPending, SiteSettingsSectionPending } from "~/components/dashboard/skeletons/site-settings-skeletons"
 
@@ -21,10 +22,12 @@ export const DASHBOARD_PENDING_VIEWS = {
   accountSettings: AccountSettingsSkeleton,
   approvalRequest: ApprovalRequestSkeleton,
   content: ContentPagePending,
+  doxabotInstructions: DoxabotInstructionsSkeleton,
   generation: ProjectGenerationSkeleton,
   generationChanges: GenerationChangesPending,
   generations: ProjectGenerationsSkeleton,
   projectApprovals: ProjectApprovalsSkeleton,
+  projectDoxabot: ProjectDoxabotSkeleton,
   projectOverview: ProjectOverviewSkeleton,
   projectRequests: ProjectRequestsSkeleton,
   projectSettings: ProjectSettingsSkeleton,

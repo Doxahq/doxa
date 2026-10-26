@@ -48,12 +48,14 @@ export async function exploreProject(
   promptRegistry: PromptRegistry = prompts,
   repoMap?: string,
   restReference?: RestReferencePromptMode,
+  repositoryAgentNotes?: string,
 ): Promise<string> {
   const prompt = promptRegistry.buildExplorationPrompt({
     cwd: config.cwd,
     documentationBrief: resolveDocumentationBrief(config.documentationBrief),
     repoMap,
     restReference,
+    repositoryAgentNotes,
   });
 
   const MAX_EXPLORATION_ATTEMPTS = 3;
@@ -152,6 +154,7 @@ export async function generateAnalysisWithRetry(
   modelCallMaxDurationMs?: number,
   repoMap?: string,
   restReference?: RestReferencePromptMode,
+  repositoryAgentNotes?: string,
 ): Promise<ProjectAnalysis> {
   const maxAttempts = 3;
 
@@ -161,6 +164,7 @@ export async function generateAnalysisWithRetry(
     documentationBrief,
     repoMap,
     restReference,
+    repositoryAgentNotes,
   });
 
   const result = await run(
@@ -203,6 +207,7 @@ export async function generateAnalysisWithRetry(
         modelCallMaxDurationMs,
         repoMap,
         restReference,
+        repositoryAgentNotes,
       );
     }
     throw error;

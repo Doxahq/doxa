@@ -5,9 +5,15 @@
 import { z } from "zod/v4";
 import { defineTool } from "../tool";
 import { runCommand } from "../../utils/runtime";
+import {
+  SENSITIVE_FILE_GLOBS,
+  globCanSelectSensitiveFile,
+  isSensitiveFilePath,
+} from "./file-access-rules";
 import { resolveProjectPath } from "./project-path";
 
 const GREP_TIMEOUT_MS = 10_000;
+const MAX_MATCH_LINES = 80;
 const EXCLUDED_DIRECTORIES = [
   ".git",
   "node_modules",
@@ -15,6 +21,17 @@ const EXCLUDED_DIRECTORIES = [
   "build",
   ".next",
   "coverage",
+] as const;
+const DEFAULT_INCLUDE_GLOBS = [
+  "*.ts",
+  "*.tsx",
+  "*.js",
+  "*.jsx",
+  "*.json",
+  "*.md",
+  "*.yaml",
+  "*.yml",
+  "*.toml",
 ] as const;
 
 export function grepTool(cwd: string) {
@@ -30,64 +47,76 @@ export function grepTool(cwd: string) {
     execute: async ({ pattern, path, glob: fileGlob }) => {
       try {
         const searchPath = await resolveProjectPath(cwd, path ?? ".");
-        const args = [
-          "grep",
-          "-rn",
-          "-I",
-          ...EXCLUDED_DIRECTORIES.map(
-            (directory) => `--exclude-dir=${directory}`,
-          ),
-          "--include=*.ts",
-          "--include=*.tsx",
-          "--include=*.js",
-          "--include=*.jsx",
-          "--include=*.json",
-          "--include=*.md",
-          "--include=*.yaml",
-          "--include=*.yml",
-          "--include=*.toml",
-        ];
-
-        if (fileGlob) {
-          // Replace generic includes with user-specified glob
-          args.splice(
-            3 + EXCLUDED_DIRECTORIES.length,
-            args.length,
-            `--include=${fileGlob}`,
-          );
+        if (isSensitiveFilePath(searchPath)) {
+          return `Skipped sensitive file: ${path}. Search source files instead.`;
         }
 
-        args.push("-E", pattern, searchPath);
-
-        const result = await runCommand(args, {
+        const result = await runCommand(buildGrepCommand(pattern, searchPath, fileGlob), {
           cwd,
           timeoutMs: GREP_TIMEOUT_MS,
         });
         const stdout = result.stdout;
-        const stderr = result.stderr;
 
         if (result.timedOut) {
           return `Error: grep timed out after ${GREP_TIMEOUT_MS}ms; narrow the path or pattern`;
         }
 
         if (!stdout.trim() && result.exitCode !== 0 && result.exitCode !== 1) {
-          return `Error: grep failed: ${stderr}`;
+          return `Error: grep failed: ${result.stderr}`;
         }
 
-        if (!stdout.trim()) {
+        const lines = withoutSensitiveMatches(stdout.trim().split("\n").filter(Boolean));
+        if (lines.length === 0) {
           return `No matches found for pattern "${pattern}"`;
         }
 
-        // Truncate if too long
-        const lines = stdout.trim().split("\n");
-        if (lines.length > 80) {
-          return lines.slice(0, 80).join("\n") + `\n... (${lines.length - 80} more matches; narrow the path or pattern)`;
+        if (lines.length > MAX_MATCH_LINES) {
+          return lines.slice(0, MAX_MATCH_LINES).join("\n")
+            + `\n... (${lines.length - MAX_MATCH_LINES} more matches; narrow the path or pattern)`;
         }
 
-        return stdout.trim();
+        return lines.join("\n");
       } catch (err) {
         return `Error searching: ${err instanceof Error ? err.message : String(err)}`;
       }
     },
   });
+}
+
+/**
+ * Builds the grep argument list. The excludes come after the includes, because
+ * grep lets the last matching rule win. `--` ends the options, so a pattern
+ * that starts with "-" stays a pattern.
+ */
+function buildGrepCommand(pattern: string, searchPath: string, fileGlob: string | undefined): string[] {
+  const includeGlobs = fileGlob && !globCanSelectSensitiveFile(fileGlob)
+    ? [fileGlob]
+    : DEFAULT_INCLUDE_GLOBS;
+
+  return [
+    "grep",
+    "-rn",
+    "-I",
+    ...EXCLUDED_DIRECTORIES.map((directory) => `--exclude-dir=${directory}`),
+    ...includeGlobs.map((glob) => `--include=${glob}`),
+    ...SENSITIVE_FILE_GLOBS.map((glob) => `--exclude=${glob}`),
+    "-E",
+    "--",
+    pattern,
+    searchPath,
+  ];
+}
+
+/** Drops match lines from sensitive files, in case a grep build ignores an exclude. */
+function withoutSensitiveMatches(lines: string[]): string[] {
+  return lines.filter((line) => {
+    const filePath = matchLineFilePath(line);
+    return filePath === null || !isSensitiveFilePath(filePath);
+  });
+}
+
+/** Reads the file path from a `path:line:text` match line. */
+function matchLineFilePath(line: string): string | null {
+  const match = /^(.*?):\d+:/.exec(line);
+  return match?.[1] ?? null;
 }

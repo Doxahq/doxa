@@ -267,7 +267,7 @@ async function runGenerationInWorkspace(
   const flushEvents = () => eventQueue;
 
   const outputRoot = workspace.outputRoot;
-  const documentationBrief = resolveRunBrief();
+  const documentationBrief = resolveRunBrief(input);
   const documentationFingerprint = documentationBriefFingerprint(documentationBrief);
 
   await emitEvent("container_booted", "Agent container started generation.", {
@@ -280,6 +280,7 @@ async function runGenerationInWorkspace(
     documentationPolicyVersion: PUBLIC_DOCUMENTATION_POLICY_VERSION,
     documentationBriefFingerprint: documentationFingerprint,
     projectContextLength: documentationBrief.projectContext?.length ?? 0,
+    projectInstructionsVersion: documentationBrief.projectInstructions?.version ?? null,
   });
   await rm(workspace.jobRoot, { recursive: true, force: true });
   await Promise.all([

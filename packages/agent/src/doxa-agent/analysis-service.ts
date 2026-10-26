@@ -13,6 +13,7 @@ import type { PromptRegistry } from "./prompts";
 import { documentationBriefFingerprint, resolveDocumentationBrief } from "./documentation-policy";
 import { filterPublicReferenceSurfaces } from "./public-surfaces";
 import { resolvePlanningRepoMap } from "./planning-repo-map";
+import { loadRepositoryAgentNotes, renderRepositoryAgentNotesBlock } from "./repository-agent-notes";
 import { readRepositorySpecs, type RepositorySpecRead } from "../reference-specs/reader";
 import { withRestSurface } from "../utils/analysis-rest-surface";
 import { extractRestReference } from "../rest-extraction";
@@ -223,6 +224,7 @@ export async function analyzeProjectWithCacheState(
 
     const repoMap = await resolvePlanningRepoMap(config, onProgress);
     const restReference = restReferencePromptMode(config, specRead);
+    const repositoryAgentNotes = await readRepositoryAgentNotes(config.cwd, onProgress);
     const explorationContext = await exploreProject(
       provider,
       config,
@@ -230,6 +232,7 @@ export async function analyzeProjectWithCacheState(
       promptRegistry,
       repoMap,
       restReference,
+      repositoryAgentNotes,
     );
 
     onProgress?.({ stage: "analyzing", message: "Generating project analysis...", progress: 70 });
@@ -248,6 +251,7 @@ export async function analyzeProjectWithCacheState(
       config.modelCallMaxDurationMs,
       repoMap,
       restReference,
+      repositoryAgentNotes,
     ));
     const result = await enrichAnalysis(
       config,
@@ -317,4 +321,24 @@ export async function suggestStructure(
     onProgress?.({ stage: "error", message: `Structure suggestion failed: ${errorMessage}`, progress: 0 });
     throw error;
   }
+}
+
+/**
+ * Reads the repository's agent notes first, as a fast route to the facts.
+ * Missing or broken files are skipped, so this never stops the analysis.
+ */
+async function readRepositoryAgentNotes(
+  projectRoot: string,
+  onProgress?: AgentProgressCallback,
+): Promise<string | undefined> {
+  const agentNotes = await loadRepositoryAgentNotes(projectRoot);
+  if (agentNotes.notes.length > 0 || agentNotes.skipped.length > 0) {
+    const skipped = agentNotes.skipped.map((file) => `${file.path} (${file.reason})`).join(", ");
+    onProgress?.({
+      stage: "analyzing",
+      message: `Read ${agentNotes.notes.length} agent note file(s)${skipped ? `; skipped ${skipped}` : ""}.`,
+      progress: 10,
+    });
+  }
+  return renderRepositoryAgentNotesBlock(agentNotes);
 }

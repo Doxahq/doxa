@@ -13,6 +13,7 @@ import {
   projectGenerationsQueryOptions,
 } from "~/lib/queries/dashboard"
 import { docsBranchListQueryOptions } from "~/lib/queries/docs-branches"
+import { doxabotInstructionsQueryOptions } from "~/lib/queries/doxabot-instructions"
 import { generationReviewQueryOptions } from "~/lib/queries/generation-review"
 import { prefetchProjectPage, type ProjectPrefetchPage } from "~/lib/queries/project-prefetch"
 
@@ -73,10 +74,16 @@ describe("prefetchProjectPage", () => {
     ],
     ["requests", hashes(approvalRequestListQueryOptions("p1", undefined).queryKey), 1],
     [
-      "settings",
-      hashes(projectGenerationCacheQueryOptions("p1").queryKey, projectDoxabotQueryOptions("p1").queryKey),
-      2,
+      "doxabot",
+      hashes(
+        doxabotInstructionsQueryOptions("p1").queryKey,
+        projectDoxabotQueryOptions("p1").queryKey,
+        projectGenerationCacheQueryOptions("p1").queryKey,
+      ),
+      3,
     ],
+    // Settings reads only the project detail, which the layout loads.
+    ["settings", [], 0],
   ])("%s starts the page's queries with the page's keys", async (page, expected, requests) => {
     const client = makeClient()
     void prefetchProjectPage(client, page, { projectId: "p1" })
@@ -123,9 +130,9 @@ describe("prefetchProjectPage", () => {
 
   test("a query that is already loading is shared, not sent twice", () => {
     const client = makeClient()
-    void prefetchProjectPage(client, "settings", { projectId: "p1" })
-    void prefetchProjectPage(client, "settings", { projectId: "p1" })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    void prefetchProjectPage(client, "doxabot", { projectId: "p1" })
+    void prefetchProjectPage(client, "doxabot", { projectId: "p1" })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
   test("a failed request settles the prefetch without throwing", async () => {

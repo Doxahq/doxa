@@ -281,6 +281,13 @@
       "when": 1792107115947,
       "tag": "0039_version_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792964794091,
+      "tag": "0040_project_instruction_versions",
+      "breakpoints": true
     }
   ]
 }

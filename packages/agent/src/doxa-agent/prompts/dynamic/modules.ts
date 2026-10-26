@@ -1,5 +1,6 @@
 import { REPO_MAP_EXPLORATION_MAX_STEPS } from "../../constants";
 import { resolveDocumentationBrief, resolveDocumentationPolicy } from "../../documentation-policy";
+import { renderProjectInstructionsBlock } from "../../project-instructions";
 import {
   formatAnalysisSummary,
   formatPublicEditorialBrief,
@@ -70,9 +71,37 @@ const publicPolicyModules: PromptModule[] = PUBLIC_POLICY_STAGES.map((stage) => 
   },
 }));
 
+/** Next to the repo map, and as stable: the notes come from the same source tree. */
+const AGENT_NOTES_PRIORITY = 92;
+
+const repositoryAgentNotesModules: PromptModule[] = (["exploration", "analysis"] as const).map((stage) => ({
+  id: `repository-agent-notes-${stage}`,
+  stage,
+  priority: AGENT_NOTES_PRIORITY,
+  render: (context) => context.repositoryAgentNotes,
+}));
+
+/**
+ * After the repo map: the instructions are the same for every call of a run,
+ * so they stay inside the cached prefix too.
+ */
+const PROJECT_INSTRUCTIONS_PRIORITY = 95;
+
+const projectInstructionsModules: PromptModule[] = PUBLIC_POLICY_STAGES.map((stage) => ({
+  id: `project-instructions-${stage}`,
+  stage,
+  priority: PROJECT_INSTRUCTIONS_PRIORITY,
+  render: (context) => {
+    const projectInstructions = context.documentationBrief?.projectInstructions;
+    return projectInstructions ? renderProjectInstructionsBlock(projectInstructions) : undefined;
+  },
+}));
+
 export const promptModules: PromptModule[] = [
   ...publicPolicyModules,
   ...repoMapModules,
+  ...repositoryAgentNotesModules,
+  ...projectInstructionsModules,
   {
     id: "json-contract",
     stage: "analysis",

@@ -17,6 +17,8 @@ import {
   buildPageInputHashMap,
   buildStructuralFingerprint,
   documentationBriefFingerprint,
+  projectInstructionsFingerprint,
+  applyInstructionEdits,
   evidencePaths,
   flattenStructure,
   hashObject,
@@ -60,6 +62,9 @@ export async function analyzeIncrementalGeneration(input: {
   const structuralFingerprint = await buildStructuralFingerprint(
     input.sourceState.files,
   );
+  const brief = resolveDocumentationBrief(input.config.documentationBrief);
+  const briefFingerprint = documentationBriefFingerprint(brief);
+  const instructionsFingerprint = projectInstructionsFingerprint(brief);
   const previous = previousPlanningState(input.reusableState);
   const previousStructure = reusableStructure(input.reusableState);
   // The published page state is keyed by the stable page ID and by the page
@@ -76,6 +81,7 @@ export async function analyzeIncrementalGeneration(input: {
     planningFingerprint: input.planningFingerprint,
     writingFingerprint: input.writingFingerprint,
     structuralFingerprint,
+    projectInstructionsFingerprint: instructionsFingerprint,
     previous,
     structuralPaths: await specStructuralPaths(input.config, input.reusableState),
   });
@@ -92,9 +98,8 @@ export async function analyzeIncrementalGeneration(input: {
     schemaVersion: GENERATION_STATE_SCHEMA_VERSION,
     analysis: persistentAnalysis,
     analysisHash: hashObject(persistentAnalysis),
-    documentationBriefFingerprint: documentationBriefFingerprint(
-      resolveDocumentationBrief(input.config.documentationBrief),
-    ),
+    documentationBriefFingerprint: briefFingerprint,
+    projectInstructionsFingerprint: instructionsFingerprint,
     sourceSummaries: mergeSourceSummaries(
       input.sourceState,
       input.reusableState,
@@ -153,6 +158,9 @@ export async function finalizeIncrementalPlan(input: {
         planningFingerprint: input.planningFingerprint,
         writingFingerprint: input.writingFingerprint,
         structuralFingerprint: input.structuralFingerprint,
+        projectInstructionsFingerprint: projectInstructionsFingerprint(
+          resolveDocumentationBrief(input.documentationBrief),
+        ),
         previous,
         templatePageIds,
       })
@@ -166,10 +174,22 @@ export async function finalizeIncrementalPlan(input: {
         previous,
         templatePageIds,
       });
-  const pageEdits = editsForPlan(plan, input);
+  const sourceEdits = editsForPlan(plan, input);
+  const finalPlan = input.preliminaryPlan.editReason === "instructions_changed"
+    // After an instructions change every page the baseline has is edited
+    // from its published text, so it follows the instructions and keeps its
+    // wording where they ask nothing.
+    ? applyInstructionEdits({
+        plan,
+        currentPageIds,
+        previousPages: input.reusableState?.pages ?? [],
+        edits: sourceEdits,
+        templatePageIds,
+      })
+    : withPageEdits(plan, sourceEdits);
   const persistentStructure = toJsonValue(input.structure);
   return {
-    plan: Object.keys(pageEdits).length > 0 ? { ...plan, pageEdits } : plan,
+    plan: finalPlan,
     structureState: generationStructureStateSchema.parse({
       schemaVersion: GENERATION_STATE_SCHEMA_VERSION,
       structure: persistentStructure,
@@ -177,6 +197,10 @@ export async function finalizeIncrementalPlan(input: {
       structuralFingerprint: input.structuralFingerprint,
     }),
   };
+}
+
+function withPageEdits(plan: IncrementalGenerationPlan, pageEdits: Record<string, PageEdit>): IncrementalGenerationPlan {
+  return Object.keys(pageEdits).length > 0 ? { ...plan, pageEdits } : plan;
 }
 
 /** The regenerated baseline pages that the writer edits, with the changed files behind each. */
@@ -495,6 +519,8 @@ function previousPlanningState(
       reusableState.manifest.planningFingerprint,
     writingFingerprint:
       reusableState.manifest.writingFingerprint,
+    projectInstructionsFingerprint:
+      reusableState.analysis.projectInstructionsFingerprint,
     structuralFingerprint:
       reusableState.structure.structuralFingerprint,
     pages: reusableState.pages.map((page) => ({

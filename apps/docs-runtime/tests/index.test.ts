@@ -1290,6 +1290,7 @@ function createEnv(input: {
       }),
       getCurrentChangeProposalState: async () => null,
       createInstallationAccessToken: async () => "",
+      createRepositoryReadToken: async () => "",
       markJobRunning: async () => undefined,
       markJobFailed: async () => undefined,
       markJobCancelled: async () => undefined,

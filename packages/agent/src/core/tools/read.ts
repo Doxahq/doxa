@@ -5,18 +5,11 @@
 import { z } from "zod/v4";
 import { defineTool } from "../tool";
 import { fileExists, readTextFile } from "../../utils/runtime";
+import { isLargeFilePath, isSensitiveFilePath } from "./file-access-rules";
 import { resolveProjectPath } from "./project-path";
 
 const MAX_READ_CHARS = 8_000;
 const MAX_READ_LINES = 180;
-const LARGE_FILE_PATTERNS = [
-  /(^|\/)bun\.lock$/,
-  /(^|\/)pnpm-lock\.yaml$/,
-  /(^|\/)package-lock\.json$/,
-  /(^|\/)yarn\.lock$/,
-  /(^|\/)\.env$/,
-  /(^|\/)\.env\./,
-];
 
 export function readTool(cwd: string) {
   return defineTool({
@@ -29,8 +22,8 @@ export function readTool(cwd: string) {
     execute: async ({ path }) => {
       try {
         const fullPath = await resolveProjectPath(cwd, path);
-        const normalized = path.replace(/\\/g, "/");
-        if (LARGE_FILE_PATTERNS.some((pattern) => pattern.test(normalized))) {
+        // The resolved path catches a harmless-looking symlink to a secret file.
+        if (isLargeFilePath(path) || isSensitiveFilePath(path) || isSensitiveFilePath(fullPath)) {
           return `Skipped large or sensitive file: ${path}. Read the package manifest or specific source files instead.`;
         }
 

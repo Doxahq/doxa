@@ -439,6 +439,45 @@ export const doxabotAutomationSettings = pgTable(
   ],
 );
 
+/**
+ * Doxabot instructions of a project, one row per saved version. Rows are
+ * never updated: a save or a restore adds a row with the next version, so the
+ * history stays complete. `body` and `screening` hold the
+ * `doxabotInstructionsSchema` and `doxabotInstructionScreeningSchema`
+ * contracts; the repository parses them on every write and read.
+ */
+export const projectInstructionVersions = pgTable(
+  "project_instruction_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    body: jsonb("body").notNull(),
+    screening: jsonb("screening").notNull(),
+    createdByUserId: text("created_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("project_instruction_versions_project_version_idx").on(
+      table.projectId,
+      table.version,
+    ),
+    index("project_instruction_versions_created_by_user_id_idx").on(
+      table.createdByUserId,
+    ),
+    check(
+      "project_instruction_versions_version_positive",
+      sql`${table.version} > 0`,
+    ),
+  ],
+);
+
 export const scmWebhookDeliveries = pgTable(
   "scm_webhook_deliveries",
   {

@@ -7,6 +7,7 @@ import {
 import { error, json } from "../http/response";
 import { parseValidatedJson } from "../http/validation";
 import { PendingMergesRepository } from "../repositories/pending-merges";
+import { createDoxabotInstructionsRoutes } from "./doxabot-instructions";
 import {
   DoxabotSettingsError,
   DoxabotSettingsService,
@@ -14,6 +15,8 @@ import {
 
 export function createDoxabotRoutes(): ApiApp {
   const app = createApiRouter();
+
+  app.route("/instructions", createDoxabotInstructionsRoutes());
 
   app.get("/", (context) =>
     withProjectAccess(context, "project.read", (access) =>

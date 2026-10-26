@@ -14,7 +14,7 @@
  *     UI component.
  */
 
-import type { ModelProvider, ReferenceSourceReport } from "@doxahq/contracts";
+import type { GenerationInstructions, ModelProvider, ReferenceSourceReport } from "@doxahq/contracts";
 import type { SpecReaderInput } from "@doxahq/contracts/spec-reader";
 import type {
   AgentLoopTermination,
@@ -526,12 +526,15 @@ export type DocumentationTarget = { kind: "public" };
 export interface DocumentationGenerationBrief {
   target: DocumentationTarget;
   projectContext?: string;
+  /** The Doxabot instructions saved for the project, already validated by the API. */
+  projectInstructions?: GenerationInstructions;
 }
 
 /** A normalized generation brief with the public target made explicit. */
 export interface ResolvedDocumentationGenerationBrief {
   target: DocumentationTarget;
   projectContext?: string;
+  projectInstructions?: GenerationInstructions;
 }
 
 /** Editorial guidance extracted from optional project context during analysis. */
@@ -803,6 +806,8 @@ export interface PreviousPage {
   content: string;
   /** The changed source files that the page depends on. Empty when only its brief changed. */
   changedSources: readonly string[];
+  /** The project instructions changed: update the page to follow them. */
+  instructionsChanged?: boolean;
 }
 
 /** A single generated page. */

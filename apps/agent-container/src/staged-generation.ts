@@ -11,6 +11,7 @@ import {
   documentationBriefFingerprint,
   flattenStructure,
   generateDocumentation,
+  keepPublishedRoutes,
   normalizeProjectAnalysis,
   PUBLIC_DOCUMENTATION_POLICY_VERSION,
   resolveRestApiRuntimeFeatures,
@@ -612,7 +613,9 @@ async function executeStructureStage(
     }, onProgress, (summary) => {
       reviewDecisionSummary = summary;
     });
-    structure = reviewedStructure;
+    // The model plans from page IDs only, so the routes that the published
+    // pages had come back here, for every page the new plan kept.
+    structure = keepPublishedRoutes(reviewedStructure, regenerationAnchor);
     if (reviewDecisionSummary) {
       await emitEvent(
         "structure_review_decided",
@@ -667,7 +670,8 @@ async function executeStructureStage(
                   regenerationCauses:
                     `new:${incremental.plan.causes.newPages}` +
                     `inputs:${incremental.plan.causes.inputChanged}` +
-                    `deps:${incremental.plan.causes.dependencyChanged}`,
+                    `deps:${incremental.plan.causes.dependencyChanged}` +
+                    `instructions:${incremental.plan.causes.instructionsChanged ?? 0}`,
                 }
               : {}),
           }
@@ -714,7 +718,7 @@ async function prepareWorkspace(
   workspace: HostedWorkspaceLayout,
   runtime: GenerationStageRuntime,
 ): Promise<PreparedRepositorySnapshotResult | null> {
-  const documentationBrief = resolveRunBrief();
+  const documentationBrief = resolveRunBrief(input);
   await emitEvent("container_stage_booted", `Agent container started ${input.stage} stage.`, {
     stage: input.stage,
     model: input.model ?? null,
@@ -868,7 +872,7 @@ function createAgentConfig(
       : {}),
     onPageFailure: hostedPageFailureAction,
     onDocsQualityFailure: hostedDocsQualityFailureAction,
-    documentationBrief: resolveRunBrief(),
+    documentationBrief: resolveRunBrief(input),
     // Each stage execution gets its own job instance; the analysis destroys it when done.
     specReader: (runtime.createSpecReader ?? resolveSpecReaderClient)(stageExecutionId),
     restExtractionModel: resolvedRestExtractionModel(input),

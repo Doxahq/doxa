@@ -68,6 +68,8 @@ export function projectCrumbs(pathname: string, projectId: string, isPagePending
       return rest[2] === "changes"
         ? ["Generations", shortenGenerationId(rest[1]), "Changes"]
         : ["Generations", shortenGenerationId(rest[1])]
+    case "doxabot":
+      return rest[1] === "instructions" ? ["Doxabot", "Instructions"] : ["Doxabot"]
     case "requests":
       return ["Requests"]
     case "settings":

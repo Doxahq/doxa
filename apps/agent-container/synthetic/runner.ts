@@ -973,6 +973,10 @@ class SyntheticInternalApi {
     return "synthetic-installation-token-never-sent";
   }
 
+  async createRepositoryReadToken() {
+    return this.createInstallationAccessToken();
+  }
+
   async addJobEvent(
     _jobId: string,
     input: {

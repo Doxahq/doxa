@@ -68,6 +68,8 @@ export interface PromptRenderContext {
   explorationContext?: string;
   /** Code-built repository map; stable for a source tree, so it belongs in the cached system prompt. */
   repoMap?: string;
+  /** The repository's notes for coding agents (AGENTS.md and the like), rendered as evidence. */
+  repositoryAgentNotes?: string;
   /** Where the REST endpoints come from, when not from the analysis answer. */
   restReference?: RestReferencePromptMode;
   previousAnalysis?: ProjectAnalysis;

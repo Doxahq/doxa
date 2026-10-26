@@ -71,11 +71,18 @@ describe("SCOPE_CAPABILITIES", () => {
     );
   });
 
+  it("never grants instructions.configure", () => {
+    expect(capabilitiesForScopes(OAUTH_SCOPES).has("instructions.configure")).toBe(
+      false,
+    );
+  });
+
   it("grants every other capability through some scope", () => {
     const granted = capabilitiesForScopes(OAUTH_SCOPES);
     expect(CAPABILITIES.filter((c) => !granted.has(c))).toEqual([
       "approvals.decide",
       "approvals.configure",
+      "instructions.configure",
       "team.manage",
       "team.delete",
     ]);

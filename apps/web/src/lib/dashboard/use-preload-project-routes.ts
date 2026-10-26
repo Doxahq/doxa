@@ -8,6 +8,7 @@ const PROJECT_PAGE_ROUTE_IDS: ReadonlySet<string> = new Set([
   "/dashboard/projects/$projectId/project",
   "/dashboard/projects/$projectId/content",
   "/dashboard/projects/$projectId/generations/",
+  "/dashboard/projects/$projectId/doxabot/",
   "/dashboard/projects/$projectId/requests/",
   "/dashboard/projects/$projectId/settings/",
 ])

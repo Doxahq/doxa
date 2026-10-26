@@ -62,6 +62,7 @@ export const API_ENTRYPOINT_METHODS = {
     "getGenerationExecutionContext",
     "getCurrentChangeProposalState",
     "createInstallationAccessToken",
+    "createRepositoryReadToken",
     "markJobRunning",
     "markJobFailed",
     "markJobCancelled",

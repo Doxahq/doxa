@@ -18,6 +18,7 @@ import {
   type GenerationSourceState,
   type RepositorySnapshot,
   type ReusableGenerationState,
+  incrementalGenerationPlanSchema,
 } from "@doxahq/contracts";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
@@ -305,6 +306,61 @@ describe("incremental generation checkpoints", () => {
     expect(result.plan.regeneratePageIds).toEqual(["reference/create-flag"]);
     expect(result.plan.reusePageIds).toEqual(["guide/rollouts"]);
     expect(result.plan.causes).toMatchObject({ inputChanged: 1 });
+  });
+
+  test("after an instructions change, kept pages are edited from their published text", async () => {
+    const published = structureWithPages(3);
+    const reusableState = reusableStateWithPages(published);
+    const replanned: DocumentationStructure = {
+      sections: [{
+        ...published.sections[0]!,
+        pages: [...published.sections[0]!.pages, { id: "competitors", title: "Competitors", description: "Competitors", sourceEvidence: [] }],
+      }],
+    };
+    const replannedIds = Object.keys(buildPageInputHashMap(replanned));
+
+    const result = await finalizeIncrementalPlan({
+      analysis: flagForgeAnalysisWithUndefinedFields(),
+      documentationBrief: undefined,
+      planningFingerprint: "planning-v1",
+      writingFingerprint: "writing-v1",
+      reusableState,
+      snapshot,
+      structuralFingerprint: reusableState.structure.structuralFingerprint,
+      structure: replanned,
+      preliminaryPlan: { ...preliminaryRegenerationPlan(replannedIds), editReason: "instructions_changed" },
+    });
+
+    const keptIds = reusableState.pages.map((page) => page.pageId);
+    expect(result.plan.editReason).toBe("instructions_changed");
+    expect(result.plan.regeneratePageIds).toEqual(replannedIds);
+    expect(result.plan.reusePageIds).toEqual([]);
+    expect(Object.keys(result.plan.pageEdits ?? {}).sort()).toEqual([...keptIds].sort());
+    for (const pageId of keptIds) {
+      expect(result.plan.pageEdits?.[pageId]).toMatchObject({ instructionsChanged: true });
+    }
+    expect(result.plan.pageEdits?.["guide/competitors"]).toBeUndefined();
+    expect(incrementalGenerationPlanSchema.parse(result.plan)).toEqual(result.plan);
+  });
+
+  test("a plan that rewrites every page for another reason edits nothing", async () => {
+    const published = structureWithPages(2);
+    const reusableState = reusableStateWithPages(published);
+
+    const result = await finalizeIncrementalPlan({
+      analysis: flagForgeAnalysisWithUndefinedFields(),
+      documentationBrief: undefined,
+      planningFingerprint: "planning-v1",
+      writingFingerprint: "writing-v1",
+      reusableState,
+      snapshot,
+      structuralFingerprint: reusableState.structure.structuralFingerprint,
+      structure: published,
+      preliminaryPlan: preliminaryRegenerationPlan(Object.keys(buildPageInputHashMap(published))),
+    });
+
+    expect(result.plan.editReason).toBeUndefined();
+    expect(Object.values(result.plan.pageEdits ?? {}).some((edit) => edit.instructionsChanged)).toBe(false);
   });
 
   test("canonicalizes optional structure fields before validating persistent state", async () => {

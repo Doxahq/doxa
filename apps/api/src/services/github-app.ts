@@ -30,12 +30,17 @@ export interface InstallationAccessTokenScope {
 
 const GITHUB_API_BASE_URL = "https://api.github.com";
 
+/** Local development uses `LOCAL_GITHUB_TOKEN` instead of a GitHub App installation. */
+export function isLocalInstallation(installationId: string): boolean {
+  return installationId.startsWith("local");
+}
+
 export async function createInstallationAccessToken(
   env: Env,
   installationId: string,
   scope?: InstallationAccessTokenScope,
 ): Promise<InstallationAccessToken> {
-  if (installationId.startsWith("local")) {
+  if (isLocalInstallation(installationId)) {
     const token = env.LOCAL_GITHUB_TOKEN;
     if (!token) {
       throw new Error("LOCAL_GITHUB_TOKEN is required for local repository generation.");

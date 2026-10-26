@@ -8,7 +8,6 @@ import {
 
 /** The cards of project Settings, with their real titles and descriptions. */
 const SETTINGS_CARDS = [
-  { title: "Doxabot", description: null, action: "5.5rem", content: true },
   {
     title: "Agent approvals",
     description: "Choose which agent actions run at once, which wait for you, and which never run.",
@@ -16,13 +15,6 @@ const SETTINGS_CARDS = [
     content: false,
   },
   { title: "Team", description: null, action: null, content: false },
-  {
-    title: "Generation cache",
-    description:
-      "Generations reuse the previous analysis, structure, and pages wherever the source has not changed. Clear the cache to make the next generation analyze the repository from scratch.",
-    action: null,
-    content: true,
-  },
 ] as const
 
 /** Project Settings until every card's data is there. */
@@ -32,7 +24,7 @@ export function ProjectSettingsSkeleton() {
       <PageHeadingSkeleton
         label="Project"
         title="Settings"
-        description="How this project's documentation is generated and kept up to date."
+        description="Who works on this project and what agents can do in it."
       />
       <section className="flex flex-col gap-4">
         {SETTINGS_CARDS.map((card) => (

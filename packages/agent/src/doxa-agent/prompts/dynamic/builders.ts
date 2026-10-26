@@ -446,13 +446,11 @@ function previousPageBlock(previousPage: PreviousPage | undefined): string {
   const changedFiles = previousPage.changedSources.length > 0
     ? previousPage.changedSources.join(", ")
     : "none; only the page brief above changed";
+  const rules = previousPage.instructionsChanged ? INSTRUCTIONS_EDIT_RULES : SOURCE_EDIT_RULES;
   return `
 PUBLISHED VERSION OF THIS PAGE:
 The live site already has this page. Update it; do not write it again:
-- Change only what the changed files make wrong or incomplete, and what the page brief above now asks for.
-- Keep every other heading, sentence, example, and their order exactly as published, word for word.
-- Add a section only for behavior that the changed files add. Remove text only when the source no longer supports it.
-- Do not reword, reorder, or restyle text that the source still confirms.
+${rules}
 Changed files this page depends on: ${changedFiles}
 
 <published-page>
@@ -460,6 +458,17 @@ ${body}
 </published-page>
 `;
 }
+
+const SOURCE_EDIT_RULES = `- Change only what the changed files make wrong or incomplete, and what the page brief above now asks for.
+- Keep every other heading, sentence, example, and their order exactly as published, word for word.
+- Add a section only for behavior that the changed files add. Remove text only when the source no longer supports it.
+- Do not reword, reorder, or restyle text that the source still confirms.`;
+
+/** The project instructions changed: the page follows them, and keeps everything they do not touch. */
+const INSTRUCTIONS_EDIT_RULES = `- The project instructions changed since this page was published. Change what they now ask of this page: content to add or remove, tone, terms, and code example languages.
+- Also change what the changed files make wrong or incomplete, and what the page brief above now asks for.
+- Keep every heading, sentence, example, and their order where the instructions and the changed files ask nothing of them.
+- If the instructions ask nothing of this page, return it as published.`;
 
 export function buildWriterPrompt(
   context: PromptRenderContext,

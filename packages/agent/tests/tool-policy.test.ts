@@ -108,6 +108,67 @@ describe("repository search policy", () => {
     );
   });
 
+  test("grep never lets a model glob select secret files", async () => {
+    const project = await temporaryProject();
+    runCommand.mockResolvedValue(grepResult(""));
+
+    await grepTool(project).execute({ pattern: "KEY", glob: ".env*" });
+
+    const [command] = runCommand.mock.calls[0]!;
+    expect(command).not.toContain("--include=.env*");
+    expect(command).toContain("--include=*.ts");
+    expect(command).toContain("--exclude=.env");
+    expect(command).toContain("--exclude=.env.*");
+    const lastInclude = command.findLastIndex((arg: string) => arg.startsWith("--include="));
+    const firstExclude = command.findIndex((arg: string) => arg.startsWith("--exclude="));
+    expect(firstExclude).toBeGreaterThan(lastInclude);
+  });
+
+  test("grep keeps a safe model glob", async () => {
+    const project = await temporaryProject();
+    runCommand.mockResolvedValue(grepResult(""));
+
+    await grepTool(project).execute({ pattern: "x", glob: "*.py" });
+
+    const [command] = runCommand.mock.calls[0]!;
+    expect(command).toContain("--include=*.py");
+    expect(command).not.toContain("--include=*.ts");
+  });
+
+  test("grep reads a pattern that starts with a dash as a pattern", async () => {
+    const project = await temporaryProject();
+    runCommand.mockResolvedValue(grepResult(""));
+
+    await grepTool(project).execute({ pattern: "--include=.env" });
+
+    const [command] = runCommand.mock.calls[0]!;
+    const separator = command.indexOf("--");
+    expect(separator).toBeGreaterThan(-1);
+    expect(command[separator + 1]).toBe("--include=.env");
+  });
+
+  test("grep drops match lines from secret files", async () => {
+    const project = await temporaryProject();
+    runCommand.mockResolvedValue(grepResult(
+      `${project}/src/included.ts:1:const API_KEY = read()\n${project}/.env.local:2:API_KEY=sk-live-123`,
+    ));
+
+    const output = await grepTool(project).execute({ pattern: "API_KEY" });
+
+    expect(output).toContain("src/included.ts:1:");
+    expect(output).not.toContain("sk-live-123");
+  });
+
+  test("grep refuses a secret file as the search path", async () => {
+    const project = await temporaryProject();
+    await writeFile(join(project, ".env"), "TOKEN=secret");
+
+    const output = await grepTool(project).execute({ pattern: "TOKEN", path: ".env" });
+
+    expect(output).toContain("Skipped sensitive file");
+    expect(runCommand).not.toHaveBeenCalled();
+  });
+
   test("glob skips generated and dependency directories", async () => {
     const project = await temporaryProject();
     await Promise.all(
@@ -124,6 +185,10 @@ describe("repository search policy", () => {
     ).resolves.toBe("src/included.ts");
   });
 });
+
+function grepResult(stdout: string) {
+  return { exitCode: stdout ? 0 : 1, signal: null, stdout, stderr: "", timedOut: false };
+}
 
 async function temporaryProject(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "doxa-tool-policy-"));

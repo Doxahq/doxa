@@ -5,6 +5,7 @@ import type {
 } from "../types";
 import { PUBLIC_DOCUMENTATION_POLICY_VERSION } from "@doxahq/contracts";
 import { hashObject } from "../utils/hash";
+import { projectInstructionsFingerprintInput } from "./project-instructions";
 
 export { PUBLIC_DOCUMENTATION_POLICY_VERSION } from "@doxahq/contracts";
 export const MAX_PROJECT_CONTEXT_LENGTH = 10_000;
@@ -27,6 +28,7 @@ export function resolveDocumentationBrief(
   return {
     target: PUBLIC_TARGET,
     ...(projectContext ? { projectContext } : {}),
+    ...(input?.projectInstructions ? { projectInstructions: input.projectInstructions } : {}),
   };
 }
 
@@ -49,7 +51,27 @@ export function documentationBriefFingerprint(
     policyVersion: PUBLIC_DOCUMENTATION_POLICY_VERSION,
     target: brief.target,
     projectContext: brief.projectContext ?? null,
+    // Absent instructions keep the older fingerprint, so existing pages stay reusable.
+    ...(brief.projectInstructions
+      ? { projectInstructions: projectInstructionsFingerprintInput(brief.projectInstructions) }
+      : {}),
   });
+}
+
+/** The instructions fingerprint of a run without project instructions. */
+export const NO_PROJECT_INSTRUCTIONS_FINGERPRINT = "none";
+
+/**
+ * What the project instructions change in a run, apart from the policy
+ * version. A policy change re-runs the analysis; an instructions change
+ * rewrites every page.
+ */
+export function projectInstructionsFingerprint(
+  brief: ResolvedDocumentationGenerationBrief,
+): string {
+  return brief.projectInstructions
+    ? hashObject(projectInstructionsFingerprintInput(brief.projectInstructions))
+    : NO_PROJECT_INSTRUCTIONS_FINGERPRINT;
 }
 
 function normalizeProjectContext(value: string | undefined): string | undefined {

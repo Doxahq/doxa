@@ -18,7 +18,13 @@ export async function readPreviousPages(
       const edit = pageEdits[pageId];
       if (!edit) return null;
       const content = await read(edit.artifactKey);
-      return content === null ? null : ([pageId, { content, changedSources: edit.changedSources }] as const);
+      if (content === null) return null;
+      const page: PreviousPageText = {
+        content,
+        changedSources: edit.changedSources,
+        ...(edit.instructionsChanged ? { instructionsChanged: true } : {}),
+      };
+      return [pageId, page] as const;
     }),
   );
   return Object.fromEntries(entries.filter((entry) => entry !== null));

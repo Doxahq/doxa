@@ -5,9 +5,10 @@ import {
 import type { Capability } from "./capabilities";
 
 /**
- * `approvals.decide`, `approvals.configure`, `team.manage` and `team.delete`
- * are in no list on purpose: a human decides approval requests, sets their
- * gates and runs the team, so no OAuth scope can ever grant them to an agent.
+ * `approvals.decide`, `approvals.configure`, `instructions.configure`,
+ * `team.manage` and `team.delete` are in no list on purpose: a human decides
+ * approval requests, sets their gates, writes the instructions that steer
+ * Doxabot and runs the team, so no OAuth scope can ever grant them to an agent.
  */
 export const SCOPE_CAPABILITIES = {
   "projects:read": ["project.read", "domains.read", "generation.read"],

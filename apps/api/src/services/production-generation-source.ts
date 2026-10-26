@@ -8,11 +8,8 @@ import {
   createInstallationAccessToken,
   type InstallationAccessTokenScope,
 } from "./github-app";
-import {
-  GITHUB_API_BASE_URL,
-  githubApiHeaders,
-  parseGitHubRepositoryId,
-} from "./doxabot/github-api";
+import { GITHUB_API_BASE_URL, githubApiHeaders } from "./doxabot/github-api";
+import { repositoryReadScope } from "./repository-read-access";
 import type {
   ProductionGenerationSource,
   ProductionGenerationTarget,
@@ -82,19 +79,10 @@ export class GitHubProductionGenerationSource
       );
     }
 
-    const repositoryId = parseGitHubRepositoryId(
-      repository.externalId,
-    );
     const token =
       await this.dependencies.createInstallationToken({
         installationId: repository.installationId,
-        scope: {
-          repositoryIds: [repositoryId],
-          permissions: {
-            contents: "read",
-            metadata: "read",
-          },
-        },
+        scope: repositoryReadScope(repository.externalId),
       });
     const owner = encodeURIComponent(repository.owner);
     const name = encodeURIComponent(repository.name);

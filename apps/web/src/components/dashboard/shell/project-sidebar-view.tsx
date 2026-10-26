@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Activity, Bot, ChevronRight, Info, PenLine, Settings } from "lucide-react"
 import type { GenerationJobDto } from "@doxahq/contracts"
 
+import { DoxabotIcon } from "~/components/dashboard/doxabot/doxabot-icon"
 import { ProjectMonogram } from "~/components/dashboard/shell/project-monogram"
 import {
   EditedPill,
@@ -81,6 +82,13 @@ export function ProjectSidebarView({ projectId }: { projectId: string }) {
         label="Generations"
         active={isOn("generations")}
         hint={<LatestGenerationHint job={detail.data?.latestJob ?? null} />}
+      />
+      <SidebarNavLink
+        to="/dashboard/projects/$projectId/doxabot"
+        params={{ projectId }}
+        icon={DoxabotIcon}
+        label="Doxabot"
+        active={isOn("doxabot")}
       />
       <SidebarNavLink
         to="/dashboard/projects/$projectId/requests"

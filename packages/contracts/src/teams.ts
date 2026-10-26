@@ -37,6 +37,8 @@ export const CAPABILITIES = [
   "approvals.decide",
   /** Changes the project approval settings. Never granted to an agent. */
   "approvals.configure",
+  /** Changes the Doxabot instructions of a project. Never granted to an agent. */
+  "instructions.configure",
   /** Renames the team, invites, changes roles, removes members. */
   "team.manage",
   "team.delete",

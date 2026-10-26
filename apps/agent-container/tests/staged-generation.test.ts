@@ -450,7 +450,7 @@ describe("staged structure anchoring", () => {
       reusePageCount: expect.any(Number),
       regeneratePageCount: expect.any(Number),
       regenerationCauses: expect.stringMatching(
-        /^new:\d+inputs:\d+deps:\d+$/,
+        /^new:\d+inputs:\d+deps:\d+instructions:\d+$/,
       ),
     });
   });

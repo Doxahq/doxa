@@ -5,6 +5,7 @@ import type {
   ApproveBlockReason,
 } from "@doxahq/contracts/approval-requests"
 import { ApiRequestError } from "~/lib/api-errors"
+import { formatRelativeAge } from "~/lib/dashboard/relative-time"
 
 export type ApprovalTone = "warning" | "success" | "muted" | "destructive" | "outline"
 
@@ -41,20 +42,9 @@ export function closedRequestMessage(status: ApprovalRequestStatus): string | nu
   }
 }
 
-const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" })
-
 /** "2 minutes ago", "3 days ago". */
 export function formatRequestAge(iso: string, now: number = Date.now()): string {
-  const seconds = Math.round((new Date(iso).getTime() - now) / 1000)
-  const steps: [Intl.RelativeTimeFormatUnit, number][] = [
-    ["day", 86_400],
-    ["hour", 3_600],
-    ["minute", 60],
-  ]
-  for (const [unit, size] of steps) {
-    if (Math.abs(seconds) >= size) return RELATIVE.format(Math.round(seconds / size), unit)
-  }
-  return RELATIVE.format(seconds, "second")
+  return formatRelativeAge(iso, now)
 }
 
 /** True when a completed publish request also deleted its branch. */

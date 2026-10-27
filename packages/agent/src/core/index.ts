@@ -92,6 +92,7 @@ export type {
   TrackedToolsOptions,
 } from "./tools";
 export { createToolResultCache } from "./tools";
+export { isProtectedFilePath } from "./tools/file-access-rules";
 
 // Types
 export type {

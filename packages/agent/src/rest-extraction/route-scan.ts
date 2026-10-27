@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { isProtectedFilePath } from "../core/tools/file-access-rules";
 import { isHiddenPath, isSkippedPath } from "../repo-map/paths";
 import { listProjectFiles } from "../utils/runtime";
 
@@ -67,6 +68,7 @@ export async function scanRouteFiles(checkoutRoot: string): Promise<RouteFile[]>
 
 /** A route file read from the checkout, or undefined when it registers no route. */
 export async function readRouteFile(checkoutRoot: string, path: string): Promise<RouteFile | undefined> {
+  if (isProtectedFilePath(path)) return undefined;
   const absolutePath = join(checkoutRoot, path);
   try {
     if ((await stat(absolutePath)).size > MAX_ROUTE_FILE_BYTES) return undefined;

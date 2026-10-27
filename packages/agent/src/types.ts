@@ -748,6 +748,11 @@ export interface WriterValidationConfig {
    * page regeneration. Default: `["mdx"]`.
    */
   targetedRepairClasses?: TargetedRepairClass[];
+  /**
+   * Exact values that no page may contain: the credentials of this run and
+   * other secret environment values. The page gate rejects a page with one.
+   */
+  forbiddenValues?: readonly string[];
 }
 
 export type TargetedRepairClass =

@@ -12,6 +12,7 @@ import {
   type ContainerGenerationStageRequest,
 } from "@doxahq/contracts";
 import { ActiveGenerationRequests } from "./active-generation-requests";
+import { outputSecrets, registerActiveSecrets, sanitizeText, sanitizeValue } from "./logging";
 import { bindGenerationRequestCancellation } from "./request-cancellation";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -67,6 +68,9 @@ export function createLocalAgentServer(handlers: LocalAgentHandlers): Server {
 
     const cancellation = bindGenerationRequestCancellation(request, response);
     let registeredJobId: string | null = null;
+    // Set once the request parses. Every response and log line masks them.
+    let secrets: string[] = [];
+    let releaseSecrets = () => {};
     try {
       const rawInput = await readJson<unknown>(request);
       let input: ContainerGenerateRequest | ContainerGenerationStageRequest;
@@ -90,6 +94,9 @@ export function createLocalAgentServer(handlers: LocalAgentHandlers): Server {
         }
         input = parsed.data;
       }
+
+      secrets = outputSecrets(input);
+      releaseSecrets = registerActiveSecrets(secrets);
 
       if (!activeRequests.register(input.jobId, cancellation.abortController)) {
         sendJson(response, 409, { error: "Generation was cancelled before it started." });
@@ -119,11 +126,11 @@ export function createLocalAgentServer(handlers: LocalAgentHandlers): Server {
         input as ContainerGenerateRequest,
         cancellation.abortController,
       );
-      sendJson(response, 200, result);
+      sendJson(response, 200, sanitizeValue(result, secrets));
     } catch (error) {
       if (!response.headersSent) {
         sendJson(response, 500, {
-          error: error instanceof Error ? error.message : "Generation failed",
+          error: sanitizeText(error instanceof Error ? error.message : "Generation failed", secrets),
         });
       } else if (!response.writableEnded) {
         response.end();
@@ -132,6 +139,7 @@ export function createLocalAgentServer(handlers: LocalAgentHandlers): Server {
       if (registeredJobId) {
         activeRequests.unregister(registeredJobId, cancellation.abortController);
       }
+      releaseSecrets();
       cancellation.dispose();
     }
   });

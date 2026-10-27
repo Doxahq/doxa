@@ -28,3 +28,34 @@ export function cleanInstructionText(value: string): string {
     .replace(INVISIBLE_CHARACTERS, "")
     .trim();
 }
+
+/**
+ * Cyrillic and Greek letters that look like Latin letters, such as the
+ * Cyrillic "і" in "іgnore". Only screening uses this map. The saved text
+ * keeps its letters, so instructions in Russian or Greek stay correct.
+ */
+const LATIN_LOOKALIKES: Readonly<Record<string, string>> = {
+  // Cyrillic
+  "а": "a", "в": "b", "с": "c", "ԁ": "d", "е": "e", "һ": "h", "і": "i", "ј": "j",
+  "к": "k", "ӏ": "l", "м": "m", "н": "h", "о": "o", "р": "p", "ԛ": "q", "ѕ": "s",
+  "т": "t", "ս": "u", "ԝ": "w", "х": "x", "у": "y",
+  "А": "A", "В": "B", "С": "C", "Е": "E", "Н": "H", "І": "I", "Ј": "J", "К": "K",
+  "М": "M", "О": "O", "Р": "P", "Ѕ": "S", "Т": "T", "Х": "X", "Ү": "Y",
+  // Greek
+  "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ο": "o", "ρ": "p", "τ": "t",
+  "υ": "u", "χ": "x", "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I",
+  "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X",
+};
+const LATIN_LOOKALIKE_PATTERN = new RegExp(`[${Object.keys(LATIN_LOOKALIKES).join("")}]`, "gu");
+const COMBINING_MARKS = /\p{M}/gu;
+
+/**
+ * The text as a screening rule must read it: cleaned, accents removed and
+ * look-alike letters replaced by their Latin letters. Never store or show it.
+ */
+export function screeningSkeleton(value: string): string {
+  return cleanInstructionText(value)
+    .normalize("NFKD")
+    .replace(COMBINING_MARKS, "")
+    .replace(LATIN_LOOKALIKE_PATTERN, (letter) => LATIN_LOOKALIKES[letter] ?? letter);
+}

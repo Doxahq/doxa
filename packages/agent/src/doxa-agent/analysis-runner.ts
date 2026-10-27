@@ -21,10 +21,8 @@ import type { RestReferencePromptMode } from "./prompts/dynamic";
 import { REPO_MAP_EXPLORATION_MAX_STEPS } from "./constants";
 import { parseProjectAnalysis } from "./json-parsing";
 import { resolveDocumentationBrief } from "./documentation-policy";
-import {
-  ProjectPathAccessError,
-  resolveProjectPath,
-} from "../core/tools/project-path";
+import { ProjectPathAccessError } from "../core/tools/project-path";
+import { resolveReadableProjectPath } from "../core/tools/file-access-rules";
 
 /**
  * With a repo map the explorer gets a lower turn cap and a final tool-free
@@ -229,8 +227,8 @@ export async function runIncrementalAnalysis(
   for (const filePath of allChanges.slice(0, 50)) {
     // Limit to 50 files for token efficiency
     try {
-      const fullPath = await resolveProjectPath(config.cwd, filePath);
-      if (await fileExists(fullPath)) {
+      const fullPath = await resolveReadableProjectPath(config.cwd, filePath);
+      if (fullPath !== null && await fileExists(fullPath)) {
         const content = await readTextFile(fullPath);
         // Limit per-file content to avoid token overflow
         const truncated = content.length > 5000

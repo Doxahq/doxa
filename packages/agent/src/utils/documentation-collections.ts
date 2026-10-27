@@ -14,6 +14,7 @@ import {
   ProjectPathAccessError,
   resolveProjectPath,
 } from "../core/tools/project-path";
+import { resolveReadableProjectPath } from "../core/tools/file-access-rules";
 import { MIN_DOCUMENTATION_COLLECTION_ITEMS } from "./documentation-collection-policy";
 
 const INDEX_NAMES = new Set(["index", "readme", "overview"]);
@@ -87,7 +88,9 @@ async function readProjectJson(
   path: string,
 ): Promise<Record<string, unknown> | null> {
   try {
-    const text = await readTextFile(await resolveProjectPath(cwd, path));
+    const fullPath = await resolveReadableProjectPath(cwd, path);
+    if (fullPath === null) return null;
+    const text = await readTextFile(fullPath);
     const parsed = JSON.parse(text);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? parsed as Record<string, unknown>
@@ -147,7 +150,9 @@ async function discoverDocsCollections(cwd: string): Promise<Map<string, Documen
     const items: DocumentationCollectionItem[] = [];
 
     for (const file of files.sort()) {
-      const absolute = await resolveProjectPath(cwd, file);
+      // A docs file can be a symlink to a secret file.
+      const absolute = await resolveReadableProjectPath(cwd, file);
+      if (absolute === null) continue;
       const content = await readTextFile(absolute);
       const slug = slugify(basename(file).replace(/\.(md|mdx)$/i, ""));
       const rawTitle = extractDocTitle(content, file);

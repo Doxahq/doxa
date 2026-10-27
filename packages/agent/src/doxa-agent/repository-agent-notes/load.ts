@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, posix } from "node:path";
 import { cleanInstructionText } from "@doxahq/contracts";
-import { resolveProjectPath } from "../../core/tools/project-path";
+import { resolveReadableProjectPath } from "../../core/tools/file-access-rules";
 
 /**
  * Loads the notes that a repository keeps for coding agents (AGENTS.md,
@@ -47,7 +47,7 @@ export interface RepositoryAgentNote {
   truncated: boolean;
 }
 
-export type AgentNoteSkipReason = "too_large" | "not_text" | "unreadable" | "outside_repository" | "over_budget";
+export type AgentNoteSkipReason = "too_large" | "not_text" | "unreadable" | "outside_repository" | "protected" | "over_budget";
 
 export interface RepositoryAgentNotes {
   notes: RepositoryAgentNote[];
@@ -104,12 +104,14 @@ type NoteFileRead =
   | { kind: "read"; text: string };
 
 async function readNoteFile(projectRoot: string, path: string): Promise<NoteFileRead> {
-  let fullPath: string;
+  // A note, a `@path` pointer or a symlink never opens a secret file.
+  let fullPath: string | null;
   try {
-    fullPath = await resolveProjectPath(projectRoot, path);
+    fullPath = await resolveReadableProjectPath(projectRoot, path);
   } catch {
     return { kind: "skipped", reason: "outside_repository" };
   }
+  if (fullPath === null) return { kind: "skipped", reason: "protected" };
 
   try {
     const info = await stat(fullPath);

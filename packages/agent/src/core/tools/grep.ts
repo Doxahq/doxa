@@ -8,9 +8,9 @@ import { runCommand } from "../../utils/runtime";
 import {
   SENSITIVE_FILE_GLOBS,
   globCanSelectSensitiveFile,
-  isSensitiveFilePath,
+  isProtectedFilePath,
+  resolveReadableProjectPath,
 } from "./file-access-rules";
-import { resolveProjectPath } from "./project-path";
 
 const GREP_TIMEOUT_MS = 10_000;
 const MAX_MATCH_LINES = 80;
@@ -46,8 +46,8 @@ export function grepTool(cwd: string) {
     }),
     execute: async ({ pattern, path, glob: fileGlob }) => {
       try {
-        const searchPath = await resolveProjectPath(cwd, path ?? ".");
-        if (isSensitiveFilePath(searchPath)) {
+        const searchPath = await resolveReadableProjectPath(cwd, path ?? ".");
+        if (searchPath === null) {
           return `Skipped sensitive file: ${path}. Search source files instead.`;
         }
 
@@ -107,11 +107,14 @@ function buildGrepCommand(pattern: string, searchPath: string, fileGlob: string 
   ];
 }
 
-/** Drops match lines from sensitive files, in case a grep build ignores an exclude. */
+/**
+ * Drops match lines from protected files: screened files have no basename
+ * exclude, and a grep build can ignore an exclude.
+ */
 function withoutSensitiveMatches(lines: string[]): string[] {
   return lines.filter((line) => {
     const filePath = matchLineFilePath(line);
-    return filePath === null || !isSensitiveFilePath(filePath);
+    return filePath === null || !isProtectedFilePath(filePath);
   });
 }
 

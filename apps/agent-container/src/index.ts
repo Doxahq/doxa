@@ -42,7 +42,7 @@ import {
   resolvedPageConcurrency,
   resolvedRestExtractionModel,
 } from "./generation-profile";
-import { createContainerLogger, requestSecrets, sanitizeText, sanitizeValue } from "./logging";
+import { createContainerLogger, installOutputRedaction, outputSecrets, sanitizeText, sanitizeValue } from "./logging";
 import { resolveSpecReaderClient } from "./utility/spec-reader-client";
 import { createLocalAgentServer } from "./local-http-server";
 import { startGenerationHeartbeat } from "./generation-heartbeat";
@@ -59,6 +59,9 @@ import { stripUnsupportedMdxEsm } from "./runtime-page-content";
 import { resolveRunBrief } from "./run-brief";
 
 const port = Number(process.env.PORT ?? 8789);
+
+// Before any request: a library can log a raw error that repeats a credential.
+installOutputRedaction();
 
 await startContainerServer({
   port,
@@ -98,31 +101,31 @@ async function streamGeneration(
   input: ContainerGenerateRequest,
   abortController: AbortController,
 ): Promise<void> {
-  const secrets = requestSecrets(input);
+  const secrets = outputSecrets(input);
   response.writeHead(200, {
     "content-type": "application/x-ndjson; charset=utf-8",
     "cache-control": "no-store",
   });
   const stopHeartbeat = startGenerationHeartbeat((record) => {
     if (!response.writableEnded && !abortController.signal.aborted) {
-      writeNdjson(response, record);
+      writeNdjson(response, secrets, record);
     }
   });
 
   try {
     const result = await runGeneration(input, async (event) => {
-      writeNdjson(response, {
+      writeNdjson(response, secrets, {
         kind: "event",
         event: sanitizeValue(event, secrets),
       });
     }, abortController);
-    writeNdjson(response, {
+    writeNdjson(response, secrets, {
       kind: "result",
       result,
     });
   } catch (error) {
     createContainerLogger(input, Date.now()).error(error instanceof Error ? error.message : "Generation failed");
-    writeNdjson(response, {
+    writeNdjson(response, secrets, {
       kind: "error",
       error: {
         message: sanitizeText(error instanceof Error ? error.message : "Generation failed", secrets),
@@ -139,7 +142,7 @@ async function streamGenerationStage(
   input: ContainerGenerationStageRequest,
   abortController: AbortController,
 ): Promise<void> {
-  const secrets = requestSecrets(input);
+  const secrets = outputSecrets(input);
   const startedAt = Date.now();
   const logger = createContainerLogger(input, startedAt);
   let sequence = 0;
@@ -149,7 +152,7 @@ async function streamGenerationStage(
   });
   const stopHeartbeat = startGenerationHeartbeat((record) => {
     if (!response.writableEnded && !abortController.signal.aborted) {
-      writeStageNdjson(response, record);
+      writeStageNdjson(response, secrets, record);
     }
   });
 
@@ -166,19 +169,19 @@ async function streamGenerationStage(
         data: { elapsedMs, containerSequence: sequence, stage: input.stage, ...(data ?? {}) },
       };
       logger.event(event);
-      writeStageNdjson(response, { kind: "event", event: sanitizeValue(event, secrets) });
+      writeStageNdjson(response, secrets, { kind: "event", event: sanitizeValue(event, secrets) });
     }, abortController, {
       onUsage: (record) => {
-        writeStageNdjson(response, { kind: "usage", record });
+        writeStageNdjson(response, secrets, { kind: "usage", record });
       },
       onDiagnostic: (diagnostic) => {
-        writeStageNdjson(response, { kind: "diagnostic", diagnostic });
+        writeStageNdjson(response, secrets, { kind: "diagnostic", diagnostic });
       },
       onPageCheckpoint: (page) => {
-        writeStageNdjson(response, { kind: "page_checkpoint", page });
+        writeStageNdjson(response, secrets, { kind: "page_checkpoint", page });
       },
     });
-    writeStageNdjson(response, { kind: "stage_result", result });
+    writeStageNdjson(response, secrets, { kind: "stage_result", result });
   } catch (error) {
     const classified = classifyGenerationStageError(error);
     logger.error(classified.message, {
@@ -187,7 +190,7 @@ async function streamGenerationStage(
       code: classified.code,
       errorName: error instanceof Error ? error.name : "UnknownError",
     });
-    writeStageNdjson(response, {
+    writeStageNdjson(response, secrets, {
       kind: "error",
       error: {
         message: sanitizeText(classified.message, secrets),
@@ -337,7 +340,7 @@ async function runGenerationInWorkspace(
     concurrency: resolvedPageConcurrency(input),
     writerExploration: HOSTED_WRITER_EXPLORATION,
     writerMaxSteps: HOSTED_WRITER_MAX_STEPS,
-    writerValidation: HOSTED_WRITER_VALIDATION,
+    writerValidation: { ...HOSTED_WRITER_VALIDATION, forbiddenValues: outputSecrets(input) },
     docsQuality: HOSTED_DOCS_QUALITY,
     pageFailureMaxRetries: HOSTED_PAGE_FAILURE_MAX_RETRIES,
     onPageFailure: hostedPageFailureAction,
@@ -474,10 +477,14 @@ function eventTypeForProgress(event: AgentProgressEvent): string | null {
   return null;
 }
 
-function writeNdjson(response: ServerResponse, value: ContainerGenerateStreamRecord): void {
-  response.write(`${JSON.stringify(value)}\n`);
+/**
+ * Every record leaves the container with the request credentials masked:
+ * events, diagnostics, page checkpoints and results with page content.
+ */
+function writeNdjson(response: ServerResponse, secrets: string[], value: ContainerGenerateStreamRecord): void {
+  response.write(`${JSON.stringify(sanitizeValue(value, secrets))}\n`);
 }
 
-function writeStageNdjson(response: ServerResponse, value: ContainerGenerationStageStreamRecord): void {
-  response.write(`${JSON.stringify(value)}\n`);
+function writeStageNdjson(response: ServerResponse, secrets: string[], value: ContainerGenerationStageStreamRecord): void {
+  response.write(`${JSON.stringify(sanitizeValue(value, secrets))}\n`);
 }

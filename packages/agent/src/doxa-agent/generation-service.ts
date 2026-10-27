@@ -396,6 +396,7 @@ async function validateSplicedPage(
 ): Promise<{ ok: boolean; issueCodes: string[] }> {
   const report = await runPageValidation(content, {
     mdxCompile: writerValidation.mdxCompile,
+    forbiddenValues: writerValidation.forbiddenValues,
     timeoutMs: writerValidation.timeoutMs,
     onSpan,
   });

@@ -28,6 +28,8 @@ export interface ValidatePageToolOptions {
   restEndpointPage?: boolean;
   /** Receives MDX validation timing spans. */
   onSpan?: AgentSpanCallback;
+  /** Exact values that no page may contain, such as the run's credentials. */
+  forbiddenValues?: readonly string[];
 }
 
 export const VALIDATE_PAGE_TOOL_DESCRIPTION =
@@ -52,6 +54,7 @@ export function validatePageTool(opts: ValidatePageToolOptions = {}) {
         preserveTitle: opts.preserveTitle,
         restEndpointPage: opts.restEndpointPage,
         onSpan: opts.onSpan,
+        forbiddenValues: opts.forbiddenValues,
       });
       return JSON.stringify(report);
     },

@@ -77,7 +77,7 @@ import {
   resolvedRestExtractionModel,
 } from "./generation-profile";
 import { HOSTED_AGENT_TOOL_POLICY } from "./worker-core";
-import { createWriterDiagnosticLogger } from "./logging";
+import { createWriterDiagnosticLogger, outputSecrets } from "./logging";
 import { GenerationStageInvariantError } from "./generation-stage-errors";
 import { releaseWriterLimiter, throttleOnRetry, writerLimiterForJob } from "./writer-width";
 import {
@@ -864,7 +864,7 @@ function createAgentConfig(
     ...writerWidthConfig(input),
     writerExploration: HOSTED_WRITER_EXPLORATION,
     writerMaxSteps: HOSTED_WRITER_MAX_STEPS,
-    writerValidation: HOSTED_WRITER_VALIDATION,
+    writerValidation: { ...HOSTED_WRITER_VALIDATION, forbiddenValues: outputSecrets(input) },
     docsQuality: HOSTED_DOCS_QUALITY,
     pageFailureMaxRetries: HOSTED_PAGE_FAILURE_MAX_RETRIES,
     pageRetryConcurrency: resolvedPageConcurrency(input),

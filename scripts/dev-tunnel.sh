@@ -12,6 +12,14 @@ if ! command -v cloudflared >/dev/null 2>&1; then
   exit 1
 fi
 
+# Older releases trust the compromised emSign intermediate certificates.
+CLOUDFLARED_MIN_VERSION="2026.10.3"
+CLOUDFLARED_VERSION="$(cloudflared --version | awk '{print $3}')"
+if [ "$(printf '%s\n' "${CLOUDFLARED_MIN_VERSION}" "${CLOUDFLARED_VERSION}" | sort -V | head -n1)" != "${CLOUDFLARED_MIN_VERSION}" ]; then
+  echo "cloudflared ${CLOUDFLARED_VERSION} is too old. Upgrade to ${CLOUDFLARED_MIN_VERSION} or later (brew upgrade cloudflared)." >&2
+  exit 1
+fi
+
 if [ -f "${ENV_FILE}" ]; then
   set -a
   # shellcheck source=/dev/null

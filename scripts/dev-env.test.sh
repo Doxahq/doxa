@@ -73,6 +73,10 @@ chmod +x "${FAKE_BIN}/curl"
 
 cat > "${FAKE_BIN}/cloudflared" <<'SCRIPT'
 #!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  echo "cloudflared version ${DOXA_DEV_TEST_CLOUDFLARED_VERSION:-2026.10.3} (built 2026-10-21T10:51:09Z)"
+  exit 0
+fi
 if [ -n "${DOXA_DEV_TEST_CLOUDFLARED_LOG:-}" ]; then
   printf '%s\n' "$*" >> "$DOXA_DEV_TEST_CLOUDFLARED_LOG"
 fi
@@ -442,6 +446,21 @@ fi
 if ! grep -Fq "CLOUDFLARED_PROTOCOL must be one of: auto, http2, quic." "$invalid_protocol_output"; then
   echo "tunnel script did not explain the invalid transport" >&2
   cat "$invalid_protocol_output" >&2
+  exit 1
+fi
+
+old_cloudflared_output="${TMP_DIR}/old-cloudflared.log"
+if DOXA_DEV_TEST_CLOUDFLARED_VERSION=2026.10.2 \
+  DOXA_DEV_TUNNEL_ENV_FILE="$tunnel_env" \
+  DOXA_DEV_TUNNEL_CONFIG_DIR="$tunnel_config_dir" \
+  PATH="${FAKE_BIN}:${PATH}" \
+    bash "${ROOT_DIR}/scripts/dev-tunnel.sh" > "$old_cloudflared_output" 2>&1; then
+  echo "tunnel script unexpectedly started an outdated cloudflared" >&2
+  exit 1
+fi
+if ! grep -Fq "cloudflared 2026.10.2 is too old. Upgrade to 2026.10.3 or later" "$old_cloudflared_output"; then
+  echo "tunnel script did not explain the outdated cloudflared" >&2
+  cat "$old_cloudflared_output" >&2
   exit 1
 fi
 

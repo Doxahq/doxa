@@ -12,7 +12,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --dir tests",
     "test:synthetic": "pnpm --filter @doxahq/agent build && tsx synthetic/cli.ts",
-    "test:image": "docker build -t doxa-agent-container-image-test -f Dockerfile ../.. && docker run --rm --entrypoint git doxa-agent-container-image-test --version && docker run --rm --entrypoint sh doxa-agent-container-image-test -c 'test \"$DOXA_WORKSPACE_ROOT\" = /app && test -w \"$DOXA_WORKSPACE_ROOT/.workspaces\" && mkdir \"$DOXA_WORKSPACE_ROOT/.workspaces/image-smoke-test\"'"
+    "test:image": "docker build -t doxa-agent-container-image-test -f Dockerfile ../.. && docker run --rm --entrypoint git doxa-agent-container-image-test --version && docker run --rm --entrypoint sh doxa-agent-container-image-test -c 'test \"$DOXA_WORKSPACE_ROOT\" = /app && test -w \"$DOXA_WORKSPACE_ROOT/.workspaces\" && mkdir \"$DOXA_WORKSPACE_ROOT/.workspaces/image-smoke-test\"'",
+    "security:image": "docker build --platform linux/amd64 -t agent-container:security-lab -f Dockerfile ../..",
+    "security:prepare": "node security/prepare.mjs",
+    "security:lab": "node security/run.mjs --jobs 2",
+    "security:test": "node --test security/lab.test.mjs security/regressions.test.mjs"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

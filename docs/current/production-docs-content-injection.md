@@ -228,7 +228,10 @@ build minifies the server code and leaves out the local content source
 (`import.meta.env.DOXA_OMIT_LOCAL_CONTENT_SOURCE`). Its server Mermaid module
 is a stub, because Mermaid draws only in the browser. A Dynamic Worker compiles
 every module of the package on each cold start, used or not. These steps took
-the package from 94 modules and 16.6 MB to 29 modules and 5.5 MB.
+the package from 94 modules and 16.6 MB to 29 modules and 5.5 MB. The changes
+of 2026-10-29 below took it to 50 modules, 3.5 MB and 0.73 MB compressed
+(from 1.19 MB). There are more modules because each code grammar is now its
+own small chunk.
 
 ### Server code highlighting
 

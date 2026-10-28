@@ -51,6 +51,16 @@ test("rolls the shared renderer isolate out to the operator's canary sites", () 
   );
 });
 
+test("keeps the hostname map off until the operator rolls it out", () => {
+  const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
+
+  assert.equal(config.vars.DOXA_PROD_KV_HOSTNAME_MODE, "off");
+  // The namespace ID is account-issued, so the ops repo holds it.
+  assert.deepEqual(config.kv_namespaces, [
+    { binding: "DOCS_HOSTNAME_MAP", id: "${CF_DOCS_HOSTNAME_MAP_KV_ID}" },
+  ]);
+});
+
 test("shares docs cache entries across dispatcher versions", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 

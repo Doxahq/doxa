@@ -79,6 +79,12 @@
       "binding": "LOADER"
     }
   ],
+  "kv_namespaces": [
+    {
+      "binding": "DOCS_HOSTNAME_MAP",
+      "id": "${CF_DOCS_HOSTNAME_MAP_KV_ID}"
+    }
+  ],
   "r2_buckets": [
     {
       "binding": "RENDERER_CODE_BUCKET",
@@ -103,6 +109,7 @@
     "DOXA_PROD_ROUTE_DATA_CACHE_SITE_IDS": "",
     "DOXA_PROD_SHARED_ISOLATE_MODE": "allowlist",
     "DOXA_PROD_SHARED_ISOLATE_SITE_IDS": "${OPS_DOCS_SHARED_ISOLATE_SITE_IDS}",
+    "DOXA_PROD_KV_HOSTNAME_MODE": "off",
     "VITE_OPENSOURCE_REPO_URL": "https://github.com/ipenywis/doxa",
     "DOXA_API_BASE_URL": "https://api.doxa.so",
     "DOXA_DASHBOARD_BASE_URL": "https://doxa.so",

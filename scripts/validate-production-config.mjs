@@ -117,6 +117,26 @@ function validateDocsRenderingConfigs() {
       `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_SHARED_ISOLATE_MODE to off, allowlist or all.`,
     );
   }
+  // The hostname map rolls out off → shadow → on. A typo fails closed to off
+  // at runtime, so only the three modes are accepted here.
+  if (
+    !["off", "shadow", "on"].includes(
+      dispatcher.vars?.DOXA_PROD_KV_HOSTNAME_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_KV_HOSTNAME_MODE to off, shadow or on.`,
+    );
+  }
+  if (
+    !dispatcher.kv_namespaces?.some(
+      (item) => item?.binding === "DOCS_HOSTNAME_MAP" && item?.id,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must define the DOCS_HOSTNAME_MAP KV namespace.`,
+    );
+  }
   if (dispatcher.vars?.DOXA_PRERENDER_REPAIR_ENABLED !== "false") {
     throw new Error(
       `${DEFAULT_DISPATCHER_CONFIG} must default request repairs to false.`,

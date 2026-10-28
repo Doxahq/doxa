@@ -1,3 +1,5 @@
+import type { HostLookupFacts } from "./host-lookup";
+
 export interface ServerTimingEntry {
   name: string;
   durationMs: number;
@@ -121,6 +123,8 @@ export function logRequestTiming(
     hostCacheStatus: string;
     htmlCacheStatus: string;
     routeDataCacheStatus?: string;
+    /** Absent when the request never resolved its hostname. */
+    hostLookup?: HostLookupFacts | undefined;
   },
 ): void {
   const requestWithCloudflare = request as Request & {
@@ -142,6 +146,7 @@ export function logRequestTiming(
             ? { routeData: cache.routeDataCacheStatus }
             : {}),
         },
+        ...hostLookupLogFields(cache.hostLookup),
         ...(requestWithCloudflare.cf?.colo
           ? { colo: requestWithCloudflare.cf.colo }
           : {}),
@@ -172,6 +177,7 @@ export function logRequestTiming(
             },
           }
         : {}),
+      ...hostLookupLogFields(cache.hostLookup),
       ...(requestWithCloudflare.cf?.colo
         ? { colo: requestWithCloudflare.cf.colo }
         : {}),
@@ -179,6 +185,17 @@ export function logRequestTiming(
       timings: readDoxaTimings(response.headers.get("server-timing")),
     }),
   );
+}
+
+/** `hostSource`: kv, cache or resolver; `hostnameMap`: the map read and, in shadow mode, its agreement. */
+function hostLookupLogFields(
+  facts: HostLookupFacts | undefined,
+): Record<string, unknown> {
+  if (!facts) return {};
+  return {
+    hostSource: facts.source,
+    ...(facts.hostnameMap ? { hostnameMap: facts.hostnameMap } : {}),
+  };
 }
 
 function formatEntry(entry: ServerTimingEntry): string {

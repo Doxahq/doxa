@@ -1,5 +1,4 @@
 import {
-  docsDomainResolutionSchema,
   docsCacheInvalidationSchema,
   type DocsCacheInvalidation,
   type DocsDomainResolution,
@@ -13,10 +12,10 @@ import {
   DocsResolverClient,
   type DocsResolverBinding,
 } from "@doxahq/contracts/docs-resolver";
+import type { DocsHostnameMapSync } from "@doxahq/contracts/docs-hostname-map";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import {
-  DOCS_HOST_CACHE_FORMAT,
   createHtmlCacheProps,
   createDocsCacheTags,
   isCacheableDocsRequest,
@@ -31,6 +30,16 @@ import {
 } from "./cache-policy";
 import { dispatchDocsRequest } from "./dispatcher";
 import { toHostResolution } from "./host-resolution";
+import {
+  lookupHost,
+  readHostCache,
+  setHostDiagnostics,
+  type HostLookupFacts,
+} from "./host-lookup";
+import {
+  applyHostnameMapUpdates,
+  parseHostnameMapMode,
+} from "./hostname-map";
 import { requireEnvValue } from "./env-values";
 import {
   observeResponseBody,
@@ -95,6 +104,9 @@ interface DispatcherEnv extends DeliveryRolloutEnv, RendererIsolateEnv {
   DOXA_PROD_DYNAMIC_RENDERER_SITE_IDS?: string;
   DOXA_RENDERER_RELEASE_ID?: string;
   DOXA_PRERENDER_REPAIR_ENABLED?: string;
+  /** Workers KV hostname map. Optional: without it every lookup misses. */
+  DOCS_HOSTNAME_MAP?: KVNamespace;
+  DOXA_PROD_KV_HOSTNAME_MODE?: string;
 }
 
 /** Workers Cache caches fetch entrypoints, not custom RPC methods. */
@@ -111,6 +123,13 @@ export class DocsHostCache extends WorkerEntrypoint<
       tags: createDocsCacheTags(target),
     });
     if (!result.success) throw new Error("Workers Cache purge failed");
+  }
+
+  // The API sends entries that it computed from the database. Without the
+  // namespace binding the map is not provisioned, and every read misses too.
+  async syncHostnames(input: DocsHostnameMapSync): Promise<void> {
+    if (!this.env.DOCS_HOSTNAME_MAP) return;
+    await applyHostnameMapUpdates(this.env.DOCS_HOSTNAME_MAP, input);
   }
 
   async fetch(): Promise<Response> {
@@ -270,6 +289,9 @@ export default {
       env.DOXA_PROD_DYNAMIC_RENDERER_SITE_IDS,
     );
     const rollouts = readDeliveryRollouts(env);
+    const hostnameMapMode = parseHostnameMapMode(
+      env.DOXA_PROD_KV_HOSTNAME_MODE,
+    );
 
     const cacheable = isCacheableDocsRequest(request);
     const prerenderable = isPrerenderableDocsRequest(request);
@@ -281,28 +303,25 @@ export default {
     let prerenderFallback = false;
     let prerenderDiagnostics: PrerenderAttemptDiagnostics | null = null;
     let resolvedHost: DocsDomainResolution | null | undefined;
+    let hostLookup: HostLookupFacts | undefined;
     const resolveHost = (hostname: string) =>
       timing.measure(
         "doxa_resolve",
         async () => {
           if (resolvedHost !== undefined) return resolvedHost;
-          // The resolution depends only on the hostname, and the entrypoint
-          // stores public production mappings only. Visitor-specific requests
-          // can share it; they still bypass the HTML cache.
-          const cached = await getWorkerExports(ctx)
-            .DocsHostCache({
-              props: { hostname, format: DOCS_HOST_CACHE_FORMAT },
-            })
-            .fetch("https://docs-cache.internal/resolve");
-          hostCacheStatus =
-            cached.headers.get("cf-cache-status") ?? "UNAVAILABLE";
-          if (!cached.ok) throw new Error("Hostname cache lookup failed");
-          resolvedHost = docsDomainResolutionSchema
-            .nullable()
-            .parse(await cached.json());
+          const lookup = await lookupHost({
+            hostname,
+            mode: hostnameMapMode,
+            store: env.DOCS_HOSTNAME_MAP,
+            now: Date.now(),
+            readHostCache: () => readHostCache(ctx, hostname),
+          });
+          hostLookup = lookup.facts;
+          hostCacheStatus = lookup.facts.hostCacheStatus;
+          resolvedHost = lookup.resolution;
           return resolvedHost;
         },
-        () => hostCacheStatus,
+        () => (hostLookup?.source === "kv" ? "KV" : hostCacheStatus),
       );
     const findDeliveryRenderId = async (
       deliveryRequest: Request,
@@ -339,7 +358,7 @@ export default {
         withDocsSecurityHeaders(withoutResponseCaching(routeData.response)),
         resolvedHost,
       );
-      result.headers.set("x-doxa-host-cache", hostCacheStatus);
+      setHostDiagnostics(result.headers, hostCacheStatus, hostLookup);
       result.headers.set("x-doxa-route-data-cache", routeData.cacheStatus);
       exposeRequestTiming(result, result, timing, {
         usedHtmlCache: false,
@@ -349,6 +368,7 @@ export default {
         hostCacheStatus,
         htmlCacheStatus: "BYPASS",
         routeDataCacheStatus: routeData.cacheStatus,
+        hostLookup,
       });
       return result;
     }
@@ -361,7 +381,7 @@ export default {
           withDocsSecurityHeaders(withoutResponseCaching(saved.response)),
           resolvedHost,
         );
-        result.headers.set("x-doxa-host-cache", hostCacheStatus);
+        setHostDiagnostics(result.headers, hostCacheStatus, hostLookup);
         result.headers.set("x-doxa-html-cache", "PRERENDER");
         if (prerenderDiagnostics) {
           applyPrerenderDiagnostics(result, prerenderDiagnostics, timing);
@@ -373,6 +393,7 @@ export default {
         logRequestTiming(request, result, timing, {
           hostCacheStatus,
           htmlCacheStatus: "PRERENDER",
+          hostLookup,
         });
         return result;
       }
@@ -460,7 +481,7 @@ export default {
           : "shared",
       );
     }
-    result.headers.set("x-doxa-host-cache", hostCacheStatus);
+    setHostDiagnostics(result.headers, hostCacheStatus, hostLookup);
     result.headers.set("x-doxa-html-cache", htmlCacheStatus);
     if (prerenderDiagnostics) {
       applyPrerenderDiagnostics(result, prerenderDiagnostics, timing);
@@ -472,6 +493,7 @@ export default {
     logRequestTiming(request, result, timing, {
       hostCacheStatus,
       htmlCacheStatus,
+      hostLookup,
     });
     return result;
   },

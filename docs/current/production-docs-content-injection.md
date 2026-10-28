@@ -246,6 +246,23 @@ The output is the same as with the highlighter that holds every grammar. A
 test in `server-highlighter.test.ts` compares both for every page of every
 frozen artifact set. Loaded grammars stay loaded for the life of the isolate.
 
+An HTML page render imports and creates this highlighter before it waits for
+`getRouteData` (`startServerHighlighter` in `apps/docs-template/src/server.ts`),
+and starts loading the page's grammars when the route data arrives.
+
+### Startup module graph
+
+V8's code cache of the isolate start covers only the modules that the entry
+imports at startup. A chunk behind a dynamic import is compiled on its first
+use, inside the first render. The platform build therefore adds
+`eagerServerChunksPlugin` (`apps/docs-template/src/config/vite/eager-server-chunks.ts`):
+the server entry `index.js` imports the chunks that every page render loads
+(router, page routes, route-data and site-config server functions, the server
+highlighter and its themes). `PAGE_RENDER_MODULES` lists them. The build fails
+if one of them is in no chunk. Chunks for some pages only (chat, search, the
+full Lucide set, API reference bodies, diagrams, code grammars) stay lazy. The
+client build and the `vite` content source build do not use the plugin.
+
 ### How the object is built
 
 The script `apps/docs-template/scripts/deploy-renderer.mjs` runs these steps

@@ -9,6 +9,7 @@ import {
   getDevAllowedHosts,
   getHostingPlugins,
 } from "./src/config/vite/deployment";
+import { eagerServerChunksPlugin } from "./src/config/vite/eager-server-chunks";
 import { createMdxPlugin } from "./src/config/vite/mdx";
 import { mdxSourceCapturePlugin } from "./src/config/vite/mdx-source-capture";
 import { searchDataPlugin } from "./src/config/vite/search-data";
@@ -26,7 +27,8 @@ export default defineConfig(({ mode }) => {
   // `scripts/deploy-renderer.mjs` builds the platform renderer. It reads every
   // page through the dispatcher binding, and the Dynamic Worker compiles every
   // server module on each cold start. So that build leaves out the local
-  // content source and minifies the server code.
+  // content source, minifies the server code, and imports the chunks of
+  // every page render at startup (see `eagerServerChunksPlugin`).
   const isPlatformRendererBuild = process.env.DOXA_RENDERER_BUILD === "platform";
   const buildConfig =
     deploymentTarget === "cloudflare"
@@ -68,6 +70,7 @@ export default defineConfig(({ mode }) => {
       tanstackStart(startConfig),
       viteReact(),
       ...getHostingPlugins(deploymentTarget),
+      ...(isPlatformRendererBuild ? [eagerServerChunksPlugin()] : []),
     ],
   };
 });

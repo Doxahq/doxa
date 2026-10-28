@@ -22,9 +22,15 @@ export default defineConfig(({ mode }) => {
     ...process.env,
     ...env,
   });
+  // `scripts/deploy-renderer.mjs` builds the platform renderer. It reads every
+  // page through the dispatcher binding, and the Dynamic Worker compiles every
+  // server module on each cold start. So that build leaves out the local
+  // content source and minifies the server code.
+  const isPlatformRendererBuild = process.env.DOXA_RENDERER_BUILD === "platform";
   const buildConfig =
     deploymentTarget === "cloudflare"
       ? {
+          ...(isPlatformRendererBuild ? { minify: "esbuild" as const } : {}),
           rollupOptions: {
             output: {
               manualChunks: {
@@ -44,6 +50,9 @@ export default defineConfig(({ mode }) => {
       allowedHosts: getDevAllowedHosts(),
     },
     build: buildConfig,
+    define: isPlatformRendererBuild
+      ? { "import.meta.env.DOXA_OMIT_LOCAL_CONTENT_SOURCE": "true" }
+      : {},
     plugins: [
       tsConfigPaths({
         projects: ["./tsconfig.json"],

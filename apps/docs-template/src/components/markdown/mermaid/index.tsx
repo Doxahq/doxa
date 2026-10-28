@@ -5,8 +5,10 @@ interface MermaidProps {
   className?: string;
 }
 
-const MermaidLazy = lazy(
-  () => import("@/src/components/markdown/mermaid/component")
+const MermaidLazy = lazy(() =>
+  import.meta.env.SSR
+    ? import("@/src/components/markdown/mermaid/component.server")
+    : import("@/src/components/markdown/mermaid/component")
 );
 
 export default function Mermaid(props: MermaidProps) {

@@ -18,7 +18,11 @@ export interface MermaidProps {
 
 /** The part of the `mermaid` package the diagram uses. */
 export interface MermaidApi {
-  initialize(config: { startOnLoad: boolean; theme: "neutral" }): void;
+  initialize(config: {
+    startOnLoad: boolean;
+    theme: "neutral";
+    securityLevel: "strict";
+  }): void;
   render(
     id: string,
     text: string,
@@ -116,6 +120,9 @@ export function createMermaid(mermaid: MermaidApi): ComponentType<MermaidProps> 
   mermaid.initialize({
     startOnLoad: false,
     theme: "neutral",
+    // Diagram text comes from site authors. Strict is the Mermaid default,
+    // set here so a library upgrade cannot loosen it.
+    securityLevel: "strict",
   });
 
   const Mermaid = ({ chart, className }: MermaidProps) => {

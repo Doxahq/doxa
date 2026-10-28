@@ -43,6 +43,8 @@ try {
       ...process.env,
       CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH: options.sharedConfig,
       DOXA_DEPLOY_TARGET: "cloudflare",
+      // Minified server code without the local content source.
+      DOXA_RENDERER_BUILD: "platform",
     },
   });
 

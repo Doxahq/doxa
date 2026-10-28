@@ -26,6 +26,11 @@ export async function createConfiguredRuntimeSource(
 
   switch (mode) {
     case "vite": {
+      if (import.meta.env.DOXA_OMIT_LOCAL_CONTENT_SOURCE) {
+        throw new Error(
+          'This renderer build has no local content source. Set DOXA_DOCS_RUNTIME_SOURCE to "binding" or "platform".'
+        );
+      }
       const { viteRuntimeSource } = await import("./vite");
       return viteRuntimeSource;
     }

@@ -11,6 +11,11 @@ export interface DocsRouterPreloadPolicy {
 export interface DocsLinkPreloadPolicy {
   preload: DocsPreloadMode;
   preloadDelay?: number;
+  /**
+   * Also preload when the link is visible, but only after the page has loaded
+   * and through a shared queue with a small concurrency limit.
+   */
+  deferredViewportPreload?: true;
 }
 
 export interface DocsNavigationPreloadSettings {
@@ -19,7 +24,6 @@ export interface DocsNavigationPreloadSettings {
 
 const INTENT_PRELOAD_DELAY_MS = 75;
 const INTENT_PRELOAD_PROXIMITY_PX = 48;
-const AGRESSIVE_NAV_VIEWPORT_DELAY_MS = 50;
 
 export const docsRouterPreloadPolicy = {
   defaultPreload: "intent",
@@ -27,12 +31,15 @@ export const docsRouterPreloadPolicy = {
   defaultPreloadIntentProximity: INTENT_PRELOAD_PROXIMITY_PX,
 } as const satisfies DocsRouterPreloadPolicy;
 
-function createViewportPreloadPolicy(
-  preloadDelay = AGRESSIVE_NAV_VIEWPORT_DELAY_MS
-): DocsLinkPreloadPolicy {
+/**
+ * Aggressive navigation preloads every visible link, but only after the page
+ * has loaded, a few at a time, so the preloads do not slow the page itself.
+ * Hover still preloads at once.
+ */
+function createDeferredViewportPreloadPolicy(): DocsLinkPreloadPolicy {
   return {
-    preload: "viewport",
-    preloadDelay,
+    ...createIntentPreloadPolicy(),
+    deferredViewportPreload: true,
   };
 }
 
@@ -47,7 +54,7 @@ export function createDocsSidebarLinkPreload(
   settings: DocsNavigationPreloadSettings
 ): DocsLinkPreloadPolicy {
   return settings.AgressiveNavPrefetch
-    ? createViewportPreloadPolicy()
+    ? createDeferredViewportPreloadPolicy()
     : createIntentPreloadPolicy();
 }
 
@@ -55,7 +62,7 @@ export function createDocsNearRoutePreload(
   settings: DocsNavigationPreloadSettings
 ): DocsLinkPreloadPolicy {
   return settings.AgressiveNavPrefetch
-    ? createViewportPreloadPolicy()
+    ? createDeferredViewportPreloadPolicy()
     : createIntentPreloadPolicy();
 }
 

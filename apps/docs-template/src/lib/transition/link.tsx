@@ -1,10 +1,18 @@
-import { useCallback, type ComponentProps, type MouseEvent } from "react";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  type ComponentProps,
+  type MouseEvent,
+} from "react";
 import {
   Link as RouterLink,
   useNavigate,
+  useRouter,
   useSearch,
 } from "@tanstack/react-router";
 
+import { useDeferredViewportPreload } from "@/src/lib/deferred-preload";
 import { startViewTransitionIfSupported } from "@/src/lib/transition/document-view-transition";
 
 function isModifiedEvent(event: MouseEvent): boolean {
@@ -38,6 +46,8 @@ interface LinkProps extends Omit<ComponentProps<"a">, "href"> {
   scroll?: boolean;
   preload?: ComponentProps<typeof RouterLink>["preload"];
   preloadDelay?: ComponentProps<typeof RouterLink>["preloadDelay"];
+  /** Preload when visible, after the page has loaded. See `deferred-preload.ts`. */
+  deferredViewportPreload?: boolean;
 }
 
 export function Link({
@@ -45,17 +55,34 @@ export function Link({
   onClick,
   preload,
   preloadDelay,
+  deferredViewportPreload = false,
   replace,
   scroll,
   children,
   ...rest
 }: LinkProps) {
   const navigate = useNavigate();
+  const router = useRouter();
   const rootSearch = useSearch({ from: "__root__" });
-  const demoSearch = rootSearch.demo ? { demo: true as const } : undefined;
+  const isDemo = Boolean(rootSearch.demo);
+  const demoSearch = useMemo(
+    () => (isDemo ? { demo: true as const } : undefined),
+    [isDemo]
+  );
+  const isExternal = href.startsWith("http") || href.startsWith("//");
+  const anchorRef = useRef<HTMLAnchorElement>(null);
+  const preloadRoute = useCallback(
+    () => router.preloadRoute({ to: href, search: demoSearch }),
+    [router, href, demoSearch]
+  );
+  useDeferredViewportPreload(anchorRef, {
+    enabled: deferredViewportPreload && !isExternal,
+    key: demoSearch ? `${href}?demo` : href,
+    preload: preloadRoute,
+  });
 
   // Handle external links
-  if (href.startsWith("http") || href.startsWith("//")) {
+  if (isExternal) {
     return (
       <a href={href} {...rest}>
         {children}
@@ -95,6 +122,7 @@ export function Link({
 
   return (
     <RouterLink
+      ref={anchorRef}
       to={href}
       onClick={handleClick}
       preload={preload}

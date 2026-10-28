@@ -39,7 +39,7 @@ edge → origin   header x-doxa-origin-key (ORIGIN_SHARED_SECRET)
   anything else                     a public request, proxied as it is
 
 origin → edge   header x-doxa-bridge-key (BRIDGE_SHARED_SECRET)
-  POST /__bridge/call/:binding/:method   GENERATION_QUEUE, EMAIL_QUEUE, DOCS_CACHE_INVALIDATOR, PRERENDER_QUEUE
+  POST /__bridge/call/:binding/:method   GENERATION_QUEUE, EMAIL_QUEUE, DOCS_CACHE_INVALIDATOR (invalidate, syncHostnames), PRERENDER_QUEUE
   ANY  /__bridge/fetch/AGENT_CONTAINER   a fetch to the agent container
 ```
 

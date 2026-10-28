@@ -1,14 +1,16 @@
 # Production Docs Caching
 
-**Status:** Cache and durable invalidation implemented. Migration and production verification are pending rollout.
-**Last reviewed:** 2026-10-28
+**Status:** Cache and durable invalidation implemented. Migration and production verification are pending rollout. The Workers KV hostname map is implemented and off by default (see [Hostname Map](#hostname-map)).
+**Last reviewed:** 2026-10-29
 **Scope:** Public production docs served by Dynamic Workers. Not the Doxa dashboard.
 
 ## Decision
 
 Use Cloudflare **Workers Cache**, not the older `caches.default` Cache API,
 an isolate-local map, or Workers KV. Cloudflare manages storage and cache fills
-around named `fetch` entrypoints in the dispatcher.
+around named `fetch` entrypoints in the dispatcher. The one exception is the
+hostname map: a Workers KV copy of public production hostname resolutions that
+the dispatcher can read before `DocsHostCache` (see [Hostname Map](#hostname-map)).
 
 Publishing attempts a native purge after the database commit. A durable database
 outbox retries failed attempts. The hostname lifetime remains a fallback; this is
@@ -16,6 +18,7 @@ not a strict global read-after-write guarantee.
 
 | Layer                      | Lifetime                    | Identity                                                                                                                       |
 | -------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Hostname map (Workers KV)  | Used for 1 day after the API read it; KV expires it after 2 days | Normalized hostname (`host:<hostname>`) and `DOCS_HOSTNAME_MAP_FORMAT` in the value                                     |
 | `DocsHostCache`            | 1 day, stale on error       | Trusted hostname and `DOCS_HOST_CACHE_FORMAT` in `ctx.props`                                                                   |
 | `DocsHtmlCache`            | 1 year, then 7 days stale   | Trusted hostname, resolved site/version/artifact data, renderer build, delivery render ID in `ctx.props`, plus URL path        |
 | `DocsRouteDataCache`       | 1 year, then 7 days stale   | Trusted hostname, resolved site/version/artifact data, delivery identity (`renderId`) in `ctx.props`, plus the route-data path |
@@ -42,6 +45,8 @@ browser or other HTTP caches. Do not remove this boundary.
 ```text
 Public HTML request
   → dispatcher checks whether caching is allowed
+  → hostname map (DOXA_PROD_KV_HOSTNAME_MODE=on): hostname → public production version
+      miss, invalid, too old or KV error → DocsHostCache
   → DocsHostCache: hostname → public production version
       miss → API.resolveDocsHost → database
   → DocsHtmlCache: host + site + version + build + path → HTML
@@ -168,6 +173,148 @@ All inputs used to render cacheable HTML must remain versioned. Do not change
 published artifacts in place. A future mutable branding, feature, or access
 setting needs a new version/cache identity or explicit invalidation.
 
+## Hostname Map
+
+A `DocsHostCache` miss calls the resolver Worker next to the database in
+`aws:us-east-1`. From Singapore that lookup cost about 900 ms, from Europe
+about 200 ms. Workers KV is replicated to every data center, so the dispatcher
+can read a copy of the resolution near the visitor.
+
+### Shape
+
+- The namespace binds only to the dispatcher (`DOCS_HOSTNAME_MAP`, namespace
+  `doxa-docs-hostname-map`, ID placeholder `${CF_DOCS_HOSTNAME_MAP_KV_ID}`).
+  The API has no KV binding. It sends entries through the private
+  `DocsHostCache.syncHostnames` RPC, on the same `DOCS_CACHE_INVALIDATOR`
+  binding as the purge. The Node origin reaches it through the bridge.
+- Key: `host:<hostname>`, lowercase and without a trailing dot. Value:
+  `{ format, resolvedAt, resolution }`. `resolvedAt` is when the API read the
+  database (epoch ms). The contract is `@doxahq/contracts/docs-hostname-map`.
+- The API computes every entry with `resolveDocsHost`, the function that the
+  resolver Worker runs, from the database state at delivery time. Never from
+  the caller of a mutation.
+
+### Writes
+
+The writes reuse the `docs_cache_invalidations` outbox. Every task that purges
+`DocsHostCache` also rewrites the map, so every covered mutation in the table
+below updates it, including the follow-up two minutes later:
+
+1. The worker resolves every hostname that the task can affect: the task's
+   hostname, the site's generated hostname, and every domain row of the site
+   in any state. Project deletion already queues one task per hostname, so a
+   deleted site's hostnames are covered after its rows are gone.
+2. A public production resolution of the same hostname becomes a put. Anything
+   else (no resolution, preview, generation snapshot, authenticated site, or
+   another hostname's resolution) becomes a delete.
+3. The purge and the sync run in parallel, each with a three-second timeout.
+   The task completes only when both succeed. A failed sync records
+   `hostname_sync_failed` or `hostname_sync_timeout` and retries with the
+   normal backoff. A retry repeats both; each reads the current state again.
+4. One claimed batch reads and writes each hostname once. Every claimed task
+   committed before the claim, so one read after the claim sees all of them.
+
+The dispatcher checks the input again with Zod, stores only a public production
+resolution whose hostname matches the key, and deletes the key for every other
+update. A put sets a KV `expirationTtl` of two days
+(`DOCS_HOSTNAME_MAP_EXPIRATION_SECONDS`), so KV removes an orphan by itself.
+Without the namespace binding `syncHostnames` does nothing.
+
+### Reconcile and backfill
+
+The API scheduler runs `DocsHostnameMapReconciler` every five minutes. It
+lists the hostnames that can be public production now (the generated hostname
+of every published site, and every active, verified domain of a published
+site), keeps those in this run's slot (FNV-1a of the hostname modulo 144), and
+syncs them. Every public hostname is rewritten once every 12 hours
+(`DOCS_HOSTNAME_MAP_REFRESH_SECONDS`). It reads the database and writes only
+the map; it logs `docs_hostname_map_reconcile` with the slot and the counts.
+It is the backfill for existing sites: 12 hours after the first deployment
+with the namespace bound, every public hostname has an entry. It does not run
+without the `DOCS_CACHE_INVALIDATOR` binding, for example in local development.
+
+### Reads and rollout
+
+`DOXA_PROD_KV_HOSTNAME_MODE` in `apps/docs-dispatcher/wrangler.json`:
+
+- `off` (default): the dispatcher does not read the map. The API still writes
+  it once the namespace is bound.
+- `shadow`: the dispatcher reads the map and `DocsHostCache` in parallel,
+  serves the `DocsHostCache` answer and logs the agreement.
+- `on`: a valid map hit serves the request and skips `DocsHostCache`. A miss,
+  an invalid or too old entry, a KV error or a missing binding falls back to
+  `DocsHostCache` and the resolver, as before.
+
+An invalid value logs a warning and means `off`.
+`pnpm validate:production-config` accepts only the three values and requires
+the `DOCS_HOSTNAME_MAP` binding.
+
+A read is a hit only when the value parses with the Zod schema, has the current
+format, is a public production resolution of the requested hostname,
+`resolvedAt` is not more than five minutes in the future, and `resolvedAt` is
+at most one day old (`DOCS_HOSTNAME_MAP_MAX_AGE_SECONDS`, equal to
+`DOCS_HOSTNAME_CACHE_TTL_SECONDS`). Previews, generation snapshots and
+authenticated resolutions are never stored and always reach the resolver.
+
+`docs_request_cache` (and `docs_request_timing`) gain `hostSource` (`kv`,
+`cache` or `resolver`) when the request resolved its hostname, and
+`hostnameMap: { mode, status, agreement? }` when the mode is not `off`.
+`status` is `hit`, `miss`, `invalid`, `expired`, `error` or `unbound`.
+`agreement` (shadow only) is `agree`, `missing` (a public hostname without a
+usable entry), `disagree` (another resolution, or an entry for a hostname that
+is no longer public production) or `error`. The `x-doxa-host-source` response
+header carries the source. A `DocsHostCache` status of `HIT`, `STALE` or
+`UPDATING` counts as `cache`; any other status counts as `resolver`.
+
+### Consistency and worst case
+
+KV is eventually consistent. A write reaches the other data centers within
+about 60 seconds: a data center that read the key recently serves its cached
+copy until it expires. With the mode `on`:
+
+- After a publish, promotion or domain change, a data center can serve the
+  previous mapping for up to about 60 seconds after the immediate delivery.
+  Without the map, the purge removes the mapping in a few seconds.
+- A lookup that read the database before the commit can write the old mapping
+  after the new one, as with `DocsHostCache`. The follow-up task two minutes
+  later reads the database again and rewrites the key, so this window is at
+  most about seven minutes plus propagation. KV has no compare-and-set, so a
+  delayed write cannot be fenced.
+- A failed sync retries with the outbox backoff. The purge is not held back
+  by it.
+- If every write for a hostname were lost (for example a mutation that the
+  outbox does not cover), the dispatcher stops using the entry one day after
+  `resolvedAt`, the same bound as the hostname cache. Storage that an entry
+  can point to waits `HOSTNAME_READER_GRACE_SECONDS` (25 hours), so an entry
+  never points at deleted storage. The reconcile repairs a live hostname
+  within 12 hours.
+
+In `shadow` mode a short `disagree` after a publish is expected: either side
+can be the stale one during the windows above. Persistent `disagree` or
+`missing` for one hostname is a bug to fix before `on`.
+
+### Provisioning, rollout and revert
+
+1. Create the namespace once: `wrangler kv namespace create
+   doxa-docs-hostname-map`. Put its ID in
+   `doxa-ops/wrangler/production-ids.json` as `CF_DOCS_HOSTNAME_MAP_KV_ID`.
+   The production deploy fails at the placeholder check without it.
+2. Deploy normally. The `docs-rendering` step deploys the dispatcher before the
+   API. The Node origin goes before the thin `doxa-api` Worker, so for a few
+   minutes the edge refuses `syncHostnames`: those tasks retry and still purge.
+3. Set the mode to `shadow` and deploy `docs-rendering`. Wait at least 12
+   hours for the reconcile, then check that `agreement` is almost always
+   `agree`.
+4. Set the mode to `on` and deploy `docs-rendering`. Compare `hostSource` and
+   `doxa_resolve` timings by `colo`.
+
+To revert, set the mode to `off` and deploy `docs-rendering`; every lookup
+uses `DocsHostCache` again. The API writes stay harmless. To stop the writes
+too, remove the `DOCS_HOSTNAME_MAP` binding: `syncHostnames` then does
+nothing. When the entry shape changes, increase `DOCS_HOSTNAME_MAP_FORMAT`:
+the dispatcher then treats older entries as misses until the reconcile
+rewrites them.
+
 ## Durable Invalidation
 
 The API writes a `docs_cache_invalidations` task in the same transaction as the
@@ -177,7 +324,8 @@ successful commit, it attempts the task through the private
 There is no public purge route, browser request, new API token, or new queue.
 
 `DocsHostCache.invalidate` uses native `ctx.cache.purge({ tags })` and checks
-`success`. A missing cache context, rejected RPC, or unsuccessful result is a
+`success`. The same delivery rewrites the hostname map through
+`DocsHostCache.syncHostnames` (see [Hostname Map](#hostname-map)). A missing cache context, rejected RPC, or unsuccessful result is a
 failed attempt. Custom RPC methods are not cached. Purge targets the owning
 hostname-cache entrypoint, not the HTML entrypoint or the older Cache API.
 
@@ -272,7 +420,8 @@ this HTML cache. No preview access rules or dashboard code were changed.
 ## Verification and Operations
 
 Every request writes one `docs_request_cache` log line with the hostname,
-path, status, cache statuses and data center (`colo`). With `DEBUG` set to
+path, status, cache statuses, data center (`colo`) and, once the hostname is
+resolved, `hostSource` and `hostnameMap` (see [Hostname Map](#hostname-map)). With `DEBUG` set to
 `true`, the line is `docs_request_timing` and also carries the timings. Every
 renderer call writes `docs_renderer_load` with the isolate scope, the build,
 `COLD` (this request started the isolate) or `WARM`, the code load time, the

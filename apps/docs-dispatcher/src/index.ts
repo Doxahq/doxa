@@ -83,6 +83,7 @@ import {
 
 export { DocsPrerenderCache } from "./prerender-cache-entrypoint";
 export { DocsRouteDataCache } from "./route-data-cache-entrypoint";
+export { DocsRendererCodeCache } from "./renderer-code-cache-entrypoint";
 
 interface DispatcherEnv extends DeliveryRolloutEnv, RendererIsolateEnv {
   DEBUG?: string;
@@ -512,6 +513,7 @@ async function renderWithDynamicWorker(
     content: getWorkerExports(ctx).ScopedDocsContent({
       props: { resolution: hostResolution },
     }),
+    codeCache: getWorkerExports(ctx).DocsRendererCodeCache,
     timing,
   });
   const startedAt = Date.now();
@@ -581,6 +583,7 @@ async function withPrivatePrerenderRenderer<T>(
     content: getWorkerExports(input.ctx).ScopedDocsContent({
       props: { resolution: input.resolution },
     }),
+    codeCache: getWorkerExports(input.ctx).DocsRendererCodeCache,
     timing: createServerTiming(input.env.DEBUG),
   });
   const entrypoint: unknown = isolate.getEntrypoint("DocsPrerenderRenderer");

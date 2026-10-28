@@ -9,14 +9,18 @@ vi.mock("cloudflare:workers", () => ({
   },
 }));
 
-vi.mock("../src/renderer-code-package", () => ({
+vi.mock("../src/renderer-code-package", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/renderer-code-package")>()),
   loadRendererCodePackage: vi.fn(async () => ({
-    schemaVersion: 1,
-    buildId: "build-1",
-    compatibilityDate: "2026-06-12",
-    compatibilityFlags: ["nodejs_compat"],
-    mainModule: "index.js",
-    modules: { "index.js": "export default {}" },
+    code: {
+      schemaVersion: 1,
+      buildId: "build-1",
+      compatibilityDate: "2026-06-12",
+      compatibilityFlags: ["nodejs_compat"],
+      mainModule: "index.js",
+      modules: { "index.js": "export default {}" },
+    },
+    source: "cache",
   })),
 }));
 

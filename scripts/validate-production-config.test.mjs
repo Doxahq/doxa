@@ -51,6 +51,15 @@ test("rolls the shared renderer isolate out to the operator's canary sites", () 
   );
 });
 
+test("caches the renderer code package in Workers Cache", () => {
+  const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
+
+  assert.deepEqual(config.exports.DocsRendererCodeCache, {
+    type: "worker",
+    cache: { enabled: true },
+  });
+});
+
 test("shares docs cache entries across dispatcher versions", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 

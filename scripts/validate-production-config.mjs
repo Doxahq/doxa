@@ -166,6 +166,12 @@ function validateDocsRenderingConfigs() {
       `${DEFAULT_DISPATCHER_CONFIG} must cache DocsRouteDataCache internally.`,
     );
   }
+  // Without it, every new dispatcher isolate reads the renderer code from R2.
+  if (dispatcher.exports?.DocsRendererCodeCache?.cache?.enabled !== true) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must cache DocsRendererCodeCache internally.`,
+    );
+  }
   if (dispatcher.assets?.html_handling !== "none") {
     throw new Error(
       `${DEFAULT_DISPATCHER_CONFIG} must disable implicit HTML asset routing.`,

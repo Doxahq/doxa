@@ -36,6 +36,12 @@
       "cache": {
         "enabled": true
       }
+    },
+    "DocsRendererCodeCache": {
+      "type": "worker",
+      "cache": {
+        "enabled": true
+      }
     }
   },
   "compatibility_date": "2026-06-12",

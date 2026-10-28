@@ -11,14 +11,18 @@ import {
 import { createServerTiming } from "../src/server-timing";
 import type { DocsRuntimeRpc } from "../src/worker-exports";
 
-vi.mock("../src/renderer-code-package", () => ({
+vi.mock("../src/renderer-code-package", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/renderer-code-package")>()),
   loadRendererCodePackage: vi.fn(async () => ({
-    schemaVersion: 1,
-    buildId: "build-1",
-    compatibilityDate: "2026-06-12",
-    compatibilityFlags: ["nodejs_compat"],
-    mainModule: "index.js",
-    modules: { "index.js": "export default {}" },
+    code: {
+      schemaVersion: 1,
+      buildId: "build-1",
+      compatibilityDate: "2026-06-12",
+      compatibilityFlags: ["nodejs_compat"],
+      mainModule: "index.js",
+      modules: { "index.js": "export default {}" },
+    },
+    source: "cache",
   })),
 }));
 
@@ -69,6 +73,7 @@ function open(env: RendererIsolateEnv, siteId = SITE_A) {
     env,
     resolution: resolutionFor(siteId),
     content,
+    codeCache: vi.fn(),
     timing: createServerTiming("false"),
   });
   return { isolate, content };
@@ -184,6 +189,7 @@ describe("logRendererUse", () => {
       rendererBuildId: "build-1",
       state: "COLD",
       codeLoadMs: expect.any(Number),
+      codeSource: "cache",
       totalMs: expect.any(Number),
       ok: false,
       error: "Error: boom",

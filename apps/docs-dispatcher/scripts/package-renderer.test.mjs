@@ -47,6 +47,7 @@ describe("createRendererPackage", () => {
       DocsHtmlCache: { type: "worker", cache: { enabled: true } },
       DocsPrerenderCache: { type: "worker", cache: { enabled: true } },
       DocsRouteDataCache: { type: "worker", cache: { enabled: true } },
+      DocsRendererCodeCache: { type: "worker", cache: { enabled: true } },
     });
     expect(config.vars.DEBUG).toBe("false");
   });

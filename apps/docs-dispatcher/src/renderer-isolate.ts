@@ -1,7 +1,14 @@
 import type { DocsHostResolution } from "@doxahq/contracts";
 
 import { requireEnvValue } from "./env-values";
-import { loadRendererCodePackage } from "./renderer-code-package";
+import {
+  createRendererCodeReaders,
+  type RendererCodeCacheProps,
+} from "./renderer-code-readers";
+import {
+  loadRendererCodePackage,
+  type RendererCodeSource,
+} from "./renderer-code-package";
 import type {
   BodyTiming,
   RendererIsolateFacts,
@@ -18,7 +25,7 @@ import {
   createSharedRendererWorkerId,
 } from "./routing-policy";
 import type { ServerTimingRecorder } from "./server-timing";
-import type { DocsRuntimeRpc } from "./worker-exports";
+import type { CacheEntrypoint, DocsRuntimeRpc } from "./worker-exports";
 
 /**
  * Which Dynamic Worker isolate renders a site.
@@ -62,6 +69,8 @@ export interface RendererIsolate {
   /** True when this request started the isolate and loaded the code. */
   readonly cold: boolean;
   readonly codeLoadMs: number | undefined;
+  /** Where the cold start got its code. Undefined for a warm isolate. */
+  readonly codeSource: RendererCodeSource | undefined;
 }
 
 export type RendererEntrypointName = "fetch" | "prepare" | "render";
@@ -100,15 +109,17 @@ export function selectRendererIsolateScope(
 
 /**
  * Gets the renderer isolate for one request. `content` must be the
- * `ScopedDocsContent` binding pinned to `resolution`.
+ * `ScopedDocsContent` binding pinned to `resolution`. `codeCache` is the
+ * dispatcher's own `DocsRendererCodeCache` entrypoint.
  */
 export function openRendererIsolate(input: {
   env: RendererIsolateEnv;
   resolution: DocsHostResolution;
   content: DocsRuntimeRpc;
+  codeCache: CacheEntrypoint<RendererCodeCacheProps>;
   timing: ServerTimingRecorder;
 }): RendererIsolate {
-  const { env, resolution, content, timing } = input;
+  const { env, resolution, content, codeCache, timing } = input;
   const rendererBuildId = requireEnvValue(
     env.DOXA_RENDERER_BUILD_ID,
     "DOXA_RENDERER_BUILD_ID",
@@ -131,18 +142,29 @@ export function openRendererIsolate(input: {
         });
   const siteContent: RendererRequestProps = { content, resolution };
 
-  const load: { cold: boolean; codeLoadMs?: number } = { cold: false };
+  const load: {
+    cold: boolean;
+    codeLoadMs?: number;
+    codeSource?: RendererCodeSource;
+  } = { cold: false };
   const worker = env.LOADER.get(workerId, async () => {
     load.cold = true;
     const startedAt = Date.now();
-    const code = await timing.measure("doxa_code", () =>
+    const { code, source } = await timing.measure("doxa_code", () =>
       loadRendererCodePackage({
-        bucket: env.RENDERER_CODE_BUCKET,
         objectKey,
         expectedBuildId: rendererBuildId,
+        readers: createRendererCodeReaders({
+          cache: codeCache,
+          bucket: env.RENDERER_CODE_BUCKET,
+          buildId: rendererBuildId,
+          objectKey,
+        }),
+        warn: (message) => console.warn(message),
       }),
     );
     load.codeLoadMs = Date.now() - startedAt;
+    load.codeSource = source;
     return {
       compatibilityDate: code.compatibilityDate,
       compatibilityFlags: code.compatibilityFlags,
@@ -167,6 +189,9 @@ export function openRendererIsolate(input: {
     },
     get codeLoadMs() {
       return load.codeLoadMs;
+    },
+    get codeSource() {
+      return load.codeSource;
     },
   };
 }
@@ -228,6 +253,7 @@ export function logRendererUse(
       ...(isolate.codeLoadMs !== undefined
         ? { codeLoadMs: isolate.codeLoadMs }
         : {}),
+      ...(isolate.codeSource ? { codeSource: isolate.codeSource } : {}),
       totalMs: (input.finishedAt ?? Date.now()) - input.startedAt,
       ...input.outcome,
       ...(input.phases ? { phases: input.phases } : {}),

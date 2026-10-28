@@ -3,6 +3,7 @@ import type { PublicDocsRouteDataV1 } from "@doxahq/contracts/docs-prerender";
 
 import type { HostCacheProps, HtmlCacheProps } from "./cache-policy";
 import type { PrerenderCacheProps } from "./prerender-cache-entrypoint";
+import type { RendererCodeCacheProps } from "./renderer-code-readers";
 import type { RouteDataCacheProps } from "./route-data-cache-entrypoint";
 
 export interface RuntimeRequest {
@@ -52,7 +53,7 @@ export interface PrerenderRendererRpc {
   }): Promise<Response>;
 }
 
-type CacheEntrypoint<Props> = (options: {
+export type CacheEntrypoint<Props> = (options: {
   props: Props;
 }) => Pick<Fetcher, "fetch">;
 
@@ -63,6 +64,7 @@ export interface DispatcherExports {
   DocsHtmlCache: CacheEntrypoint<HtmlCacheProps>;
   DocsPrerenderCache: CacheEntrypoint<PrerenderCacheProps>;
   DocsRouteDataCache: CacheEntrypoint<RouteDataCacheProps>;
+  DocsRendererCodeCache: CacheEntrypoint<RendererCodeCacheProps>;
   PrerenderRendererApi(options: {
     props?: Record<string, never>;
   }): PrerenderRendererRpc;

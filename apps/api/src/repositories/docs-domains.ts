@@ -107,7 +107,7 @@ export class DocsDomainsRepository {
 
     return withDocsCacheInvalidation(
       this.db,
-      this.env.DOCS_CACHE_INVALIDATOR,
+      this.env,
       async (transaction, enqueue) => {
         const [lockedProject] = await transaction
           .select({ id: schema.projects.id })
@@ -299,7 +299,7 @@ export class DocsDomainsRepository {
 
     return withDocsCacheInvalidation(
       this.db,
-      this.env.DOCS_CACHE_INVALIDATOR,
+      this.env,
       async (tx, enqueue) => {
         const [domain] = await tx
           .delete(schema.docsDomains)

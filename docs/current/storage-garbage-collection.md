@@ -37,7 +37,7 @@ An entry whose target has no collector in this deployment returns to the work li
 
 The inspect step is mandatory. Enqueue records an intent. Only the collector decides that deletion is correct.
 
-A grace period covers stale readers. The dispatcher can hold a resolved hostname for one day (`DOCS_HOSTNAME_CACHE_TTL_SECONDS` in `@doxahq/contracts`), so every collector that a cached hostname can reach waits that long plus one hour (`HOSTNAME_READER_GRACE_SECONDS`, 25 hours). Pre-rendered output waits 25 hours.
+A grace period covers stale readers. The dispatcher can hold a resolved hostname for one day (`DOCS_HOSTNAME_CACHE_TTL_SECONDS` in `@doxahq/contracts`), so every collector that a cached hostname can reach waits that long plus one hour (`HOSTNAME_READER_GRACE_SECONDS`, 25 hours). The Workers KV hostname map has the same limit: the dispatcher ignores an entry that the API resolved more than one day ago (`DOCS_HOSTNAME_MAP_MAX_AGE_SECONDS`). Pre-rendered output waits 25 hours.
 
 Deletion runs in the Worker that owns the write binding for that storage. The API drives policy and never holds a delete binding it does not need.
 

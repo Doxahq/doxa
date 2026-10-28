@@ -26,6 +26,7 @@
     "./docs-prerender": "./src/docs-prerender.ts",
     "./docs-prerender-tasks": "./src/docs-prerender-tasks.ts",
     "./docs-resolver": "./src/docs-resolver.ts",
+    "./docs-hostname-map": "./src/docs-hostname-map.ts",
     "./storage-gc": "./src/storage-gc.ts",
     "./storage-lifecycle": "./src/storage-lifecycle.ts",
     "./retention-policy": "./src/retention-policy.ts",

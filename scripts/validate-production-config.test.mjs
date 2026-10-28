@@ -68,6 +68,17 @@ test("prefetches route data on cold renderer starts for every site", () => {
   assert.equal(config.vars.DOXA_PROD_ROUTE_DATA_PREFETCH_SITE_IDS, "");
 });
 
+test("reads the hostname map in shadow mode during the rollout", () => {
+  const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
+
+  // Shadow reads KV and logs agreement, but still serves the old path.
+  assert.equal(config.vars.DOXA_PROD_KV_HOSTNAME_MODE, "shadow");
+  // The namespace ID is account-issued, so the ops repo holds it.
+  assert.deepEqual(config.kv_namespaces, [
+    { binding: "DOCS_HOSTNAME_MAP", id: "${CF_DOCS_HOSTNAME_MAP_KV_ID}" },
+  ]);
+});
+
 test("shares docs cache entries across dispatcher versions", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 

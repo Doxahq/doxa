@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { createAgentActionRuntime } from "./services/agent-actions/action-runtime";
 import { DocsCacheInvalidationMaintenance } from "./services/docs-cache-invalidation-monitoring";
 import { DocsDomainStatusChecks } from "./services/docs-domain-status-checks";
+import { DocsHostnameMapReconciler } from "./services/docs-hostname-map";
 import { DocsPrerenderTaskMaintenance } from "./services/docs-prerender-tasks";
 import { MergeGenerationScheduler } from "./services/doxabot/merge-generations";
 import { DoxabotQueueOutboxPublisher } from "./services/doxabot/queue-outbox";
@@ -19,6 +20,7 @@ import { createStorageGarbageCollector } from "./services/storage-gc";
 export function runScheduledJobs(scheduledTime: number, env: Env, context: ExecutionContext): void {
   context.waitUntil(DoxabotQueueOutboxPublisher.fromEnv(env).publishPending());
   context.waitUntil(DocsCacheInvalidationMaintenance.fromEnv(env).run());
+  context.waitUntil(runHostnameMapReconcile(scheduledTime, env));
   context.waitUntil(DocsPrerenderTaskMaintenance.fromEnv(env).run());
   context.waitUntil(createStorageGarbageCollector(env).run());
   context.waitUntil(runDomainStatusChecks(env));
@@ -31,6 +33,11 @@ export function runScheduledJobs(scheduledTime: number, env: Env, context: Execu
   if (resolveOAuthConfig(env).configured) {
     context.waitUntil(OAuthDataPurge.fromEnv(env).run());
   }
+}
+
+/** Async, so a failed setup rejects this job only and the other jobs still run. */
+async function runHostnameMapReconcile(scheduledTime: number, env: Env): Promise<unknown> {
+  return DocsHostnameMapReconciler.fromEnv(env)?.run(scheduledTime);
 }
 
 /** Async, so a failed setup rejects this job only and the other jobs still run. */

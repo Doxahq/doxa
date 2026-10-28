@@ -15,7 +15,10 @@ import worker, {
   DocsHtmlCache,
   DocsRouteDataCache,
 } from "../src/index";
-import { createDocsCacheTags } from "../src/cache-policy";
+import {
+  DOCS_HOST_CACHE_FORMAT,
+  createDocsCacheTags,
+} from "../src/cache-policy";
 import { createExpectedPrerenderIdentity } from "../src/prerender-policy";
 import type { RouteDataCacheProps } from "../src/route-data-cache-entrypoint";
 import { createRouteData } from "./fixtures/route-data";
@@ -129,7 +132,7 @@ describe("cache entrypoints", () => {
       "docs-site:site-1,docs-host:docs.example.com",
     );
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=3600, must-revalidate",
+      "public, max-age=3600, stale-if-error=604800",
     );
   });
 
@@ -144,6 +147,7 @@ describe("cache entrypoints", () => {
   });
 
   test("pins an HTML cache fill to the resolved production version", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const env = createEnv();
     const ctx = {
       props: {
@@ -159,13 +163,23 @@ describe("cache entrypoints", () => {
     const response = await entrypoint.fetch(htmlRequest());
     expect(await response.text()).toBe("<h1>Guide</h1>");
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=86400, stale-while-revalidate=604800, stale-if-error=604800",
+      "public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800",
     );
     expect(env.LOADER.get).toHaveBeenCalledWith(
       "docs:site-1:version-1:build-1",
       expect.any(Function),
     );
     expect(env.DOCS_RESOLVER.fetch).not.toHaveBeenCalled();
+    // Logged without DEBUG. The mock loader keeps an isolate, so no code loads.
+    expect(JSON.parse(String(info.mock.calls.at(-1)?.[0]))).toEqual({
+      event: "docs_renderer_load",
+      siteId: "site-1",
+      publishedVersionId: "version-1",
+      state: "WARM",
+      totalMs: expect.any(Number),
+      status: 200,
+    });
+    info.mockRestore();
   });
 
   test("stores renderer timings as private cache metadata when DEBUG is true", async () => {
@@ -302,7 +316,7 @@ describe("cache entrypoints", () => {
       );
       expect(env.DOCS_RESOLVER.fetch).toHaveBeenCalledOnce();
       expect(ctx.exports.DocsHostCache).toHaveBeenCalledWith({
-        props: { hostname: "docs.example.com" },
+        props: { hostname: "docs.example.com", format: DOCS_HOST_CACHE_FORMAT },
       });
       expect(ctx.exports.DocsHtmlCache).not.toHaveBeenCalled();
       expect(env.render).toHaveBeenCalledOnce();
@@ -402,7 +416,7 @@ describe("cache entrypoints", () => {
       ctx as never,
     );
     expect(hostCache).toHaveBeenCalledWith({
-      props: { hostname: "docs.example.com" },
+      props: { hostname: "docs.example.com", format: DOCS_HOST_CACHE_FORMAT },
     });
     expect(ctx.exports.DocsHtmlCache).not.toHaveBeenCalled();
     expect(response.headers.get("cache-control")).toBe("private, no-store");
@@ -454,7 +468,7 @@ describe("route-data cache entrypoint", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(createRouteData());
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=86400, stale-while-revalidate=604800, stale-if-error=604800",
+      "public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800",
     );
     expect(prepare).toHaveBeenCalledWith({
       resolution: expect.objectContaining({ siteId: "site-1" }),

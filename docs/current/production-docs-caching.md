@@ -1,7 +1,7 @@
 # Production Docs Caching
 
 **Status:** Cache and durable invalidation implemented. Migration and production verification are pending rollout.
-**Last reviewed:** 2026-10-01
+**Last reviewed:** 2026-10-28
 **Scope:** Public production docs served by Dynamic Workers. Not the Doxa dashboard.
 
 ## Decision
@@ -16,14 +16,15 @@ not a strict global read-after-write guarantee.
 
 | Layer                      | Lifetime                    | Identity                                                                                                                       |
 | -------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `DocsHostCache`            | 1 hour                      | Trusted hostname in `ctx.props`                                                                                                |
-| `DocsHtmlCache`            | 24 hours, then 7 days stale | Trusted hostname, resolved site/version/artifact data, renderer build, delivery render ID in `ctx.props`, plus URL path        |
-| `DocsRouteDataCache`       | 24 hours, then 7 days stale | Trusted hostname, resolved site/version/artifact data, delivery identity (`renderId`) in `ctx.props`, plus the route-data path |
+| `DocsHostCache`            | 1 hour, stale on error      | Trusted hostname and `DOCS_HOST_CACHE_FORMAT` in `ctx.props`                                                                   |
+| `DocsHtmlCache`            | 1 year, then 7 days stale   | Trusted hostname, resolved site/version/artifact data, renderer build, delivery render ID in `ctx.props`, plus URL path        |
+| `DocsRouteDataCache`       | 1 year, then 7 days stale   | Trusted hostname, resolved site/version/artifact data, delivery identity (`renderId`) in `ctx.props`, plus the route-data path |
 | Public dispatcher response | Not stored                  | Explicit `private, no-store`                                                                                                   |
 
 The constants live in `apps/docs-dispatcher/src/cache-policy.ts`. The dispatcher
 uses Wrangler 4.135.0 or later with per-entrypoint Workers Cache configuration.
-The global cache default is disabled. `exports.default.cache.enabled` is also
+The global cache default is disabled, and `cache.cross_version_cache` is
+`true`. `exports.default.cache.enabled` is also
 explicitly disabled, while `DocsHostCache`, `DocsHtmlCache`, `DocsPrerenderCache`,
 and `DocsRouteDataCache` opt into caching.
 Other entrypoints inherit the disabled default. The renderer package builder
@@ -80,8 +81,25 @@ can supply a site ID, version ID, artifact prefix, or access policy.
 Workers Cache does **not** include the URL hostname in its default key. Doxa
 passes the hostname through trusted `ctx.props` to separate domains. The full
 resolved production record also separates sites and versions. The page path is
-part of Cloudflare's native key. Cloudflare additionally separates deployed
-Worker versions by default; we do not enable cross-version cache sharing.
+part of Cloudflare's native key.
+
+Cloudflare separates deployed Worker versions by default, so each deploy starts
+with an empty cache. The dispatcher sets `cache.cross_version_cache` to `true`
+to share entries across versions. A dispatcher-only deploy then keeps every
+cached page. This is safe because the props already pin each content entry:
+
+- HTML: the site version, the renderer build ID, and the delivery render ID.
+- Route data and saved output: the delivery identity, which contains the
+  renderer release.
+- Hostname mappings: `DOCS_HOST_CACHE_FORMAT`. Increase it when the cached
+  resolution JSON changes shape.
+
+A change outside these identities does not reach cached content. Examples are
+a dispatcher variable that is passed to the renderer, such as
+`DOXA_API_BASE_URL`, or a change to the dispatcher code that wraps HTML before
+it is stored. After such a change, deploy a new renderer build, or turn off
+`cross_version_cache` for one deploy. `pnpm validate:production-config` rejects
+a dispatcher config without the flag.
 
 The cacheable HTML subrequest has canonical headers: `Accept: text/html` only.
 Visitor headers such as forwarded hosts, language preferences, and user agents
@@ -99,7 +117,7 @@ HTML cache. A promotion changes the published database version ID, even when it
 reuses an older artifact prefix. That new ID selects a different HTML cache
 entry. An in-flight fill for the previous version cannot overwrite it.
 
-The 24-hour HTML lifetime does **not** make production changes wait 24 hours.
+The 1-year HTML lifetime does **not** make production changes wait.
 After commit, the API attempts to purge all hostname mappings tagged with the
 site ID. That removes the intentional TTL wait during normal publishing. The
 next lookup reads the new pointer and selects its version-specific HTML entry.
@@ -115,17 +133,24 @@ Cache lifetimes have names in `cache-policy.ts`:
 
 | Lifetime       | Entries                                                    | `Cache-Control`                                                                 |
 | -------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `hostname`     | `DocsHostCache`                                            | `public, max-age=3600, must-revalidate`                                         |
+| `hostname`     | `DocsHostCache`                                            | `public, max-age=3600, stale-if-error=604800`                                   |
 | `liveFallback` | Live output after a saved-output miss                      | `public, max-age=30, must-revalidate`                                           |
-| `versioned`    | HTML, saved HTML and data, and `DocsRouteDataCache` output | `public, max-age=86400, stale-while-revalidate=604800, stale-if-error=604800` |
+| `versioned`    | HTML, saved HTML and data, and `DocsRouteDataCache` output | `public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800` |
 
 Version-keyed entries can serve stale copies, because a publish selects a new
 key and never changes content under an existing key. A stale copy is identical
-to a fresh one. After 24 hours Cloudflare returns the stored copy and refreshes
+to a fresh one. The lifetime is 1 year because only a new key or a purge can
+make an entry wrong. Cloudflare can still evict an entry that gets no traffic.
+After 1 year Cloudflare returns the stored copy and refreshes
 it in the background. If the refresh fails, it keeps the stored copy. Do not add
 `must-revalidate`, `s-maxage`, or `proxy-revalidate` to `versioned`: each one
-disables stale serving. The hostname mapping must keep `must-revalidate`,
-because a publish changes it.
+disables stale serving.
+
+The hostname mapping has no `stale-while-revalidate`, because a publish changes
+it, and a publish purges it. It has `stale-if-error`. If the resolver fails
+after the hour, Workers Cache serves the last mapping, so a cached site stays up
+during an API outage. Do not add `must-revalidate` to it: that disables
+`stale-if-error`. A purged mapping cannot be served stale.
 
 Domain removal, disabling, or reassignment also requests a purge, but has the
 same possible short stale-mapping window. This is an accepted limit for public
@@ -239,6 +264,17 @@ binding keep their existing behavior. Local `.localhost` development is outside
 this HTML cache. No preview access rules or dashboard code were changed.
 
 ## Verification and Operations
+
+Every request writes one `docs_request_cache` log line with the hostname,
+path, status, cache statuses and data center (`colo`). With `DEBUG` set to
+`true`, the line is `docs_request_timing` and also carries the timings. Every
+HTML cache miss writes `docs_renderer_load` with the site, the version, `COLD`
+(this request loaded the renderer code) or `WARM`, the code load time and the
+total render time. docs-runtime writes `docs_runtime_reads` for every
+`getRouteData` call, with the number of artifact reads that passed the memory
+caches, their total time and the longest read. `getRouteData` starts its
+independent reads together. Use these lines for the hit rate and for slow
+misses.
 
 The gateway adds `x-doxa-host-cache` and `x-doxa-html-cache` for diagnostics.
 The route-data endpoint adds `x-doxa-route-data-cache`.

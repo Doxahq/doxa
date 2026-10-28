@@ -16,6 +16,7 @@ import {
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import {
+  DOCS_HOST_CACHE_FORMAT,
   createHtmlCacheProps,
   createDocsCacheTags,
   isCacheableDocsRequest,
@@ -25,6 +26,7 @@ import {
   withHostCachePolicy,
   withHtmlCachePolicy,
   withoutResponseCaching,
+  type HostCacheProps,
   type HtmlCacheProps,
 } from "./cache-policy";
 import { dispatchDocsRequest } from "./dispatcher";
@@ -55,6 +57,7 @@ import {
   attachInternalServerTiming,
   createServerTiming,
   exposeRequestTiming,
+  logRendererLoad,
   logRequestTiming,
   type ServerTimingRecorder,
 } from "./server-timing";
@@ -93,7 +96,7 @@ interface DispatcherEnv extends DeliveryRolloutEnv {
 /** Workers Cache caches fetch entrypoints, not custom RPC methods. */
 export class DocsHostCache extends WorkerEntrypoint<
   DispatcherEnv,
-  { hostname: string }
+  HostCacheProps
 > {
   // The API binds directly to this named entrypoint. The public gateway exposes
   // no purge route, and the dynamic renderer receives no invalidation binding.
@@ -279,7 +282,9 @@ export default {
           // stores public production mappings only. Visitor-specific requests
           // can share it; they still bypass the HTML cache.
           const cached = await getWorkerExports(ctx)
-            .DocsHostCache({ props: { hostname } })
+            .DocsHostCache({
+              props: { hostname, format: DOCS_HOST_CACHE_FORMAT },
+            })
             .fetch("https://docs-cache.internal/resolve");
           hostCacheStatus =
             cached.headers.get("cf-cache-status") ?? "UNAVAILABLE";
@@ -511,11 +516,14 @@ async function renderWithDynamicWorker(
   });
 
   let loadedRendererCode = false;
-  return timing.measure(
+  let codeLoadMs: number | undefined;
+  const startedAt = Date.now();
+  const response = await timing.measure(
     "doxa_loader",
     async () => {
       const worker = env.LOADER.get(workerId, async () => {
         loadedRendererCode = true;
+        const codeStartedAt = Date.now();
         const code = await timing.measure("doxa_code", () =>
           loadRendererCodePackage({
             bucket: env.RENDERER_CODE_BUCKET,
@@ -523,6 +531,7 @@ async function renderWithDynamicWorker(
             expectedBuildId: rendererBuildId,
           }),
         );
+        codeLoadMs = Date.now() - codeStartedAt;
 
         return {
           compatibilityDate: code.compatibilityDate,
@@ -554,6 +563,15 @@ async function renderWithDynamicWorker(
     },
     () => (loadedRendererCode ? "COLD" : "WARM"),
   );
+  logRendererLoad({
+    siteId: resolution.siteId,
+    publishedVersionId: resolution.publishedVersionId,
+    state: loadedRendererCode ? "COLD" : "WARM",
+    codeLoadMs,
+    totalMs: Date.now() - startedAt,
+    status: response.status,
+  });
+  return response;
 }
 
 interface PrivatePrerenderRenderer {

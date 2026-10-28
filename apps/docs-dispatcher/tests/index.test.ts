@@ -20,6 +20,7 @@ vi.mock("../src/renderer-code-package", () => ({
   })),
 }));
 
+import { DOCS_HOST_CACHE_FORMAT } from "../src/cache-policy";
 import worker, { DocsHostCache } from "../src/index";
 
 afterEach(() => {
@@ -145,7 +146,7 @@ describe("docs dispatcher worker", () => {
     },
   );
 
-  test("writes structured timing logs only when DEBUG is true", async () => {
+  test("writes timing logs with DEBUG and one cache-status line without it", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const sharedRenderer = {
       fetch: async () => new Response("shared"),
@@ -171,7 +172,14 @@ describe("docs dispatcher worker", () => {
       {} as never,
     );
 
-    expect(info).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(info.mock.calls[1]?.[0]))).toEqual({
+      event: "docs_request_cache",
+      hostname: "docs.example.com",
+      path: "/guide",
+      status: 200,
+      cache: { host: "BYPASS", html: "BYPASS" },
+    });
     expect(enabledResponse.headers.get("server-timing")).toContain(
       "doxa_total;dur=",
     );
@@ -259,7 +267,7 @@ describe("docs dispatcher worker", () => {
     expect(await response.text()).toBe("cached html");
     expect(env.DOCS_RESOLVER.fetch).not.toHaveBeenCalled();
     expect(ctx.exports.DocsHostCache).toHaveBeenCalledWith({
-      props: { hostname: "docs.example.com" },
+      props: { hostname: "docs.example.com", format: DOCS_HOST_CACHE_FORMAT },
     });
     expect(ctx.exports.DocsHtmlCache).toHaveBeenCalledWith({
       props: {

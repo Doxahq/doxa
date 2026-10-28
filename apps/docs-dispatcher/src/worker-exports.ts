@@ -1,7 +1,7 @@
 import type { DocsHostResolution } from "@doxahq/contracts";
 import type { PublicDocsRouteDataV1 } from "@doxahq/contracts/docs-prerender";
 
-import type { HtmlCacheProps } from "./cache-policy";
+import type { HostCacheProps, HtmlCacheProps } from "./cache-policy";
 import type { PrerenderCacheProps } from "./prerender-cache-entrypoint";
 import type { RouteDataCacheProps } from "./route-data-cache-entrypoint";
 
@@ -59,7 +59,7 @@ type CacheEntrypoint<Props> = (options: {
 /** Loopback bindings to this Worker's own named entrypoints. */
 export interface DispatcherExports {
   ScopedDocsContent(options: { props: ScopedDocsContentProps }): DocsRuntimeRpc;
-  DocsHostCache: CacheEntrypoint<{ hostname: string }>;
+  DocsHostCache: CacheEntrypoint<HostCacheProps>;
   DocsHtmlCache: CacheEntrypoint<HtmlCacheProps>;
   DocsPrerenderCache: CacheEntrypoint<PrerenderCacheProps>;
   DocsRouteDataCache: CacheEntrypoint<RouteDataCacheProps>;

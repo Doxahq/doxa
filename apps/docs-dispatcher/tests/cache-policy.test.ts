@@ -133,7 +133,7 @@ describe("docs cache policy", () => {
   test("bounds the public production hostname response freshness", async () => {
     const response = withHostCachePolicy(resolution);
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=3600, must-revalidate",
+      "public, max-age=3600, stale-if-error=604800",
     );
     expect(await response.json()).toEqual(resolution);
   });
@@ -206,7 +206,7 @@ describe("docs cache policy", () => {
       }),
     );
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=86400, stale-while-revalidate=604800, stale-if-error=604800",
+      "public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800",
     );
     expect(await response.text()).toBe("<h1>Guide</h1>");
   });
@@ -233,7 +233,7 @@ describe("docs cache policy", () => {
   test.each([
     {
       lifetime: "hostname" as const,
-      expected: "public, max-age=3600, must-revalidate",
+      expected: "public, max-age=3600, stale-if-error=604800",
     },
     {
       lifetime: "liveFallback" as const,
@@ -242,7 +242,7 @@ describe("docs cache policy", () => {
     {
       lifetime: "versioned" as const,
       expected:
-        "public, max-age=86400, stale-while-revalidate=604800, stale-if-error=604800",
+        "public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800",
     },
   ])("uses one exact header for the $lifetime lifetime", ({ lifetime, expected }) => {
     expect(cacheControlFor(lifetime)).toBe(expected);

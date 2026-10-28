@@ -145,6 +145,11 @@ function validateDocsRenderingConfigs() {
       `${DEFAULT_DISPATCHER_CONFIG} must cache DocsPrerenderCache internally.`,
     );
   }
+  if (dispatcher.cache?.cross_version_cache !== true) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must share cache entries across Worker versions (cache.cross_version_cache).`,
+    );
+  }
   if (dispatcher.exports?.DocsRouteDataCache?.cache?.enabled !== true) {
     throw new Error(
       `${DEFAULT_DISPATCHER_CONFIG} must cache DocsRouteDataCache internally.`,

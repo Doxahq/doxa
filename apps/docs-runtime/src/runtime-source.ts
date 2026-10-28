@@ -300,6 +300,24 @@ const RUNTIME_CACHE_MAX_ENTRIES = 500;
 export interface RuntimeRequestContext {
   timing: RuntimeTiming;
   cache: RuntimeRequestCache;
+  reads: RuntimeReadStats;
+}
+
+/** Artifact reads that passed the memory caches during one request. */
+interface RuntimeReadStats {
+  count: number;
+  totalMs: number;
+  longestMs: number;
+}
+
+export function recordArtifactRead(
+  runtimeContext: RuntimeRequestContext,
+  durationMs: number,
+): void {
+  const { reads } = runtimeContext;
+  reads.count += 1;
+  reads.totalMs += durationMs;
+  reads.longestMs = Math.max(reads.longestMs, durationMs);
 }
 
 interface RuntimeRequestCache {
@@ -352,6 +370,7 @@ function createRuntimeRequestContext(
 ): RuntimeRequestContext {
   return {
     timing: createRuntimeTiming(env),
+    reads: { count: 0, totalMs: 0, longestMs: 0 },
     cache: {
       resolutions: new Map(),
       manifests: new Map(),
@@ -534,7 +553,42 @@ export async function runResolvedRuntimeRequest(
     manifest: manifestRead.manifest,
   };
 
-  return runLoadedRuntimeRequest(env, context, input, runtimeContext);
+  const result = await runLoadedRuntimeRequest(
+    env,
+    context,
+    input,
+    runtimeContext,
+  );
+  if (input.operation === "getRouteData") {
+    logRouteDataReads(resolution.data, runtimeContext, result.ok);
+  }
+  return result;
+}
+
+/**
+ * One line per route-data read, with or without DOXA_DOCS_RUNTIME_TIMING.
+ * The dispatcher calls getRouteData only on an HTML or route-data cache miss,
+ * so the volume follows the misses. The read count includes the manifest
+ * reads made before the operation.
+ */
+function logRouteDataReads(
+  resolution: DocsHostResolution,
+  runtimeContext: RuntimeRequestContext,
+  ok: boolean,
+): void {
+  const { reads } = runtimeContext;
+  console.info(
+    JSON.stringify({
+      event: "docs_runtime_reads",
+      operation: "getRouteData",
+      siteId: resolution.siteId,
+      publishedVersionId: resolution.publishedVersionId,
+      ok,
+      reads: reads.count,
+      readMs: Math.round(reads.totalMs),
+      longestReadMs: Math.round(reads.longestMs),
+    }),
+  );
 }
 
 function isPinnedManifest(
@@ -1047,6 +1101,24 @@ async function getRouteData(
   pathname: string,
   runtimeContext: RuntimeRequestContext,
 ): Promise<RuntimeRouteData> {
+  // Start the reads that do not depend on the page now, so that cold R2 reads
+  // overlap. The request cache gives the later awaits the same promises.
+  const sectionsRead = readSections(env, context, runtimeContext);
+  const siteConfigRead = readSiteConfig(env, context, runtimeContext);
+  const homeHrefRead = getHomeHref(env, context, runtimeContext);
+  const sectionHomeHrefsRead = sectionsRead.then((sections) =>
+    getSectionHomeHrefs(env, context, sections, runtimeContext),
+  );
+  // A redirect or a not-found page returns before these reads are awaited.
+  for (const read of [
+    sectionsRead,
+    siteConfigRead,
+    homeHrefRead,
+    sectionHomeHrefsRead,
+  ]) {
+    read.catch(() => undefined);
+  }
+
   const resolution = await resolvePage(env, context, pathname, runtimeContext);
 
   if (resolution.type === "redirect") {
@@ -1068,26 +1140,34 @@ async function getRouteData(
     };
   }
 
-  const sections = await readSections(env, context, runtimeContext);
+  const sections = await sectionsRead;
   const href = normalizeHref(resolution.href);
   const slug =
     resolution.type === "page" ? resolution.slug : normalizeSlug(href);
   const currentSection = getSectionFromHref(sections, href);
   const sectionSlug = currentSection?.slug ?? "";
-  const rawSectionNavigation = sectionSlug
-    ? await readNavigation(env, context, sectionSlug, runtimeContext)
-    : [];
+  const [
+    rawSectionNavigation,
+    sectionRoutes,
+    homeHref,
+    sectionHomeHrefs,
+    siteConfig,
+    site,
+    features,
+  ] = await Promise.all([
+    sectionSlug
+      ? readNavigation(env, context, sectionSlug, runtimeContext)
+      : Promise.resolve([]),
+    sectionSlug
+      ? readRoutes(env, context, sectionSlug, runtimeContext)
+      : Promise.resolve([]),
+    homeHrefRead,
+    sectionHomeHrefsRead,
+    siteConfigRead,
+    getSiteConfig(env, context, runtimeContext),
+    getFeatureConfig(env, context, runtimeContext),
+  ]);
   const sectionNavigation = flattenNavigation(rawSectionNavigation);
-  const sectionRoutes = sectionSlug
-    ? await readRoutes(env, context, sectionSlug, runtimeContext)
-    : [];
-  const homeHref = await getHomeHref(env, context, runtimeContext);
-  const sectionHomeHrefs = await getSectionHomeHrefs(
-    env,
-    context,
-    sections,
-    runtimeContext,
-  );
   const routeTitle =
     sectionRoutes.find((route) => normalizeHref(route.href) === href)?.title ??
     null;
@@ -1099,9 +1179,9 @@ async function getRouteData(
     slug,
     href,
     homeHref,
-    siteConfig: await readSiteConfig(env, context, runtimeContext),
-    site: await getSiteConfig(env, context, runtimeContext),
-    features: await getFeatureConfig(env, context, runtimeContext),
+    siteConfig,
+    site,
+    features,
     sections,
     currentSection,
     sectionHomeHrefs,
@@ -1353,7 +1433,7 @@ export async function readText(
     runtimeContext.cache.artifacts,
     runtimeModuleCaches.artifacts,
     `artifact:${artifactPath}`,
-    () => readTextUncached(env, artifactPath, runtimeContext.timing),
+    () => readTextUncached(env, artifactPath, runtimeContext),
     runtimeContext.timing,
     { cacheKind: "artifact", artifactKind },
   );
@@ -1362,15 +1442,18 @@ export async function readText(
 async function readTextUncached(
   env: RuntimeSourceEnv,
   path: string,
-  timing: RuntimeTiming,
+  runtimeContext: RuntimeRequestContext,
 ): Promise<string | null> {
+  const { timing } = runtimeContext;
   const artifactKind = getArtifactKind(path);
   const bucketStartedAt = now();
   const object = await artifactReader(env.DOCS_BUCKET).get(path);
+  const bucketMs = elapsed(bucketStartedAt);
+  recordArtifactRead(runtimeContext, bucketMs);
   timing.mark("artifact.bucketGet", {
     artifactKind,
     hit: Boolean(object),
-    durationMs: elapsed(bucketStartedAt),
+    durationMs: bucketMs,
   });
   if (object) {
     const textStartedAt = now();

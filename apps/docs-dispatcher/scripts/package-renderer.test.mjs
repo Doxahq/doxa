@@ -37,7 +37,10 @@ describe("createRendererPackage", () => {
     const config = JSON.parse(
       await readFile(result.generatedConfigPath, "utf8"),
     );
-    expect(config.cache).toEqual({ enabled: false });
+    expect(config.cache).toEqual({
+      enabled: false,
+      cross_version_cache: true,
+    });
     expect(config.exports).toEqual({
       default: { type: "worker", cache: { enabled: false } },
       DocsHostCache: { type: "worker", cache: { enabled: true } },

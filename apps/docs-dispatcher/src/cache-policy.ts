@@ -4,10 +4,15 @@ import type {
 } from "@doxahq/contracts";
 
 // The hostname TTL is a freshness trade-off, not an invalidation guarantee.
+// Versioned output never changes under its key: only a new key (site version,
+// renderer build, render ID) or a purge ends an entry. One year is the longest
+// conventional HTTP lifetime. Cloudflare can still evict entries that see no
+// traffic.
 // Keep these together so the early cache policy has one place to change.
 const DOCS_CACHE_POLICY = {
   hostnameTtlSeconds: 3_600,
-  versionedTtlSeconds: 86_400,
+  hostnameStaleIfErrorSeconds: 604_800,
+  versionedTtlSeconds: 31_536_000,
   versionedStaleSeconds: 604_800,
   liveFallbackTtlSeconds: 30,
 } as const;
@@ -33,6 +38,18 @@ export function isContentCacheLifetime(
   value: unknown,
 ): value is ContentCacheLifetime {
   return CONTENT_CACHE_LIFETIMES.some((lifetime) => lifetime === value);
+}
+
+/**
+ * The dispatcher sets `cross_version_cache`, so a new deploy reads entries
+ * that an older deploy stored. Increase this value when the cached hostname
+ * resolution JSON changes shape. The new deploy then uses new keys.
+ */
+export const DOCS_HOST_CACHE_FORMAT = 1;
+
+export interface HostCacheProps {
+  hostname: string;
+  format: number;
 }
 
 export interface HtmlCacheProps {
@@ -209,7 +226,14 @@ export function withoutResponseCaching(response: Response): Response {
 export function cacheControlFor(lifetime: DocsCacheLifetime): string {
   switch (lifetime) {
     case "hostname":
-      return strictCacheControl(DOCS_CACHE_POLICY.hostnameTtlSeconds);
+      // A publish purges the mapping, so it needs no must-revalidate. Without
+      // that directive, Workers Cache can serve the last mapping when the
+      // resolver fails, and a cached site stays up during an API outage.
+      return [
+        "public",
+        `max-age=${DOCS_CACHE_POLICY.hostnameTtlSeconds}`,
+        `stale-if-error=${DOCS_CACHE_POLICY.hostnameStaleIfErrorSeconds}`,
+      ].join(", ");
     case "liveFallback":
       return strictCacheControl(DOCS_CACHE_POLICY.liveFallbackTtlSeconds);
     case "versioned":

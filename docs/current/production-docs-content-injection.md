@@ -107,8 +107,8 @@ The live path runs when a visitor opens a page and no saved HTML exists.
 - It parses the MDX body at request time with `@doxahq/mdx-runtime`.
 - TanStack Start renders the HTML on the server and returns it to the
   dispatcher.
-- The dispatcher stores this HTML in the Workers Cache for 24 hours. The cache
-  key includes the version ID.
+- The dispatcher stores this HTML in the Workers Cache for 1 year. The cache
+  key includes the version ID and the renderer build.
 
 ### Other renderers
 

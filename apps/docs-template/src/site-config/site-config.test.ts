@@ -163,6 +163,8 @@ describe("customized fixture chrome", () => {
     );
     expect(html).toMatch(/<head>[\s\S]*<style>[\s\S]*--primary: #123456/);
     expect(html).toContain("Start here");
+    // Cached HTML must not freeze the year. The browser renders it.
+    expect(html).not.toMatch(/©\s*\d{4}/);
     expect(html).toContain('href="https://example.com/blog"');
     expect(html).toMatch(/<a href="\/overview" data-client-link="">Start here<\/a>/);
     expect(html).toContain('href="https://example.com/pricing" rel="noopener noreferrer"');

@@ -123,10 +123,32 @@ export function logRequestTiming(
     routeDataCacheStatus?: string;
   },
 ): void {
-  if (!timing.enabled) return;
   const requestWithCloudflare = request as Request & {
     cf?: { colo?: string };
   };
+  if (!timing.enabled) {
+    // One short line per request, so production shows the hit rate per site
+    // and per data center without DEBUG.
+    console.info(
+      JSON.stringify({
+        event: "docs_request_cache",
+        hostname: new URL(request.url).hostname,
+        path: new URL(request.url).pathname,
+        status: response.status,
+        cache: {
+          host: cache.hostCacheStatus,
+          html: cache.htmlCacheStatus,
+          ...(cache.routeDataCacheStatus
+            ? { routeData: cache.routeDataCacheStatus }
+            : {}),
+        },
+        ...(requestWithCloudflare.cf?.colo
+          ? { colo: requestWithCloudflare.cf.colo }
+          : {}),
+      }),
+    );
+    return;
+  }
   console.info(
     JSON.stringify({
       event: "docs_request_timing",
@@ -155,6 +177,33 @@ export function logRequestTiming(
         : {}),
       serverTiming: response.headers.get("server-timing"),
       timings: readDoxaTimings(response.headers.get("server-timing")),
+    }),
+  );
+}
+
+/**
+ * Logs every Dynamic Worker render on an HTML cache miss, with or without
+ * DEBUG. COLD means that this request loaded the renderer code package.
+ */
+export function logRendererLoad(input: {
+  siteId: string;
+  publishedVersionId: string;
+  state: "COLD" | "WARM";
+  codeLoadMs: number | undefined;
+  totalMs: number;
+  status: number;
+}): void {
+  console.info(
+    JSON.stringify({
+      event: "docs_renderer_load",
+      siteId: input.siteId,
+      publishedVersionId: input.publishedVersionId,
+      state: input.state,
+      ...(input.codeLoadMs !== undefined
+        ? { codeLoadMs: input.codeLoadMs }
+        : {}),
+      totalMs: input.totalMs,
+      status: input.status,
     }),
   );
 }

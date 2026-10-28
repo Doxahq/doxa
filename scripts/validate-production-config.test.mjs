@@ -40,6 +40,13 @@ test("enables the lazy route-data cache for all production sites by default", ()
   });
 });
 
+test("shares docs cache entries across dispatcher versions", () => {
+  const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
+
+  // Without this flag, every dispatcher deploy empties the docs cache.
+  assert.deepEqual(config.cache, { enabled: false, cross_version_cache: true });
+});
+
 test("accepts an API production config with a custom-domain CNAME target", () => {
   const result = runValidator(createValidConfig());
 

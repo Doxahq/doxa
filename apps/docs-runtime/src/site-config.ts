@@ -2,6 +2,7 @@ import { readSiteConfig as readArtifactSiteConfig } from "@doxahq/docs-engine";
 import type { ResolvedSiteConfig } from "@doxahq/site-config";
 import {
   readText,
+  recordArtifactRead,
   type RuntimeSourceEnv,
   type ProjectRuntimeContext,
   type RuntimeRequestContext,
@@ -31,10 +32,12 @@ export function readSiteConfig(
     {
       read: async (path) => {
         if (context.manifest.schemaVersion === 2) {
+          const startedAt = performance.now();
           const object = await runtimeContext.timing.measure(
             "siteConfig.bucketGet",
             () => artifactReader(env.DOCS_BUCKET).get(path),
           );
+          recordArtifactRead(runtimeContext, performance.now() - startedAt);
           if (object) return new Uint8Array(await object.arrayBuffer());
         }
         // Local development can store artifacts behind the internal API fallback.

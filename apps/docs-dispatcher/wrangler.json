@@ -3,7 +3,8 @@
   "name": "doxa-docs-renderer",
   "main": "src/index.ts",
   "cache": {
-    "enabled": false
+    "enabled": false,
+    "cross_version_cache": true
   },
   "exports": {
     "default": {

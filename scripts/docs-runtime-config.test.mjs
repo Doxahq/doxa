@@ -28,11 +28,18 @@ test("caches only the DocsBlobCache entrypoint of the docs runtime", () => {
   assert.doesNotThrow(() => validateDocsRuntimeConfig(config));
 });
 
-test("rolls the blob cache out only when an operator turns it on", () => {
+test("rolls the blob cache out to the operator's canary sites", () => {
   const config = runtimeConfig();
 
-  assert.equal(config.env.production.vars.DOXA_PROD_BLOB_CACHE_MODE, "off");
-  assert.equal(config.env.production.vars.DOXA_PROD_BLOB_CACHE_SITE_IDS, "");
+  // Canary sites only. The site IDs are an operator value in the ops repo.
+  assert.equal(
+    config.env.production.vars.DOXA_PROD_BLOB_CACHE_MODE,
+    "allowlist",
+  );
+  assert.equal(
+    config.env.production.vars.DOXA_PROD_BLOB_CACHE_SITE_IDS,
+    "${OPS_DOCS_BLOB_CACHE_SITE_IDS}",
+  );
 });
 
 test("rejects a cached default or RPC entrypoint", () => {

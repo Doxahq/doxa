@@ -230,6 +230,22 @@ is a stub, because Mermaid draws only in the browser. A Dynamic Worker compiles
 every module of the package on each cold start, used or not. These steps took
 the package from 94 modules and 16.6 MB to 29 modules and 5.5 MB.
 
+### Server code highlighting
+
+The renderer highlights code fences with one Shiki instance per isolate.
+`apps/docs-template/src/config/vite/workspace-aliases.ts` points every
+`@doxahq/mdx-runtime` import at the package source, so `@doxahq/docs-prose`
+and the template share one highlighter module.
+
+Page renders and `prepare` use `apps/docs-template/src/runtime/server-highlighter.ts`.
+It starts with the themes only and loads the grammars of the fences that
+`collectFenceLanguages` finds in the page (the lazy loader of
+`@doxahq/mdx-runtime/highlight-lazy`). If the parser highlights a fence whose
+grammar the scan missed, the page is parsed again after that grammar loads.
+The output is the same as with the highlighter that holds every grammar. A
+test in `server-highlighter.test.ts` compares both for every page of every
+frozen artifact set. Loaded grammars stay loaded for the life of the isolate.
+
 ### How the object is built
 
 The script `apps/docs-template/scripts/deploy-renderer.mjs` runs these steps

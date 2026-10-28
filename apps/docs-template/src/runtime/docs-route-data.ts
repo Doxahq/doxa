@@ -115,10 +115,24 @@ export type DocsRootRouteData =
   | DocsRouteData
   | { type: "empty"; homeHref: string | null };
 
+export type DocsParserHighlighter = NonNullable<
+  RuntimeMdxParseOptions["highlighter"]
+>;
+
+/** Highlights a page with a highlighter that has the page's grammars loaded. */
+export interface DocsPageHighlighting {
+  parse<T>(
+    source: string,
+    parse: (highlighter: DocsParserHighlighter) => T
+  ): Promise<T>;
+}
+
 export interface ResolveDocsRouteDataOptions {
   includeRawDocument?: boolean;
   includeRuntimeDocument?: boolean;
   highlighter?: RuntimeMdxParseOptions["highlighter"];
+  /** Wins over `highlighter`. */
+  highlighting?: DocsPageHighlighting;
   timing?: RuntimeTimingSink;
 }
 
@@ -170,6 +184,7 @@ async function resolveDocsRouteDataWithoutIcons(
         pathname,
         {
           highlighter,
+          highlighting: options.highlighting,
           includeRawDocument,
           includeRuntimeDocument,
           startedAt,
@@ -284,13 +299,7 @@ async function resolveDocsRouteDataWithoutIcons(
       ? await measureDocsRouteStep(
           timing,
           "route.parseRuntimeDocument",
-          () =>
-            parseDocsRouteDocument(
-              page.body,
-              page.href,
-              options.highlighter,
-              page.assets
-            ),
+          () => parseDocsRoutePage(page, options),
           { sourceBytes: page.body.length }
         )
       : null;
@@ -334,6 +343,7 @@ async function resolveDocsRouteDataWithoutIcons(
 
 interface CompleteRuntimeRouteDataOptions {
   highlighter?: RuntimeMdxParseOptions["highlighter"];
+  highlighting?: DocsPageHighlighting;
   includeRawDocument: boolean;
   includeRuntimeDocument: boolean;
   startedAt: number;
@@ -348,6 +358,7 @@ async function completeDocsRouteDataFromRuntimeRouteData(
 ): Promise<DocsRouteData> {
   const {
     highlighter,
+    highlighting,
     includeRawDocument,
     includeRuntimeDocument,
     startedAt,
@@ -381,6 +392,7 @@ async function completeDocsRouteDataFromRuntimeRouteData(
     runtimeRouteData,
     {
       highlighter,
+      highlighting,
       includeRawDocument,
       includeRuntimeDocument,
       timing,
@@ -406,7 +418,11 @@ async function buildDocsRoutePageDataFromRuntimeRouteData(
   runtimeRouteData: RuntimeRoutePageData,
   options: Pick<
     CompleteRuntimeRouteDataOptions,
-    "highlighter" | "includeRawDocument" | "includeRuntimeDocument" | "timing"
+    | "highlighter"
+    | "highlighting"
+    | "includeRawDocument"
+    | "includeRuntimeDocument"
+    | "timing"
   >
 ): Promise<DocsRoutePageData> {
   const page = runtimeRouteData.page;
@@ -427,13 +443,7 @@ async function buildDocsRoutePageDataFromRuntimeRouteData(
       ? await measureDocsRouteStep(
           options.timing,
           "route.parseRuntimeDocument",
-          () =>
-            parseDocsRouteDocument(
-              page.body,
-              page.href,
-              options.highlighter,
-              page.assets
-            ),
+          () => parseDocsRoutePage(page, options),
           { sourceBytes: page.body.length }
         )
       : null;
@@ -520,6 +530,17 @@ export async function resolveDocsRootRouteData(
   }
 
   return resolution;
+}
+
+async function parseDocsRoutePage(
+  page: RuntimePage,
+  options: Pick<ResolveDocsRouteDataOptions, "highlighter" | "highlighting">
+): Promise<ParsedDocument> {
+  const parse = (highlighter?: DocsParserHighlighter) =>
+    parseDocsRouteDocument(page.body, page.href, highlighter, page.assets);
+  return options.highlighting
+    ? options.highlighting.parse(page.body, parse)
+    : parse(options.highlighter);
 }
 
 export function parseDocsRouteDocument(

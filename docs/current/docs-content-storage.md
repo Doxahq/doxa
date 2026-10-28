@@ -133,8 +133,9 @@ Cache between `caches.default` and R2:
 
 - `DocsBlobCache` is a named entrypoint of the docs runtime
   (`apps/docs-runtime/src/blob-cache.ts`). `wrangler.json` turns the Workers
-  Cache on for it only (`exports`). The default and `RuntimeSourceApi`
-  entrypoints stay uncached. `cache.cross_version_cache` is `true`, so a
+  Cache on for it only (`exports`). The default entrypoint stays uncached.
+  `RuntimeSourceApi` has RPC methods only, so it is not listed: Cloudflare
+  rejects cache options for it, and it inherits the disabled Worker cache. `cache.cross_version_cache` is `true`, so a
   deploy keeps the entries: their bytes depend only on the key.
 - The reader calls it with `ctx.exports.DocsBlobCache.fetch()`. Each request
   builds its reader with the binding of its own `ctx`, in the fetch handler

@@ -14,12 +14,6 @@
         "enabled": false
       }
     },
-    "RuntimeSourceApi": {
-      "type": "worker",
-      "cache": {
-        "enabled": false
-      }
-    },
     "DocsBlobCache": {
       "type": "worker",
       "cache": {

@@ -22,7 +22,6 @@ test("caches only the DocsBlobCache entrypoint of the docs runtime", () => {
   assert.deepEqual(config.cache, { enabled: false, cross_version_cache: true });
   assert.deepEqual(config.exports, {
     default: { type: "worker", cache: { enabled: false } },
-    RuntimeSourceApi: { type: "worker", cache: { enabled: false } },
     DocsBlobCache: { type: "worker", cache: { enabled: true } },
   });
   assert.doesNotThrow(() => validateDocsRuntimeConfig(config));
@@ -42,16 +41,24 @@ test("rolls the blob cache out to the operator's canary sites", () => {
   );
 });
 
-test("rejects a cached default or RPC entrypoint", () => {
-  for (const entrypoint of ["default", "RuntimeSourceApi"]) {
-    const config = runtimeConfig();
-    config.exports[entrypoint].cache.enabled = true;
+test("rejects a cached default entrypoint", () => {
+  const config = runtimeConfig();
+  config.exports.default.cache.enabled = true;
 
-    assert.throws(
-      () => validateDocsRuntimeConfig(config),
-      new RegExp(`must not cache the ${entrypoint} entrypoint`),
-    );
-  }
+  assert.throws(
+    () => validateDocsRuntimeConfig(config),
+    /must not cache the default entrypoint/,
+  );
+});
+
+test("rejects cache options for the RPC-only RuntimeSourceApi", () => {
+  const config = runtimeConfig();
+  config.exports.RuntimeSourceApi = { type: "worker", cache: { enabled: false } };
+
+  assert.throws(
+    () => validateDocsRuntimeConfig(config),
+    /must not list the RPC-only RuntimeSourceApi/,
+  );
 });
 
 test("rejects a runtime whose Worker cache is on by default", () => {

@@ -15,12 +15,16 @@ export function validateDocsRuntimeConfig(runtime) {
       `${RUNTIME_CONFIG} must turn the Worker cache off and share entries across versions (cache.cross_version_cache).`,
     );
   }
-  for (const entrypoint of ["default", "RuntimeSourceApi"]) {
-    if (runtime.exports?.[entrypoint]?.cache?.enabled !== false) {
-      throw new Error(
-        `${RUNTIME_CONFIG} must not cache the ${entrypoint} entrypoint.`,
-      );
-    }
+  if (runtime.exports?.default?.cache?.enabled !== false) {
+    throw new Error(`${RUNTIME_CONFIG} must not cache the default entrypoint.`);
+  }
+  // RuntimeSourceApi has RPC methods only. Cloudflare rejects cache options
+  // for it ("Cache options reference an unknown entrypoint"), and it inherits
+  // the disabled Worker cache.
+  if (runtime.exports?.RuntimeSourceApi !== undefined) {
+    throw new Error(
+      `${RUNTIME_CONFIG} must not list the RPC-only RuntimeSourceApi in exports.`,
+    );
   }
   if (runtime.exports?.DocsBlobCache?.cache?.enabled !== true) {
     throw new Error(`${RUNTIME_CONFIG} must cache DocsBlobCache internally.`);

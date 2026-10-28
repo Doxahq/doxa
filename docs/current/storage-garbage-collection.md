@@ -101,6 +101,8 @@ Both collectors accept only a validated `{ siteId, versionId }` resource. They b
 
 Both collectors delete the physical keys of the folder: its `tree.json` and, until the storage migration ends, its old flat files. They never delete a blob. After a complete deletion, they enqueue a `docs_site_blobs` entry for the site.
 
+The tiered blob cache of the docs runtime (`DocsBlobCache`) can keep a deleted tree for up to one day and a deleted blob for up to one year. No reader reaches them: a reader asks only for the folder of a version row that serves it. See [Trees and Deleted Versions](docs-content-storage.md#trees-and-deleted-versions).
+
 ## Branch Image Folders
 
 An image upload (MCP `upload_asset`) writes a version folder with one file,

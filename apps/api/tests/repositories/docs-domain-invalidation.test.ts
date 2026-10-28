@@ -78,7 +78,12 @@ function database(selects: Row[][], deleted: Row[] = [domain]) {
     select: () => new Result(selects.shift() ?? []),
     insert: (table: unknown) => ({
       values: (values: Row) => {
-        if (table === schema.docsCacheInvalidations) invalidations.push(values);
+        // Follow-up purges carry a delayed nextAttemptAt.
+        if (
+          table === schema.docsCacheInvalidations &&
+          !("nextAttemptAt" in values)
+        )
+          invalidations.push(values);
         return new Result([{ ...domain, ...values }]);
       },
     }),

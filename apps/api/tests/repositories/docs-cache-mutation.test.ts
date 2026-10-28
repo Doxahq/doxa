@@ -14,10 +14,15 @@ function fixture() {
   const events: string[] = [];
   const pending: unknown[] = [];
   const persisted: unknown[] = [];
+  const followUps: unknown[] = [];
   const tx = {
     insert: (table: unknown) => ({
-      values: async (value: unknown) => {
+      values: async (value: Record<string, unknown>) => {
         expect(table).toBe(schema.docsCacheInvalidations);
+        if ("nextAttemptAt" in value) {
+          followUps.push(value);
+          return;
+        }
         pending.push(value);
         events.push("enqueue");
       },
@@ -40,7 +45,7 @@ function fixture() {
   delivery.process.mockReset().mockImplementation(async () => {
     events.push("purge");
   });
-  return { db, binding, events, persisted };
+  return { db, binding, events, persisted, followUps };
 }
 
 describe("docs cache mutation transaction", () => {
@@ -59,6 +64,25 @@ describe("docs cache mutation transaction", () => {
     expect(state.events).toEqual(["publish", "enqueue", "commit", "purge"]);
     expect(state.persisted).toEqual([
       { id: expect.any(String), siteId: "site-1" },
+    ]);
+  });
+
+  test("queues a delayed follow-up purge for a lookup that raced the first", async () => {
+    const state = fixture();
+    await withDocsCacheInvalidation(
+      state.db as never,
+      state.binding,
+      async (_tx, enqueue) => {
+        await enqueue({ siteId: "site-1", hostname: "docs.acme.com" });
+      },
+    );
+    expect(state.followUps).toEqual([
+      {
+        id: expect.any(String),
+        siteId: "site-1",
+        hostname: "docs.acme.com",
+        nextAttemptAt: expect.anything(),
+      },
     ]);
   });
 

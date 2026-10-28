@@ -92,7 +92,7 @@ Saved output is deleted when it stops serving production. The scheduled garbage 
 
 A pre-render task becomes obsolete when the published version changes, when the hostname stops serving the site, or when the renderer release changes. The obsolete task records its render as collectable.
 
-The objects wait 24 hours before deletion. The dispatcher can hold a resolved hostname for one hour, so this grace period covers a request that still asks for the previous render.
+The objects wait 25 hours before deletion (`HOSTNAME_READER_GRACE_SECONDS`). The dispatcher can hold a resolved hostname for one day, so this grace period covers a request that still asks for the previous render.
 
 The collector recomputes the current render identity for every active hostname of the site before it deletes an object. A render that still serves production is kept.
 

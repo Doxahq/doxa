@@ -10,7 +10,11 @@ import {
   sql,
 } from "drizzle-orm";
 import { createDb, schema, type DoxaDb } from "@doxahq/db";
-import type { DocsAccessPolicy, DocsHostResolution } from "@doxahq/contracts";
+import {
+  HOSTNAME_READER_GRACE_SECONDS,
+  type DocsAccessPolicy,
+  type DocsHostResolution,
+} from "@doxahq/contracts";
 import {
   createPrerenderIdentity,
   normalizePublicDocsPathname,
@@ -43,11 +47,10 @@ import { enqueueStorageCollection } from "./storage-gc";
 /**
  * Wait time before the garbage collector may delete an obsolete render.
  *
- * The dispatcher can hold a resolved hostname for one hour, so a request can
- * still ask for a render that just became obsolete. One day keeps a wide
- * margin and still bounds storage growth.
+ * The dispatcher can hold a resolved hostname for a day, so a request can
+ * still ask for a render that just became obsolete during that time.
  */
-const RENDER_COLLECTION_GRACE_SECONDS = 24 * 60 * 60;
+const RENDER_COLLECTION_GRACE_SECONDS = HOSTNAME_READER_GRACE_SECONDS;
 const CLAIM_LIMIT = 10;
 const CLAIM_CANDIDATE_LIMIT = 50;
 const MAX_RUNNING_PER_SITE = 2;

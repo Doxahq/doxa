@@ -16,7 +16,7 @@ not a strict global read-after-write guarantee.
 
 | Layer                      | Lifetime                    | Identity                                                                                                                       |
 | -------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `DocsHostCache`            | 1 hour, stale on error      | Trusted hostname and `DOCS_HOST_CACHE_FORMAT` in `ctx.props`                                                                   |
+| `DocsHostCache`            | 1 day, stale on error       | Trusted hostname and `DOCS_HOST_CACHE_FORMAT` in `ctx.props`                                                                   |
 | `DocsHtmlCache`            | 1 year, then 7 days stale   | Trusted hostname, resolved site/version/artifact data, renderer build, delivery render ID in `ctx.props`, plus URL path        |
 | `DocsRouteDataCache`       | 1 year, then 7 days stale   | Trusted hostname, resolved site/version/artifact data, delivery identity (`renderId`) in `ctx.props`, plus the route-data path |
 | Public dispatcher response | Not stored                  | Explicit `private, no-store`                                                                                                   |
@@ -124,8 +124,14 @@ next lookup reads the new pointer and selects its version-specific HTML entry.
 
 A purge can fail or be delayed. An old lookup that was already running can also
 finish after the publish or purge and put an old mapping back into the cache.
-That mapping can live for another hour from its cache fill. Therefore, one hour
-is a fallback cache lifetime, not a hard deadline measured from publication.
+That mapping would live for a day from its cache fill
+(`DOCS_HOSTNAME_CACHE_TTL_SECONDS`). Therefore every enqueue also queues a
+follow-up purge two minutes later, which the scheduler delivers within about
+seven minutes. The follow-up removes such a late fill. Storage that a cached
+hostname can still point to (retired versions, deleted sites, pre-rendered
+output) waits `HOSTNAME_READER_GRACE_SECONDS`, 25 hours, before collection.
+The outbox health counts a task as delayed only after it has waited longer
+than one scheduler run plus a minute.
 A page response already in progress can still return the old version. An already
 open browser page does not update itself.
 
@@ -133,7 +139,7 @@ Cache lifetimes have names in `cache-policy.ts`:
 
 | Lifetime       | Entries                                                    | `Cache-Control`                                                                 |
 | -------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `hostname`     | `DocsHostCache`                                            | `public, max-age=3600, stale-if-error=604800`                                   |
+| `hostname`     | `DocsHostCache`                                            | `public, max-age=86400, stale-if-error=604800`                                  |
 | `liveFallback` | Live output after a saved-output miss                      | `public, max-age=30, must-revalidate`                                           |
 | `versioned`    | HTML, saved HTML and data, and `DocsRouteDataCache` output | `public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800` |
 

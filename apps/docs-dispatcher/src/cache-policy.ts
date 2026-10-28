@@ -1,6 +1,7 @@
-import type {
-  DocsCacheInvalidation,
-  DocsDomainResolution,
+import {
+  DOCS_HOSTNAME_CACHE_TTL_SECONDS,
+  type DocsCacheInvalidation,
+  type DocsDomainResolution,
 } from "@doxahq/contracts";
 
 // The hostname TTL is a freshness trade-off, not an invalidation guarantee.
@@ -10,7 +11,7 @@ import type {
 // traffic.
 // Keep these together so the early cache policy has one place to change.
 const DOCS_CACHE_POLICY = {
-  hostnameTtlSeconds: 3_600,
+  hostnameTtlSeconds: DOCS_HOSTNAME_CACHE_TTL_SECONDS,
   hostnameStaleIfErrorSeconds: 604_800,
   versionedTtlSeconds: 31_536_000,
   versionedStaleSeconds: 604_800,

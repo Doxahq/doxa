@@ -36,17 +36,36 @@ export interface DocsCacheInvalidationHealthStore {
   readHealth(): Promise<DocsCacheInvalidationHealth>;
 }
 
+/**
+ * A lookup that read the old pointer before the commit can store its mapping
+ * after the first purge. The dispatcher keeps hostnames for a day, so a
+ * second purge, which the scheduler delivers, removes such a late fill.
+ */
+const FOLLOW_UP_PURGE_DELAY_SECONDS = 120;
+
+/**
+ * Queues an immediate purge, returned for post-commit delivery, and a delayed
+ * follow-up purge that the scheduler delivers.
+ */
 export async function enqueueDocsCacheInvalidation(
   tx: DocsMutationTransaction,
   input: DocsCacheInvalidation,
 ): Promise<string> {
   const id = crypto.randomUUID();
   await tx.insert(schema.docsCacheInvalidations).values({ id, ...input });
+  await tx.insert(schema.docsCacheInvalidations).values({
+    id: crypto.randomUUID(),
+    ...input,
+    nextAttemptAt: sql`now() + ${FOLLOW_UP_PURGE_DELAY_SECONDS} * interval '1 second'`,
+  });
   return id;
 }
 
 const tasks = schema.docsCacheInvalidations;
 const CLAIM_LIMIT = 25;
+// The scheduler claims due work every five minutes. A task counts as delayed
+// once it has waited longer than one run, plus a minute of margin.
+const DELAYED_AFTER_SECONDS = 6 * 60;
 // Longer than a full batch of 25 three-second purge attempts.
 const LEASE_SECONDS = 120;
 
@@ -125,7 +144,7 @@ export class DocsCacheInvalidationsRepository
       .select({
         pendingCount: sql<number>`count(*)`.mapWith(Number),
         delayedCount:
-          sql<number>`count(*) filter (where ${tasks.nextAttemptAt} <= now() and (${tasks.leaseUntil} is null or ${tasks.leaseUntil} <= now()))`.mapWith(
+          sql<number>`count(*) filter (where ${tasks.nextAttemptAt} <= now() - ${DELAYED_AFTER_SECONDS} * interval '1 second' and (${tasks.leaseUntil} is null or ${tasks.leaseUntil} <= now()))`.mapWith(
             Number,
           ),
         failedCount:

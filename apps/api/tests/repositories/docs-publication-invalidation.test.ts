@@ -67,7 +67,11 @@ function database(selects: Row[][]) {
   return {
     invalidations: () =>
       inserted
-        .filter(({ table }) => table === schema.docsCacheInvalidations)
+        .filter(
+          ({ table, values }) =>
+            table === schema.docsCacheInvalidations &&
+            !("nextAttemptAt" in values),
+        )
         .map(({ values }) => values),
     publications: () =>
       inserted

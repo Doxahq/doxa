@@ -132,7 +132,7 @@ describe("cache entrypoints", () => {
       "docs-site:site-1,docs-host:docs.example.com",
     );
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=3600, stale-if-error=604800",
+      "public, max-age=86400, stale-if-error=604800",
     );
   });
 

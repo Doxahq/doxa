@@ -43,3 +43,7 @@ With the standard `pnpm dev` stack, use
   `/runtime-source`.
 - `DOCS_PUBLIC_BASE_URL`: non-secret public base URL used in fallback runtime
   metadata.
+- `DOXA_PROD_BLOB_CACHE_MODE` (`off`, `allowlist`, `all`) and
+  `DOXA_PROD_BLOB_CACHE_SITE_IDS`: which sites read blobs and trees through
+  the tiered `DocsBlobCache` entrypoint. See
+  [Docs Content Storage](../../docs/current/docs-content-storage.md#tiered-blob-cache-of-the-docs-runtime).

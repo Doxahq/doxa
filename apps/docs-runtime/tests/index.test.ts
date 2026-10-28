@@ -7,6 +7,7 @@ import {
   runHostRuntimeRequest,
   runResolvedRuntimeRequest,
 } from "../src/runtime-source";
+import { testExecutionContext } from "./support/execution-context";
 import { createTreeBucket, treeBucketOf } from "./support/tree-bucket";
 
 vi.mock("cloudflare:workers", () => ({
@@ -241,6 +242,7 @@ describe("docs runtime fetch", () => {
     const response = await worker.fetch(
       new Request("http://docs.test/doxa-demo"),
       env,
+      testExecutionContext(),
     );
     const html = await response.text();
 
@@ -273,6 +275,7 @@ describe("docs runtime fetch", () => {
     const response = await worker.fetch(
       new Request("http://docs.test/doxa-demo"),
       env,
+      testExecutionContext(),
     );
     const html = await response.text();
 
@@ -296,6 +299,7 @@ describe("docs runtime fetch", () => {
     const response = await worker.fetch(
       new Request("http://docs.test/doxa-demo"),
       env,
+      testExecutionContext(),
     );
     const html = await response.text();
 
@@ -1063,6 +1067,7 @@ describe("docs runtime fetch", () => {
         body: JSON.stringify({ operation: "getHomeHref" }),
       }),
       env,
+      testExecutionContext(),
     );
     const payload = (await response.json()) as {
       ok: false;
@@ -1364,6 +1369,7 @@ function runtimeRequest(
       body: JSON.stringify({ operation, payload }),
     }),
     env,
+    testExecutionContext(),
   );
 }
 const PUBLIC_ACCESS_POLICY: DocsAccessPolicy = "public";

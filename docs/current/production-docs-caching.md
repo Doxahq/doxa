@@ -37,6 +37,10 @@ still sets `Cache-Control`, `CDN-Cache-Control`, and
 `Cloudflare-CDN-Cache-Control` to `private, no-store` to prevent storage by the
 browser or other HTTP caches. Do not remove this boundary.
 
+The docs runtime has its own Workers Cache entrypoint, `DocsBlobCache`, for
+the immutable blobs and trees that it reads from R2. See
+[Docs Content Storage](docs-content-storage.md#tiered-blob-cache-of-the-docs-runtime).
+
 ## Request Flow
 
 ```text

@@ -2,7 +2,7 @@
 
 **Status:** Implemented. Production was migrated on 2026-09-30 (see
 [Migration](#migration)).
-**Last reviewed:** 2026-10-23
+**Last reviewed:** 2026-10-29
 
 This document describes how published docs versions are stored in the
 `doxa-docs-artifacts-enam` R2 bucket. For the reason behind the design, see the plan
@@ -77,7 +77,7 @@ only reader. Each app wraps it once:
 | App | Entry point |
 |---|---|
 | API | `createR2DocsContentStore` and `createR2DocsArtifactReader` in `apps/api/src/services/docs-content/store.ts` |
-| docs-runtime | `artifactReader` in `apps/docs-runtime/src/artifact-storage.ts` |
+| docs-runtime | `artifactReader` in `apps/docs-runtime/src/artifact-storage.ts`, one per request |
 | Generation Worker | `artifactReader` in `apps/agent-worker/src/artifact-storage.ts` |
 
 Rules:
@@ -116,6 +116,89 @@ The API and the docs runtime build their reader caches with
   from the cache in the end. A reader resolves a version through its database
   row first, so it does not ask for a deleted version.
 - A fill runs through `waitUntil`, so it can finish after the response.
+
+### Tiered Blob Cache of the Docs Runtime
+
+`caches.default` is local to one data center. A cold read from a data center
+far from the `enam` bucket still pays the full R2 round trip: 30–200 ms from
+Europe and 340–841 ms from Singapore. The docs runtime can put a tiered Workers
+Cache between `caches.default` and R2:
+
+| Order | Tier | Holds | Cost |
+|---|---|---|---|
+| 1 | Isolate memory | Parsed trees | Free |
+| 2 | `caches.default` of the data center | Trees (24 hours), blobs of 256 KB or less (1 year) | Free, local |
+| 3 | `DocsBlobCache` (Workers Cache, lower and regional upper tier) | Trees (24 hours), all blobs (1 year) | One Workers request per read |
+| 4 | R2 | Everything | One R2 read |
+
+- `DocsBlobCache` is a named entrypoint of the docs runtime
+  (`apps/docs-runtime/src/blob-cache.ts`). `wrangler.json` turns the Workers
+  Cache on for it only (`exports`). The default and `RuntimeSourceApi`
+  entrypoints stay uncached. `cache.cross_version_cache` is `true`, so a
+  deploy keeps the entries: their bytes depend only on the key.
+- The reader calls it with `ctx.exports.DocsBlobCache.fetch()`. Each request
+  builds its reader with the binding of its own `ctx`, in the fetch handler
+  and in each `RuntimeSourceApi` call. Only `fetch` calls are cached.
+- The storage adapter (`createVersionObjectStorage` in
+  `packages/docs-engine/src/version-object-cache.ts`) sends only the blob and
+  tree keys that the tree layer builds (`parseImmutableStorageKey`). Every
+  other key goes to R2 unchanged. If the entrypoint fails, the read goes to R2.
+- The endpoint (`respondWithVersionObject`) accepts only a GET for
+  `https://docs-object-cache.internal/{key}` with such a key, and nothing
+  else (400, `no-store`). A missing object is a 404 with `no-store`, so a
+  publish can write it a moment later. A blob must hash to its key and a tree
+  must parse as the tree of its folder; otherwise the response is a 502 with
+  `no-store`, and damaged bytes are never cached.
+- The key holds the site id, so two sites never share an entry. No public
+  route reaches the entrypoint, and its keys come only from resolved version
+  folders and their trees.
+- Entries carry the `Cache-Tag` values `docs-objects-site:{siteId}` and, for a
+  tree, `docs-objects-version:{siteId}/{versionId}`. Only code in the
+  `DocsBlobCache` entrypoint can purge them. No purge runs today; see below.
+- `caches.default` stays in front. It is local and free, while each
+  `DocsBlobCache` call is billed as a Workers request. A tier-2 hit makes no
+  call; a tier-3 hit fills tier 2 as before.
+
+#### Trees and Deleted Versions
+
+Trees go through `DocsBlobCache` too, because the tree read is the first of
+the two serial read levels of a cold page. A collected version can keep its
+tree in the cache for up to one day after the last fill. This is safe:
+
+- A version id is never reused, so a cached tree never names the wrong files.
+- The reader asks for a tree only through a version that the database
+  resolved. The collectors delete a folder only when no row serves it, and
+  only after the 25-hour hostname grace period.
+- The dispatcher caches rendered HTML of a version for a year under the same
+  rule. Deleting the site row and purging the hostname mapping makes both
+  unreachable.
+
+A collected blob can stay in the cache for up to a year, but only a live tree
+can name it, and its bytes are the same. If a cached object must ever leave
+before it expires, add a purge method to `DocsBlobCache` that calls
+`ctx.cache.purge({ tags })` with the tags above, and call it from the
+collector.
+
+#### Rollout and Logs
+
+| Variable | Values | Default |
+|---|---|---|
+| `DOXA_PROD_BLOB_CACHE_MODE` | `off`, `allowlist`, `all`. Any other value is `off` and logs `docs_runtime_blob_cache_invalid_mode` once per isolate. | `off` |
+| `DOXA_PROD_BLOB_CACHE_SITE_IDS` | Comma-separated site ids for `allowlist`. | empty |
+
+`pnpm validate:production-config` checks the cache settings and the mode
+(`scripts/lib/docs-runtime-config.mjs`).
+
+The `docs_runtime_reads` log line has three counters for the storage reads
+below the logical reads, by where they were served: `edgeCacheHits`
+(`caches.default`), `blobCacheHits` (a `cf-cache-status` of `HIT`, `STALE`,
+`UPDATING`, or `REVALIDATED`), and `r2Reads` (every read that reached R2,
+directly or as the fill of a tiered-cache miss).
+
+To turn the tiered cache off, set `DOXA_PROD_BLOB_CACHE_MODE` to `off` and
+deploy the docs runtime. To remove it, also set
+`exports.DocsBlobCache.cache.enabled` to `false`. Old entries do no harm:
+their bytes cannot change.
 
 ## Writing
 
@@ -213,8 +296,10 @@ docs again. The new version gets a tree.
 
 - `packages/docs-engine/src/version-tree.ts`
 - `packages/docs-engine/src/version-edge-cache.ts`
+- `packages/docs-engine/src/version-object-cache.ts`
 - `apps/api/src/services/docs-content/store.ts`
 - `apps/api/src/services/docs-branches/materialize.ts`
 - `apps/api/src/services/storage-gc/collectors/docs-site-blobs.ts`
 - `apps/docs-runtime/src/artifact-storage.ts`
+- `apps/docs-runtime/src/blob-cache.ts`
 - `apps/agent-worker/src/artifact-storage.ts`

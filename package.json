@@ -28,7 +28,7 @@
     "deploy:api:ecs": "node scripts/deploy-api-ecs.mjs",
     "secrets:api:ecs": "bash scripts/api-origin-secrets.sh",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test && node --test scripts/validate-production-config.test.mjs scripts/docs-placement-config.test.mjs scripts/mcp-production-config.test.mjs scripts/deploy-production.test.mjs scripts/worker-startup.test.mjs scripts/ecs-task-definition.test.mjs scripts/deploy-api-ecs.test.mjs scripts/deploy-api.test.mjs scripts/apply-production-ids.test.mjs scripts/refuse-api-worker-deploy.test.mjs",
+    "test": "pnpm -r test && node --test scripts/validate-production-config.test.mjs scripts/docs-placement-config.test.mjs scripts/docs-runtime-config.test.mjs scripts/mcp-production-config.test.mjs scripts/deploy-production.test.mjs scripts/worker-startup.test.mjs scripts/ecs-task-definition.test.mjs scripts/deploy-api-ecs.test.mjs scripts/deploy-api.test.mjs scripts/apply-production-ids.test.mjs scripts/refuse-api-worker-deploy.test.mjs",
     "validate:production-config": "node scripts/validate-production-config.mjs",
     "test:generation:synthetic": "pnpm --filter @doxahq/agent-container test:synthetic",
     "db:generate": "pnpm --filter @doxahq/db db:generate",

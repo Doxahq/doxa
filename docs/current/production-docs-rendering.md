@@ -159,6 +159,14 @@ The shared renderer handles:
 - all traffic while dynamic mode is off;
 - safe fallback requests.
 
+A hostname that the dispatcher cannot resolve also reaches the shared
+renderer. When the runtime answers `project_not_found` (no published docs for
+the hostname), the renderer returns `404` with a short static page (plain
+text for a request that does not accept HTML) and `Cache-Control: no-store`
+(`apps/docs-template/src/lib/no-published-docs.ts`). It shows no site data and
+no error details. Every other runtime error still fails the request with a
+5xx.
+
 ## Dynamic Worker Security
 
 The dispatcher resolves one exact production version before it creates the

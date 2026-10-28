@@ -9,6 +9,7 @@ import type {
   DoxaDocsRuntimeSource,
   RuntimeRouteData,
 } from "@/src/runtime/runtime-source";
+import { isNoPublishedDocsError } from "@/src/runtime/runtime-source-error";
 import {
   createConfiguredRuntimeSource,
   createDispatcherRuntimeSource,
@@ -33,6 +34,7 @@ import {
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import { getAccessGateResponse } from "@/src/lib/access-gate";
+import { noPublishedDocsResponse } from "@/src/lib/no-published-docs";
 import { tryRawMarkdownResponse } from "@/src/lib/raw-markdown";
 import { getRendererHealthResponse } from "@/src/lib/renderer-health";
 import { getRedirectResponse } from "@/src/lib/request-redirects";
@@ -129,86 +131,100 @@ const server = {
     request: Request,
     env?: RendererWorkerEnv,
     ctx?: ExecutionContext
-  ) {
-    const { host, hostname, pathname } = new URL(request.url);
-    const requestScope = readRendererRequestScope(ctx?.props);
-    // Only a dispatcher-pinned render reports its timing: the dispatcher reads
-    // the header and removes it. The shared renderer resolves by hostname.
-    const timing =
-      requestScope || env?.DOXA_DOCS_CONTENT_RESOLUTION
-        ? startRendererTiming()
-        : undefined;
-    const runtimeSource = createDispatcherRuntimeSource(env, {
-      requestScope,
-      hostname,
-      wrapContent: timing?.wrapContent,
-    });
-
-    const health = getRendererHealthResponse(request);
-    if (health) return health;
-
-    const redirect = getRedirectResponse(request);
-    if (redirect) return redirect;
-
-    const gate = await getAccessGateResponse(request);
-    if (gate) return gate;
-
-    if (pathname.startsWith("/_doxa/assets/")) {
-      if (request.method !== "GET" && request.method !== "HEAD")
-        return new Response(null, { status: 405 });
-      const hash = sha256Schema.safeParse(
-        pathname.slice("/_doxa/assets/".length)
-      );
-      if (!hash.success) return new Response(null, { status: 404 });
-      // This branch runs before TanStack Start, so the platform source cannot
-      // read the host from a Start request context. Pass it from the request.
-      // `host` keeps the port, like `getRequestHost` on the page render path.
-      const source =
-        runtimeSource ??
-        (await createConfiguredRuntimeSource(process.env, host));
-      const response =
-        (await source.getAsset?.(hash.data)) ??
-        new Response(null, { status: 404 });
-      return request.method === "HEAD"
-        ? new Response(null, response)
-        : response;
+  ): Promise<Response> {
+    try {
+      return await handleDocsRequest(request, env, ctx);
+    } catch (error) {
+      // A host without published docs is a missing page, not a failure.
+      // Every other error still reaches the platform as a 5xx.
+      if (isNoPublishedDocsError(error)) {
+        return noPublishedDocsResponse(request);
+      }
+      throw error;
     }
-
-    const versionAsset = await tryVersionAssetResponse(
-      request,
-      runtimeSource,
-      host
-    );
-    if (versionAsset) return versionAsset;
-
-    const rawMarkdown = await tryRawMarkdownResponse(pathname, runtimeSource);
-    if (rawMarkdown) return rawMarkdown;
-
-    const context: DocsRequestContext = runtimeSource
-      ? {
-          runtimeSource,
-          runtimeSourceMode: "binding",
-          ...getTrustedDeliveryContext(request),
-        }
-      : {};
-    if (
-      runtimeSource &&
-      request.method === "GET" &&
-      request.headers.get("accept")?.includes("text/html")
-    ) {
-      const preloadPageGrammars = startServerHighlighter();
-      const route = await measurePhase(timing, "routeDataMs", async () =>
-        runtimeSource.getRouteData?.(pathname)
-      );
-      preloadPageGrammars(route);
-      context.siteConfig = await measurePhase(timing, "siteConfigMs", () =>
-        loadSiteConfig(runtimeSource, route)
-      );
-    }
-    const response = await startHandler(request, { context });
-    return timing ? timing.attach(response) : response;
   },
 };
+
+async function handleDocsRequest(
+  request: Request,
+  env?: RendererWorkerEnv,
+  ctx?: ExecutionContext
+): Promise<Response> {
+  const { host, hostname, pathname } = new URL(request.url);
+  const requestScope = readRendererRequestScope(ctx?.props);
+  // Only a dispatcher-pinned render reports its timing: the dispatcher reads
+  // the header and removes it. The shared renderer resolves by hostname.
+  const timing =
+    requestScope || env?.DOXA_DOCS_CONTENT_RESOLUTION
+      ? startRendererTiming()
+      : undefined;
+  const runtimeSource = createDispatcherRuntimeSource(env, {
+    requestScope,
+    hostname,
+    wrapContent: timing?.wrapContent,
+  });
+
+  const health = getRendererHealthResponse(request);
+  if (health) return health;
+
+  const redirect = getRedirectResponse(request);
+  if (redirect) return redirect;
+
+  const gate = await getAccessGateResponse(request);
+  if (gate) return gate;
+
+  if (pathname.startsWith("/_doxa/assets/")) {
+    if (request.method !== "GET" && request.method !== "HEAD")
+      return new Response(null, { status: 405 });
+    const hash = sha256Schema.safeParse(
+      pathname.slice("/_doxa/assets/".length)
+    );
+    if (!hash.success) return new Response(null, { status: 404 });
+    // This branch runs before TanStack Start, so the platform source cannot
+    // read the host from a Start request context. Pass it from the request.
+    // `host` keeps the port, like `getRequestHost` on the page render path.
+    const source =
+      runtimeSource ?? (await createConfiguredRuntimeSource(process.env, host));
+    const response =
+      (await source.getAsset?.(hash.data)) ??
+      new Response(null, { status: 404 });
+    return request.method === "HEAD" ? new Response(null, response) : response;
+  }
+
+  const versionAsset = await tryVersionAssetResponse(
+    request,
+    runtimeSource,
+    host
+  );
+  if (versionAsset) return versionAsset;
+
+  const rawMarkdown = await tryRawMarkdownResponse(pathname, runtimeSource);
+  if (rawMarkdown) return rawMarkdown;
+
+  const context: DocsRequestContext = runtimeSource
+    ? {
+        runtimeSource,
+        runtimeSourceMode: "binding",
+        ...getTrustedDeliveryContext(request),
+      }
+    : {};
+  if (
+    runtimeSource &&
+    request.method === "GET" &&
+    request.headers.get("accept")?.includes("text/html")
+  ) {
+    const preloadPageGrammars = startServerHighlighter();
+    const route = await measurePhase(timing, "routeDataMs", async () =>
+      runtimeSource.getRouteData?.(pathname)
+    );
+    preloadPageGrammars(route);
+    context.siteConfig = await measurePhase(timing, "siteConfigMs", () =>
+      loadSiteConfig(runtimeSource, route)
+    );
+  }
+  const response = await startHandler(request, { context });
+  return timing ? timing.attach(response) : response;
+}
 
 /**
  * Starts the server highlighter while the content request is in flight: it

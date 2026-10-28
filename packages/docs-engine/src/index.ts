@@ -48,6 +48,7 @@ export {
   chainVersionByteCaches,
   createVersionTreeReader,
   isSafeVersionTreePath,
+  parseImmutableStorageKey,
   parseVersionArtifactKey,
   parseVersionPrefix,
   parseVersionTreeText,
@@ -62,6 +63,7 @@ export {
   versionTreeKey,
   versionTreeSchema,
   writeVersionTree,
+  type ImmutableStorageKey,
   type VersionArtifactKeyParts,
   type VersionByteCache,
   type VersionPrefixParts,
@@ -83,6 +85,19 @@ export {
   type WaitUntil,
   type WorkerVersionCacheOptions,
 } from "./version-edge-cache";
+export {
+  VERSION_BLOB_CACHE_CONTROL,
+  VERSION_OBJECT_CACHE_ORIGIN,
+  VERSION_TREE_CACHE_CONTROL,
+  createVersionObjectStorage,
+  parseVersionObjectRequest,
+  respondWithVersionObject,
+  versionObjectCacheTags,
+  versionObjectCacheUrl,
+  type VersionObjectFetcher,
+  type VersionObjectReadSource,
+  type VersionObjectStorageOptions,
+} from "./version-object-cache";
 export {
   readSiteConfig,
   type SiteConfigStorageReader,

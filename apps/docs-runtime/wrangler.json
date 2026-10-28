@@ -3,10 +3,36 @@
   "name": "doxa-docs-runtime",
   "main": "src/index.ts",
   "compatibility_date": "2026-06-12",
+  "cache": {
+    "enabled": false,
+    "cross_version_cache": true
+  },
+  "exports": {
+    "default": {
+      "type": "worker",
+      "cache": {
+        "enabled": false
+      }
+    },
+    "RuntimeSourceApi": {
+      "type": "worker",
+      "cache": {
+        "enabled": false
+      }
+    },
+    "DocsBlobCache": {
+      "type": "worker",
+      "cache": {
+        "enabled": true
+      }
+    }
+  },
   "vars": {
     "API_BASE_URL": "http://localhost:8787",
     "ALLOW_INTERNAL_HTTP": "true",
-    "DOCS_PUBLIC_BASE_URL": "http://localhost:8788"
+    "DOCS_PUBLIC_BASE_URL": "http://localhost:8788",
+    "DOXA_PROD_BLOB_CACHE_MODE": "off",
+    "DOXA_PROD_BLOB_CACHE_SITE_IDS": ""
   },
   "services": [
     {
@@ -29,7 +55,9 @@
       "vars": {
         "API_BASE_URL": "",
         "ALLOW_INTERNAL_HTTP": "false",
-        "DOCS_PUBLIC_BASE_URL": "https://preview.doxa.so"
+        "DOCS_PUBLIC_BASE_URL": "https://preview.doxa.so",
+        "DOXA_PROD_BLOB_CACHE_MODE": "off",
+        "DOXA_PROD_BLOB_CACHE_SITE_IDS": ""
       },
       "services": [
         {

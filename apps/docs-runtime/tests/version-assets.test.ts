@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { loadFrozenArtifactSetByName } from "@doxahq/docs-artifact-fixtures";
 import { sha256Hex } from "@doxahq/docs-engine";
+import { artifactReader } from "../src/artifact-storage";
 import { readPageAssetVersions } from "../src/page-assets";
 import {
   resetRuntimeSourceCachesForTests,
@@ -181,7 +182,7 @@ describe("page asset hashes", () => {
     const env = createEnv();
     expect(
       await readPageAssetVersions(
-        env.DOCS_BUCKET,
+        artifactReader(env),
         set.artifactPrefix,
         "![a](/assets/diagram.png) and ![b](/assets/missing.png).",
       ),
@@ -192,7 +193,11 @@ describe("page asset hashes", () => {
     const env = createEnv();
     const read = vi.spyOn(env.DOCS_BUCKET, "get");
     expect(
-      await readPageAssetVersions(env.DOCS_BUCKET, set.artifactPrefix, "# Hi"),
+      await readPageAssetVersions(
+        artifactReader(env),
+        set.artifactPrefix,
+        "# Hi",
+      ),
     ).toBeUndefined();
     expect(read).not.toHaveBeenCalled();
   });
@@ -200,7 +205,7 @@ describe("page asset hashes", () => {
   test("is undefined when the prefix is not a version folder", async () => {
     expect(
       await readPageAssetVersions(
-        createEnv().DOCS_BUCKET,
+        artifactReader(createEnv()),
         "not-a-version",
         "![a](/assets/diagram.png)",
       ),

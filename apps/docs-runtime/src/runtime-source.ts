@@ -9,6 +9,8 @@ import {
   manifestPathForPrefix,
   parseDocsManifestText,
   type DocsManifest,
+  type VersionObjectFetcher,
+  type VersionTreeReader,
 } from "@doxahq/docs-engine";
 import { z } from "zod";
 import {
@@ -25,7 +27,11 @@ import {
   DocsResolverClient,
   type DocsResolverBinding,
 } from "@doxahq/contracts/docs-resolver";
-import { artifactReader } from "./artifact-storage";
+import {
+  artifactReader,
+  type ArtifactReadSource,
+  type ArtifactStorageEnv,
+} from "./artifact-storage";
 import { readPageAssetVersions } from "./page-assets";
 
 const docsResolutionResponseSchema = z
@@ -34,12 +40,11 @@ const docsResolutionResponseSchema = z
   })
   .strict();
 
-export interface RuntimeSourceEnv {
+export interface RuntimeSourceEnv extends ArtifactStorageEnv {
   DOCS_RESOLVER?: DocsResolverBinding;
   API?: InternalApiRpc;
   ALLOW_INTERNAL_HTTP?: string;
   API_BASE_URL?: string;
-  DOCS_BUCKET: R2Bucket;
   DOCS_CONTENT_TOKEN?: string;
   DOCS_PUBLIC_BASE_URL?: string;
   DOXA_DOCS_RUNTIME_TIMING?: string;
@@ -301,6 +306,8 @@ export interface RuntimeRequestContext {
   timing: RuntimeTiming;
   cache: RuntimeRequestCache;
   reads: RuntimeReadStats;
+  /** The artifact reader of this request. It counts its storage reads. */
+  artifacts: VersionTreeReader;
 }
 
 /** Artifact reads that passed the memory caches during one request. */
@@ -308,6 +315,8 @@ interface RuntimeReadStats {
   count: number;
   totalMs: number;
   longestMs: number;
+  /** Storage reads by where they were served. */
+  sources: Record<ArtifactReadSource, number>;
 }
 
 export function recordArtifactRead(
@@ -365,12 +374,29 @@ type RuntimeTimingData = Record<
   boolean | number | string | null | undefined
 >;
 
+/**
+ * `blobCache` is `ctx.exports.DocsBlobCache` of the current request. Without
+ * it, the reader reads R2.
+ */
 function createRuntimeRequestContext(
   env: RuntimeSourceEnv,
+  blobCache: VersionObjectFetcher | null,
 ): RuntimeRequestContext {
+  const reads: RuntimeReadStats = {
+    count: 0,
+    totalMs: 0,
+    longestMs: 0,
+    sources: { edgeCache: 0, blobCache: 0, r2: 0 },
+  };
   return {
     timing: createRuntimeTiming(env),
-    reads: { count: 0, totalMs: 0, longestMs: 0 },
+    reads,
+    artifacts: artifactReader(env, {
+      blobCache,
+      onRead: (source) => {
+        reads.sources[source] += 1;
+      },
+    }),
     cache: {
       resolutions: new Map(),
       manifests: new Map(),
@@ -394,11 +420,12 @@ export function resetRuntimeSourceCachesForTests(): void {
 export async function handleRuntimeSourceRequest(
   request: Request,
   env: RuntimeSourceEnv,
+  blobCache: VersionObjectFetcher | null = null,
 ): Promise<Response | null> {
   const url = new URL(request.url);
   if (url.pathname.replace(/\/+$/, "") !== DEFAULT_RUNTIME_PATH) return null;
   const requestStartedAt = now();
-  const runtimeContext = createRuntimeRequestContext(env);
+  const runtimeContext = createRuntimeRequestContext(env, blobCache);
   const { timing } = runtimeContext;
 
   if (request.method !== "POST") {
@@ -510,6 +537,7 @@ export async function handleRuntimeSourceRequest(
 export async function runResolvedRuntimeRequest(
   env: RuntimeSourceEnv,
   input: ResolvedRuntimeRequest,
+  blobCache: VersionObjectFetcher | null = null,
 ): Promise<RuntimeResponseBody> {
   const resolution = docsHostResolutionSchema.safeParse(input.resolution);
   if (!resolution.success || !isRuntimeOperation(input.operation)) {
@@ -523,7 +551,7 @@ export async function runResolvedRuntimeRequest(
     };
   }
 
-  const runtimeContext = createRuntimeRequestContext(env);
+  const runtimeContext = createRuntimeRequestContext(env, blobCache);
   const manifestRead = await readManifest(
     env,
     resolution.data.manifestPath,
@@ -569,7 +597,9 @@ export async function runResolvedRuntimeRequest(
  * One line per route-data read, with or without DOXA_DOCS_RUNTIME_TIMING.
  * The dispatcher calls getRouteData only on an HTML or route-data cache miss,
  * so the volume follows the misses. The read count includes the manifest
- * reads made before the operation.
+ * reads made before the operation. `edgeCacheHits`, `blobCacheHits` and
+ * `r2Reads` split the storage reads below those reads (a tree, a blob) by
+ * where they were served; a tiered-cache miss is an R2 read.
  */
 function logRouteDataReads(
   resolution: DocsHostResolution,
@@ -587,6 +617,9 @@ function logRouteDataReads(
       reads: reads.count,
       readMs: Math.round(reads.totalMs),
       longestReadMs: Math.round(reads.longestMs),
+      edgeCacheHits: reads.sources.edgeCache,
+      blobCacheHits: reads.sources.blobCache,
+      r2Reads: reads.sources.r2,
     }),
   );
 }
@@ -610,6 +643,7 @@ function isPinnedManifest(
 export async function runHostRuntimeRequest(
   env: RuntimeSourceEnv,
   input: HostRuntimeRequest,
+  blobCache: VersionObjectFetcher | null = null,
 ): Promise<RuntimeResponseBody> {
   const hostname = input.hostname?.trim().toLowerCase();
   if (
@@ -626,7 +660,7 @@ export async function runHostRuntimeRequest(
     };
   }
 
-  const runtimeContext = createRuntimeRequestContext(env);
+  const runtimeContext = createRuntimeRequestContext(env, blobCache);
   const loaded = await loadProjectRuntimeContext(
     env,
     { kind: "host", value: hostname },
@@ -1270,7 +1304,11 @@ async function getPage(
 
   const [sections, assets] = await Promise.all([
     readSections(env, context, runtimeContext),
-    readPageAssetVersions(env.DOCS_BUCKET, context.artifactPrefix, raw.body),
+    readPageAssetVersions(
+      runtimeContext.artifacts,
+      context.artifactPrefix,
+      raw.body,
+    ),
   ]);
   return {
     ...raw,
@@ -1447,7 +1485,7 @@ async function readTextUncached(
   const { timing } = runtimeContext;
   const artifactKind = getArtifactKind(path);
   const bucketStartedAt = now();
-  const object = await artifactReader(env.DOCS_BUCKET).get(path);
+  const object = await runtimeContext.artifacts.get(path);
   const bucketMs = elapsed(bucketStartedAt);
   recordArtifactRead(runtimeContext, bucketMs);
   timing.mark("artifact.bucketGet", {

@@ -18,14 +18,16 @@ import {
   type ResolvedRuntimeRequest,
   resolveDocsHost,
 } from "./runtime-source";
-import { artifactReader } from "./artifact-storage";
+import { artifactReader, type ArtifactStorageEnv } from "./artifact-storage";
+import { blobCacheOf } from "./worker-exports";
 
-interface Env {
+export { DocsBlobCache } from "./blob-cache";
+
+interface Env extends ArtifactStorageEnv {
   DOCS_RESOLVER?: DocsResolverBinding;
   API?: InternalApiRpc;
   API_BASE_URL?: string;
   ALLOW_INTERNAL_HTTP?: string;
-  DOCS_BUCKET: R2Bucket;
   DOCS_CONTENT_TOKEN?: string;
   DOCS_PUBLIC_BASE_URL?: string;
 }
@@ -60,13 +62,16 @@ export class RuntimeSourceApi extends WorkerEntrypoint<Env> {
       resolution,
       input.name,
       input.version ?? null,
+      blobCacheOf(this.ctx),
     );
   }
 
   request(input: ResolvedRuntimeRequest | HostRuntimeRequest) {
+    // Each call reads the tiered blob cache through its own ctx.
+    const blobCache = blobCacheOf(this.ctx);
     return "resolution" in input
-      ? runResolvedRuntimeRequest(this.env, input)
-      : runHostRuntimeRequest(this.env, input);
+      ? runResolvedRuntimeRequest(this.env, input, blobCache)
+      : runHostRuntimeRequest(this.env, input, blobCache);
   }
 }
 
@@ -81,14 +86,23 @@ interface RouteParts {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
+    const blobCache = blobCacheOf(ctx);
     const assetResponse =
       (await handleSiteAssetRequest(request, env)) ??
-      (await handleVersionAssetRequest(request, env));
+      (await handleVersionAssetRequest(request, env, blobCache));
     if (assetResponse) return assetResponse;
     // Production template deployments call this private content contract.
     // The HTML route below is retained as a lightweight preview/debug surface.
-    const runtimeResponse = await handleRuntimeSourceRequest(request, env);
+    const runtimeResponse = await handleRuntimeSourceRequest(
+      request,
+      env,
+      blobCache,
+    );
     if (runtimeResponse) return runtimeResponse;
 
     const url = new URL(request.url);
@@ -195,7 +209,7 @@ async function readManifest(
 }
 
 async function readText(env: Env, path: string): Promise<string | null> {
-  const object = await artifactReader(env.DOCS_BUCKET).get(path);
+  const object = await artifactReader(env).get(path);
   if (object) return object.text();
 
   if (env.API) {

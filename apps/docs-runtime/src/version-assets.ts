@@ -4,7 +4,10 @@ import {
   docsAssetContentTypeForName,
   docsAssetVersionFromUrl,
 } from "@doxahq/contracts/docs-assets";
-import { parseVersionPrefix } from "@doxahq/docs-engine";
+import {
+  parseVersionPrefix,
+  type VersionObjectFetcher,
+} from "@doxahq/docs-engine";
 import { artifactReader } from "./artifact-storage";
 import {
   authenticateRuntimeRequest,
@@ -24,6 +27,7 @@ const ROUTE_PREFIX = "/runtime-source/version-assets/";
 export async function handleVersionAssetRequest(
   request: Request,
   env: RuntimeSourceEnv,
+  blobCache: VersionObjectFetcher | null = null,
 ): Promise<Response | null> {
   const path = new URL(request.url).pathname;
   if (!path.startsWith(ROUTE_PREFIX)) return null;
@@ -42,6 +46,7 @@ export async function handleVersionAssetRequest(
     resolution,
     path.slice(ROUTE_PREFIX.length),
     docsAssetVersionFromUrl(new URL(request.url)),
+    blobCache,
   );
   return request.method === "HEAD" ? new Response(null, response) : response;
 }
@@ -60,6 +65,7 @@ export async function serveVersionAsset(
   resolutionInput: unknown,
   nameInput: unknown,
   version: unknown = null,
+  blobCache: VersionObjectFetcher | null = null,
 ): Promise<Response> {
   const resolution = docsHostResolutionSchema.safeParse(resolutionInput);
   if (!resolution.success || typeof nameInput !== "string") return missing();
@@ -69,7 +75,7 @@ export async function serveVersionAsset(
     !isFolderOfSite(resolution.data.artifactPrefix, resolution.data.siteId)
   )
     return missing();
-  const reader = artifactReader(env.DOCS_BUCKET);
+  const reader = artifactReader(env, { blobCache });
   const path = docsAssetArtifactPath(nameInput);
   const object = await reader.get(`${resolution.data.artifactPrefix}/${path}`);
   if (!object) return missing();

@@ -1,17 +1,20 @@
 import { preparePublicDocsRouteData } from "@/src/runtime/prerender-renderer";
+import {
+  startRendererTiming,
+  type RendererTiming,
+  type RendererTimingPhase,
+} from "@/src/runtime/renderer-timing";
 import type { DocsRequestContext } from "@/src/runtime/request-context";
-import type { DoxaDocsRuntimeSource } from "@/src/runtime/runtime-source";
+import type {
+  DoxaDocsRuntimeSource,
+  RuntimeRouteData,
+} from "@/src/runtime/runtime-source";
 import {
   createConfiguredRuntimeSource,
   createDispatcherRuntimeSource,
   readRendererRequestScope,
   type RendererWorkerEnv,
 } from "@/src/runtime/runtime-source-selection";
-import {
-  startRendererTiming,
-  type RendererTiming,
-  type RendererTimingPhase,
-} from "@/src/runtime/renderer-timing";
 import { loadSiteConfig } from "@/src/site-config/load-site-config";
 import {
   docsAssetNameFromUrlPath,
@@ -193,9 +196,11 @@ const server = {
       request.method === "GET" &&
       request.headers.get("accept")?.includes("text/html")
     ) {
+      const preloadPageGrammars = startServerHighlighter();
       const route = await measurePhase(timing, "routeDataMs", async () =>
         runtimeSource.getRouteData?.(pathname)
       );
+      preloadPageGrammars(route);
       context.siteConfig = await measurePhase(timing, "siteConfigMs", () =>
         loadSiteConfig(runtimeSource, route)
       );
@@ -204,6 +209,30 @@ const server = {
     return timing ? timing.attach(response) : response;
   },
 };
+
+/**
+ * Starts the server highlighter while the content request is in flight: it
+ * does not depend on the content. The module is imported here, not at the
+ * top, so its evaluation also overlaps the request instead of the isolate
+ * start. The returned function starts loading the page's code grammars once
+ * the route data is known, before the route loader parses the page.
+ */
+function startServerHighlighter(): (
+  route: RuntimeRouteData | undefined
+) => void {
+  const highlighter = import("@/src/runtime/server-highlighter");
+  highlighter
+    .then((module) => module.warmServerHighlighter())
+    .catch(() => undefined);
+
+  return (route) => {
+    if (!route || !("page" in route) || !route.page) return;
+    const { body } = route.page;
+    highlighter
+      .then((module) => module.preloadServerHighlighterLanguages(body))
+      .catch(() => undefined);
+  };
+}
 
 function measurePhase<T>(
   timing: RendererTiming | undefined,

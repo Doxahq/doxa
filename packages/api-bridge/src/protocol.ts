@@ -99,7 +99,7 @@ export type ApiEntrypointMethod<E extends ApiEntrypointName> = (typeof API_ENTRY
 export const BRIDGE_CALL_BINDINGS = {
   GENERATION_QUEUE: ["send", "sendBatch"],
   EMAIL_QUEUE: ["send", "sendBatch"],
-  DOCS_CACHE_INVALIDATOR: ["invalidate"],
+  DOCS_CACHE_INVALIDATOR: ["invalidate", "syncHostnames"],
   PRERENDER_QUEUE: ["start", "inspect", "collectRender"],
 } as const;
 

@@ -76,7 +76,7 @@ export class ProjectDeletionRepository {
   }): Promise<DeletedProject> {
     return withDocsCacheInvalidation(
       this.db,
-      this.env.DOCS_CACHE_INVALIDATOR,
+      this.env,
       async (tx, enqueueInvalidation) => {
         const [project] = await tx
           .select({ id: schema.projects.id })

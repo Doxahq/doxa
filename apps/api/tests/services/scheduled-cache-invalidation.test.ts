@@ -4,6 +4,7 @@ const pending = vi.hoisted(() => ({
   generations: vi.fn(),
   prerenders: vi.fn(),
   purges: vi.fn(),
+  hostnameMaps: vi.fn(),
   collections: vi.fn(),
   approvalSweeps: vi.fn(),
   domainChecks: vi.fn(),
@@ -18,6 +19,11 @@ vi.mock("../../src/services/doxabot/queue-outbox", () => ({
 vi.mock("../../src/services/docs-cache-invalidation-monitoring", () => ({
   DocsCacheInvalidationMaintenance: {
     fromEnv: () => ({ run: pending.purges }),
+  },
+}));
+vi.mock("../../src/services/docs-hostname-map", () => ({
+  DocsHostnameMapReconciler: {
+    fromEnv: () => ({ run: pending.hostnameMaps }),
   },
 }));
 vi.mock("../../src/services/docs-prerender-tasks", () => ({
@@ -51,6 +57,7 @@ describe("scheduled cache invalidation", () => {
   test("runs all durable maintenance jobs when generation delivery fails", async () => {
     pending.generations.mockRejectedValue(new Error("queue unavailable"));
     pending.purges.mockResolvedValue({ completed: 1, failed: 0 });
+    pending.hostnameMaps.mockResolvedValue({ slot: 3, due: 1, stored: 1, deleted: 0 });
     pending.prerenders.mockResolvedValue({ dispatched: 2 });
     pending.collections.mockResolvedValue({ collected: 1 });
     pending.approvalSweeps.mockResolvedValue({ expired: 0, removedKinds: 0, interrupted: 0, stale: 0 });
@@ -69,6 +76,7 @@ describe("scheduled cache invalidation", () => {
     expect(await Promise.allSettled(background)).toEqual([
       { status: "rejected", reason: expect.any(Error) },
       { status: "fulfilled", value: { completed: 1, failed: 0 } },
+      { status: "fulfilled", value: { slot: 3, due: 1, stored: 1, deleted: 0 } },
       { status: "fulfilled", value: { dispatched: 2 } },
       { status: "fulfilled", value: { collected: 1 } },
       { status: "fulfilled", value: { checked: 3, failed: 0 } },
@@ -79,6 +87,7 @@ describe("scheduled cache invalidation", () => {
       { status: "fulfilled", value: 0 },
     ]);
     expect(pending.purges).toHaveBeenCalledOnce();
+    expect(pending.hostnameMaps).toHaveBeenCalledOnce();
     expect(pending.prerenders).toHaveBeenCalledOnce();
     expect(pending.collections).toHaveBeenCalledOnce();
     expect(pending.approvalSweeps).toHaveBeenCalledOnce();

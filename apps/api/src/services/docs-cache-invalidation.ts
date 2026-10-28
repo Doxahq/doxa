@@ -6,14 +6,27 @@ import {
   type ClaimedDocsCacheInvalidation,
   type DocsCacheInvalidationStore,
 } from "../repositories/docs-cache-invalidations";
+import { DocsHostnameSourceRepository } from "../repositories/docs-hostname-source";
+import {
+  DocsHostnameMapSync,
+  type DocsHostnameSource,
+} from "./docs-hostname-map";
 
-class PurgeAttemptError extends Error {
-  constructor(readonly code: "binding_missing" | "purge_timeout") {
+type DeliveryFailureCode =
+  | "binding_missing"
+  | "purge_timeout"
+  | "purge_failed"
+  | "hostname_sync_timeout"
+  | "hostname_sync_failed";
+
+class DeliveryAttemptError extends Error {
+  constructor(readonly code: DeliveryFailureCode) {
     super(code);
   }
 }
 
 const PURGE_TIMEOUT_MS = 3_000;
+const HOSTNAME_SYNC_TIMEOUT_MS = 3_000;
 const INITIAL_RETRY_DELAY_SECONDS = 30;
 const MAX_RETRY_DELAY_SECONDS = 3_600;
 
@@ -22,31 +35,40 @@ export interface DocsCacheInvalidationProcessResult {
   failed: number;
 }
 
+/**
+ * Delivers a task: purges the hostname cache and, when a hostname source is
+ * configured, rewrites the hostname map for every hostname the task can
+ * affect. A task completes only when both succeed; a retry repeats both,
+ * which is safe because each reads the current state.
+ */
 export class DocsCacheInvalidationWorker {
   constructor(
     private readonly store: DocsCacheInvalidationStore,
     private readonly binding: DocsCacheInvalidationRpc | undefined,
+    private readonly hostnames?: DocsHostnameSource,
   ) {}
 
   static fromEnv(env: Env): DocsCacheInvalidationWorker {
     return new DocsCacheInvalidationWorker(
       new DocsCacheInvalidationsRepository(createDb(env)),
       env.DOCS_CACHE_INVALIDATOR,
+      new DocsHostnameSourceRepository(env),
     );
   }
 
   async process(ids?: string[]): Promise<DocsCacheInvalidationProcessResult> {
     const tasks = await this.store.claim(ids);
+    const hostnameSync = this.createHostnameSync();
     let completed = 0;
     let failed = 0;
     for (const task of tasks) {
       try {
-        await this.purge(task);
+        await this.deliver(task, hostnameSync);
         await this.store.complete(task);
         completed += 1;
       } catch (error) {
         const code =
-          error instanceof PurgeAttemptError ? error.code : "purge_failed";
+          error instanceof DeliveryAttemptError ? error.code : "purge_failed";
         const delaySeconds = Math.min(
           MAX_RETRY_DELAY_SECONDS,
           INITIAL_RETRY_DELAY_SECONDS * 2 ** Math.min(7, task.attempts - 1),
@@ -63,24 +85,72 @@ export class DocsCacheInvalidationWorker {
     return { completed, failed };
   }
 
-  private async purge(task: ClaimedDocsCacheInvalidation): Promise<void> {
-    if (!this.binding) throw new PurgeAttemptError("binding_missing");
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        this.binding.invalidate({
+  /** One sync per claimed batch, so each hostname is read and written once. */
+  private createHostnameSync(): DocsHostnameMapSync | null {
+    return this.binding && this.hostnames
+      ? new DocsHostnameMapSync(this.hostnames, this.binding)
+      : null;
+  }
+
+  /** The purge always runs, even when the map sync fails, and the other way round. */
+  private async deliver(
+    task: ClaimedDocsCacheInvalidation,
+    hostnameSync: DocsHostnameMapSync | null,
+  ): Promise<void> {
+    if (!this.binding) throw new DeliveryAttemptError("binding_missing");
+    const binding = this.binding;
+    const [purge, sync] = await Promise.allSettled([
+      withTimeout(
+        binding.invalidate({
           siteId: task.siteId,
           ...(task.hostname ? { hostname: task.hostname } : {}),
         }),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new PurgeAttemptError("purge_timeout")),
-            PURGE_TIMEOUT_MS,
-          );
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
+        PURGE_TIMEOUT_MS,
+        "purge_timeout",
+      ),
+      hostnameSync
+        ? withTimeout(
+            hostnameSync.syncTask(task),
+            HOSTNAME_SYNC_TIMEOUT_MS,
+            "hostname_sync_timeout",
+          )
+        : Promise.resolve(),
+    ]);
+    if (purge.status === "rejected") {
+      throw asAttemptError(purge.reason, "purge_failed");
     }
+    if (sync.status === "rejected") {
+      throw asAttemptError(sync.reason, "hostname_sync_failed");
+    }
+  }
+}
+
+function asAttemptError(
+  error: unknown,
+  fallback: DeliveryFailureCode,
+): DeliveryAttemptError {
+  return error instanceof DeliveryAttemptError
+    ? error
+    : new DeliveryAttemptError(fallback);
+}
+
+async function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  code: DeliveryFailureCode,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new DeliveryAttemptError(code)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
 }

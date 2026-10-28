@@ -104,6 +104,7 @@ export function createBridgedBindings(bridge: BridgeClient): BridgedBindings {
     EMAIL_QUEUE: new BridgedQueue<EmailQueueMessage>(bridge, "EMAIL_QUEUE"),
     DOCS_CACHE_INVALIDATOR: {
       invalidate: (input) => bridge.call<void, "DOCS_CACHE_INVALIDATOR">("DOCS_CACHE_INVALIDATOR", "invalidate", [input]),
+      syncHostnames: (input) => bridge.call<void, "DOCS_CACHE_INVALIDATOR">("DOCS_CACHE_INVALIDATOR", "syncHostnames", [input]),
     },
     PRERENDER_QUEUE: {
       start: (input) => bridge.call("PRERENDER_QUEUE", "start", [input]),

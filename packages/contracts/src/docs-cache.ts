@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { DocsHostnameMapSync } from "./docs-hostname-map";
+import type { DocsHostnameMapRpc } from "./docs-hostname-map";
 
 /**
  * How long the docs dispatcher keeps a resolved hostname (hostname → site and
@@ -24,13 +24,10 @@ export const docsCacheInvalidationSchema = z.object({
 
 export type DocsCacheInvalidation = z.infer<typeof docsCacheInvalidationSchema>;
 
-/** Private service binding only. A resolved call means the purge was accepted. */
-export interface DocsCacheInvalidationRpc {
+/**
+ * Private service binding only (`doxa-docs-renderer#DocsHostCache`). A
+ * resolved call means the purge, or the hostname map write, was accepted.
+ */
+export interface DocsCacheInvalidationRpc extends DocsHostnameMapRpc {
   invalidate(input: DocsCacheInvalidation): Promise<void>;
-  /**
-   * Writes the hostname map (see `./docs-hostname-map`). Optional in the
-   * type only so that test doubles can leave it out; the deployed dispatcher
-   * has it.
-   */
-  syncHostnames?(input: DocsHostnameMapSync): Promise<void>;
 }

@@ -1,9 +1,7 @@
-import type {
-  DocsCacheInvalidation,
-  DocsCacheInvalidationRpc,
-} from "@doxahq/contracts";
+import type { DocsCacheInvalidation } from "@doxahq/contracts";
 import type { DoxaDb } from "@doxahq/db";
 import { DocsCacheInvalidationWorker } from "../services/docs-cache-invalidation";
+import type { DocsResolutionEnv } from "../services/docs-host-resolution";
 import {
   DocsCacheInvalidationsRepository,
   enqueueDocsCacheInvalidation,
@@ -16,9 +14,17 @@ import {
 } from "./docs-prerender-tasks";
 import { dispatchDocsPrerenderTasks } from "./docs-prerender-delivery";
 import { DocsPrerenderTasksRepository } from "./docs-prerender-tasks";
+import { DocsHostnameSourceRepository } from "./docs-hostname-source";
 import type { Env } from "../env";
 
 type EnqueueInvalidation = (input: DocsCacheInvalidation) => Promise<void>;
+
+/**
+ * What post-commit delivery needs: the dispatcher binding, and the resolver's
+ * inputs to rewrite the hostname map from the committed state.
+ */
+export type DocsCacheDeliveryEnv = DocsResolutionEnv &
+  Pick<Env, "DOCS_CACHE_INVALIDATOR">;
 type EnqueuePrerender = (
   input: EnqueuePublicationTasksInput,
 ) => Promise<void>;
@@ -26,7 +32,7 @@ type EnqueuePrerender = (
 /** The mutation and its invalidation task commit together; delivery is post-commit. */
 export async function withDocsCacheInvalidation<T>(
   db: DoxaDb,
-  binding: DocsCacheInvalidationRpc | undefined,
+  env: DocsCacheDeliveryEnv,
   mutate: (
     tx: DocsMutationTransaction,
     enqueue: EnqueueInvalidation,
@@ -38,7 +44,7 @@ export async function withDocsCacheInvalidation<T>(
       ids.push(await enqueueDocsCacheInvalidation(tx, input));
     }),
   );
-  await deliverCacheInvalidations(db, binding, ids);
+  await deliverCacheInvalidations(db, env, ids);
   return result;
 }
 
@@ -49,6 +55,7 @@ export async function withDocsPublicationEffects<T>(
     Env,
     | "DOCS_CACHE_INVALIDATOR"
     | "DOCS_BASE_DOMAIN"
+    | "DOCS_PREVIEW_GATE_ENABLED"
     | "DOXA_RENDERER_RELEASE_ID"
     | "DOCS_PREVIEW_GATE_ENABLED"
     | "PRERENDER_QUEUE"
@@ -82,11 +89,7 @@ export async function withDocsPublicationEffects<T>(
       },
     ),
   );
-  await deliverCacheInvalidations(
-    db,
-    env.DOCS_CACHE_INVALIDATOR,
-    invalidationIds,
-  );
+  await deliverCacheInvalidations(db, env, invalidationIds);
   if (env.PRERENDER_QUEUE && prerenderTaskIds.length > 0) {
     try {
       await dispatchDocsPrerenderTasks(
@@ -106,14 +109,15 @@ export async function withDocsPublicationEffects<T>(
 
 async function deliverCacheInvalidations(
   db: DoxaDb,
-  binding: DocsCacheInvalidationRpc | undefined,
+  env: DocsCacheDeliveryEnv,
   ids: string[],
 ): Promise<void> {
-  if (!binding || ids.length === 0) return;
+  if (!env.DOCS_CACHE_INVALIDATOR || ids.length === 0) return;
   try {
     await new DocsCacheInvalidationWorker(
       new DocsCacheInvalidationsRepository(db),
-      binding,
+      env.DOCS_CACHE_INVALIDATOR,
+      new DocsHostnameSourceRepository(env),
     ).process(ids);
   } catch {
     // The committed outbox survives failed delivery. Publication must not be

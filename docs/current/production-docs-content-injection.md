@@ -273,6 +273,14 @@ provider SDKs and the assistant tools) and the server copy of the chat UI. The
 the site has chat turned off, or `503` otherwise. This removed about 1.2 MB
 from the server package.
 
+`/llms.txt`, `/llms-full.txt` and the `.md` routes read the requesting site's
+pages through its runtime source (`apps/docs-template/src/lib/llms.ts`,
+`apps/docs-template/src/lib/raw-markdown.ts`). Until 2026-10-29 the llms
+routes read `contentStore`, so every production site served the template's
+own demo pages under its name. With no reader of `contentStore` left, the
+platform build also drops the template's demo pages and `gray-matter` from the
+server bundle, about 1.1 MB more.
+
 ### How the object is built
 
 The script `apps/docs-template/scripts/deploy-renderer.mjs` runs these steps

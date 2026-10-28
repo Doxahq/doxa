@@ -19,9 +19,9 @@ Do not confuse this app with `apps/docs-runtime`. The template renders the publi
 - Documentation content: `src/contents/docs/` — MDX files organized in folders
 - Navigation config: `src/contents/settings/documents.ts`
 - Site settings: `src/settings/main.ts`
-- Content access layer: `src/lib/content/` — unified async API (`contentStore`) with pluggable adapters (vite/github). Agent tools, AI routes, and route renderers all go through this instead of touching `fs` or `child_process`. Edge-safe.
+- Content access layer: `src/lib/content/` — unified async API (`contentStore`) with pluggable adapters (vite/github) over the template's own content. The chat assistant and its agent tools use it instead of touching `fs` or `child_process`. Edge-safe. Page routes, `.md` routes and the llms routes read the runtime source instead, so a published site only serves its own content. The platform renderer build (`DOXA_RENDERER_BUILD=platform`) has no `contentStore` and no chat.
 - Content adapter selection: `src/settings/content.ts` — `CONTENT_SOURCE=vite|github` env var picks backend. Add custom adapters here (R2, KV, Supabase, etc.)
-- AI-native routes: `/llms.txt` (page index), `/llms-full.txt` (full corpus) — defined in `src/routes/llms[.]txt.ts` and `src/routes/llms-full[.]txt.ts`. Consumed by external AI clients per the llms.txt spec.
+- AI-native routes: `/llms.txt` (page index), `/llms-full.txt` (full corpus) — defined in `src/routes/llms[.]txt.ts` and `src/routes/llms-full[.]txt.ts`, built by `src/lib/llms.ts` from the runtime source in navigation order. Consumed by external AI clients per the llms.txt spec.
 - Agent tools: `src/lib/agent/tools/` — `grep` and `cat` consume `contentStore`. No filesystem/subprocess deps; works on Cloudflare Workers and Vercel Edge.
 
 ## IMPORTANT: Artifact Compatibility Gate

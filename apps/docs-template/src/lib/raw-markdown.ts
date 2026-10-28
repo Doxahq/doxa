@@ -10,8 +10,6 @@
 import type { DoxaDocsRuntimeSource } from "@/src/runtime/runtime-source";
 import { createConfiguredRuntimeSource } from "@/src/runtime/runtime-source-selection";
 
-import { contentStore } from "@/src/lib/content/store";
-
 const MD_SUFFIX = ".md";
 
 /**
@@ -31,9 +29,7 @@ export async function tryRawMarkdownResponse(
   const source = runtimeSource ?? (await createConfiguredRuntimeSource());
   if (!(await source.getFeatureConfig()).rawMarkdown) return null;
 
-  const raw = runtimeSource
-    ? ((await runtimeSource.getRawPage(slug))?.body ?? null)
-    : await contentStore.readRaw(slug);
+  const raw = (await source.getRawPage(slug))?.body ?? null;
   if (!raw) {
     return new Response("Not found", {
       status: 404,

@@ -263,6 +263,16 @@ if one of them is in no chunk. Chunks for some pages only (chat, search, the
 full Lucide set, API reference bodies, diagrams, code grammars) stay lazy. The
 client build and the `vite` content source build do not use the plugin.
 
+### Chat in the platform renderer
+
+Chat with Docs answers from the template's own content (`contentStore`) with
+the server's `AI_API_KEY`. The platform renderer has neither, so it serves no
+chat: its build leaves out `apps/docs-template/src/lib/chat-stream.ts` (the AI
+provider SDKs and the assistant tools) and the server copy of the chat UI. The
+`chatWithDocsStream` server function stays registered and answers `403` when
+the site has chat turned off, or `503` otherwise. This removed about 1.2 MB
+from the server package.
+
 ### How the object is built
 
 The script `apps/docs-template/scripts/deploy-renderer.mjs` runs these steps

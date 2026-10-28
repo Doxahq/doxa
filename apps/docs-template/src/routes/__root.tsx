@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { DemoModeProvider } from "@/src/contexts/demo-mode";
 import { Providers } from "@/src/providers";
 import type { DocsDeliveryCapability } from "@/src/runtime/request-context";
@@ -39,10 +39,15 @@ import globalsCss from "@/src/styles/globals.css?url";
 
 const fallbackConfig = toClientSiteConfig(resolveSiteConfig({}));
 
-const ChatWithDocs = lazy(() =>
-  import("@/src/components/chat").then((module) => ({
-    default: module.ChatWithDocs,
-  }))
+// The chat draws only in the browser, after a visitor opens it. The platform
+// renderer serves no chat (see `chat-api.ts`), so its server build leaves the
+// chat code out of the server bundle.
+const ChatWithDocs = lazy<ComponentType>(() =>
+  import.meta.env.SSR && import.meta.env.DOXA_OMIT_LOCAL_CONTENT_SOURCE
+    ? Promise.resolve({ default: NoChat })
+    : import("@/src/components/chat").then((module) => ({
+        default: module.ChatWithDocs,
+      }))
 );
 const DemoChatWithDocs = lazy(() =>
   import("@/src/components/chat/demo-chat").then((module) => ({
@@ -177,6 +182,10 @@ function serializeDeliveryCapability(
   capability: DocsDeliveryCapability
 ): string {
   return JSON.stringify(capability).replace(/</g, "\\u003c");
+}
+
+function NoChat() {
+  return null;
 }
 
 function ChatInterface({ isDemoMode }: { isDemoMode: boolean }) {

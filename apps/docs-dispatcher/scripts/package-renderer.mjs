@@ -181,10 +181,17 @@ function createGeneratedDispatcherConfig(input) {
   };
 }
 
+// The release ID must change only when rendered HTML would change. HTML links
+// to the content-hashed files under assets/ by name. Fixed-name files keep
+// their URLs, and the template's own pages.json and sitemap.xml change on
+// every build, which would empty the docs cache on every deploy.
+const CLIENT_DIGEST_DIR = "assets";
+
 async function createDirectoryManifestDigest(directory) {
-  const files = (await listFiles(directory)).sort();
+  const assetsDirectory = path.join(directory, CLIENT_DIGEST_DIR);
+  const files = (await listFiles(assetsDirectory).catch(() => [])).sort();
   if (files.length === 0) {
-    throw new Error(`No client assets found in ${directory}.`);
+    throw new Error(`No client assets found in ${assetsDirectory}.`);
   }
   const entries = await Promise.all(
     files.map(async (filePath) => {

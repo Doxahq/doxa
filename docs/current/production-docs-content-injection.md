@@ -168,7 +168,10 @@ in order:
    a missing file, the script stops.
 5. It builds the JSON document above without the build ID. Then it hashes the
    JSON to get the build ID.
-6. It hashes every file under `dist/client` to get the client asset digest.
+6. It hashes every file under `dist/client/assets` to get the client asset
+   digest. These are the content-hashed files that HTML links to. Fixed-name
+   files are left out: they keep their URLs, and the template rebuilds
+   `pages.json` and `sitemap.xml` with new timestamps on every build.
 7. It hashes the build ID, the client digest, and the output schema version
    together. The result is the renderer release ID.
 8. It gzips the JSON at level 9 with a fixed mtime of zero. The same input

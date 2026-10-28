@@ -146,6 +146,33 @@ describe("createRendererPackage", () => {
     expect(config.cache).toEqual({ enabled: true });
   });
 
+  test("keeps the release ID when only fixed-name client files change", async () => {
+    const fixture = await createFixture();
+    const pack = (outputDir) =>
+      createRendererPackage({
+        appRoot: fixture.root,
+        clientDir: "client",
+        serverDir: "server",
+        outputDir,
+      });
+    await writeFile(path.join(fixture.root, "client/pages.json"), "[1]");
+    await writeFile(path.join(fixture.root, "client/sitemap.xml"), "<a/>");
+    const first = await pack("dist-a");
+
+    // The template rebuilds these files with new timestamps on every build.
+    await writeFile(path.join(fixture.root, "client/pages.json"), "[2]");
+    await writeFile(path.join(fixture.root, "client/sitemap.xml"), "<b/>");
+    const second = await pack("dist-b");
+    expect(second.rendererReleaseId).toBe(first.rendererReleaseId);
+
+    await writeFile(
+      path.join(fixture.root, "client/assets/app.js"),
+      "export const client = false;",
+    );
+    const third = await pack("dist-c");
+    expect(third.rendererReleaseId).not.toBe(first.rendererReleaseId);
+  });
+
   test("enables every production site by default", async () => {
     const fixture = await createFixture();
     const result = await createRendererPackage({

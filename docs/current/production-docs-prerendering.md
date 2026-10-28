@@ -43,7 +43,7 @@ Rendering never changes the production pointer. A failed render keeps the live r
 The deployment script computes one renderer release ID from these values:
 
 - The immutable server package digest.
-- The client asset manifest digest.
+- The client asset manifest digest: the content-hashed files under `dist/client/assets`.
 - The output schema version.
 
 The generated API, dispatcher, and pre-render Worker configurations must contain the same release ID. The deployment script rejects a mismatch.

@@ -2,6 +2,7 @@ import { resolveSiteConfig } from "@doxahq/site-config";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { DoxaDocsRuntimeSource } from "./runtime/runtime-source";
+import { RuntimeSourceError } from "./runtime/runtime-source-error";
 import server, { renderPreparedDocsRequest } from "./server";
 
 vi.mock("cloudflare:workers", () => ({
@@ -13,6 +14,8 @@ const handlers = vi.hoisted(() => ({
   rawMarkdown: vi.fn(async () => null),
   redirect: vi.fn(() => null),
   start: vi.fn(async () => new Response("rendered")),
+  warmHighlighter: vi.fn(),
+  preloadGrammars: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-start/server", () => ({
@@ -30,6 +33,11 @@ vi.mock("@/src/lib/raw-markdown", () => ({
 
 vi.mock("@/src/lib/request-redirects", () => ({
   getRedirectResponse: handlers.redirect,
+}));
+
+vi.mock("@/src/runtime/server-highlighter", () => ({
+  warmServerHighlighter: handlers.warmHighlighter,
+  preloadServerHighlighterLanguages: handlers.preloadGrammars,
 }));
 
 describe("docs renderer server", () => {
@@ -150,6 +158,123 @@ describe("docs renderer server", () => {
     });
   });
 
+  test("creates the highlighter while the route data request is in flight", async () => {
+    const request = vi.fn(async () => {
+      await vi.waitFor(() =>
+        expect(handlers.warmHighlighter).toHaveBeenCalledOnce()
+      );
+      return {
+        ok: true as const,
+        data: {
+          type: "page",
+          siteConfig: resolveSiteConfig({}),
+          page: { body: "```ts\nconst a = 1;\n```" },
+        },
+      };
+    });
+    await server.fetch(
+      new Request("https://docs.example.com/guide", {
+        headers: { accept: "text/html" },
+      }),
+      {
+        DOXA_DOCS_RUNTIME_SOURCE: "binding",
+        DOXA_DOCS_CONTENT_BINDING: { request },
+        DOXA_DOCS_CONTENT_RESOLUTION: RESOLUTION,
+      }
+    );
+
+    expect(request).toHaveBeenCalledOnce();
+    await vi.waitFor(() =>
+      expect(handlers.preloadGrammars).toHaveBeenCalledOnce()
+    );
+    expect(handlers.preloadGrammars).toHaveBeenCalledWith(
+      "```ts\nconst a = 1;\n```"
+    );
+  });
+
+  test("does not start the highlighter for a request that is not an HTML page", async () => {
+    await server.fetch(new Request("https://docs.example.com/llms.txt"), {
+      DOXA_DOCS_RUNTIME_SOURCE: "binding",
+      DOXA_DOCS_CONTENT_BINDING: { request: vi.fn() },
+      DOXA_DOCS_CONTENT_RESOLUTION: RESOLUTION,
+    });
+
+    expect(handlers.start).toHaveBeenCalledOnce();
+    expect(handlers.warmHighlighter).not.toHaveBeenCalled();
+    expect(handlers.preloadGrammars).not.toHaveBeenCalled();
+  });
+
+  test("answers 404 with a static page for a host without published docs", async () => {
+    const request = vi.fn(async () => ({
+      ok: false as const,
+      error: {
+        code: "project_not_found",
+        message: "No published docs were found for this hostname.",
+      },
+    }));
+
+    const response = await server.fetch(
+      new Request("https://next-auth.doxa.page/", {
+        headers: { accept: "text/html" },
+      }),
+      {
+        DOXA_DOCS_RUNTIME_SOURCE: "binding",
+        DOXA_DOCS_CONTENT_BINDING: { request },
+      }
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toBe(
+      "text/html; charset=utf-8"
+    );
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const html = await response.text();
+    expect(html).toContain("No documentation is published at this address.");
+    expect(html).not.toContain("project_not_found");
+    expect(html).not.toContain("binding-runtime-source");
+    expect(handlers.start).not.toHaveBeenCalled();
+  });
+
+  test("answers a plain 404 to a non-page request for a host without published docs", async () => {
+    handlers.rawMarkdown.mockRejectedValueOnce(
+      new RuntimeSourceError("No published docs.", "project_not_found")
+    );
+
+    const response = await server.fetch(
+      new Request("https://next-auth.doxa.page/guide.md"),
+      {
+        DOXA_DOCS_RUNTIME_SOURCE: "binding",
+        DOXA_DOCS_CONTENT_BINDING: { request: vi.fn() },
+      }
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toBe(
+      "text/plain; charset=utf-8"
+    );
+    expect(await response.text()).toBe("Not found");
+  });
+
+  test("still fails a render when the content runtime has another error", async () => {
+    const request = vi.fn(async () => ({
+      ok: false as const,
+      error: { code: "operation_failed", message: "R2 read failed." },
+    }));
+
+    await expect(
+      server.fetch(
+        new Request("https://docs.example.com/guide", {
+          headers: { accept: "text/html" },
+        }),
+        {
+          DOXA_DOCS_RUNTIME_SOURCE: "binding",
+          DOXA_DOCS_CONTENT_BINDING: { request },
+          DOXA_DOCS_CONTENT_RESOLUTION: RESOLUTION,
+        }
+      )
+    ).rejects.toThrow("R2 read failed.");
+  });
+
   test("a pinned render reports its timing in the internal header", async () => {
     const request = vi.fn(async () => ({
       ok: true as const,
@@ -225,7 +350,9 @@ describe("docs renderer server", () => {
       expect(response.status).toBe(200);
       expect(await response.text()).toBe("<svg/>");
       const [url, init] = fetch.mock.calls[0] ?? [];
-      expect(String(url)).toBe(`http://content.test/runtime-source/assets/${hash}`);
+      expect(String(url)).toBe(
+        `http://content.test/runtime-source/assets/${hash}`
+      );
       expect(new Headers(init?.headers).get("x-doxa-host")).toBe(
         "flagforge.localhost:3002"
       );

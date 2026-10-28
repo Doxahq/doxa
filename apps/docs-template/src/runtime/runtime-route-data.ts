@@ -62,12 +62,10 @@ export const loadDocsRawPage = createServerFn({ method: "GET" })
 
 export const loadDocsDeliveryCapability = createServerFn({
   method: "GET",
-}).handler(
-  async ({ context }) => {
-    const requestContext: DocsRequestContext = context ?? {};
-    return requestContext.delivery ?? null;
-  },
-);
+}).handler(async ({ context }) => {
+  const requestContext: DocsRequestContext = context ?? {};
+  return requestContext.delivery ?? null;
+});
 
 export const loadDocsProductionRouteData = createServerFn({ method: "GET" })
   .inputValidator((input: ProductionRouteInput) => input)
@@ -175,7 +173,7 @@ async function loadConfiguredDocsRouteData<T>(
   ) => Promise<T>,
   requestContext: DocsRequestContext
 ): Promise<T> {
-  const { getDocsHighlighter } = await import("@doxahq/mdx-runtime/highlight");
+  const { loadServerPageHighlighting } = await import("./server-highlighter");
   const source =
     requestContext.runtimeSource ?? (await createConfiguredRuntimeSource());
   const mode = requestContext.runtimeSourceMode ?? getRuntimeSourceMode();
@@ -188,7 +186,7 @@ async function loadConfiguredDocsRouteData<T>(
   return resolver(source, {
     includeRawDocument: false,
     includeRuntimeDocument: mode !== "vite",
-    highlighter: getDocsHighlighter(),
+    highlighting: await loadServerPageHighlighting(),
     timing,
   });
 }

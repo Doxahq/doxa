@@ -7,6 +7,8 @@ import type { RuntimeMdxParseOptions } from "@doxahq/mdx-runtime";
 import {
   resolveDocsRootRouteData,
   resolveDocsRouteData,
+  type DocsPageHighlighting,
+  type ResolveDocsRouteDataOptions,
 } from "./docs-route-data";
 import type { DoxaDocsRuntimeSource } from "./runtime-source";
 
@@ -24,19 +26,17 @@ export async function preparePublicDocsRouteData(
   pathname: string,
   options: PreparePublicDocsRouteOptions = {}
 ): Promise<PublicDocsRouteDataV1> {
-  const highlighter = options.highlighter ?? (await loadDocsHighlighter());
+  const resolveOptions: ResolveDocsRouteDataOptions = {
+    includeRawDocument: false,
+    includeRuntimeDocument: true,
+    ...(options.highlighter
+      ? { highlighter: options.highlighter }
+      : { highlighting: await loadPageHighlighting() }),
+  };
   const data =
     pathname === "/"
-      ? await resolveDocsRootRouteData(source, {
-          includeRawDocument: false,
-          includeRuntimeDocument: true,
-          highlighter,
-        })
-      : await resolveDocsRouteData(source, pathname, {
-          includeRawDocument: false,
-          includeRuntimeDocument: true,
-          highlighter,
-        });
+      ? await resolveDocsRootRouteData(source, resolveOptions)
+      : await resolveDocsRouteData(source, pathname, resolveOptions);
 
   if (
     (data.type === "page" || data.type === "not_found") &&
@@ -48,9 +48,7 @@ export async function preparePublicDocsRouteData(
   return parsePublicDocsRouteDataV1(data);
 }
 
-async function loadDocsHighlighter(): Promise<
-  RuntimeMdxParseOptions["highlighter"]
-> {
-  const { getDocsHighlighter } = await import("@doxahq/mdx-runtime/highlight");
-  return getDocsHighlighter();
+async function loadPageHighlighting(): Promise<DocsPageHighlighting> {
+  const { loadServerPageHighlighting } = await import("./server-highlighter");
+  return loadServerPageHighlighting();
 }

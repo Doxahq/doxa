@@ -48,13 +48,17 @@ const ApiReferenceBody = lazy(() =>
 // sibling `__rawSource` export injected by mdxSourceCapturePlugin. This keeps
 // raw MDX out of the client bundle while the server adapter can still read it.
 // The modules stay lazy because platform routes always use runtime documents.
-// Standalone Vite routes load only the bundled page that they render.
+// Standalone Vite routes load only the bundled page that they render. The
+// platform renderer's server build has no local content, so it leaves the
+// bundled pages out of the server bundle.
+const bundledMdxLoaders: Record<string, () => Promise<BundledMdxComponent>> =
+  import.meta.env.SSR && import.meta.env.DOXA_OMIT_LOCAL_CONTENT_SOURCE
+    ? {}
+    : import.meta.glob<BundledMdxComponent>("/src/contents/docs/**/index.mdx", {
+        import: "default",
+      });
 const mdxModules = Object.fromEntries(
-  Object.entries(
-    import.meta.glob<BundledMdxComponent>("/src/contents/docs/**/index.mdx", {
-      import: "default",
-    })
-  ).map(([path, loadComponent]) => [
+  Object.entries(bundledMdxLoaders).map(([path, loadComponent]) => [
     path,
     lazy(async () => ({ default: await loadComponent() })),
   ])

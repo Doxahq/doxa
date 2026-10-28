@@ -296,7 +296,61 @@ build minifies the server code and leaves out the local content source
 (`import.meta.env.DOXA_OMIT_LOCAL_CONTENT_SOURCE`). Its server Mermaid module
 is a stub, because Mermaid draws only in the browser. A Dynamic Worker compiles
 every module of the package on each cold start, used or not. These steps took
-the package from 94 modules and 16.6 MB to 29 modules and 5.5 MB.
+the package from 94 modules and 16.6 MB to 29 modules and 5.5 MB. The changes
+of 2026-10-29 below took it to 50 modules, 3.5 MB and 0.73 MB compressed
+(from 1.19 MB). There are more modules because each code grammar is now its
+own small chunk.
+
+### Server code highlighting
+
+The renderer highlights code fences with one Shiki instance per isolate.
+`apps/docs-template/src/config/vite/workspace-aliases.ts` points every
+`@doxahq/mdx-runtime` import at the package source, so `@doxahq/docs-prose`
+and the template share one highlighter module.
+
+Page renders and `prepare` use `apps/docs-template/src/runtime/server-highlighter.ts`.
+It starts with the themes only and loads the grammars of the fences that
+`collectFenceLanguages` finds in the page (the lazy loader of
+`@doxahq/mdx-runtime/highlight-lazy`). If the parser highlights a fence whose
+grammar the scan missed, the page is parsed again after that grammar loads.
+The output is the same as with the highlighter that holds every grammar. A
+test in `server-highlighter.test.ts` compares both for every page of every
+frozen artifact set. Loaded grammars stay loaded for the life of the isolate.
+
+An HTML page render imports and creates this highlighter before it waits for
+`getRouteData` (`startServerHighlighter` in `apps/docs-template/src/server.ts`),
+and starts loading the page's grammars when the route data arrives.
+
+### Startup module graph
+
+V8's code cache of the isolate start covers only the modules that the entry
+imports at startup. A chunk behind a dynamic import is compiled on its first
+use, inside the first render. The platform build therefore adds
+`eagerServerChunksPlugin` (`apps/docs-template/src/config/vite/eager-server-chunks.ts`):
+the server entry `index.js` imports the chunks that every page render loads
+(router, page routes, route-data and site-config server functions, the server
+highlighter and its themes). `PAGE_RENDER_MODULES` lists them. The build fails
+if one of them is in no chunk. Chunks for some pages only (chat, search, the
+full Lucide set, API reference bodies, diagrams, code grammars) stay lazy. The
+client build and the `vite` content source build do not use the plugin.
+
+### Chat in the platform renderer
+
+Chat with Docs answers from the template's own content (`contentStore`) with
+the server's `AI_API_KEY`. The platform renderer has neither, so it serves no
+chat: its build leaves out `apps/docs-template/src/lib/chat-stream.ts` (the AI
+provider SDKs and the assistant tools) and the server copy of the chat UI. The
+`chatWithDocsStream` server function stays registered and answers `403` when
+the site has chat turned off, or `503` otherwise. This removed about 1.2 MB
+from the server package.
+
+`/llms.txt`, `/llms-full.txt` and the `.md` routes read the requesting site's
+pages through its runtime source (`apps/docs-template/src/lib/llms.ts`,
+`apps/docs-template/src/lib/raw-markdown.ts`). Until 2026-10-29 the llms
+routes read `contentStore`, so every production site served the template's
+own demo pages under its name. With no reader of `contentStore` left, the
+platform build also drops the template's demo pages and `gray-matter` from the
+server bundle, about 1.1 MB more.
 
 ### How the object is built
 

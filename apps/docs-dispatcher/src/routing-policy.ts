@@ -34,6 +34,11 @@ export function getRendererSelection(input: {
     : "shared";
 }
 
+/** One isolate per renderer build, shared by the sites of the shared-isolate rollout. */
+export function createSharedRendererWorkerId(rendererBuildId: string): string {
+  return ["docs", "build", rendererBuildId].join(":");
+}
+
 export function createDynamicWorkerId(input: {
   siteId: string;
   publishedVersionId: string;

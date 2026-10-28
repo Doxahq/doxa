@@ -106,6 +106,17 @@ function validateDocsRenderingConfigs() {
       `${DEFAULT_DISPATCHER_CONFIG} must default the route-data cache to all.`,
     );
   }
+  // The shared renderer isolate rolls out per site. A typo would silently keep
+  // every site on its own isolate, so only the three modes are accepted.
+  if (
+    !["off", "allowlist", "all"].includes(
+      dispatcher.vars?.DOXA_PROD_SHARED_ISOLATE_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_SHARED_ISOLATE_MODE to off, allowlist or all.`,
+    );
+  }
   if (dispatcher.vars?.DOXA_PRERENDER_REPAIR_ENABLED !== "false") {
     throw new Error(
       `${DEFAULT_DISPATCHER_CONFIG} must default request repairs to false.`,

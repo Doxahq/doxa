@@ -268,9 +268,11 @@ this HTML cache. No preview access rules or dashboard code were changed.
 Every request writes one `docs_request_cache` log line with the hostname,
 path, status, cache statuses and data center (`colo`). With `DEBUG` set to
 `true`, the line is `docs_request_timing` and also carries the timings. Every
-HTML cache miss writes `docs_renderer_load` with the site, the version, `COLD`
-(this request loaded the renderer code) or `WARM`, the code load time and the
-total render time. docs-runtime writes `docs_runtime_reads` for every
+renderer call writes `docs_renderer_load` with the isolate scope, the build,
+`COLD` (this request started the isolate) or `WARM`, the code load time, the
+total time and the outcome (see
+[Renderer Isolate Scope](./production-docs-content-injection.md#renderer-isolate-scope)).
+docs-runtime writes `docs_runtime_reads` for every
 `getRouteData` call, with the number of artifact reads that passed the memory
 caches, their total time and the longest read. `getRouteData` starts its
 independent reads together. Use these lines for the hit rate and for slow

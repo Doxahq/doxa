@@ -40,6 +40,17 @@ test("enables the lazy route-data cache for all production sites by default", ()
   });
 });
 
+test("rolls the shared renderer isolate out to the operator's canary sites", () => {
+  const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
+
+  assert.equal(config.vars.DOXA_PROD_SHARED_ISOLATE_MODE, "allowlist");
+  // The site IDs are an operator value, kept in the ops repo.
+  assert.equal(
+    config.vars.DOXA_PROD_SHARED_ISOLATE_SITE_IDS,
+    "${OPS_DOCS_SHARED_ISOLATE_SITE_IDS}",
+  );
+});
+
 test("shares docs cache entries across dispatcher versions", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 

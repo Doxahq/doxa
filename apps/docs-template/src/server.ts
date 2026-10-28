@@ -4,6 +4,7 @@ import type { DoxaDocsRuntimeSource } from "@/src/runtime/runtime-source";
 import {
   createConfiguredRuntimeSource,
   createDispatcherRuntimeSource,
+  readRendererRequestScope,
   type RendererWorkerEnv,
 } from "@/src/runtime/runtime-source-selection";
 import { loadSiteConfig } from "@/src/site-config/load-site-config";
@@ -105,7 +106,9 @@ export class DocsPrerenderRenderer extends WorkerEntrypoint<RendererWorkerEnv> {
   }
 
   private getRuntimeSource(): DoxaDocsRuntimeSource {
-    const source = createDispatcherRuntimeSource(this.env);
+    const source = createDispatcherRuntimeSource(this.env, {
+      requestScope: readRendererRequestScope(this.ctx.props),
+    });
     if (!source) {
       throw new Error("The private renderer requires a pinned content source.");
     }
@@ -114,9 +117,16 @@ export class DocsPrerenderRenderer extends WorkerEntrypoint<RendererWorkerEnv> {
 }
 
 const server = {
-  async fetch(request: Request, env?: RendererWorkerEnv) {
+  async fetch(
+    request: Request,
+    env?: RendererWorkerEnv,
+    ctx?: ExecutionContext
+  ) {
     const { host, hostname, pathname } = new URL(request.url);
-    const runtimeSource = createDispatcherRuntimeSource(env, hostname);
+    const runtimeSource = createDispatcherRuntimeSource(env, {
+      requestScope: readRendererRequestScope(ctx?.props),
+      hostname,
+    });
 
     const health = getRendererHealthResponse(request);
     if (health) return health;

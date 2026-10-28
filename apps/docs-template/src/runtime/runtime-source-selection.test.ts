@@ -1,9 +1,35 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
+import type {
+  BindingRuntimeResolution,
+  DocsContentBinding,
+} from "./binding-runtime-source";
 import {
+  createDispatcherRuntimeSource,
   getPlatformRuntimeSourceConfig,
   getRuntimeSourceMode,
+  readRendererRequestScope,
 } from "./runtime-source-selection";
+
+function resolutionFor(siteId: string): BindingRuntimeResolution {
+  return {
+    siteId,
+    projectId: `project-${siteId}`,
+    projectSlug: siteId,
+    publishedVersionId: `version-${siteId}`,
+    artifactPrefix: `sites/${siteId}/versions/v1`,
+    manifestPath: `sites/${siteId}/versions/v1/manifest.json`,
+    accessPolicy: "public",
+  };
+}
+
+function bindingFor(siteId: string) {
+  const request = vi.fn<DocsContentBinding["request"]>(async () => ({
+    ok: true,
+    data: { name: siteId },
+  }));
+  return { binding: { request } satisfies DocsContentBinding, request };
+}
 
 describe("runtime source selection", () => {
   test("defaults to vite mode", () => {
@@ -114,5 +140,65 @@ describe("runtime source selection", () => {
     expect(() => getPlatformRuntimeSourceConfig({})).toThrow(
       "Missing required platform runtime env var"
     );
+  });
+});
+
+describe("renderer request scope", () => {
+  test("reads a content binding and a resolution from entrypoint props", () => {
+    const { binding } = bindingFor("site-a");
+    const resolution = resolutionFor("site-a");
+    expect(
+      readRendererRequestScope({ content: binding, resolution })
+    ).toEqual({ content: binding, resolution });
+  });
+
+  test.each([
+    undefined,
+    null,
+    "props",
+    {},
+    { content: {}, resolution: resolutionFor("site-a") },
+    { content: bindingFor("site-a").binding },
+    {
+      content: bindingFor("site-a").binding,
+      resolution: { ...resolutionFor("site-a"), siteId: "" },
+    },
+    {
+      content: bindingFor("site-a").binding,
+      resolution: { ...resolutionFor("site-a"), accessPolicy: "private" },
+    },
+  ])("treats any other props as no scope: %j", (props) => {
+    expect(readRendererRequestScope(props)).toBeUndefined();
+  });
+
+  test("the request scope wins over the content pinned in env", async () => {
+    const pinned = bindingFor("site-env");
+    const scoped = bindingFor("site-request");
+    const source = createDispatcherRuntimeSource(
+      {
+        DOXA_DOCS_RUNTIME_SOURCE: "binding",
+        DOXA_DOCS_CONTENT_BINDING: pinned.binding,
+        DOXA_DOCS_CONTENT_RESOLUTION: resolutionFor("site-env"),
+      },
+      {
+        requestScope: {
+          content: scoped.binding,
+          resolution: resolutionFor("site-request"),
+        },
+      }
+    );
+
+    await source?.getSiteConfig();
+
+    expect(pinned.request).not.toHaveBeenCalled();
+    expect(scoped.request).toHaveBeenCalledWith(
+      expect.objectContaining({ resolution: resolutionFor("site-request") })
+    );
+  });
+
+  test("a shared isolate without a request scope fails closed", () => {
+    expect(() =>
+      createDispatcherRuntimeSource({ DOXA_DOCS_RUNTIME_SOURCE: "binding" })
+    ).toThrow("Binding runtime mode requires a content binding.");
   });
 });

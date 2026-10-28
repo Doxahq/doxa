@@ -173,10 +173,14 @@ describe("cache entrypoints", () => {
     // Logged without DEBUG. The mock loader keeps an isolate, so no code loads.
     expect(JSON.parse(String(info.mock.calls.at(-1)?.[0]))).toEqual({
       event: "docs_renderer_load",
+      entrypoint: "fetch",
       siteId: "site-1",
       publishedVersionId: "version-1",
+      isolateScope: "site",
+      rendererBuildId: "build-1",
       state: "WARM",
       totalMs: expect.any(Number),
+      ok: true,
       status: 200,
     });
     info.mockRestore();

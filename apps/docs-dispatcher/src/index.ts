@@ -31,7 +31,14 @@ import {
 } from "./cache-policy";
 import { dispatchDocsRequest } from "./dispatcher";
 import { toHostResolution } from "./host-resolution";
-import { loadRendererCodePackage } from "./renderer-code-package";
+import { requireEnvValue } from "./env-values";
+import {
+  logRendererUse,
+  openRendererIsolate,
+  type RendererCallOutcome,
+  type RendererEntrypointName,
+  type RendererIsolateEnv,
+} from "./renderer-isolate";
 import {
   readDeliveryRollouts,
   resolveActiveDelivery,
@@ -44,7 +51,7 @@ import {
   type PrerenderAttemptDiagnostics,
 } from "./prerender-routing";
 import { parseSiteAllowlist } from "./rollout-policy";
-import { createDynamicWorkerId, parseRendererMode } from "./routing-policy";
+import { parseRendererMode } from "./routing-policy";
 import { handleRouteDataEndpoint } from "./route-data-endpoint";
 import { ROUTE_DATA_PATH } from "./route-data-request";
 import {
@@ -57,7 +64,6 @@ import {
   attachInternalServerTiming,
   createServerTiming,
   exposeRequestTiming,
-  logRendererLoad,
   logRequestTiming,
   type ServerTimingRecorder,
 } from "./server-timing";
@@ -72,25 +78,17 @@ import {
 export { DocsPrerenderCache } from "./prerender-cache-entrypoint";
 export { DocsRouteDataCache } from "./route-data-cache-entrypoint";
 
-interface DispatcherEnv extends DeliveryRolloutEnv {
+interface DispatcherEnv extends DeliveryRolloutEnv, RendererIsolateEnv {
   DEBUG?: string;
   DOCS_RESOLVER: DocsResolverBinding;
   DOCS_RUNTIME: DocsRuntimeRpc;
   SHARED_RENDERER: Fetcher;
-  LOADER: WorkerLoader;
-  RENDERER_CODE_BUCKET: R2Bucket;
   DOCS_RENDERED_BUCKET?: R2Bucket;
   PRERENDER_TASKS?: PrerenderRepairTasksRpc;
   DOXA_PROD_DYNAMIC_RENDERER_MODE?: string;
   DOXA_PROD_DYNAMIC_RENDERER_SITE_IDS?: string;
-  DOXA_RENDERER_BUILD_ID?: string;
-  DOXA_RENDERER_PACKAGE_KEY?: string;
   DOXA_RENDERER_RELEASE_ID?: string;
   DOXA_PRERENDER_REPAIR_ENABLED?: string;
-  DOXA_API_BASE_URL?: string;
-  DOXA_DASHBOARD_BASE_URL?: string;
-  DOXA_DOCS_BASE_DOMAIN?: string;
-  VITE_OPENSOURCE_REPO_URL?: string;
 }
 
 /** Workers Cache caches fetch entrypoints, not custom RPC methods. */
@@ -176,15 +174,17 @@ export class PrerenderRendererApi extends WorkerEntrypoint<DispatcherEnv> {
     resolution: DocsHostResolution;
     pathname: string;
   }): Promise<PublicDocsRouteDataV1> {
-    const timing = createServerTiming(this.env.DEBUG);
-    const renderer = await getPrivatePrerenderRenderer(
-      input.resolution,
-      this.env,
-      this.ctx,
-      timing,
-    );
-    return parsePublicDocsRouteDataV1(
-      await renderer.prepare({ pathname: input.pathname }),
+    return withPrivatePrerenderRenderer(
+      {
+        resolution: input.resolution,
+        env: this.env,
+        ctx: this.ctx,
+        entrypoint: "prepare",
+      },
+      async (renderer) =>
+        parsePublicDocsRouteDataV1(
+          await renderer.prepare({ pathname: input.pathname }),
+        ),
     );
   }
 
@@ -195,19 +195,21 @@ export class PrerenderRendererApi extends WorkerEntrypoint<DispatcherEnv> {
     renderId: string;
     routeData: PublicDocsRouteDataV1;
   }): Promise<Response> {
-    const timing = createServerTiming(this.env.DEBUG);
-    const renderer = await getPrivatePrerenderRenderer(
-      input.resolution,
-      this.env,
-      this.ctx,
-      timing,
+    return withPrivatePrerenderRenderer(
+      {
+        resolution: input.resolution,
+        env: this.env,
+        ctx: this.ctx,
+        entrypoint: "render",
+      },
+      (renderer) =>
+        renderer.render({
+          pathname: input.pathname,
+          requestUrl: input.requestUrl,
+          renderId: input.renderId,
+          routeData: parsePublicDocsRouteDataV1(input.routeData),
+        }),
     );
-    return renderer.render({
-      pathname: input.pathname,
-      requestUrl: input.requestUrl,
-      renderId: input.renderId,
-      routeData: parsePublicDocsRouteDataV1(input.routeData),
-    });
   }
 }
 
@@ -497,81 +499,43 @@ async function renderWithDynamicWorker(
   ctx: ExecutionContext,
   timing: ServerTimingRecorder,
 ): Promise<Response> {
-  const rendererBuildId = requireEnvValue(
-    env.DOXA_RENDERER_BUILD_ID,
-    "DOXA_RENDERER_BUILD_ID",
-  );
-  const objectKey = requireEnvValue(
-    env.DOXA_RENDERER_PACKAGE_KEY,
-    "DOXA_RENDERER_PACKAGE_KEY",
-  );
-  const workerId = createDynamicWorkerId({
-    siteId: resolution.siteId,
-    publishedVersionId: resolution.publishedVersionId,
-    rendererBuildId,
-  });
   const hostResolution = toHostResolution(resolution);
-  const contentBinding = getWorkerExports(ctx).ScopedDocsContent({
-    props: { resolution: hostResolution },
+  const isolate = openRendererIsolate({
+    env,
+    resolution: hostResolution,
+    content: getWorkerExports(ctx).ScopedDocsContent({
+      props: { resolution: hostResolution },
+    }),
+    timing,
   });
-
-  let loadedRendererCode = false;
-  let codeLoadMs: number | undefined;
   const startedAt = Date.now();
-  const response = await timing.measure(
-    "doxa_loader",
-    async () => {
-      const worker = env.LOADER.get(workerId, async () => {
-        loadedRendererCode = true;
-        const codeStartedAt = Date.now();
-        const code = await timing.measure("doxa_code", () =>
-          loadRendererCodePackage({
-            bucket: env.RENDERER_CODE_BUCKET,
-            objectKey,
-            expectedBuildId: rendererBuildId,
-          }),
-        );
-        codeLoadMs = Date.now() - codeStartedAt;
-
-        return {
-          compatibilityDate: code.compatibilityDate,
-          compatibilityFlags: code.compatibilityFlags,
-          mainModule: code.mainModule,
-          modules: code.modules,
-          env: compactEnv({
-            DOXA_DOCS_RUNTIME_SOURCE: "binding",
-            DOXA_DOCS_CONTENT_BINDING: contentBinding,
-            DOXA_DOCS_CONTENT_RESOLUTION: hostResolution,
-            DOXA_API_BASE_URL: env.DOXA_API_BASE_URL,
-            DOXA_DASHBOARD_BASE_URL: env.DOXA_DASHBOARD_BASE_URL,
-            DOXA_DOCS_BASE_DOMAIN: env.DOXA_DOCS_BASE_DOMAIN,
-            VITE_OPENSOURCE_REPO_URL: env.VITE_OPENSOURCE_REPO_URL,
-          }),
-          globalOutbound: null,
-          limits: {
-            cpuMs: 30_000,
-            subRequests: 50,
-          },
-        };
-      });
-
-      return timing.measure(
-        "doxa_render",
-        () => worker.getEntrypoint().fetch(request),
-        "DYNAMIC",
-      );
-    },
-    () => (loadedRendererCode ? "COLD" : "WARM"),
-  );
-  logRendererLoad({
-    siteId: resolution.siteId,
-    publishedVersionId: resolution.publishedVersionId,
-    state: loadedRendererCode ? "COLD" : "WARM",
-    codeLoadMs,
-    totalMs: Date.now() - startedAt,
-    status: response.status,
-  });
-  return response;
+  try {
+    const response = await timing.measure(
+      "doxa_loader",
+      () =>
+        timing.measure(
+          "doxa_render",
+          () => isolate.getEntrypoint().fetch(request),
+          "DYNAMIC",
+        ),
+      () => (isolate.cold ? "COLD" : "WARM"),
+    );
+    logRendererUse(isolate, {
+      entrypoint: "fetch",
+      resolution: hostResolution,
+      startedAt,
+      outcome: { ok: response.ok, status: response.status },
+    });
+    return response;
+  } catch (error) {
+    logRendererUse(isolate, {
+      entrypoint: "fetch",
+      resolution: hostResolution,
+      startedAt,
+      outcome: { ok: false, error: describeError(error) },
+    });
+    throw error;
+  }
 }
 
 interface PrivatePrerenderRenderer {
@@ -584,61 +548,46 @@ interface PrivatePrerenderRenderer {
   }): Promise<Response>;
 }
 
-async function getPrivatePrerenderRenderer(
-  resolution: DocsHostResolution,
-  env: DispatcherEnv,
-  ctx: ExecutionContext,
-  timing: ServerTimingRecorder,
-): Promise<PrivatePrerenderRenderer> {
-  const rendererBuildId = requireEnvValue(
-    env.DOXA_RENDERER_BUILD_ID,
-    "DOXA_RENDERER_BUILD_ID",
-  );
-  const objectKey = requireEnvValue(
-    env.DOXA_RENDERER_PACKAGE_KEY,
-    "DOXA_RENDERER_PACKAGE_KEY",
-  );
-  const workerId = createDynamicWorkerId({
-    siteId: resolution.siteId,
-    publishedVersionId: resolution.publishedVersionId,
-    rendererBuildId,
+/** Runs one call on the private pre-render entrypoint and logs the isolate use. */
+async function withPrivatePrerenderRenderer<T>(
+  input: {
+    resolution: DocsHostResolution;
+    env: DispatcherEnv;
+    ctx: ExecutionContext;
+    entrypoint: Exclude<RendererEntrypointName, "fetch">;
+  },
+  call: (renderer: PrivatePrerenderRenderer) => Promise<T>,
+): Promise<T> {
+  const isolate = openRendererIsolate({
+    env: input.env,
+    resolution: input.resolution,
+    content: getWorkerExports(input.ctx).ScopedDocsContent({
+      props: { resolution: input.resolution },
+    }),
+    timing: createServerTiming(input.env.DEBUG),
   });
-  const contentBinding = getWorkerExports(ctx).ScopedDocsContent({
-    props: { resolution },
-  });
-  const worker = env.LOADER.get(workerId, async () => {
-    const code = await timing.measure("doxa_code", () =>
-      loadRendererCodePackage({
-        bucket: env.RENDERER_CODE_BUCKET,
-        objectKey,
-        expectedBuildId: rendererBuildId,
-      }),
-    );
-    return {
-      compatibilityDate: code.compatibilityDate,
-      compatibilityFlags: code.compatibilityFlags,
-      mainModule: code.mainModule,
-      modules: code.modules,
-      env: compactEnv({
-        DOXA_DOCS_RUNTIME_SOURCE: "binding",
-        DOXA_DOCS_CONTENT_BINDING: contentBinding,
-        DOXA_DOCS_CONTENT_RESOLUTION: resolution,
-        DOXA_API_BASE_URL: env.DOXA_API_BASE_URL,
-        DOXA_DASHBOARD_BASE_URL: env.DOXA_DASHBOARD_BASE_URL,
-        DOXA_DOCS_BASE_DOMAIN: env.DOXA_DOCS_BASE_DOMAIN,
-        VITE_OPENSOURCE_REPO_URL: env.VITE_OPENSOURCE_REPO_URL,
-      }),
-      globalOutbound: null,
-      limits: { cpuMs: 30_000, subRequests: 50 },
-    };
-  });
-  const entrypoint: unknown = worker.getEntrypoint("DocsPrerenderRenderer");
+  const entrypoint: unknown = isolate.getEntrypoint("DocsPrerenderRenderer");
   if (!isPrivatePrerenderRenderer(entrypoint)) {
     throw new Error(
       "The renderer package has no private pre-render entrypoint.",
     );
   }
-  return entrypoint;
+  const startedAt = Date.now();
+  const log = (outcome: RendererCallOutcome) =>
+    logRendererUse(isolate, {
+      entrypoint: input.entrypoint,
+      resolution: input.resolution,
+      startedAt,
+      outcome,
+    });
+  try {
+    const result = await call(entrypoint);
+    log({ ok: true });
+    return result;
+  } catch (error) {
+    log({ ok: false, error: describeError(error) });
+    throw error;
+  }
 }
 
 function isPrivatePrerenderRenderer(
@@ -654,14 +603,6 @@ function isPrivatePrerenderRenderer(
   );
 }
 
-function requireEnvValue(value: string | undefined, name: string): string {
-  const normalized = value?.trim();
-  if (normalized) return normalized;
-  throw new Error(`Missing required dispatcher variable: ${name}.`);
-}
-
-function compactEnv(value: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  );
+function describeError(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : "Unknown error";
 }

@@ -6,7 +6,7 @@ import server, {
 import { getRedirectResponse } from "./src/lib/request-redirects";
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
     const redirect = getRedirectResponse(request);
     if (redirect) return redirect;
@@ -22,7 +22,9 @@ export default {
       if (directResponse.ok) return directResponse;
     }
 
-    return server.fetch(request, env);
+    // `ctx.props` carries the request's content scope when one renderer
+    // isolate serves many sites. Dropping `ctx` makes those renders fail.
+    return server.fetch(request, env, ctx);
   },
 };
 

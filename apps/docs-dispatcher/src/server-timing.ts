@@ -181,33 +181,6 @@ export function logRequestTiming(
   );
 }
 
-/**
- * Logs every Dynamic Worker render on an HTML cache miss, with or without
- * DEBUG. COLD means that this request loaded the renderer code package.
- */
-export function logRendererLoad(input: {
-  siteId: string;
-  publishedVersionId: string;
-  state: "COLD" | "WARM";
-  codeLoadMs: number | undefined;
-  totalMs: number;
-  status: number;
-}): void {
-  console.info(
-    JSON.stringify({
-      event: "docs_renderer_load",
-      siteId: input.siteId,
-      publishedVersionId: input.publishedVersionId,
-      state: input.state,
-      ...(input.codeLoadMs !== undefined
-        ? { codeLoadMs: input.codeLoadMs }
-        : {}),
-      totalMs: input.totalMs,
-      status: input.status,
-    }),
-  );
-}
-
 function formatEntry(entry: ServerTimingEntry): string {
   const duration = Number(entry.durationMs.toFixed(2));
   const description = entry.description

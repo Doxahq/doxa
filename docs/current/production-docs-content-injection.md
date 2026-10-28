@@ -73,6 +73,8 @@ The live path runs when a visitor opens a page and no saved HTML exists.
   3. `DOXA_DOCS_CONTENT_RESOLUTION` is the resolution from Step 1.
 - The Dynamic Worker gets nothing else. It has no R2 access, no database
   access, and no network access. `globalOutbound` is `null`.
+- Sites in the shared-isolate rollout use a different scope. See
+  [Renderer Isolate Scope](#renderer-isolate-scope).
 
 ### Step 3: docs-template asks for content
 
@@ -120,6 +122,50 @@ The live path runs when a visitor opens a page and no saved HTML exists.
   same pinned resolution. It calls the private `DocsPrerenderRenderer`
   entrypoint instead of `fetch`. The only difference is the time of the render.
 
+## Renderer Isolate Scope
+
+`apps/docs-dispatcher/src/renderer-isolate.ts` decides which isolate renders a
+site. Both scopes run the same renderer code.
+
+| Scope   | Isolate ID                                            | Site content                                                                                   |
+| ------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `site`  | `docs:{siteId}:{publishedVersionId}:{rendererBuildId}` | In the isolate `env`, fixed when the isolate starts                                            |
+| `build` | `docs:build:{rendererBuildId}`                        | In the entrypoint props of each call: `getEntrypoint(name, { props: { content, resolution } })` |
+
+- In the `build` scope, the isolate `env` holds only values that are the same
+  for every site. The loader runs only on a cold start, so a site value in
+  `env` would reach every later request.
+- `content` is the `ScopedDocsContent` binding pinned to `resolution`, the same
+  object as in the `site` scope. It works only during the request that
+  received it. A renderer that keeps it and uses it later gets "Cannot perform
+  I/O on behalf of a different request".
+- docs-template reads the props with `readRendererRequestScope` in
+  `apps/docs-template/src/runtime/runtime-source-selection.ts`. A request
+  scope wins over `env`. A `build` isolate without props has no content binding
+  and fails closed.
+- Module state in docs-template is shared by every site of a `build` isolate.
+  Keep per-request data in the request context. Key a module cache by a content
+  hash, never by path, hostname or site alone.
+
+The rollout uses two dispatcher variables:
+
+- `DOXA_PROD_SHARED_ISOLATE_MODE`: `off`, `allowlist` or `all`. An invalid
+  value logs a warning and keeps every site in the `site` scope.
+  `pnpm validate:production-config` rejects an invalid value.
+- `DOXA_PROD_SHARED_ISOLATE_SITE_IDS`: comma-separated site IDs for
+  `allowlist`. The config holds the placeholder
+  `${OPS_DOCS_SHARED_ISOLATE_SITE_IDS}`, and the ops repo holds the value.
+
+To revert, set `DOXA_PROD_SHARED_ISOLATE_MODE` to `off` in
+`apps/docs-dispatcher/wrangler.json`, or remove the site from the ops value,
+then deploy the `docs-rendering` step. The renderer code supports both scopes,
+so a revert needs no renderer change.
+
+Every renderer call logs `docs_renderer_load` with `entrypoint` (`fetch`,
+`prepare` or `render`), `isolateScope`, `rendererBuildId`, `state` (`COLD`
+or `WARM`), `codeLoadMs`, `totalMs`, and `ok` with `status` or `error`.
+Compare the `COLD` share and `totalMs` by `isolateScope` to judge the rollout.
+
 ## Renderer Code Package
 
 ### What the bucket is
@@ -154,6 +200,13 @@ docs-template as plain JavaScript text.
 
 The client assets (CSS, browser JavaScript, fonts) are not in this bucket. The
 dispatcher serves them from its own `ASSETS` binding.
+
+The deploy builds the renderer with `DOXA_RENDERER_BUILD=platform`. That
+build minifies the server code and leaves out the local content source
+(`import.meta.env.DOXA_OMIT_LOCAL_CONTENT_SOURCE`). Its server Mermaid module
+is a stub, because Mermaid draws only in the browser. A Dynamic Worker compiles
+every module of the package on each cold start, used or not. These steps took
+the package from 94 modules and 16.6 MB to 29 modules and 5.5 MB.
 
 ### How the object is built
 

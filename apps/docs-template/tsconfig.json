@@ -25,6 +25,9 @@
       "@doxahq/mdx-runtime/highlight": [
         "../../packages/mdx-runtime/src/highlight/index.ts"
       ],
+      "@doxahq/mdx-runtime/highlight-lazy": [
+        "../../packages/mdx-runtime/src/highlight/lazy.ts"
+      ],
       "@/*": ["./*"],
       "~/*": ["./src/*"]
     }

@@ -13,6 +13,7 @@ import { createMdxPlugin } from "./src/config/vite/mdx";
 import { mdxSourceCapturePlugin } from "./src/config/vite/mdx-source-capture";
 import { searchDataPlugin } from "./src/config/vite/search-data";
 import { createStartConfig } from "./src/config/vite/start";
+import { workspaceSourceAliases } from "./src/config/vite/workspace-aliases";
 import { resolveSiteUrl } from "./src/lib/site-url";
 
 export default defineConfig(({ mode }) => {
@@ -45,6 +46,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: "/",
+    resolve: {
+      alias: workspaceSourceAliases,
+    },
     server: {
       port: 3000,
       allowedHosts: getDevAllowedHosts(),

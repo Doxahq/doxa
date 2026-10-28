@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { validateDocsPlacementConfigs } from "./lib/docs-placement-config.mjs";
+import { validateDocsRuntimeConfig } from "./lib/docs-runtime-config.mjs";
 import { validateMcpProductionConfig } from "./lib/mcp-production-config.mjs";
 
 const DEFAULT_API_CONFIG = "apps/api/wrangler.json";
@@ -10,6 +11,7 @@ const DEFAULT_SHARED_RENDERER_CONFIG =
   "apps/docs-template/wrangler.renderer.shared.production.json";
 const DEFAULT_DISPATCHER_CONFIG = "apps/docs-dispatcher/wrangler.json";
 const DEFAULT_PRERENDERER_CONFIG = "apps/docs-prerenderer/wrangler.json";
+const DEFAULT_RUNTIME_CONFIG = "apps/docs-runtime/wrangler.json";
 const CNAME_TARGET_VAR = "DOCS_CUSTOM_DOMAIN_CNAME_TARGET";
 const REQUIRED_PRODUCTION_COMPATIBILITY_FLAGS = [
   "nodejs_compat",
@@ -36,6 +38,7 @@ try {
   validateHyperdriveBindings(config, configPath);
   if (process.argv.length === 2) {
     validateDocsRenderingConfigs();
+    validateDocsRuntimeConfig(readJson(DEFAULT_RUNTIME_CONFIG));
     validateDocsPlacementConfigs({
       api: config,
       resolver: readJson("apps/api/wrangler.docs-resolver.json"),

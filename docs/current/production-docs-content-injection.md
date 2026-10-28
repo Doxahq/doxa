@@ -90,6 +90,8 @@ The live path runs when a visitor opens a page and no saved HTML exists.
   the pinned resolution to every call and forwards the call to docs-runtime.
 - docs-template can never change the resolution. The dispatcher sets it once
   when it creates the Dynamic Worker.
+- On a cold start, the dispatcher may already have asked docs-runtime for the
+  page's route data. See [Route-Data Prefetch](#route-data-prefetch).
 
 ### Step 4: docs-runtime reads the artifacts
 
@@ -196,6 +198,63 @@ Inside a Worker, the clock advances only on I/O. CPU work after the
 renderer's last I/O, such as rendering the page shell, therefore falls into
 `afterHandlerMs`, not `handlerMs`. The two clocks belong to different
 isolates, so small negative values can appear.
+
+## Route-Data Prefetch
+
+A cold renderer asks for its route data only after its own start (about
+440 ms), and in a cold data center that `getRouteData` call took 250–330 ms
+more (production, 28 Oct). The two waits were in sequence.
+`apps/docs-dispatcher/src/route-data-prefetch.ts` lets them overlap:
+
+1. For a page request (a `GET` that `isPrerenderableDocsRequest` accepts) of
+   a site in the rollout, the dispatcher makes a prefetch ID and puts it in
+   the `ScopedDocsContent` props as `routeDataPrefetchId`.
+2. When `LOADER.get` runs the code callback, this request starts the isolate.
+   Only then does the dispatcher send `getRouteData` to docs-runtime, pinned
+   to the same trusted resolution, with the pathname that docs-template will
+   send (`toRuntimeHref`, a copy of `normalizeRuntimeHref`; a test keeps the
+   two equal). `ctx.waitUntil` keeps the call alive. A warm render sends
+   nothing extra.
+3. When the renderer's `getRouteData` reaches `ScopedDocsContent` in the same
+   dispatcher isolate, with the same resolution and the same payload, it gets
+   the prefetched answer. This happens once per prefetch. An error answer or
+   a thrown RPC makes it call docs-runtime itself, as before.
+4. When the renderer's call reaches another dispatcher isolate, it calls
+   docs-runtime itself. The prefetch then only warmed docs-runtime: its
+   isolate, its 60-second memory cache and its `caches.default` blob cache in
+   that data center.
+
+The renderer and its public contract do not change: it makes the same RPC,
+and the HTML comes from the same `fetch` path. The prefetch ID is set only by
+the dispatcher, and a prefetched answer is only ever the answer to the same
+call for the same resolution. Each entry lives until its render reports, or
+one minute at most.
+
+`docs_renderer_load` of a render that started a prefetch has
+`routeDataPrefetch`:
+
+| Field | Meaning |
+| --- | --- |
+| `outcome` | `handedOff` (the renderer got the prefetched answer), `fellBack` (the prefetch failed, the renderer called docs-runtime itself) or `notTaken` (the renderer's call reached another dispatcher isolate or asked for other data) |
+| `prefetchMs` | Duration of the prefetch RPC |
+| `leadMs` | Prefetch start until the renderer asked for route data |
+| `waitMs` | How long the renderer still waited for the prefetched answer. `0` means full overlap |
+
+Compare `phases.routeDataMs` of `COLD` renders with and without the field.
+For `notTaken`, `phases.routeDataMs` shows what the warm-up alone gave.
+
+The rollout uses two dispatcher variables:
+
+- `DOXA_PROD_ROUTE_DATA_PREFETCH_MODE`: `off`, `allowlist` or `all`. Unset or
+  invalid means `off` (an invalid value logs a warning).
+  `pnpm validate:production-config` rejects an invalid value. Production is
+  `all`.
+- `DOXA_PROD_ROUTE_DATA_PREFETCH_SITE_IDS`: comma-separated site IDs for
+  `allowlist`.
+
+To revert, set `DOXA_PROD_ROUTE_DATA_PREFETCH_MODE` to `off` in
+`apps/docs-dispatcher/wrangler.json`, then deploy the `docs-rendering` step.
+The renderer needs no change.
 
 ## Renderer Code Package
 

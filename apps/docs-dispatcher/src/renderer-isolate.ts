@@ -2,13 +2,13 @@ import type { DocsHostResolution } from "@doxahq/contracts";
 
 import { requireEnvValue } from "./env-values";
 import {
-  createRendererCodeReaders,
-  type RendererCodeCacheProps,
-} from "./renderer-code-readers";
-import {
   loadRendererCodePackage,
   type RendererCodeSource,
 } from "./renderer-code-package";
+import {
+  createRendererCodeReaders,
+  type RendererCodeCacheProps,
+} from "./renderer-code-readers";
 import type {
   BodyTiming,
   RendererIsolateFacts,
@@ -20,6 +20,7 @@ import {
   parseSiteAllowlist,
   type SiteRollout,
 } from "./rollout-policy";
+import type { RouteDataPrefetchReport } from "./route-data-prefetch";
 import {
   createDynamicWorkerId,
   createSharedRendererWorkerId,
@@ -110,7 +111,8 @@ export function selectRendererIsolateScope(
 /**
  * Gets the renderer isolate for one request. `content` must be the
  * `ScopedDocsContent` binding pinned to `resolution`. `codeCache` is the
- * dispatcher's own `DocsRendererCodeCache` entrypoint.
+ * dispatcher's own `DocsRendererCodeCache` entrypoint. `onColdStart` runs
+ * when this request starts the isolate, before its code loads.
  */
 export function openRendererIsolate(input: {
   env: RendererIsolateEnv;
@@ -118,8 +120,9 @@ export function openRendererIsolate(input: {
   content: DocsRuntimeRpc;
   codeCache: CacheEntrypoint<RendererCodeCacheProps>;
   timing: ServerTimingRecorder;
+  onColdStart?: () => void;
 }): RendererIsolate {
-  const { env, resolution, content, codeCache, timing } = input;
+  const { env, resolution, content, codeCache, timing, onColdStart } = input;
   const rendererBuildId = requireEnvValue(
     env.DOXA_RENDERER_BUILD_ID,
     "DOXA_RENDERER_BUILD_ID",
@@ -149,6 +152,7 @@ export function openRendererIsolate(input: {
   } = { cold: false };
   const worker = env.LOADER.get(workerId, async () => {
     load.cold = true;
+    onColdStart?.();
     const startedAt = Date.now();
     const { code, source } = await timing.measure("doxa_code", () =>
       loadRendererCodePackage({
@@ -239,6 +243,7 @@ export function logRendererUse(
     phases?: RenderPhases;
     renderer?: RendererIsolateFacts;
     body?: BodyTiming;
+    routeDataPrefetch?: RouteDataPrefetchReport;
   },
 ): void {
   console.info(
@@ -258,6 +263,9 @@ export function logRendererUse(
       ...input.outcome,
       ...(input.phases ? { phases: input.phases } : {}),
       ...(input.renderer ? { renderer: input.renderer } : {}),
+      ...(input.routeDataPrefetch
+        ? { routeDataPrefetch: input.routeDataPrefetch }
+        : {}),
       ...(input.body ?? {}),
     }),
   );

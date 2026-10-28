@@ -280,7 +280,9 @@ renderer call writes `docs_renderer_load` with the isolate scope, the build,
 its source (`memory`, `cache` or `r2`), the total time and the outcome (see
 [Renderer Isolate Scope](./production-docs-content-injection.md#renderer-isolate-scope)).
 docs-runtime writes `docs_runtime_reads` for every
-`getRouteData` call, with the number of artifact reads that passed the memory
+`getRouteData` call (a cold render whose
+[route-data prefetch](./production-docs-content-injection.md#route-data-prefetch)
+was not handed off makes two), with the number of artifact reads that passed the memory
 caches, their total time and the longest read. `getRouteData` starts its
 independent reads together. Use these lines for the hit rate and for slow
 misses.

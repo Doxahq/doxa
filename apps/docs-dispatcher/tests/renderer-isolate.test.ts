@@ -154,6 +154,40 @@ describe("openRendererIsolate", () => {
     });
   });
 
+  test("runs onColdStart only when this request starts the isolate", async () => {
+    const { env, settle } = createEnv();
+    const onColdStart = vi.fn();
+    const isolate = openRendererIsolate({
+      env,
+      resolution: resolutionFor(SITE_A),
+      content: { request: vi.fn() } as unknown as DocsRuntimeRpc,
+      codeCache: vi.fn(),
+      timing: createServerTiming("false"),
+      onColdStart,
+    });
+    await settle();
+    expect(isolate.cold).toBe(true);
+    expect(onColdStart).toHaveBeenCalledOnce();
+
+    const warmGet = vi.fn(() => ({
+      getEntrypoint: vi.fn(),
+      getDurableObjectClass: vi.fn(),
+    }));
+    const warmColdStart = vi.fn();
+    openRendererIsolate({
+      env: {
+        ...env,
+        LOADER: { get: warmGet, load: vi.fn() } as unknown as WorkerLoader,
+      },
+      resolution: resolutionFor(SITE_A),
+      content: { request: vi.fn() } as unknown as DocsRuntimeRpc,
+      codeCache: vi.fn(),
+      timing: createServerTiming("false"),
+      onColdStart: warmColdStart,
+    });
+    expect(warmColdStart).not.toHaveBeenCalled();
+  });
+
   test("two sites in build scope share one isolate ID", () => {
     const { env, get } = createEnv({ DOXA_PROD_SHARED_ISOLATE_MODE: "all" });
     open(env, SITE_A);

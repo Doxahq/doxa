@@ -109,6 +109,8 @@
     "DOXA_PROD_ROUTE_DATA_CACHE_SITE_IDS": "",
     "DOXA_PROD_SHARED_ISOLATE_MODE": "allowlist",
     "DOXA_PROD_SHARED_ISOLATE_SITE_IDS": "${OPS_DOCS_SHARED_ISOLATE_SITE_IDS}",
+    "DOXA_PROD_ROUTE_DATA_PREFETCH_MODE": "all",
+    "DOXA_PROD_ROUTE_DATA_PREFETCH_SITE_IDS": "",
     "VITE_OPENSOURCE_REPO_URL": "https://github.com/ipenywis/doxa",
     "DOXA_API_BASE_URL": "https://api.doxa.so",
     "DOXA_DASHBOARD_BASE_URL": "https://doxa.so",

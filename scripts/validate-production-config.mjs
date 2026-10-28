@@ -117,6 +117,16 @@ function validateDocsRenderingConfigs() {
       `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_SHARED_ISOLATE_MODE to off, allowlist or all.`,
     );
   }
+  // A typo would silently turn the route-data prefetch off.
+  if (
+    !["off", "allowlist", "all"].includes(
+      dispatcher.vars?.DOXA_PROD_ROUTE_DATA_PREFETCH_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_ROUTE_DATA_PREFETCH_MODE to off, allowlist or all.`,
+    );
+  }
   if (dispatcher.vars?.DOXA_PRERENDER_REPAIR_ENABLED !== "false") {
     throw new Error(
       `${DEFAULT_DISPATCHER_CONFIG} must default request repairs to false.`,

@@ -36,6 +36,8 @@ export interface DocsRuntimeRpc {
 
 export interface ScopedDocsContentProps {
   resolution: DocsHostResolution;
+  /** Set by the dispatcher when it prefetched this render's route data. */
+  routeDataPrefetchId?: string;
 }
 
 export interface PrerenderRendererRpc {

@@ -59,6 +59,14 @@ import {
 import { parseSiteAllowlist } from "./rollout-policy";
 import { parseRendererMode } from "./routing-policy";
 import { handleRouteDataEndpoint } from "./route-data-endpoint";
+import {
+  planRouteDataPrefetch,
+  readRouteDataPrefetchRollout,
+  routeDataPrefetches,
+  type RouteDataPrefetchEnv,
+  type RouteDataPrefetchPlan,
+  type RouteDataPrefetchReport,
+} from "./route-data-prefetch";
 import { ROUTE_DATA_PATH } from "./route-data-request";
 import {
   withDocsPreviewSearchPolicy,
@@ -83,8 +91,12 @@ import {
 
 export { DocsPrerenderCache } from "./prerender-cache-entrypoint";
 export { DocsRouteDataCache } from "./route-data-cache-entrypoint";
+export { DocsRendererCodeCache } from "./renderer-code-cache-entrypoint";
 
-interface DispatcherEnv extends DeliveryRolloutEnv, RendererIsolateEnv {
+interface DispatcherEnv
+  extends DeliveryRolloutEnv,
+    RendererIsolateEnv,
+    RouteDataPrefetchEnv {
   DEBUG?: string;
   DOCS_RESOLVER: DocsResolverBinding;
   DOCS_RUNTIME: DocsRuntimeRpc;
@@ -250,11 +262,20 @@ export class ScopedDocsContent extends WorkerEntrypoint<
   }
 
   request(input: RuntimeRequest): Promise<RuntimeResponse> {
-    return this.env.DOCS_RUNTIME.request({
-      resolution: this.ctx.props.resolution,
-      operation: input.operation,
-      ...(input.payload === undefined ? {} : { payload: input.payload }),
-    });
+    const { resolution, routeDataPrefetchId } = this.ctx.props;
+    // A prefetched answer is only ever the answer to this same call, pinned
+    // to this same resolution.
+    return routeDataPrefetches.serve(
+      routeDataPrefetchId,
+      resolution,
+      input,
+      () =>
+        this.env.DOCS_RUNTIME.request({
+          resolution,
+          operation: input.operation,
+          ...(input.payload === undefined ? {} : { payload: input.payload }),
+        }),
+    );
   }
 }
 
@@ -506,14 +527,31 @@ async function renderWithDynamicWorker(
   timing: ServerTimingRecorder,
 ): Promise<Response> {
   const hostResolution = toHostResolution(resolution);
+  const prefetch = planRouteDataPrefetch({
+    request,
+    siteId: hostResolution.siteId,
+    rollout: readRouteDataPrefetchRollout(env),
+  });
   const isolate = openRendererIsolate({
     env,
     resolution: hostResolution,
     content: getWorkerExports(ctx).ScopedDocsContent({
-      props: { resolution: hostResolution },
+      props: {
+        resolution: hostResolution,
+        ...(prefetch ? { routeDataPrefetchId: prefetch.id } : {}),
+      },
     }),
+    codeCache: getWorkerExports(ctx).DocsRendererCodeCache,
     timing,
+    ...(prefetch
+      ? {
+          onColdStart: () =>
+            startRouteDataPrefetch(prefetch, hostResolution, env, ctx),
+        }
+      : {}),
   });
+  const takePrefetchReport = (): RouteDataPrefetchReport | undefined =>
+    prefetch ? routeDataPrefetches.finish(prefetch.id) : undefined;
   const startedAt = Date.now();
   try {
     const rendered = await timing.measure(
@@ -527,6 +565,7 @@ async function renderWithDynamicWorker(
       () => (isolate.cold ? "COLD" : "WARM"),
     );
     const respondedAt = Date.now();
+    const routeDataPrefetch = takePrefetchReport();
     const { response, report } = takeRendererTiming(rendered);
     return observeResponseBody(response, (body) =>
       logRendererUse(isolate, {
@@ -542,17 +581,35 @@ async function renderWithDynamicWorker(
             }
           : {}),
         body,
+        ...(routeDataPrefetch ? { routeDataPrefetch } : {}),
       }),
     );
   } catch (error) {
+    const routeDataPrefetch = takePrefetchReport();
     logRendererUse(isolate, {
       entrypoint: "fetch",
       resolution: hostResolution,
       startedAt,
       outcome: { ok: false, error: describeError(error) },
+      ...(routeDataPrefetch ? { routeDataPrefetch } : {}),
     });
     throw error;
   }
+}
+
+/**
+ * Sends this render's `getRouteData` to docs-runtime while the renderer
+ * starts. Runs only on a cold start, so a warm render never pays twice.
+ */
+function startRouteDataPrefetch(
+  plan: RouteDataPrefetchPlan,
+  resolution: DocsHostResolution,
+  env: DispatcherEnv,
+  ctx: ExecutionContext,
+): void {
+  ctx.waitUntil(
+    routeDataPrefetches.start({ plan, runtime: env.DOCS_RUNTIME, resolution }),
+  );
 }
 
 interface PrivatePrerenderRenderer {
@@ -581,6 +638,7 @@ async function withPrivatePrerenderRenderer<T>(
     content: getWorkerExports(input.ctx).ScopedDocsContent({
       props: { resolution: input.resolution },
     }),
+    codeCache: getWorkerExports(input.ctx).DocsRendererCodeCache,
     timing: createServerTiming(input.env.DEBUG),
   });
   const entrypoint: unknown = isolate.getEntrypoint("DocsPrerenderRenderer");

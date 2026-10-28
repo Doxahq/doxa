@@ -19,6 +19,7 @@ not a strict global read-after-write guarantee.
 | `DocsHostCache`            | 1 day, stale on error       | Trusted hostname and `DOCS_HOST_CACHE_FORMAT` in `ctx.props`                                                                   |
 | `DocsHtmlCache`            | 1 year, then 7 days stale   | Trusted hostname, resolved site/version/artifact data, renderer build, delivery render ID in `ctx.props`, plus URL path        |
 | `DocsRouteDataCache`       | 1 year, then 7 days stale   | Trusted hostname, resolved site/version/artifact data, delivery identity (`renderId`) in `ctx.props`, plus the route-data path |
+| `DocsRendererCodeCache`    | 1 year, then 7 days stale   | The deployed `DOXA_RENDERER_BUILD_ID`, `DOXA_RENDERER_PACKAGE_KEY` and `RENDERER_CODE_CACHE_FORMAT` in `ctx.props`, plus `/v1/{buildId}` |
 | Public dispatcher response | Not stored                  | Explicit `private, no-store`                                                                                                   |
 
 The constants live in `apps/docs-dispatcher/src/cache-policy.ts`. The dispatcher
@@ -26,7 +27,7 @@ uses Wrangler 4.135.0 or later with per-entrypoint Workers Cache configuration.
 The global cache default is disabled, and `cache.cross_version_cache` is
 `true`. `exports.default.cache.enabled` is also
 explicitly disabled, while `DocsHostCache`, `DocsHtmlCache`, `DocsPrerenderCache`,
-and `DocsRouteDataCache` opt into caching.
+`DocsRouteDataCache` and `DocsRendererCodeCache` opt into caching.
 Other entrypoints inherit the disabled default. The renderer package builder
 preserves these settings in the generated deployment config.
 
@@ -279,11 +280,13 @@ Every request writes one `docs_request_cache` log line with the hostname,
 path, status, cache statuses and data center (`colo`). With `DEBUG` set to
 `true`, the line is `docs_request_timing` and also carries the timings. Every
 renderer call writes `docs_renderer_load` with the isolate scope, the build,
-`COLD` (this request started the isolate) or `WARM`, the code load time, the
-total time and the outcome (see
+`COLD` (this request started the isolate) or `WARM`, the code load time and
+its source (`memory`, `cache` or `r2`), the total time and the outcome (see
 [Renderer Isolate Scope](./production-docs-content-injection.md#renderer-isolate-scope)).
 docs-runtime writes `docs_runtime_reads` for every
-`getRouteData` call, with the number of artifact reads that passed the memory
+`getRouteData` call (a cold render whose
+[route-data prefetch](./production-docs-content-injection.md#route-data-prefetch)
+was not handed off makes two), with the number of artifact reads that passed the memory
 caches, their total time and the longest read. `getRouteData` starts its
 independent reads together. Use these lines for the hit rate and for slow
 misses.
@@ -341,9 +344,11 @@ this feature. Once the dispatcher entrypoint exists, normal deployment order can
 resume. Keep the outbox table if rolling the API back; do not delete pending work.
 
 To turn off native caching, set `exports.DocsHostCache.cache.enabled`,
-`exports.DocsHtmlCache.cache.enabled`, and
-`exports.DocsRouteDataCache.cache.enabled` to `false`, then redeploy through the same
-workflow. The global `cache.enabled` is already `false`; it does not override
+`exports.DocsHtmlCache.cache.enabled`,
+`exports.DocsRouteDataCache.cache.enabled` and
+`exports.DocsRendererCodeCache.cache.enabled` to `false`, then redeploy through the same
+workflow. Without the renderer code cache, every cold renderer start in a new
+dispatcher isolate reads the package from R2 again (`codeSource: "r2"`). The global `cache.enabled` is already `false`; it does not override
 these explicit opt-ins. Both entrypoints continue to serve requests without
 stored responses.
 

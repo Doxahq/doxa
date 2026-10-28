@@ -51,6 +51,23 @@ test("rolls the shared renderer isolate out to the operator's canary sites", () 
   );
 });
 
+test("caches the renderer code package in Workers Cache", () => {
+  const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
+
+  assert.deepEqual(config.exports.DocsRendererCodeCache, {
+    type: "worker",
+    cache: { enabled: true },
+  });
+});
+
+test("prefetches route data on cold renderer starts for every site", () => {
+  const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
+
+  // Set the mode to off to revert; the renderer needs no change.
+  assert.equal(config.vars.DOXA_PROD_ROUTE_DATA_PREFETCH_MODE, "all");
+  assert.equal(config.vars.DOXA_PROD_ROUTE_DATA_PREFETCH_SITE_IDS, "");
+});
+
 test("shares docs cache entries across dispatcher versions", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 

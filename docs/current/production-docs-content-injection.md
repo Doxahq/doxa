@@ -63,7 +63,8 @@ The live path runs when a visitor opens a page and no saved HTML exists.
 - For a public production site, the dispatcher starts a Dynamic Worker. Its ID
   is `docs:{siteId}:{publishedVersionId}:{rendererBuildId}`.
 - The Dynamic Worker code is the built docs-template. The dispatcher reads that
-  code from the `doxa-docs-renderer-code` bucket.
+  code from the `doxa-docs-renderer-code` bucket, through Workers Cache. See
+  [How the object is read](#how-the-object-is-read).
 - The dispatcher gives the Dynamic Worker three environment values. This step
   is the injection.
   1. `DOXA_DOCS_RUNTIME_SOURCE="binding"` tells docs-template to get content
@@ -89,6 +90,8 @@ The live path runs when a visitor opens a page and no saved HTML exists.
   the pinned resolution to every call and forwards the call to docs-runtime.
 - docs-template can never change the resolution. The dispatcher sets it once
   when it creates the Dynamic Worker.
+- On a cold start, the dispatcher may already have asked docs-runtime for the
+  page's route data. See [Route-Data Prefetch](#route-data-prefetch).
 
 ### Step 4: docs-runtime reads the artifacts
 
@@ -163,7 +166,15 @@ so a revert needs no renderer change.
 
 Every renderer call logs `docs_renderer_load` with `entrypoint` (`fetch`,
 `prepare` or `render`), `isolateScope`, `rendererBuildId`, `state` (`COLD`
-or `WARM`), `codeLoadMs`, `totalMs`, and `ok` with `status` or `error`.
+or `WARM`), `codeLoadMs`, `codeSource`, `totalMs`, and `ok` with `status` or
+`error`. A `COLD` call has `codeSource`:
+
+| `codeSource` | Where the code came from |
+| --- | --- |
+| `memory` | This dispatcher isolate had already loaded the package |
+| `cache` | A stored copy in Workers Cache (`DocsRendererCodeCache`) |
+| `r2` | The R2 bucket: a cache fill, or the direct read after a cache failure |
+
 Compare the `COLD` share and `totalMs` by `isolateScope` to judge the rollout.
 
 A page render (`fetch`) also logs the renderer's own timing. docs-template
@@ -187,6 +198,63 @@ Inside a Worker, the clock advances only on I/O. CPU work after the
 renderer's last I/O, such as rendering the page shell, therefore falls into
 `afterHandlerMs`, not `handlerMs`. The two clocks belong to different
 isolates, so small negative values can appear.
+
+## Route-Data Prefetch
+
+A cold renderer asks for its route data only after its own start (about
+440 ms), and in a cold data center that `getRouteData` call took 250–330 ms
+more (production, 28 Oct). The two waits were in sequence.
+`apps/docs-dispatcher/src/route-data-prefetch.ts` lets them overlap:
+
+1. For a page request (a `GET` that `isPrerenderableDocsRequest` accepts) of
+   a site in the rollout, the dispatcher makes a prefetch ID and puts it in
+   the `ScopedDocsContent` props as `routeDataPrefetchId`.
+2. When `LOADER.get` runs the code callback, this request starts the isolate.
+   Only then does the dispatcher send `getRouteData` to docs-runtime, pinned
+   to the same trusted resolution, with the pathname that docs-template will
+   send (`toRuntimeHref`, a copy of `normalizeRuntimeHref`; a test keeps the
+   two equal). `ctx.waitUntil` keeps the call alive. A warm render sends
+   nothing extra.
+3. When the renderer's `getRouteData` reaches `ScopedDocsContent` in the same
+   dispatcher isolate, with the same resolution and the same payload, it gets
+   the prefetched answer. This happens once per prefetch. An error answer or
+   a thrown RPC makes it call docs-runtime itself, as before.
+4. When the renderer's call reaches another dispatcher isolate, it calls
+   docs-runtime itself. The prefetch then only warmed docs-runtime: its
+   isolate, its 60-second memory cache and its `caches.default` blob cache in
+   that data center.
+
+The renderer and its public contract do not change: it makes the same RPC,
+and the HTML comes from the same `fetch` path. The prefetch ID is set only by
+the dispatcher, and a prefetched answer is only ever the answer to the same
+call for the same resolution. Each entry lives until its render reports, or
+one minute at most.
+
+`docs_renderer_load` of a render that started a prefetch has
+`routeDataPrefetch`:
+
+| Field | Meaning |
+| --- | --- |
+| `outcome` | `handedOff` (the renderer got the prefetched answer), `fellBack` (the prefetch failed, the renderer called docs-runtime itself) or `notTaken` (the renderer's call reached another dispatcher isolate or asked for other data) |
+| `prefetchMs` | Duration of the prefetch RPC |
+| `leadMs` | Prefetch start until the renderer asked for route data |
+| `waitMs` | How long the renderer still waited for the prefetched answer. `0` means full overlap |
+
+Compare `phases.routeDataMs` of `COLD` renders with and without the field.
+For `notTaken`, `phases.routeDataMs` shows what the warm-up alone gave.
+
+The rollout uses two dispatcher variables:
+
+- `DOXA_PROD_ROUTE_DATA_PREFETCH_MODE`: `off`, `allowlist` or `all`. Unset or
+  invalid means `off` (an invalid value logs a warning).
+  `pnpm validate:production-config` rejects an invalid value. Production is
+  `all`.
+- `DOXA_PROD_ROUTE_DATA_PREFETCH_SITE_IDS`: comma-separated site IDs for
+  `allowlist`.
+
+To revert, set `DOXA_PROD_ROUTE_DATA_PREFETCH_MODE` to `off` in
+`apps/docs-dispatcher/wrangler.json`, then deploy the `docs-rendering` step.
+The renderer needs no change.
 
 ## Renderer Code Package
 
@@ -281,7 +349,27 @@ in order:
 ### How the object is read
 
 - The dispatcher reads the object on the first request for a new Dynamic
-  Worker ID. This read is the cold `doxa_code` timing.
+  Worker ID. This read is the cold `doxa_code` timing, and `codeLoadMs` in
+  `docs_renderer_load`.
+- The read goes through the dispatcher's own cache entrypoint
+  `DocsRendererCodeCache` (`apps/docs-dispatcher/src/renderer-code-cache-entrypoint.ts`).
+  Its props are `DOXA_RENDERER_BUILD_ID`, `DOXA_RENDERER_PACKAGE_KEY` and a
+  format number, and its URL is `https://renderer-code.internal/v1/{buildId}`.
+  It refuses any other build, key, format or URL, so no request value can
+  select a package. A cache fill reads the gzip bytes from R2 and stores them
+  unchanged for one year: a package key names one immutable build. With
+  `cross_version_cache`, the next dispatcher deploy with the same build reads
+  the same entry.
+- Fills often run in a new dispatcher isolate, in the upper cache tier. Before
+  this cache, each one paid an R2 GET: 53–314 ms in Europe and 218–817 ms in
+  Singapore (production, 28 Oct). Gunzip and `JSON.parse` of the 5.5 MB
+  package cost about 25 ms of CPU (15 ms gunzip, 10 ms parse, measured on
+  Node); in a Worker the clock does not move during CPU work, so that cost is
+  not part of `codeLoadMs`.
+- When the cache entrypoint fails, or its bytes fail the checks below, the
+  dispatcher logs a warning and reads the bucket directly
+  (`createRendererCodeReaders` in `apps/docs-dispatcher/src/renderer-code-readers.ts`).
+  A bad cache entry therefore costs one more read, never a broken render.
 - It decompresses the stream with `DecompressionStream("gzip")` and parses the
   JSON in `apps/docs-dispatcher/src/renderer-code-package.ts`.
 - It rejects the package if the build ID differs from
@@ -289,6 +377,11 @@ in order:
   contains `..`, or if the module count is more than 500.
 - The dispatcher keeps the last five parsed packages in memory per isolate. A
   warm Dynamic Worker never reads the bucket again.
+- The package is not in the `ASSETS` binding on purpose. Without
+  `run_worker_first`, every file there is public on every docs hostname, and
+  this package is the renderer's server code. Bundling it into the dispatcher
+  script would make every dispatcher cold start pay for 5.5 MB, also on HTML
+  cache hits.
 - The parsed fields go directly into the `LOADER.get` call as `mainModule`,
   `modules`, `compatibilityDate`, and `compatibilityFlags`.
 

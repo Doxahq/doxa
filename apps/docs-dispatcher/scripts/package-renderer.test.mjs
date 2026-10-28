@@ -47,8 +47,10 @@ describe("createRendererPackage", () => {
       DocsHtmlCache: { type: "worker", cache: { enabled: true } },
       DocsPrerenderCache: { type: "worker", cache: { enabled: true } },
       DocsRouteDataCache: { type: "worker", cache: { enabled: true } },
+      DocsRendererCodeCache: { type: "worker", cache: { enabled: true } },
     });
     expect(config.vars.DEBUG).toBe("false");
+    expect(config.vars.DOXA_PROD_ROUTE_DATA_PREFETCH_MODE).toBe("all");
   });
 
   test("passes the route-data cache rollout into the deploy config", async () => {

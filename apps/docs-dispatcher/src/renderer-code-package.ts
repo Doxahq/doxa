@@ -12,22 +12,103 @@ export interface RendererCodePackage {
   modules: Record<string, string>;
 }
 
+/**
+ * Where a cold renderer start got its code:
+ * - `memory`: this dispatcher isolate had already loaded the package.
+ * - `cache`: Workers Cache had the package bytes.
+ * - `r2`: the bytes came from the R2 bucket, directly or by a cache fill.
+ */
+export type RendererCodeSource = "memory" | "cache" | "r2";
+
+/** The gzip bytes of one renderer package, and where they came from. */
+export interface RendererCodeBytes {
+  body: ReadableStream;
+  source: Exclude<RendererCodeSource, "memory">;
+}
+
+/** Reads the gzip bytes of the configured package. Never takes request input. */
+export type RendererCodeReader = () => Promise<RendererCodeBytes>;
+
+export interface LoadedRendererCode {
+  code: RendererCodePackage;
+  source: RendererCodeSource;
+}
+
+/**
+ * Loads the package once per dispatcher isolate. The readers are tried in
+ * order: when one fails, or its bytes fail the checks, the next one runs. The
+ * build ID check applies to every reader.
+ */
 export async function loadRendererCodePackage(input: {
-  bucket: R2Bucket;
   objectKey: string;
   expectedBuildId: string;
-}): Promise<RendererCodePackage> {
+  readers: readonly RendererCodeReader[];
+  warn?: (message: string) => void;
+}): Promise<LoadedRendererCode> {
   const cacheKey = `${input.objectKey}:${input.expectedBuildId}`;
   const existing = rendererPackageCache.get(cacheKey);
-  if (existing) return existing;
+  if (existing) return { code: await existing, source: "memory" };
 
-  const pending = readRendererCodePackage(input).catch((error) => {
-    rendererPackageCache.delete(cacheKey);
-    throw error;
-  });
+  const loaded = readFirstValidPackage(input);
+  const pending = loaded.then(({ code }) => code);
   rendererPackageCache.set(cacheKey, pending);
+  pending.catch(() => {
+    if (rendererPackageCache.get(cacheKey) === pending) {
+      rendererPackageCache.delete(cacheKey);
+    }
+  });
   trimPackageCache();
-  return pending;
+  return loaded;
+}
+
+/** Reads the package straight from the R2 bucket. */
+export function createBucketCodeReader(
+  bucket: R2Bucket,
+  objectKey: string,
+): RendererCodeReader {
+  return async () => {
+    const object = await bucket.get(objectKey);
+    if (!object) {
+      throw new Error(`Renderer code package not found: ${objectKey}`);
+    }
+    return { body: object.body, source: "r2" };
+  };
+}
+
+async function readFirstValidPackage(input: {
+  expectedBuildId: string;
+  readers: readonly RendererCodeReader[];
+  warn?: (message: string) => void;
+}): Promise<LoadedRendererCode> {
+  let lastError: unknown = new Error("No renderer code reader is configured.");
+  for (const [index, read] of input.readers.entries()) {
+    try {
+      const bytes = await read();
+      return {
+        code: parseRendererCodePackage(
+          await gunzipText(bytes.body),
+          input.expectedBuildId,
+        ),
+        source: bytes.source,
+      };
+    } catch (error) {
+      lastError = error;
+      if (index < input.readers.length - 1) {
+        input.warn?.(
+          `[doxa-docs-dispatcher] Renderer code reader ${index} failed; trying the next one. ${describeError(error)}`,
+        );
+      }
+    }
+  }
+  throw lastError;
+}
+
+function gunzipText(body: ReadableStream): Promise<string> {
+  return new Response(body.pipeThrough(new DecompressionStream("gzip"))).text();
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function parseRendererCodePackage(
@@ -87,21 +168,6 @@ export function parseRendererCodePackage(
     mainModule: value.mainModule,
     modules: { ...value.modules },
   };
-}
-
-async function readRendererCodePackage(input: {
-  bucket: R2Bucket;
-  objectKey: string;
-  expectedBuildId: string;
-}): Promise<RendererCodePackage> {
-  const object = await input.bucket.get(input.objectKey);
-  if (!object) {
-    throw new Error(`Renderer code package not found: ${input.objectKey}`);
-  }
-
-  const decoded = object.body.pipeThrough(new DecompressionStream("gzip"));
-  const raw = await new Response(decoded).text();
-  return parseRendererCodePackage(raw, input.expectedBuildId);
 }
 
 function trimPackageCache(): void {

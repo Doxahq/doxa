@@ -182,7 +182,72 @@ describe("cache entrypoints", () => {
       totalMs: expect.any(Number),
       ok: true,
       status: 200,
+      bodyMs: expect.any(Number),
+      bytes: "<h1>Guide</h1>".length,
     });
+    info.mockRestore();
+  });
+
+  test("logs the renderer's timing split and keeps its header out of the cache", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const env = createEnv();
+    const now = Date.now();
+    env.render.mockResolvedValueOnce(
+      new Response("<h1>Guide</h1>", {
+        headers: {
+          "content-type": "text/html",
+          "x-doxa-renderer-timing": JSON.stringify({
+            isolateId: "a1b2c3d4",
+            isolateRequests: 3,
+            isolateAgeMs: 4_000,
+            requestStartedAt: now,
+            routeDataMs: 120,
+            siteConfigMs: 0,
+            contentCalls: 1,
+            contentMs: 120,
+            longestContentMs: 120,
+            respondedAt: now + 130,
+          }),
+        },
+      }),
+    );
+    const entrypoint = new DocsHtmlCache(
+      {
+        props: {
+          hostname: resolution.hostname,
+          rendererBuildId: "build-1",
+          resolution,
+          lifetime: "versioned" as const,
+          deliveryRenderId: null,
+        },
+        exports: { ScopedDocsContent: () => ({ request: vi.fn() }) },
+      } as never,
+      env as never,
+    );
+
+    const response = await entrypoint.fetch(htmlRequest());
+
+    expect(response.headers.has("x-doxa-renderer-timing")).toBe(false);
+    expect(await response.text()).toBe("<h1>Guide</h1>");
+    const logged = JSON.parse(String(info.mock.calls.at(-1)?.[0]));
+    expect(logged).toMatchObject({
+      event: "docs_renderer_load",
+      renderer: {
+        isolateId: "a1b2c3d4",
+        isolateRequests: 3,
+        isolateAgeMs: 4_000,
+      },
+      phases: {
+        handlerMs: 130,
+        routeDataMs: 120,
+        siteConfigMs: 0,
+        contentCalls: 1,
+        contentMs: 120,
+        longestContentMs: 120,
+      },
+    });
+    expect(typeof logged.phases.beforeHandlerMs).toBe("number");
+    expect(typeof logged.phases.afterHandlerMs).toBe("number");
     info.mockRestore();
   });
 

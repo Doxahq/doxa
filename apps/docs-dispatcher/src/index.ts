@@ -33,6 +33,12 @@ import { dispatchDocsRequest } from "./dispatcher";
 import { toHostResolution } from "./host-resolution";
 import { requireEnvValue } from "./env-values";
 import {
+  observeResponseBody,
+  takeRendererTiming,
+  toIsolateFacts,
+  toRenderPhases,
+} from "./renderer-timing";
+import {
   logRendererUse,
   openRendererIsolate,
   type RendererCallOutcome,
@@ -510,7 +516,7 @@ async function renderWithDynamicWorker(
   });
   const startedAt = Date.now();
   try {
-    const response = await timing.measure(
+    const rendered = await timing.measure(
       "doxa_loader",
       () =>
         timing.measure(
@@ -520,13 +526,24 @@ async function renderWithDynamicWorker(
         ),
       () => (isolate.cold ? "COLD" : "WARM"),
     );
-    logRendererUse(isolate, {
-      entrypoint: "fetch",
-      resolution: hostResolution,
-      startedAt,
-      outcome: { ok: response.ok, status: response.status },
-    });
-    return response;
+    const respondedAt = Date.now();
+    const { response, report } = takeRendererTiming(rendered);
+    return observeResponseBody(response, (body) =>
+      logRendererUse(isolate, {
+        entrypoint: "fetch",
+        resolution: hostResolution,
+        startedAt,
+        finishedAt: respondedAt,
+        outcome: { ok: response.ok, status: response.status },
+        ...(report
+          ? {
+              phases: toRenderPhases({ report, calledAt: startedAt, respondedAt }),
+              renderer: toIsolateFacts(report),
+            }
+          : {}),
+        body,
+      }),
+    );
   } catch (error) {
     logRendererUse(isolate, {
       entrypoint: "fetch",

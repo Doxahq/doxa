@@ -166,6 +166,28 @@ Every renderer call logs `docs_renderer_load` with `entrypoint` (`fetch`,
 or `WARM`), `codeLoadMs`, `totalMs`, and `ok` with `status` or `error`.
 Compare the `COLD` share and `totalMs` by `isolateScope` to judge the rollout.
 
+A page render (`fetch`) also logs the renderer's own timing. docs-template
+sends it in the internal header `x-doxa-renderer-timing`
+(`apps/docs-template/src/runtime/renderer-timing.ts`), only for a
+dispatcher-pinned render, and `apps/docs-dispatcher/src/renderer-timing.ts`
+removes the header before the response reaches Workers Cache or a visitor.
+The line is written when the body has streamed to the end.
+
+| Field | Meaning |
+| --- | --- |
+| `renderer.isolateId`, `renderer.isolateRequests`, `renderer.isolateAgeMs` | Which isolate rendered, how many requests it has served, and how long since its first request |
+| `phases.beforeHandlerMs` | Dispatcher call until the renderer handler starts: code load, isolate start, module evaluation and the hop. Subtract `codeLoadMs` for the isolate start of a COLD call. |
+| `phases.handlerMs` | Renderer handler start until it returns: content RPCs and the CPU work between them |
+| `phases.routeDataMs`, `phases.siteConfigMs` | The route-data and site-config steps inside the handler |
+| `phases.contentCalls`, `phases.contentMs`, `phases.longestContentMs` | Content RPCs through the dispatcher to docs-runtime |
+| `phases.afterHandlerMs` | Renderer handler end until the response reaches the dispatcher |
+| `bodyMs`, `bytes` | Streaming of the body after the response arrived |
+
+Inside a Worker, the clock advances only on I/O. CPU work after the
+renderer's last I/O, such as rendering the page shell, therefore falls into
+`afterHandlerMs`, not `handlerMs`. The two clocks belong to different
+isolates, so small negative values can appear.
+
 ## Renderer Code Package
 
 ### What the bucket is

@@ -150,6 +150,63 @@ describe("docs renderer server", () => {
     });
   });
 
+  test("a pinned render reports its timing in the internal header", async () => {
+    const request = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        type: "page",
+        siteConfig: resolveSiteConfig({ name: "Timed site" }),
+      },
+    }));
+    const response = await server.fetch(
+      new Request("https://docs.example.com/guide", {
+        headers: { accept: "text/html" },
+      }),
+      {
+        DOXA_DOCS_RUNTIME_SOURCE: "binding",
+        DOXA_DOCS_CONTENT_BINDING: { request },
+        DOXA_DOCS_CONTENT_RESOLUTION: {
+          siteId: "site-1",
+          projectId: "project-1",
+          projectSlug: "demo",
+          publishedVersionId: "version-1",
+          artifactPrefix: "sites/site-1/versions/version-1",
+          manifestPath: "sites/site-1/versions/version-1/manifest.json",
+          accessPolicy: "public",
+        },
+      }
+    );
+
+    expect(await response.text()).toBe("rendered");
+    expect(
+      JSON.parse(response.headers.get("x-doxa-renderer-timing") ?? "null")
+    ).toMatchObject({
+      isolateRequests: expect.any(Number),
+      routeDataMs: expect.any(Number),
+      siteConfigMs: expect.any(Number),
+      contentCalls: 1,
+    });
+  });
+
+  test("the shared renderer, which resolves by hostname, sends no timing", async () => {
+    const response = await server.fetch(
+      new Request("https://docs.example.com/guide", {
+        headers: { accept: "text/html" },
+      }),
+      {
+        DOXA_DOCS_RUNTIME_SOURCE: "binding",
+        DOXA_DOCS_CONTENT_BINDING: {
+          request: vi.fn(async () => ({
+            ok: true as const,
+            data: { type: "page", siteConfig: resolveSiteConfig({}) },
+          })),
+        },
+      }
+    );
+
+    expect(response.headers.has("x-doxa-renderer-timing")).toBe(false);
+  });
+
   test("serves a platform-mode asset with the request host, outside the Start context", async () => {
     vi.stubEnv("DOXA_DOCS_RUNTIME_SOURCE", "platform");
     vi.stubEnv("DOXA_DOCS_CONTENT_WORKER_URL", "http://content.test");

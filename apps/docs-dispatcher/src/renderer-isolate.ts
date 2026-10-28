@@ -2,6 +2,11 @@ import type { DocsHostResolution } from "@doxahq/contracts";
 
 import { requireEnvValue } from "./env-values";
 import { loadRendererCodePackage } from "./renderer-code-package";
+import type {
+  BodyTiming,
+  RendererIsolateFacts,
+  RenderPhases,
+} from "./renderer-timing";
 import {
   isSiteInRollout,
   parseRolloutMode,
@@ -194,6 +199,8 @@ function createIsolateEnv(
 /**
  * Logs every renderer call that the dispatcher makes, with or without DEBUG.
  * Compare COLD and WARM by `isolateScope` to judge the shared-isolate rollout.
+ * `phases` and `renderer` come from the renderer's own timing report, and
+ * `bodyMs` measures the streamed body after the response arrived.
  */
 export function logRendererUse(
   isolate: RendererIsolate,
@@ -201,7 +208,12 @@ export function logRendererUse(
     entrypoint: RendererEntrypointName;
     resolution: Pick<DocsHostResolution, "siteId" | "publishedVersionId">;
     startedAt: number;
+    /** When the call returned its response. Defaults to now. */
+    finishedAt?: number;
     outcome: RendererCallOutcome;
+    phases?: RenderPhases;
+    renderer?: RendererIsolateFacts;
+    body?: BodyTiming;
   },
 ): void {
   console.info(
@@ -216,8 +228,11 @@ export function logRendererUse(
       ...(isolate.codeLoadMs !== undefined
         ? { codeLoadMs: isolate.codeLoadMs }
         : {}),
-      totalMs: Date.now() - input.startedAt,
+      totalMs: (input.finishedAt ?? Date.now()) - input.startedAt,
       ...input.outcome,
+      ...(input.phases ? { phases: input.phases } : {}),
+      ...(input.renderer ? { renderer: input.renderer } : {}),
+      ...(input.body ?? {}),
     }),
   );
 }

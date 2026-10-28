@@ -86,6 +86,8 @@ export interface DispatcherRuntimeSourceOptions {
   requestScope?: RendererRequestScope;
   /** Fallback for the shared renderer, which resolves by hostname. */
   hostname?: string;
+  /** Wraps the content binding, for example to time its calls. */
+  wrapContent?: (binding: DocsContentBinding) => DocsContentBinding;
 }
 
 /** Reads the request scope from entrypoint props. Any other shape is absent. */
@@ -102,30 +104,32 @@ export function readRendererRequestScope(
 
 export function createDispatcherRuntimeSource(
   env: RendererWorkerEnv | undefined,
-  { requestScope, hostname }: DispatcherRuntimeSourceOptions = {}
+  {
+    requestScope,
+    hostname,
+    wrapContent = (binding) => binding,
+  }: DispatcherRuntimeSourceOptions = {}
 ): DoxaDocsRuntimeSource | undefined {
   if (env?.DOXA_DOCS_RUNTIME_SOURCE !== "binding") return undefined;
   if (requestScope) {
     return createBindingRuntimeSource({
-      binding: requestScope.content,
+      binding: wrapContent(requestScope.content),
       resolution: requestScope.resolution,
     });
   }
   if (!env.DOXA_DOCS_CONTENT_BINDING) {
     throw new Error("Binding runtime mode requires a content binding.");
   }
+  const binding = wrapContent(env.DOXA_DOCS_CONTENT_BINDING);
 
   if (env.DOXA_DOCS_CONTENT_RESOLUTION) {
     return createBindingRuntimeSource({
-      binding: env.DOXA_DOCS_CONTENT_BINDING,
+      binding,
       resolution: env.DOXA_DOCS_CONTENT_RESOLUTION,
     });
   }
   if (hostname) {
-    return createBindingRuntimeSource({
-      binding: env.DOXA_DOCS_CONTENT_BINDING,
-      hostname,
-    });
+    return createBindingRuntimeSource({ binding, hostname });
   }
 
   throw new Error(

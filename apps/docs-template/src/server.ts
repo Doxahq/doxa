@@ -7,6 +7,11 @@ import {
   readRendererRequestScope,
   type RendererWorkerEnv,
 } from "@/src/runtime/runtime-source-selection";
+import {
+  startRendererTiming,
+  type RendererTiming,
+  type RendererTimingPhase,
+} from "@/src/runtime/renderer-timing";
 import { loadSiteConfig } from "@/src/site-config/load-site-config";
 import {
   docsAssetNameFromUrlPath,
@@ -123,9 +128,17 @@ const server = {
     ctx?: ExecutionContext
   ) {
     const { host, hostname, pathname } = new URL(request.url);
+    const requestScope = readRendererRequestScope(ctx?.props);
+    // Only a dispatcher-pinned render reports its timing: the dispatcher reads
+    // the header and removes it. The shared renderer resolves by hostname.
+    const timing =
+      requestScope || env?.DOXA_DOCS_CONTENT_RESOLUTION
+        ? startRendererTiming()
+        : undefined;
     const runtimeSource = createDispatcherRuntimeSource(env, {
-      requestScope: readRendererRequestScope(ctx?.props),
+      requestScope,
       hostname,
+      wrapContent: timing?.wrapContent,
     });
 
     const health = getRendererHealthResponse(request);
@@ -180,12 +193,25 @@ const server = {
       request.method === "GET" &&
       request.headers.get("accept")?.includes("text/html")
     ) {
-      const route = await runtimeSource.getRouteData?.(pathname);
-      context.siteConfig = await loadSiteConfig(runtimeSource, route);
+      const route = await measurePhase(timing, "routeDataMs", async () =>
+        runtimeSource.getRouteData?.(pathname)
+      );
+      context.siteConfig = await measurePhase(timing, "siteConfigMs", () =>
+        loadSiteConfig(runtimeSource, route)
+      );
     }
-    return startHandler(request, { context });
+    const response = await startHandler(request, { context });
+    return timing ? timing.attach(response) : response;
   },
 };
+
+function measurePhase<T>(
+  timing: RendererTiming | undefined,
+  phase: RendererTimingPhase,
+  operation: () => Promise<T>
+): Promise<T> {
+  return timing ? timing.measure(phase, operation) : operation();
+}
 
 /**
  * An image of the served version at `/assets/{name}`. A miss falls through,

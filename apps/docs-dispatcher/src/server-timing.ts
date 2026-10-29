@@ -1,4 +1,5 @@
 import type { HostLookupFacts } from "./host-lookup";
+import type { FallbackFacts } from "./previous-build-fallback";
 
 export interface ServerTimingEntry {
   name: string;
@@ -125,6 +126,8 @@ export function logRequestTiming(
     routeDataCacheStatus?: string;
     /** Absent when the request never resolved its hostname. */
     hostLookup?: HostLookupFacts | undefined;
+    /** The previous-build fallback, when its window applied (M26). */
+    fallback?: FallbackFacts | null;
   },
 ): void {
   const requestWithCloudflare = request as Request & {
@@ -147,6 +150,8 @@ export function logRequestTiming(
             : {}),
         },
         ...hostLookupLogFields(cache.hostLookup),
+      ...(cache.fallback ? { fallback: cache.fallback } : {}),
+        ...(cache.fallback ? { fallback: cache.fallback } : {}),
         ...(requestWithCloudflare.cf?.colo
           ? { colo: requestWithCloudflare.cf.colo }
           : {}),

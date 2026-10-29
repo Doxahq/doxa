@@ -6,6 +6,7 @@ import {
   API_ENTRYPOINT_METHODS,
   CLIENT_COUNTRY_HEADER,
   CLIENT_IP_HEADER,
+  CLIENT_REGION_HEADER,
   ORIGIN_KEY_HEADER,
   PUBLIC_URL_HEADER,
   callRemote,
@@ -146,6 +147,27 @@ describe("public requests", () => {
     expect(request.headers.get("cf-ipcountry")).toBe("DE");
     expect(request.headers.get("content-type")).toBe("application/json");
     expect(request.url).toBe(`${ORIGIN}/projects`);
+  });
+
+  it("keeps the edge's cache pool only when it names a known pool", () => {
+    const pooled = asPublicRequest(
+      new Request(`${ORIGIN}/me`, { headers: { [ORIGIN_KEY_HEADER]: KEY, [CLIENT_REGION_HEADER]: "eu-east" } }),
+    );
+    const bogus = asPublicRequest(
+      new Request(`${ORIGIN}/me`, { headers: { [ORIGIN_KEY_HEADER]: KEY, [CLIENT_REGION_HEADER]: "eu-east, us-west" } }),
+    );
+
+    expect(pooled.headers.get(CLIENT_REGION_HEADER)).toBe("eu-east");
+    expect(bogus.headers.get(CLIENT_REGION_HEADER)).toBeNull();
+  });
+
+  it("never lets an unkeyed request carry a cache pool to the API", async () => {
+    const { handler, api } = originWith();
+
+    const response = await handler(new Request(`${ORIGIN}/me`, { headers: { [CLIENT_REGION_HEADER]: "us-west" } }));
+
+    expect(response.status).toBe(401);
+    expect(api).not.toHaveBeenCalled();
   });
 
   it("ignores a public URL that is not http(s)", () => {

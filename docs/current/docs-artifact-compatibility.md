@@ -37,6 +37,14 @@ Consequences:
 - A renderer deploy is a change to every live customer site at once.
 - A complete rollback coordinates the affected services. It is global.
 - The renderer must read every artifact set that Doxa ever published.
+- With the previous-build fallback (M26) on, a renderer deploy does not reach
+  every page at once. A page in an upper-tier cache pool that is not warm yet
+  can show the previous build's cached output, for at most the build window
+  (`DOXA_PREVIOUS_FALLBACK_BUILD_WINDOW_SECONDS`, 24 hours). The new build
+  reaches each page and each pool when the warm job finishes that pool, or
+  when the window ends. The previous build is never rendered again: only
+  output that it stored before the deploy is served. See
+  [Production Docs Caching](./production-docs-caching.md#previous-build-fallback).
 
 ### Rule 2: Breaking changes go to the write side, never the read side
 
@@ -229,12 +237,61 @@ only changes the manifest number is not a format conversion.
 - Deploy order for a renderer change: shared renderer, code package upload,
   dispatcher, pre-render Worker, API. See
   [Production Docs Content Injection](./production-docs-content-injection.md).
+- Every renderer deploy states `--previous-fallback on|off`. There is no
+  default (`deploy-renderer.mjs` and `deploy-production.mjs` stop before the
+  first step without it). Use `off` for a security fix, or whenever the build
+  being replaced must not be shown again.
+
+### Previous-build fallback
+
+The deploy keeps a release record at
+`renderer-code/releases/current.json` in the `doxa-docs-renderer-code`
+bucket: `{ buildId, releaseId, packageKey, deployedAt, previous, revoked }`.
+`deploy-renderer.mjs` reads it before packaging and writes it after the
+dispatcher deploy succeeds. The rules are in
+`scripts/lib/renderer-release-record.mjs`:
+
+| Deploy | Previous build in the dispatcher |
+|---|---|
+| `--previous-fallback off` | none |
+| No record yet (the first deploy with this code) | none |
+| The same release again | the record's previous build; the build window keeps its start |
+| A rollback: the new release is the record's previous release | none, automatically |
+| Any other new release | the release that the record names as deployed |
+| A release in `revoked`, or one equal to the new build | never |
+
+`--revoke <releaseId>` adds a release to `revoked` (repeatable). The deploy
+writes the result into the dispatcher vars `DOXA_PREVIOUS_RENDERER_BUILD_ID`,
+`DOXA_PREVIOUS_RENDERER_RELEASE_ID` and `DOXA_RENDERER_DEPLOYED_AT`, and
+`validateDispatcherConfig` checks them on the generated config: each ID empty
+or 64-hex, both or neither, and different from the deployed build.
+
+Reading the record: only a missing key (`NoSuchKey`, API code 10007, or "The
+specified key does not exist") means "no record yet". Any other read error,
+for example a missing bucket or an auth error, stops the deploy, because a
+record rebuilt from nothing loses `revoked`.
+
+Writing the record: the deploy tries the put 3 times (waits of 2 s and 5 s).
+If all fail, it prints the exact record JSON and the exact
+`pnpm exec wrangler r2 object put … --remote --force` command (run it in
+`apps/docs-dispatcher`), still deploys the prerenderer and the API so they
+match the live dispatcher, and then exits non-zero. Run the printed command
+before the next renderer deploy, or that deploy plans the wrong previous
+build.
 
 ### Renderer rollback without a content-format change
 
 A dispatcher-only rollback selects the previous Dynamic Worker package. It
 does not restore the separately deployed shared renderer or docs runtime.
 Shared traffic and fallback requests can still execute newer code.
+
+The previous-build fallback needs no step: a deploy of the record's previous
+release empties the previous build automatically, so the bad build's cached
+output is not served as a fallback. To be sure, deploy with
+`--previous-fallback off`, and add `--revoke <bad releaseId>` so that no later
+deploy uses it as its previous build. To stop the fallback without a renderer
+change, set `DOXA_PROD_PREVIOUS_FALLBACK_MODE` to `off` and deploy the
+dispatcher.
 
 1. Identify the last compatible release and the service versions that changed.
    Verify that the previous renderer package and its client assets remain available.

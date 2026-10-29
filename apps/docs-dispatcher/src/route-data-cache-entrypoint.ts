@@ -2,22 +2,24 @@ import type { DocsDomainResolution } from "@doxahq/contracts";
 import type { PrerenderIdentity } from "@doxahq/contracts/docs-prerender";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
-import {
-  isPublicProduction,
-  withRouteDataCachePolicy,
-  withoutResponseCaching,
-} from "./cache-policy";
+import { isPublicProduction, withRouteDataCachePolicy } from "./cache-policy";
 import {
   readDeliveryRollouts,
   selectRouteDataDelivery,
   type DeliveryRolloutEnv,
 } from "./delivery-identity";
 import { createLiveRouteDataResponse } from "./live-route-data";
+import {
+  readPreviousRendererBuild,
+  type RendererBuildEnv,
+} from "./previous-renderer-build";
+import { logRendererReleaseRejected } from "./release-check";
 import { ROUTE_DATA_PATH } from "./route-data-request";
 import {
   attachInternalServerTiming,
   createServerTiming,
 } from "./server-timing";
+import { serveVersionedEntrypoint } from "./versioned-entrypoint-protocol";
 import { getWorkerExports } from "./worker-exports";
 
 /** Set only by the dispatcher. Together with the URL, they form the cache key. */
@@ -28,8 +30,9 @@ export interface RouteDataCacheProps {
   resolution: DocsDomainResolution;
 }
 
-interface RouteDataCacheEnv extends DeliveryRolloutEnv {
+interface RouteDataCacheEnv extends DeliveryRolloutEnv, RendererBuildEnv {
   DEBUG?: string;
+  DOXA_RENDERER_RELEASE_ID?: string;
 }
 
 /** The internal URL of one route-data entry. It never overlaps HTML paths. */
@@ -50,23 +53,39 @@ export class DocsRouteDataCache extends WorkerEntrypoint<
 > {
   async fetch(request: Request): Promise<Response> {
     const props = this.ctx.props;
-    if (!isTrustedRouteDataCacheRequest(request, props, this.env)) {
-      return withoutResponseCaching(
-        new Response("Invalid route-data cache request", { status: 400 }),
-      );
-    }
-    const timing = createServerTiming(this.env.DEBUG);
-    const live = await timing.measure("doxa_route_data_prepare", () =>
-      createLiveRouteDataResponse(
-        getWorkerExports(this.ctx).PrerenderRendererApi({}),
-        props.resolution,
-        props.pathname,
-      ),
-    );
-    return attachInternalServerTiming(
-      withRouteDataCachePolicy(live, "versioned"),
-      timing,
-    );
+    return serveVersionedEntrypoint({
+      entrypoint: "DocsRouteDataCache",
+      request,
+      props,
+      build: {
+        requested: props.expected.rendererReleaseId,
+        deployed: this.env.DOXA_RENDERER_RELEASE_ID?.trim() || null,
+        previous: readPreviousRendererBuild(this.env)?.releaseId ?? null,
+      },
+      isTrusted: () => isTrustedRouteDataCacheRequest(request, props, this.env),
+      onBuildRejected: (reason) =>
+        logRendererReleaseRejected({
+          entrypoint: "DocsRouteDataCache",
+          expected: props.expected,
+          deployedReleaseId: this.env.DOXA_RENDERER_RELEASE_ID,
+          reason,
+        }),
+      rejection: "Invalid route-data cache request",
+      fill: async () => {
+        const timing = createServerTiming(this.env.DEBUG);
+        const live = await timing.measure("doxa_route_data_prepare", () =>
+          createLiveRouteDataResponse(
+            getWorkerExports(this.ctx).PrerenderRendererApi({}),
+            props.resolution,
+            props.pathname,
+          ),
+        );
+        return attachInternalServerTiming(
+          withRouteDataCachePolicy(live, "versioned"),
+          timing,
+        );
+      },
+    });
   }
 }
 

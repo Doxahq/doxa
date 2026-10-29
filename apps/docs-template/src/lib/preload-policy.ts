@@ -6,6 +6,7 @@ export interface DocsRouterPreloadPolicy {
   defaultPreload: DocsPreloadMode;
   defaultPreloadDelay: number;
   defaultPreloadIntentProximity: number;
+  defaultPreloadStaleTime: number;
 }
 
 export interface DocsLinkPreloadPolicy {
@@ -24,11 +25,17 @@ export interface DocsNavigationPreloadSettings {
 
 const INTENT_PRELOAD_DELAY_MS = 75;
 const INTENT_PRELOAD_PROXIMITY_PX = 48;
+// A preloaded route stays usable for 10 minutes instead of the router's 30-s
+// default, so a link preloaded early in a visit does not load its route data
+// again on click. Route data belongs to one published version, so it does not
+// go stale within a visit.
+const PRELOAD_STALE_TIME_MS = 10 * 60_000;
 
 export const docsRouterPreloadPolicy = {
   defaultPreload: "intent",
   defaultPreloadDelay: INTENT_PRELOAD_DELAY_MS,
   defaultPreloadIntentProximity: INTENT_PRELOAD_PROXIMITY_PX,
+  defaultPreloadStaleTime: PRELOAD_STALE_TIME_MS,
 } as const satisfies DocsRouterPreloadPolicy;
 
 /**

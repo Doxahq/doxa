@@ -1,3 +1,4 @@
+import type { WarmPool } from "@doxahq/contracts/docs-warm-state";
 import type { Env } from "../../env";
 import { DocsBranchesRepository, type DocsBranchStore } from "../../repositories/docs-branches";
 import { DocsDomainsRepository } from "../../repositories/docs-domains";
@@ -24,10 +25,14 @@ import type {
 } from "./action-ports";
 
 /** The only place that binds the side-effect services of actions to the env. */
-export function actionServicesFromEnv(env: Env, options: { defer: Defer }): ActionServices {
+export function actionServicesFromEnv(
+  env: Env,
+  options: { defer: Defer; warmRegion?: WarmPool | null },
+): ActionServices {
   const projects = new ProjectsRepository(env);
+  const warmRegion = options.warmRegion ?? null;
   return {
-    publish: publishPort(env),
+    publish: publishPort(env, warmRegion),
     liveSite: {
       async liveUrl(input) {
         const project = await projects.getForUser(input.userId, input.projectId);
@@ -39,7 +44,8 @@ export function actionServicesFromEnv(env: Env, options: { defer: Defer }): Acti
         const site = await new DocsBranchesRepository(env).getSiteForUser(input);
         return site?.mainVersionId ?? null;
       },
-      restore: (input) => DocsBranchHistory.fromEnv(env).restore(input),
+      restore: (input) =>
+        DocsBranchHistory.fromEnv(env).restore(warmRegion ? { ...input, warmRegion } : input),
     },
     domains: domainsPort(env),
     projects: projectsPort(env, projects),
@@ -51,7 +57,8 @@ export function actionServicesFromEnv(env: Env, options: { defer: Defer }): Acti
   };
 }
 
-function publishPort(env: Env): DocsPublishPort {
+/** `warmRegion`: the approver's pool, set only inside a dashboard approve request. */
+function publishPort(env: Env, warmRegion: WarmPool | null): DocsPublishPort {
   const branches = new DocsBranchesRepository(env);
   return {
     readBranch: (input) => readPublishBranchState(branches, input),
@@ -71,6 +78,7 @@ function publishPort(env: Env): DocsPublishPort {
         request: input.request,
         attribution: input.attribution,
         onStage: input.onStage,
+        ...(warmRegion ? { warmRegion } : {}),
       }),
   };
 }

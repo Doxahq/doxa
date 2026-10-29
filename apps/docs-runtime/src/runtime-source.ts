@@ -28,11 +28,24 @@ import {
   type DocsResolverBinding,
 } from "@doxahq/contracts/docs-resolver";
 import {
+  readDocsRuntimeTrace,
+  type DocsRuntimeCallTiming,
+  type DocsRuntimeIsolateFacts,
+  type DocsRuntimeTrace,
+} from "@doxahq/contracts/docs-runtime-trace";
+import {
   artifactReader,
   type ArtifactReadSource,
   type ArtifactStorageEnv,
 } from "./artifact-storage";
 import { readPageAssetVersions } from "./page-assets";
+import {
+  markVersionSeen,
+  recordIsolateRequest,
+  toCallTiming,
+  traceLogFields,
+  type RuntimeCallMeasurements,
+} from "./runtime-trace";
 
 const docsResolutionResponseSchema = z
   .object({
@@ -76,6 +89,11 @@ export interface RuntimeRequest {
 
 export interface ResolvedRuntimeRequest extends RuntimeRequest {
   resolution: DocsHostResolution;
+  /**
+   * Set by the dispatcher (M39). It crosses an RPC boundary, so it is parsed
+   * before use; an invalid trace counts as none.
+   */
+  trace?: unknown;
 }
 
 export interface HostRuntimeRequest extends RuntimeRequest {
@@ -284,7 +302,10 @@ type RuntimeFailure = {
   };
 };
 
-export type RuntimeResponseBody = RuntimeSuccess | RuntimeFailure;
+/** `timing` is present only when the call carried a valid trace. */
+export type RuntimeResponseBody = (RuntimeSuccess | RuntimeFailure) & {
+  timing?: DocsRuntimeCallTiming;
+};
 type DocsRuntimeResolution = NonNullable<
   Awaited<
     ReturnType<NonNullable<RuntimeSourceEnv["API"]>["resolveDocsProject"]>
@@ -317,6 +338,8 @@ interface RuntimeReadStats {
   longestMs: number;
   /** Storage reads by where they were served. */
   sources: Record<ArtifactReadSource, number>;
+  /** When the first storage read of the request ended. */
+  firstReadEndedAt?: number;
 }
 
 export function recordArtifactRead(
@@ -325,6 +348,7 @@ export function recordArtifactRead(
 ): void {
   const { reads } = runtimeContext;
   reads.count += 1;
+  reads.firstReadEndedAt ??= now();
   reads.totalMs += durationMs;
   reads.longestMs = Math.max(reads.longestMs, durationMs);
 }
@@ -539,8 +563,21 @@ export async function runResolvedRuntimeRequest(
   input: ResolvedRuntimeRequest,
   blobCache: VersionObjectFetcher | null = null,
 ): Promise<RuntimeResponseBody> {
+  const startedAt = now();
+  const isolate = recordIsolateRequest(startedAt);
+  const trace = readDocsRuntimeTrace(input.trace);
+  const operation = isRuntimeOperation(input.operation)
+    ? input.operation
+    : null;
   const resolution = docsHostResolutionSchema.safeParse(input.resolution);
-  if (!resolution.success || !isRuntimeOperation(input.operation)) {
+  if (!resolution.success || !operation) {
+    logRuntimeFailure({
+      errorCode: "invalid_request",
+      operation,
+      resolution: resolution.success ? resolution.data : null,
+      trace,
+      isolate,
+    });
     return {
       ok: false,
       error: {
@@ -551,26 +588,61 @@ export async function runResolvedRuntimeRequest(
     };
   }
 
+  const versionColdInIsolate = markVersionSeen(
+    resolution.data.publishedVersionId,
+  );
   const runtimeContext = createRuntimeRequestContext(env, blobCache);
+  const manifestStartedAt = now();
   const manifestRead = await readManifest(
     env,
     resolution.data.manifestPath,
     runtimeContext,
   );
+  const manifestMs = elapsed(manifestStartedAt);
+  const measure = (
+    operationMs: number,
+    responseBytes?: number,
+  ): RuntimeCallMeasurements => ({
+    ...readMeasurements(runtimeContext),
+    startedAt,
+    finishedAt: now(),
+    manifestMs,
+    operationMs,
+    ...(responseBytes === undefined ? {} : { responseBytes }),
+    versionColdInIsolate,
+    isolate,
+  });
   if (manifestRead.status === "unsupported_schema") {
-    return { ok: false, error: unsupportedArtifactSchemaError(manifestRead) };
+    return withCallTiming(
+      { ok: false, error: unsupportedArtifactSchemaError(manifestRead) },
+      trace,
+      measure(0),
+    );
   }
   if (
     manifestRead.status !== "ok" ||
     !isPinnedManifest(manifestRead.manifest, resolution.data)
   ) {
-    return {
-      ok: false,
-      error: {
-        code: "version_not_found",
-        message: "The pinned documentation version is unavailable.",
+    logRuntimeFailure({
+      errorCode: "version_not_found",
+      operation,
+      resolution: resolution.data,
+      trace,
+      isolate,
+      manifestMs,
+      versionColdInIsolate,
+    });
+    return withCallTiming(
+      {
+        ok: false,
+        error: {
+          code: "version_not_found",
+          message: "The pinned documentation version is unavailable.",
+        },
       },
-    };
+      trace,
+      measure(0),
+    );
   }
 
   const context: ProjectRuntimeContext = {
@@ -581,16 +653,89 @@ export async function runResolvedRuntimeRequest(
     manifest: manifestRead.manifest,
   };
 
+  const operationStartedAt = now();
   const result = await runLoadedRuntimeRequest(
     env,
     context,
     input,
     runtimeContext,
   );
-  if (input.operation === "getRouteData") {
-    logRouteDataReads(resolution.data, runtimeContext, result.ok);
+  const operationMs = elapsed(operationStartedAt);
+  const isRouteData = operation === "getRouteData";
+  // Sized only for a traced route-data call: the size costs a serialization.
+  const measured = measure(
+    operationMs,
+    isRouteData && trace && result.ok
+      ? estimateJsonSize(result.data)
+      : undefined,
+  );
+  if (isRouteData) {
+    logRouteDataReads(resolution.data, runtimeContext, result.ok, {
+      trace,
+      measured,
+    });
   }
-  return result;
+  return withCallTiming(result, trace, measured);
+}
+
+function readMeasurements(
+  runtimeContext: RuntimeRequestContext,
+): Pick<
+  RuntimeCallMeasurements,
+  "firstReadEndedAt" | "reads" | "r2Reads" | "readMs"
+> {
+  const { reads } = runtimeContext;
+  return {
+    ...(reads.firstReadEndedAt === undefined
+      ? {}
+      : { firstReadEndedAt: reads.firstReadEndedAt }),
+    reads: reads.count,
+    r2Reads: reads.sources.r2,
+    readMs: reads.totalMs,
+  };
+}
+
+/** Adds `timing` only for a traced call, so an old dispatcher gets the old answer. */
+function withCallTiming(
+  result: RuntimeResponseBody,
+  trace: DocsRuntimeTrace | undefined,
+  measured: RuntimeCallMeasurements,
+): RuntimeResponseBody {
+  return trace ? { ...result, timing: toCallTiming(measured) } : result;
+}
+
+/**
+ * One `docs_runtime_reads` line for a call that failed before its operation.
+ * It never logs the payload or the raw input: only IDs from a valid
+ * resolution and a known operation name.
+ */
+function logRuntimeFailure(input: {
+  errorCode: "invalid_request" | "version_not_found";
+  operation: RuntimeOperation | null;
+  resolution: DocsHostResolution | null;
+  trace: DocsRuntimeTrace | undefined;
+  isolate: DocsRuntimeIsolateFacts;
+  manifestMs?: number;
+  versionColdInIsolate?: boolean;
+}): void {
+  console.warn(
+    JSON.stringify({
+      event: "docs_runtime_reads",
+      operation: input.operation,
+      siteId: input.resolution?.siteId ?? null,
+      publishedVersionId: input.resolution?.publishedVersionId ?? null,
+      ok: false,
+      errorCode: input.errorCode,
+      ...traceLogFields(input.trace),
+      isolate: input.isolate,
+      ...(input.manifestMs === undefined
+        ? {}
+        : { manifestMs: Math.round(input.manifestMs) }),
+      ...(input.versionColdInIsolate === undefined
+        ? {}
+        : { versionColdInIsolate: input.versionColdInIsolate }),
+    }),
+  );
 }
 
 /**
@@ -599,14 +744,20 @@ export async function runResolvedRuntimeRequest(
  * so the volume follows the misses. The read count includes the manifest
  * reads made before the operation. `edgeCacheHits`, `blobCacheHits` and
  * `r2Reads` split the storage reads below those reads (a tree, a blob) by
- * where they were served; a tiered-cache miss is an R2 read.
+ * where they were served; a tiered-cache miss is an R2 read. `traceId` and
+ * `caller` come from the dispatcher's trace, when the call carried one.
  */
 function logRouteDataReads(
   resolution: DocsHostResolution,
   runtimeContext: RuntimeRequestContext,
   ok: boolean,
+  call: {
+    trace: DocsRuntimeTrace | undefined;
+    measured: RuntimeCallMeasurements;
+  },
 ): void {
   const { reads } = runtimeContext;
+  const { measured } = call;
   console.info(
     JSON.stringify({
       event: "docs_runtime_reads",
@@ -620,6 +771,11 @@ function logRouteDataReads(
       edgeCacheHits: reads.sources.edgeCache,
       blobCacheHits: reads.sources.blobCache,
       r2Reads: reads.sources.r2,
+      ...traceLogFields(call.trace),
+      isolate: measured.isolate,
+      manifestMs: Math.round(measured.manifestMs),
+      operationMs: Math.round(measured.operationMs),
+      versionColdInIsolate: measured.versionColdInIsolate,
     }),
   );
 }

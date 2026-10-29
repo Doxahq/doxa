@@ -37,11 +37,59 @@ import {
 
 type RuntimeMdastNode = RootContent | MdxJsxFlowElement | MdxJsxTextElement;
 
+/**
+ * Longest line that Shiki tokenizes. A longer line, such as minified code,
+ * is drawn without colors: tokenizing it costs CPU out of proportion, and
+ * one renderer isolate serves many sites.
+ */
+export const MAX_TOKENIZED_LINE_LENGTH = 2_000;
+
+/**
+ * Largest code block highlighted at render, in characters. A larger block is
+ * drawn plain. Shiki's JavaScript engine needs about 0.25 s of CPU for 32 KB.
+ */
+export const MAX_HIGHLIGHTED_CODE_BLOCK_CHARS = 32 * 1024;
+
+/**
+ * Code highlighted in one page, in characters. The blocks after it are drawn
+ * plain, so one page cannot hold the renderer's CPU for long.
+ */
+export const MAX_HIGHLIGHTED_CHARS_PER_PAGE = 128 * 1024;
+
+type ParserHighlighter = NonNullable<RuntimeMdxParseOptions["highlighter"]>;
+
+/**
+ * A highlighter that stops after `budget` characters of code. Past it, it
+ * returns an empty tree, which the parser draws as a plain block.
+ */
+function withHighlightBudget(
+  highlighter: ParserHighlighter,
+  budget: number,
+): ParserHighlighter {
+  let remaining = budget;
+  return {
+    codeToHast(code, options) {
+      if (code.length > remaining) return { type: "root", children: [] };
+      remaining -= code.length;
+      return highlighter.codeToHast(code, options);
+    },
+  };
+}
+
 export function parseRuntimeMdx(
   source: string,
   options: RuntimeMdxParseOptions = {},
 ): RuntimeMdxDocument {
   const parsed = readFrontmatter(source);
+  const nodeOptions: RuntimeMdxParseOptions = options.highlighter
+    ? {
+        ...options,
+        highlighter: withHighlightBudget(
+          options.highlighter,
+          MAX_HIGHLIGHTED_CHARS_PER_PAGE,
+        ),
+      }
+    : options;
 
   try {
     const tree = unified()
@@ -50,7 +98,7 @@ export function parseRuntimeMdx(
       .use(remarkGfm)
       .parse(parsed.content);
 
-    const nodes = toRuntimeMdxNodes(tree.children, options);
+    const nodes = toRuntimeMdxNodes(tree.children, nodeOptions);
     // Anchors for the table of contents and for links to a section.
     assignRuntimeMdxHeadingIds(nodes);
     return { frontmatter: parsed.frontmatter, nodes };
@@ -187,13 +235,20 @@ function createCodeBlock(
   options: RuntimeMdxParseOptions,
 ): RuntimeMdxElementNode {
   const language = resolveFenceLanguage(node.lang ?? "");
-  if (!options.highlighter || !language) return createPlainCodeBlock(node);
+  if (
+    !options.highlighter ||
+    !language ||
+    node.value.length > MAX_HIGHLIGHTED_CODE_BLOCK_CHARS
+  ) {
+    return createPlainCodeBlock(node);
+  }
 
   try {
     const highlightedTree = options.highlighter.codeToHast(node.value, {
       lang: language,
       themes: { light: "github-light", dark: "github-dark" },
       defaultColor: false,
+      tokenizeMaxLineLength: MAX_TOKENIZED_LINE_LENGTH,
       meta: { __raw: node.meta ?? "" },
       transformers: getDocsCodeBlockTransformers(),
     });

@@ -12,6 +12,10 @@ import {
   createRendererPackage,
   parseRendererPackageArgs,
 } from "./package-renderer.mjs";
+import {
+  listClientAssetFiles,
+  planClientAssetUploads,
+} from "../../../scripts/lib/client-assets-upload.mjs";
 
 const gunzipAsync = promisify(gunzip);
 
@@ -48,7 +52,11 @@ describe("createRendererPackage", () => {
       DocsPrerenderCache: { type: "worker", cache: { enabled: true } },
       DocsRouteDataCache: { type: "worker", cache: { enabled: true } },
       DocsRendererCodeCache: { type: "worker", cache: { enabled: true } },
+      DocsTextCache: { type: "worker", cache: { enabled: true } },
+      DocsClientAssetCache: { type: "worker", cache: { enabled: true } },
     });
+    expect(config.vars.DOXA_PROD_TEXT_ROUTE_CACHE_MODE).toBe("off");
+    expect(config.vars.DOXA_PROD_CLIENT_ASSET_FALLBACK_MODE).toBe("off");
     expect(config.vars.DEBUG).toBe("false");
     expect(config.vars.DOXA_PROD_ROUTE_DATA_PREFETCH_MODE).toBe("all");
   });
@@ -72,6 +80,41 @@ describe("createRendererPackage", () => {
     );
     expect(config.vars.DOXA_PROD_ROUTE_DATA_CACHE_MODE).toBe("allowlist");
     expect(config.vars.DOXA_PROD_ROUTE_DATA_CACHE_SITE_IDS).toBe("site-1");
+  });
+
+  test("keeps the warm job's queues, Durable Objects, migration and cron", async () => {
+    const fixture = await createFixture();
+    const result = await createRendererPackage({
+      appRoot: fixture.root,
+      clientDir: "client",
+      serverDir: "server",
+      outputDir: "dist",
+      dispatcherConfig: fileURLToPath(
+        new URL("../wrangler.json", import.meta.url),
+      ),
+    });
+    const config = JSON.parse(
+      await readFile(result.generatedConfigPath, "utf8"),
+    );
+    const source = JSON.parse(
+      await readFile(new URL("../wrangler.json", import.meta.url), "utf8"),
+    );
+    expect(config.queues).toEqual(source.queues);
+    expect(config.durable_objects).toEqual(source.durable_objects);
+    expect(config.migrations).toEqual([
+      {
+        tag: "v1",
+        new_sqlite_classes: [
+          "DocsWarmLock",
+          "DocsWarmAnchor",
+          "DocsRegionalWarmer",
+          "DocsWarmControl",
+        ],
+      },
+    ]);
+    expect(config.triggers).toEqual({ crons: ["*/5 * * * *"] });
+    expect(config.vars.DOXA_PROD_WARM_MODE).toBe("off");
+    expect(config.vars.DOXA_PROD_WARM_DEPLOY_SWEEP).toBe("off");
   });
 
   test("rejects an invalid route-data cache rollout", async () => {
@@ -175,6 +218,32 @@ describe("createRendererPackage", () => {
     expect(third.rendererReleaseId).not.toBe(first.rendererReleaseId);
   });
 
+  test("keeps the release ID when the client assets are planned for upload", async () => {
+    const fixture = await createFixture();
+    const pack = (outputDir) =>
+      createRendererPackage({
+        appRoot: fixture.root,
+        clientDir: "client",
+        serverDir: "server",
+        outputDir,
+      });
+    const before = await pack("dist-a");
+    const assetsDirectory = path.join(fixture.root, "client/assets");
+    const files = await listClientAssetFiles(assetsDirectory);
+    const plan = planClientAssetUploads({ assetsDirectory, files });
+    const after = await pack("dist-b");
+
+    // The upload covers exactly the files that the release ID digests.
+    expect(plan.map((upload) => upload.key)).toEqual([
+      "client-assets/v1/assets/app.js",
+    ]);
+    expect(after.rendererReleaseId).toBe(before.rendererReleaseId);
+    // Pinned at 71062cb: the M27 upload must not change the release ID.
+    expect(before.rendererReleaseId).toBe(
+      "e6f289c2d279d9a772d87a734ff34fc2ee4c2e03adeb3d8d03acf53f7df359c4",
+    );
+  });
+
   test("enables every production site by default", async () => {
     const fixture = await createFixture();
     const result = await createRendererPackage({
@@ -231,6 +300,152 @@ describe("createRendererPackage", () => {
     ).rejects.toThrow("DEBUG");
   });
 
+  test("keeps the committed pre-render rollout without a command-line value (F1)", async () => {
+    const fixture = await createFixture(true, {
+      DOXA_PROD_PRERENDER_MODE: "allowlist",
+      DOXA_PROD_PRERENDER_SITE_IDS: "site-1,site-2",
+    });
+    const options = parseRendererPackageArgs([], {});
+    const result = await createRendererPackage({
+      ...options,
+      appRoot: fixture.root,
+      clientDir: "client",
+      serverDir: "server",
+      outputDir: "dist",
+    });
+    const config = JSON.parse(
+      await readFile(result.generatedConfigPath, "utf8"),
+    );
+    expect(config.vars.DOXA_PROD_PRERENDER_MODE).toBe("allowlist");
+    expect(config.vars.DOXA_PROD_PRERENDER_SITE_IDS).toBe("site-1,site-2");
+  });
+
+  test("lets a command-line or environment value override the committed rollout", async () => {
+    const fixture = await createFixture(true, {
+      DOXA_PROD_PRERENDER_MODE: "allowlist",
+      DOXA_PROD_PRERENDER_SITE_IDS: "site-1",
+    });
+    for (const options of [
+      parseRendererPackageArgs(["--prerender-mode", "off"], {}),
+      parseRendererPackageArgs([], { DOXA_PROD_PRERENDER_MODE: "off" }),
+    ]) {
+      const result = await createRendererPackage({
+        ...options,
+        appRoot: fixture.root,
+        clientDir: "client",
+        serverDir: "server",
+        outputDir: "dist",
+      });
+      const config = JSON.parse(
+        await readFile(result.generatedConfigPath, "utf8"),
+      );
+      expect(config.vars.DOXA_PROD_PRERENDER_MODE).toBe("off");
+      expect(config.vars.DOXA_PROD_PRERENDER_SITE_IDS).toBe("site-1");
+    }
+  });
+
+  test("treats an empty pre-render environment value as unset", () => {
+    expect(
+      parseRendererPackageArgs([], {
+        DOXA_PROD_PRERENDER_MODE: " ",
+        DOXA_PROD_PRERENDER_SITE_IDS: "",
+      }),
+    ).toMatchObject({ prerenderMode: undefined, prerenderSiteIds: undefined });
+  });
+
+  test("leaves the previous build empty outside a deploy", async () => {
+    const fixture = await createFixture();
+    const result = await createRendererPackage({
+      appRoot: fixture.root,
+      clientDir: "client",
+      serverDir: "server",
+      outputDir: "dist",
+    });
+    const config = JSON.parse(
+      await readFile(result.generatedConfigPath, "utf8"),
+    );
+    expect(config.vars.DOXA_PREVIOUS_RENDERER_BUILD_ID).toBe("");
+    expect(config.vars.DOXA_PREVIOUS_RENDERER_RELEASE_ID).toBe("");
+    expect(config.vars.DOXA_RENDERER_DEPLOYED_AT).toBe("");
+  });
+
+  test("writes the previous build of the release record into the deploy config", async () => {
+    const fixture = await createFixture();
+    const recordPath = path.join(fixture.root, "current.json");
+    const record = {
+      buildId: "1".repeat(64),
+      releaseId: "2".repeat(64),
+      packageKey: `renderer-code/${"1".repeat(64)}.json.gz`,
+      deployedAt: "2026-10-01T00:00:00.000Z",
+      previous: null,
+      revoked: [],
+    };
+    await writeFile(recordPath, JSON.stringify(record));
+    const pack = (args, outputDir) =>
+      createRendererPackage({
+        ...parseRendererPackageArgs(args, {}),
+        appRoot: fixture.root,
+        clientDir: "client",
+        serverDir: "server",
+        outputDir,
+        now: "2026-10-29T12:00:00.000Z",
+      });
+
+    const on = await pack(
+      ["--previous-fallback", "on", "--release-record", recordPath],
+      "dist-on",
+    );
+    const onConfig = JSON.parse(await readFile(on.generatedConfigPath, "utf8"));
+    expect(onConfig.vars.DOXA_PREVIOUS_RENDERER_BUILD_ID).toBe(record.buildId);
+    expect(onConfig.vars.DOXA_PREVIOUS_RENDERER_RELEASE_ID).toBe(
+      record.releaseId,
+    );
+    expect(onConfig.vars.DOXA_RENDERER_DEPLOYED_AT).toBe(
+      "2026-10-29T12:00:00.000Z",
+    );
+    expect(on.previousBuild.reason).toBe("new_release");
+    const metadata = JSON.parse(await readFile(on.metadataPath, "utf8"));
+    expect(metadata.previousBuild).toEqual(on.previousBuild);
+
+    const revoked = await pack(
+      [
+        "--previous-fallback",
+        "on",
+        "--release-record",
+        recordPath,
+        "--revoke",
+        record.releaseId,
+      ],
+      "dist-revoked",
+    );
+    expect(revoked.previousBuild).toMatchObject({
+      previous: null,
+      reason: "revoked",
+    });
+
+    const off = await pack(
+      ["--previous-fallback", "off", "--release-record", recordPath],
+      "dist-off",
+    );
+    const offConfig = JSON.parse(
+      await readFile(off.generatedConfigPath, "utf8"),
+    );
+    expect(offConfig.vars.DOXA_PREVIOUS_RENDERER_BUILD_ID).toBe("");
+  });
+
+  test("rejects an invalid previous-fallback value", async () => {
+    const fixture = await createFixture();
+    await expect(
+      createRendererPackage({
+        appRoot: fixture.root,
+        clientDir: "client",
+        serverDir: "server",
+        outputDir: "dist",
+        previousFallback: "yes",
+      }),
+    ).rejects.toThrow("Expected on or off");
+  });
+
   test("preserves the disabled cache rollback setting", async () => {
     const fixture = await createFixture(false);
     const result = await createRendererPackage({
@@ -246,7 +461,7 @@ describe("createRendererPackage", () => {
   });
 });
 
-async function createFixture(cacheEnabled = true) {
+async function createFixture(cacheEnabled = true, vars = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "doxa-renderer-package-"));
   await mkdir(path.join(root, "server/assets"), { recursive: true });
   await mkdir(path.join(root, "client/assets"), { recursive: true });
@@ -277,7 +492,7 @@ async function createFixture(cacheEnabled = true) {
       main: "src/index.ts",
       cache: { enabled: cacheEnabled },
       assets: { directory: "../docs-template/dist/client" },
-      vars: {},
+      vars,
     }),
   );
   return { root };

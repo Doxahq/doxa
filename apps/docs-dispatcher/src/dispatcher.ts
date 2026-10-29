@@ -1,5 +1,9 @@
 import type { DocsDomainResolution } from "@doxahq/contracts";
 
+import {
+  isRendererPropsMissing,
+  logRendererPropsMissing,
+} from "./renderer-isolate";
 import type { RolloutMode } from "./rollout-policy";
 import { getRendererSelection, shouldResolveDocsHost } from "./routing-policy";
 
@@ -34,16 +38,30 @@ export async function dispatchDocsRequest(
     return renderShared(input, "shared");
   }
 
+  const replayable = isSafeToReplay(input.request);
   try {
     const response = await input.renderDynamic(input.request, resolution);
-    if (response.status < 500 || !isSafeToReplay(input.request)) {
+    if (response.status >= 500) {
+      reportPropsMissing(response, resolution, replayable);
+    }
+    if (response.status < 500 || !replayable) {
       return withRendererMode(response, "dynamic");
     }
   } catch (error) {
-    if (!isSafeToReplay(input.request)) throw error;
+    reportPropsMissing(error, resolution, replayable);
+    if (!replayable) throw error;
   }
 
   return renderShared(input, "shared-fallback");
+}
+
+function reportPropsMissing(
+  outcome: unknown,
+  resolution: DocsDomainResolution,
+  fallback: boolean,
+): void {
+  if (!isRendererPropsMissing(outcome)) return;
+  logRendererPropsMissing({ entrypoint: "fetch", resolution, fallback });
 }
 
 async function resolveHostOrNull(

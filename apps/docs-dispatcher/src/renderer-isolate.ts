@@ -82,7 +82,58 @@ export type RendererCallOutcome =
   | { ok: true }
   | { ok: false; error: string };
 
-const RENDERER_LIMITS = { cpuMs: 30_000, subRequests: 50 } as const;
+/**
+ * Limits of one renderer call. In the `build` scope every site shares the
+ * isolate (M46), so one call must not hold its CPU for long. The slowest
+ * cold render seen in production (29 Oct tail) took 2.4 s of wall time,
+ * which bounds its CPU time, so 5 s leaves headroom.
+ */
+const RENDERER_LIMITS = { cpuMs: 5_000, subRequests: 50 } as const;
+
+/**
+ * The code a renderer returns (in `x-doxa-renderer-error`) or throws (in the
+ * message) when a call reached it without its request-scope props.
+ */
+export const RENDERER_PROPS_MISSING_CODE = "renderer_props_missing";
+const RENDERER_ERROR_HEADER = "x-doxa-renderer-error";
+
+/**
+ * True when a renderer response, error or error message says the call had
+ * no request-scope props.
+ */
+export function isRendererPropsMissing(outcome: unknown): boolean {
+  if (outcome instanceof Response) {
+    return (
+      outcome.headers.get(RENDERER_ERROR_HEADER) === RENDERER_PROPS_MISSING_CODE
+    );
+  }
+  const message = outcome instanceof Error ? outcome.message : outcome;
+  return (
+    typeof message === "string" &&
+    message.includes(`[${RENDERER_PROPS_MISSING_CODE}]`)
+  );
+}
+
+/**
+ * Logs a renderer call that had no request scope. It happens only when the
+ * dispatcher fails to send the props, so it is its own event, apart from
+ * the fallback to the shared renderer that may follow.
+ */
+export function logRendererPropsMissing(input: {
+  entrypoint: RendererEntrypointName;
+  resolution: Pick<DocsHostResolution, "siteId" | "publishedVersionId">;
+  fallback: boolean;
+}): void {
+  console.error(
+    JSON.stringify({
+      event: RENDERER_PROPS_MISSING_CODE,
+      entrypoint: input.entrypoint,
+      siteId: input.resolution.siteId,
+      publishedVersionId: input.resolution.publishedVersionId,
+      fallback: input.fallback,
+    }),
+  );
+}
 
 export function readSharedIsolateRollout(
   env: Pick<
@@ -246,6 +297,18 @@ export function logRendererUse(
     routeDataPrefetch?: RouteDataPrefetchReport;
   },
 ): void {
+  // The fetch path logs it in `dispatchDocsRequest`, before its fallback.
+  if (
+    input.entrypoint !== "fetch" &&
+    "error" in input.outcome &&
+    isRendererPropsMissing(input.outcome.error)
+  ) {
+    logRendererPropsMissing({
+      entrypoint: input.entrypoint,
+      resolution: input.resolution,
+      fallback: false,
+    });
+  }
   console.info(
     JSON.stringify({
       event: "docs_renderer_load",

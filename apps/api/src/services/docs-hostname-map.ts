@@ -7,6 +7,7 @@ import {
   type DocsHostnameMapRpc,
   type DocsHostnameMapUpdate,
 } from "@doxahq/contracts/docs-hostname-map";
+import type { DocsWarmHint } from "@doxahq/contracts/docs-warm-job";
 import type { Env } from "../env";
 import { DocsHostnameSourceRepository } from "../repositories/docs-hostname-source";
 
@@ -77,11 +78,44 @@ export async function readHostnameMapUpdates(
   return updates;
 }
 
+/**
+ * `warm` orders the regional warm job of a publish (M45). Only the immediate
+ * delivery after a publish passes it; it goes with every batch, because the
+ * dispatcher starts the job from whichever batch changes the live version.
+ */
 export async function sendHostnameMapUpdates(
   rpc: DocsHostnameMapRpc,
   updates: readonly DocsHostnameMapUpdate[],
+  warm?: DocsWarmHint,
 ): Promise<void> {
   for (const batch of chunk(updates, DOCS_HOSTNAME_MAP_SYNC_LIMIT)) {
+    await (warm
+      ? sendBatchWithWarm(rpc, batch, warm)
+      : rpc.syncHostnames({ updates: batch }));
+  }
+}
+
+/**
+ * A dispatcher older than the warm job has a strict sync schema and rejects
+ * the `warm` field. The batch is then sent once more without it, so the
+ * hostname map is fresh now and not after the next reconcile run. The warm
+ * job is a hint; the writes are idempotent and ordered by `resolvedAt`.
+ */
+async function sendBatchWithWarm(
+  rpc: DocsHostnameMapRpc,
+  batch: DocsHostnameMapUpdate[],
+  warm: DocsWarmHint,
+): Promise<void> {
+  try {
+    await rpc.syncHostnames({ updates: batch, warm });
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: "docs_hostname_map_sync_retry_without_warm",
+        hostnames: batch.length,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
     await rpc.syncHostnames({ updates: batch });
   }
 }
@@ -107,6 +141,8 @@ export class DocsHostnameMapSync {
     private readonly source: DocsHostnameSource,
     private readonly rpc: DocsHostnameMapRpc,
     private readonly now: () => number = Date.now,
+    /** The publish's warm hint; only the post-publish delivery sets it. */
+    private readonly warm?: DocsWarmHint,
   ) {}
 
   async syncTask(task: {
@@ -120,6 +156,7 @@ export class DocsHostnameMapSync {
     await sendHostnameMapUpdates(
       this.rpc,
       await readHostnameMapUpdates(this.source, due, this.now),
+      this.warm,
     );
     for (const hostname of due) this.synced.add(hostname);
   }

@@ -7,6 +7,13 @@ vi.mock("cloudflare:workers", () => ({
       public env: unknown,
     ) {}
   },
+  // The warm Durable Objects (M28) are exported from the same module.
+  DurableObject: class {
+    constructor(
+      public ctx: unknown,
+      public env: unknown,
+    ) {}
+  },
 }));
 
 import { shouldSubmitRepair } from "../src/prerender-cache-entrypoint";

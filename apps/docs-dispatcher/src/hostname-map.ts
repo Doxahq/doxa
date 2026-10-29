@@ -2,11 +2,13 @@ import type { DocsDomainResolution } from "@doxahq/contracts";
 import {
   DOCS_HOSTNAME_MAP_EXPIRATION_SECONDS,
   DOCS_HOSTNAME_MAP_FORMAT,
+  docsHostnameMapEntrySchema,
   docsHostnameMapKey,
   docsHostnameMapSyncSchema,
   isStorableHostnameResolution,
   readHostnameMapEntry,
   type DocsHostnameMapEntry,
+  type DocsHostnameMapSync,
   type DocsHostnameMapUpdate,
 } from "@doxahq/contracts/docs-hostname-map";
 
@@ -41,13 +43,21 @@ export type HostnameMapLookup =
  */
 export type HostnameMapAgreement = "agree" | "missing" | "disagree" | "error";
 
+/**
+ * Every entry carries its site ID as KV metadata, so a sweep can list the
+ * keys of a site without reading each value (F26).
+ */
+export interface HostnameMapMetadata {
+  siteId: string;
+}
+
 /** The part of a KV namespace that the map uses. */
 export interface HostnameMapStore {
   get(key: string): Promise<string | null>;
   put(
     key: string,
     value: string,
-    options: { expirationTtl: number },
+    options: { expirationTtl: number; metadata: HostnameMapMetadata },
   ): Promise<void>;
   delete(key: string): Promise<void>;
 }
@@ -84,34 +94,124 @@ export async function lookupHostnameMap(
 }
 
 /**
+ * A hostname whose stored live resolution changed with this sync: a new
+ * public production entry, or one whose resolution differs from the stored
+ * one. The regional warm job (M28) starts from these.
+ */
+export interface HostnameMapLiveChange {
+  hostname: string;
+  resolution: DocsDomainResolution;
+  resolvedAt: number;
+}
+
+export interface HostnameMapUpdateOptions {
+  /**
+   * Called after the write, once per hostname whose live resolution changed.
+   * Setting it costs one extra map read per stored update.
+   */
+  onLiveChange?(change: HostnameMapLiveChange): void;
+  now?: number;
+}
+
+/**
  * Applies updates that the API computed from the database. The input is
  * validated again here, and only a public production resolution of the same
- * hostname is stored; every other update deletes the entry.
+ * hostname is stored; every other update deletes the entry. Returns the
+ * validated input.
  */
 export async function applyHostnameMapUpdates(
   store: HostnameMapStore,
   input: unknown,
-): Promise<void> {
-  const { updates } = docsHostnameMapSyncSchema.parse(input);
-  await Promise.all(updates.map((update) => applyUpdate(store, update)));
+  options: HostnameMapUpdateOptions = {},
+): Promise<DocsHostnameMapSync> {
+  const sync = docsHostnameMapSyncSchema.parse(input);
+  // Every update is tried; one failed write never hides the others (FC-L6).
+  const results = await Promise.allSettled(
+    sync.updates.map((update) => applyUpdate(store, update, options)),
+  );
+  const errors = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : [],
+  );
+  if (errors.length > 0) throw new HostnameMapWriteError(sync, errors);
+  return sync;
 }
 
-function applyUpdate(
+/**
+ * Some map writes failed. `sync` is the validated input; the other updates
+ * were written and their `onLiveChange` calls were made.
+ */
+export class HostnameMapWriteError extends AggregateError {
+  constructor(
+    readonly sync: DocsHostnameMapSync,
+    errors: readonly unknown[],
+  ) {
+    super(errors, `${errors.length} of ${sync.updates.length} hostname map writes failed`);
+    this.name = "HostnameMapWriteError";
+  }
+}
+
+async function applyUpdate(
   store: HostnameMapStore,
   update: DocsHostnameMapUpdate,
+  options: HostnameMapUpdateOptions,
 ): Promise<void> {
   const key = docsHostnameMapKey(update.hostname);
   if (!isStorableHostnameResolution(update.hostname, update.resolution)) {
     return store.delete(key);
   }
+  const before = options.onLiveChange
+    ? await lookupHostnameMap(store, update.hostname, options.now ?? Date.now())
+    : null;
   const entry: DocsHostnameMapEntry = {
     format: DOCS_HOSTNAME_MAP_FORMAT,
     resolvedAt: update.resolvedAt,
     resolution: update.resolution,
   };
-  return store.put(key, JSON.stringify(entry), {
+  await store.put(key, JSON.stringify(entry), {
     expirationTtl: DOCS_HOSTNAME_MAP_EXPIRATION_SECONDS,
+    metadata: { siteId: update.resolution.siteId },
   });
+  if (
+    options.onLiveChange &&
+    (before?.status !== "hit" ||
+      !sameResolution(before.resolution, update.resolution))
+  ) {
+    options.onLiveChange({
+      hostname: update.hostname,
+      resolution: update.resolution,
+      resolvedAt: update.resolvedAt,
+    });
+  }
+}
+
+export type HostnameMapEntryLookup =
+  | { status: "hit"; entry: DocsHostnameMapEntry }
+  | { status: Exclude<HostnameMapStatus, "hit"> };
+
+/**
+ * Like `lookupHostnameMap`, with the whole entry, for readers that need
+ * `resolvedAt` (the warm job's supersede check). Never throws.
+ */
+export async function lookupHostnameMapEntry(
+  store: Pick<HostnameMapStore, "get"> | undefined,
+  hostname: string,
+  now: number,
+): Promise<HostnameMapEntryLookup> {
+  if (!store) return { status: "unbound" };
+  let text: string | null;
+  try {
+    text = await store.get(docsHostnameMapKey(hostname));
+  } catch {
+    return { status: "error" };
+  }
+  if (text === null) return { status: "miss" };
+  const value = parseJson(text);
+  const read = readHostnameMapEntry(value, hostname, now);
+  if (read.status !== "hit") return read;
+  const entry = docsHostnameMapEntrySchema.safeParse(value);
+  return entry.success
+    ? { status: "hit", entry: entry.data }
+    : { status: "invalid" };
 }
 
 /** Compares a map read with the resolution that `DocsHostCache` returned. */

@@ -48,3 +48,29 @@ export function withDocsPreviewSearchPolicy(
   result.headers.set("x-robots-tag", "noindex, nofollow");
   return result;
 }
+
+/**
+ * HSTS for docs hostnames. One day only, without `includeSubDomains` or
+ * `preload`: a custom domain may leave Doxa, and a browser keeps the policy
+ * for its whole `max-age`. The dispatcher adds it to every HTTPS response
+ * while `DOXA_PROD_HTTPS_REDIRECT_MODE` is `on` (see `https-policy.ts`).
+ */
+export const DOCS_STRICT_TRANSPORT_SECURITY = "max-age=86400";
+
+/**
+ * Adds HSTS to a response of an HTTPS request. A browser ignores HSTS on
+ * plain HTTP, so an HTTP response stays unchanged. The header goes on a copy,
+ * because a response from a binding has immutable headers.
+ */
+export function withDocsStrictTransportSecurity(
+  response: Response,
+  request: Request,
+): Response {
+  if (new URL(request.url).protocol !== "https:") return response;
+  const result = new Response(response.body, response);
+  result.headers.set(
+    "strict-transport-security",
+    DOCS_STRICT_TRANSPORT_SECURITY,
+  );
+  return result;
+}

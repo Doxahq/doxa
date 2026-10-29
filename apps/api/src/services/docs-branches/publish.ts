@@ -3,6 +3,7 @@ import type {
   PublishDocsBranchInput,
   PublishDocsBranchResult,
 } from "@doxahq/contracts/docs-branches";
+import type { WarmPool } from "@doxahq/contracts/docs-warm-state";
 import type { Env } from "../../env";
 import type {
   DocsBranchStore,
@@ -16,6 +17,7 @@ import {
 } from "../../repositories/docs-branch-publication";
 import { DocsVersionGcEntriesRepository } from "../../repositories/docs-version-gc-entries";
 import type { PublicationAttribution } from "../../repositories/docs-publications";
+import { buildDocsWarmHint } from "../docs-warm-hint";
 import { freePlanEntitlements } from "../free-plan-entitlements";
 import {
   createR2SiteAssetStore,
@@ -49,6 +51,11 @@ export interface BranchPublishRequest {
   onStage?: (stage: DocsPublishStage) => void;
   /** Set when an agent action publishes. */
   attribution?: PublicationAttribution;
+  /**
+   * The publisher's cache pool, when a person publishes from a request
+   * (M45). The regional warm job starts there.
+   */
+  warmRegion?: WarmPool | null;
 }
 
 export class DocsBranchPublish {
@@ -158,6 +165,9 @@ export class DocsBranchPublish {
       changes,
     });
 
+    // Ordering only: the publisher's pool and the changed pages go first.
+    const warm = buildDocsWarmHint({ region: input.warmRegion, changes });
+
     input.onStage?.("optimizing");
     const published = await this.deps.publish({
       userId: input.userId,
@@ -173,6 +183,7 @@ export class DocsBranchPublish {
       attribution: input.attribution,
       pageMoves: pageChanges.moves,
       removedHrefs: pageChanges.removedHrefs,
+      ...(warm ? { warm } : {}),
     });
     await this.deps.collectStorage(published.collectEntryIds);
 

@@ -7,6 +7,7 @@ import {
 } from "./binding-runtime-source";
 import type { PlatformRuntimeSourceConfig } from "./platform-runtime-source";
 import type { DoxaDocsRuntimeSource } from "./runtime-source";
+import { RendererPropsMissingError } from "./runtime-source-error";
 import { isRuntimeTimingEnabled } from "./runtime-timing";
 
 export type RuntimeSourceMode = "vite" | "platform" | "binding";
@@ -117,8 +118,10 @@ export function createDispatcherRuntimeSource(
       resolution: requestScope.resolution,
     });
   }
+  // A `build` isolate keeps no site content in its env, so a call without
+  // valid props has no content to read. Never resolve it any other way.
   if (!env.DOXA_DOCS_CONTENT_BINDING) {
-    throw new Error("Binding runtime mode requires a content binding.");
+    throw new RendererPropsMissingError();
   }
   const binding = wrapContent(env.DOXA_DOCS_CONTENT_BINDING);
 

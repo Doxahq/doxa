@@ -7,6 +7,13 @@ vi.mock("cloudflare:workers", () => ({
       readonly env: unknown,
     ) {}
   },
+  // The warm Durable Objects (M28) are exported from the same module.
+  DurableObject: class {
+    constructor(
+      readonly ctx: unknown,
+      readonly env: unknown,
+    ) {}
+  },
 }));
 
 import {

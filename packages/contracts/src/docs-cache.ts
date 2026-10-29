@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { DocsHostnameMapRpc } from "./docs-hostname-map";
+import type { DocsWarmStatusRpc } from "./docs-warm-job";
 
 /**
  * How long the docs dispatcher keeps a resolved hostname (hostname → site and
@@ -30,4 +31,9 @@ export type DocsCacheInvalidation = z.infer<typeof docsCacheInvalidationSchema>;
  */
 export interface DocsCacheInvalidationRpc extends DocsHostnameMapRpc {
   invalidate(input: DocsCacheInvalidation): Promise<void>;
+  /**
+   * The site's regional warm progress (M45b). Optional: a dispatcher
+   * deployed before the warm job has no such method.
+   */
+  getWarmStatus?: DocsWarmStatusRpc["getWarmStatus"];
 }

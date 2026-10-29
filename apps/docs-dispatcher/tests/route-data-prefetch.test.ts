@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import {
   RouteDataPrefetches,
+  planPathnameRouteDataPrefetch,
   planRouteDataPrefetch,
   readRouteDataPrefetchRollout,
   toRuntimeHref,
@@ -24,6 +25,19 @@ const ALL = readRouteDataPrefetchRollout({
   DOXA_PROD_ROUTE_DATA_PREFETCH_MODE: "all",
 });
 const ROUTE_DATA: RuntimeResponse = { ok: true, data: { type: "page" } };
+const TRACE_ID = "6f1c1a52-8a4e-4c1e-9d55-0f4f3b2a7c10";
+const RUNTIME_TIMING = {
+  manifestMs: 12,
+  operationMs: 30,
+  firstReadMs: 9,
+  totalMs: 44,
+  reads: 3,
+  r2Reads: 1,
+  readMs: 25,
+  responseBytes: 2048,
+  versionColdInIsolate: true,
+  isolate: { id: "runtime-isolate-1", requests: 7, ageMs: 120_000 },
+};
 
 function htmlRequest(path: string, init: RequestInit = {}): Request {
   return new Request(`https://docs.example.com${path}`, {
@@ -59,7 +73,7 @@ function setup(answer: () => Promise<RuntimeResponse> = async () => ROUTE_DATA) 
     ok: true,
     data: { type: "fresh" },
   }));
-  const prefetches = new RouteDataPrefetches(clock.now);
+  const prefetches = new RouteDataPrefetches(clock.now, () => TRACE_ID);
   return { clock, release, runtime, call, prefetches };
 }
 
@@ -170,6 +184,32 @@ describe("planRouteDataPrefetch", () => {
   });
 });
 
+describe("planPathnameRouteDataPrefetch", () => {
+  test("plans the runtime pathname without a request", () => {
+    expect(
+      planPathnameRouteDataPrefetch({
+        pathname: "/docs/index",
+        siteId: SITE,
+        rollout: ALL,
+        createId: () => "id-1",
+      }),
+    ).toEqual({ id: "id-1", payload: { pathname: "/docs" } });
+  });
+
+  test("plans nothing for a site outside the rollout", () => {
+    expect(
+      planPathnameRouteDataPrefetch({
+        pathname: "/guide",
+        siteId: "site-2",
+        rollout: readRouteDataPrefetchRollout({
+          DOXA_PROD_ROUTE_DATA_PREFETCH_MODE: "allowlist",
+          DOXA_PROD_ROUTE_DATA_PREFETCH_SITE_IDS: SITE,
+        }),
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("RouteDataPrefetches", () => {
   test("hands the prefetched answer to the renderer's call", async () => {
     const { clock, release, runtime, call, prefetches } = setup();
@@ -193,14 +233,69 @@ describe("RouteDataPrefetches", () => {
       resolution,
       operation: "getRouteData",
       payload: { pathname: "/guide" },
+      trace: { id: TRACE_ID, caller: "prefetch" },
     });
     expect(prefetches.finish("prefetch-1")).toEqual({
       outcome: "handedOff",
       prefetchMs: 50,
       leadMs: 40,
       waitMs: 10,
+      traceId: TRACE_ID,
     });
     expect(prefetches.size).toBe(0);
+  });
+
+  test("reports docs-runtime's timing and keeps it from the renderer", async () => {
+    const { clock, release, runtime, call, prefetches } = setup(async () => ({
+      ...ROUTE_DATA,
+      timing: RUNTIME_TIMING,
+    }));
+    prefetches.start({ plan: plan(), runtime, resolution });
+    const served = prefetches.serve(
+      "prefetch-1",
+      resolution,
+      { operation: "getRouteData", payload: { pathname: "/guide" } },
+      call,
+    );
+    clock.advance(60);
+    release();
+
+    await expect(served).resolves.toEqual(ROUTE_DATA);
+    expect(await served).not.toHaveProperty("timing");
+    expect(prefetches.finish("prefetch-1")).toEqual({
+      outcome: "handedOff",
+      prefetchMs: 60,
+      leadMs: 0,
+      waitMs: 60,
+      traceId: TRACE_ID,
+      calleeMs: 44,
+      outsideMs: 16,
+      runtimeIsolate: RUNTIME_TIMING.isolate,
+      reads: 3,
+      r2Reads: 1,
+      readMs: 25,
+      manifestMs: 12,
+      responseBytes: 2048,
+    });
+  });
+
+  test("drops an invalid timing answer", async () => {
+    const { release, runtime, call, prefetches } = setup(async () => ({
+      ...ROUTE_DATA,
+      timing: { totalMs: "slow" },
+    }));
+    prefetches.start({ plan: plan(), runtime, resolution });
+    release();
+
+    const served = await prefetches.serve(
+      "prefetch-1",
+      resolution,
+      { operation: "getRouteData", payload: { pathname: "/guide" } },
+      call,
+    );
+
+    expect(served).toEqual(ROUTE_DATA);
+    expect(prefetches.finish("prefetch-1")).not.toHaveProperty("calleeMs");
   });
 
   test("hands the answer over only once", async () => {

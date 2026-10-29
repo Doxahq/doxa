@@ -190,6 +190,9 @@ importers:
       '@doxahq/api-bridge':
         specifier: workspace:*
         version: link:../../packages/api-bridge
+      '@doxahq/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20260612.0
@@ -209,6 +212,9 @@ importers:
       '@doxahq/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20260701.1

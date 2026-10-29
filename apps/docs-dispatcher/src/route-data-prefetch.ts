@@ -1,4 +1,8 @@
 import type { DocsHostResolution } from "@doxahq/contracts";
+import type {
+  DocsRuntimeCallTiming,
+  DocsRuntimeIsolateFacts,
+} from "@doxahq/contracts/docs-runtime-trace";
 
 import { isPrerenderableDocsRequest } from "./cache-policy";
 import {
@@ -7,6 +11,7 @@ import {
   parseSiteAllowlist,
   type SiteRollout,
 } from "./rollout-policy";
+import { createRuntimeTrace, splitRuntimeTiming } from "./runtime-trace";
 import type {
   DocsRuntimeRpc,
   RuntimeRequest,
@@ -54,6 +59,22 @@ export interface RouteDataPrefetchReport {
   leadMs?: number;
   /** How long the renderer waited for the prefetched answer. */
   waitMs?: number;
+  /** The dispatcher's trace ID of the prefetch call, also in `docs_runtime_reads`. */
+  traceId: string;
+  /**
+   * The fields below come from docs-runtime's `timing` answer. They are
+   * absent when docs-runtime sent none (an older deploy) or the call failed.
+   * `calleeMs`: time inside docs-runtime. `outsideMs`: `prefetchMs` minus
+   * `calleeMs`, the RPC transport and queueing.
+   */
+  calleeMs?: number;
+  outsideMs?: number;
+  runtimeIsolate?: DocsRuntimeIsolateFacts;
+  reads?: number;
+  r2Reads?: number;
+  readMs?: number;
+  manifestMs?: number;
+  responseBytes?: number;
 }
 
 const OPERATION = "getRouteData";
@@ -84,15 +105,31 @@ export function planRouteDataPrefetch(input: {
   rollout: SiteRollout;
   createId?: () => string;
 }): RouteDataPrefetchPlan | null {
-  const { request, siteId, rollout } = input;
-  if (!isSiteInRollout(rollout, siteId)) return null;
+  const { request } = input;
   // docs-template asks for route data only for a GET that accepts HTML.
   if (request.method !== "GET" || !isPrerenderableDocsRequest(request)) {
     return null;
   }
+  return planPathnameRouteDataPrefetch({
+    ...input,
+    pathname: new URL(request.url).pathname,
+  });
+}
+
+/**
+ * Plans a prefetch from a pathname alone, for a call without a request: the
+ * private `prepare` entrypoint always asks for the route data of its pathname.
+ */
+export function planPathnameRouteDataPrefetch(input: {
+  pathname: string;
+  siteId: string;
+  rollout: SiteRollout;
+  createId?: () => string;
+}): RouteDataPrefetchPlan | null {
+  if (!isSiteInRollout(input.rollout, input.siteId)) return null;
   return {
     id: (input.createId ?? (() => crypto.randomUUID()))(),
-    payload: { pathname: toRuntimeHref(new URL(request.url).pathname) },
+    payload: { pathname: toRuntimeHref(input.pathname) },
   };
 }
 
@@ -118,6 +155,8 @@ interface PrefetchEntry {
   payloadKey: string;
   /** Never rejects: undefined means the RPC threw. */
   result: Promise<RuntimeResponse | undefined>;
+  traceId: string;
+  timing?: DocsRuntimeCallTiming;
   startedAt: number;
   settledAt?: number;
   ok?: boolean;
@@ -131,7 +170,10 @@ interface PrefetchEntry {
 export class RouteDataPrefetches {
   private readonly entries = new Map<string, PrefetchEntry>();
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly now: () => number = Date.now,
+    private readonly createTraceId: () => string = () => crypto.randomUUID(),
+  ) {}
 
   /**
    * Starts the RPC. Returns a promise that ends with it, for `waitUntil`;
@@ -144,14 +186,21 @@ export class RouteDataPrefetches {
   }): Promise<void> {
     this.prune();
     const { plan, runtime, resolution } = input;
+    const trace = createRuntimeTrace("prefetch", this.createTraceId);
     const entry: PrefetchEntry = {
       resolution,
       payloadKey: JSON.stringify(plan.payload),
+      traceId: trace.id,
       startedAt: this.now(),
       result: Promise.resolve(undefined),
     };
     entry.result = runtime
-      .request({ resolution, operation: OPERATION, payload: plan.payload })
+      .request({
+        resolution,
+        operation: OPERATION,
+        payload: plan.payload,
+        trace,
+      })
       .then(
         (response) => this.settle(entry, response),
         () => this.settle(entry, undefined),
@@ -201,10 +250,13 @@ export class RouteDataPrefetches {
 
   private settle(
     entry: PrefetchEntry,
-    response: RuntimeResponse | undefined,
+    answer: RuntimeResponse | undefined,
   ): RuntimeResponse | undefined {
     entry.settledAt = this.now();
-    entry.ok = response?.ok === true;
+    entry.ok = answer?.ok === true;
+    if (!answer) return undefined;
+    const { response, timing } = splitRuntimeTiming(answer);
+    if (timing) entry.timing = timing;
     return response;
   }
 
@@ -220,6 +272,8 @@ export class RouteDataPrefetches {
 
 function toReport(entry: PrefetchEntry): RouteDataPrefetchReport {
   const { startedAt, settledAt, takenAt } = entry;
+  const prefetchMs =
+    settledAt !== undefined ? settledAt - startedAt : undefined;
   return {
     outcome:
       takenAt === undefined
@@ -227,10 +281,32 @@ function toReport(entry: PrefetchEntry): RouteDataPrefetchReport {
         : entry.ok === false
           ? "fellBack"
           : "handedOff",
-    ...(settledAt !== undefined ? { prefetchMs: settledAt - startedAt } : {}),
+    ...(prefetchMs !== undefined ? { prefetchMs } : {}),
     ...(takenAt !== undefined ? { leadMs: takenAt - startedAt } : {}),
     ...(takenAt !== undefined && settledAt !== undefined
       ? { waitMs: Math.max(0, settledAt - takenAt) }
+      : {}),
+    traceId: entry.traceId,
+    ...(entry.timing ? toCalleeFields(entry.timing, prefetchMs) : {}),
+  };
+}
+
+function toCalleeFields(
+  timing: DocsRuntimeCallTiming,
+  prefetchMs: number | undefined,
+): Partial<RouteDataPrefetchReport> {
+  return {
+    calleeMs: timing.totalMs,
+    ...(prefetchMs !== undefined
+      ? { outsideMs: Math.max(0, prefetchMs - timing.totalMs) }
+      : {}),
+    runtimeIsolate: timing.isolate,
+    reads: timing.reads,
+    r2Reads: timing.r2Reads,
+    readMs: timing.readMs,
+    manifestMs: timing.manifestMs,
+    ...(timing.responseBytes !== undefined
+      ? { responseBytes: timing.responseBytes }
       : {}),
   };
 }

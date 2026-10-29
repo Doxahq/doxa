@@ -15,6 +15,7 @@ import { loadDocsRawPage } from "@/src/runtime/runtime-route-data";
 import { useSiteConfig } from "@/src/site-config/site-config-context";
 import { docsLayout } from "@doxahq/site-config";
 
+import { isChatAvailable } from "@/src/lib/chat-availability";
 import type { ChatPageContext } from "@/src/lib/chat-page-context";
 import { components, elements } from "@/src/lib/components";
 import { cn } from "@/src/lib/utils";
@@ -166,9 +167,10 @@ export function DocsPage({ data }: DocsPageProps) {
                 <div className="not-prose flex flex-col gap-3 @2xl/article:flex-row @2xl/article:items-start @2xl/article:justify-between">
                   <ArticleTitle title={title} apiMethod={apiMethod} />
                   <div className="flex shrink-0 flex-wrap items-center gap-2 @2xl/article:order-last">
-                    {data.features.ai.chat && data.features.ai.chatWithPage && (
-                      <ChatWithPage pageContext={pageContext} />
-                    )}
+                    {isChatAvailable(data.features) &&
+                      data.features.ai.chatWithPage && (
+                        <ChatWithPage pageContext={pageContext} />
+                      )}
                     {copyPageEnabled && (
                       <CopyPage
                         options={data.features.copyPage}

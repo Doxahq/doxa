@@ -202,6 +202,7 @@ describe("branch synchronization and publish", () => {
         eraseBranch: true,
       },
       onStage: (stage) => stages.push(stage),
+      warmRegion: "eu-west",
     });
     expect(stages).toEqual(["preparing", "building", "optimizing"]);
     expect(result.versionNumber).toBe(3);
@@ -210,6 +211,8 @@ describe("branch synchronization and publish", () => {
     expect(collectStorage).toHaveBeenCalledWith(["gc-preview-1"]);
     const input = publish.mock.calls[0]?.[0];
     expect(input?.summary).toMatchObject({ changedPageCount: 1 });
+    // M45: the publisher's pool and the edited page order the warm job.
+    expect(input?.warm).toEqual({ regions: ["eu-west"], paths: ["/"] });
     expect(objects.get(`${input?.artifactPrefix}/source/index.mdx`)).toContain(
       "Branch edit",
     );

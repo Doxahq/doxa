@@ -8,6 +8,13 @@ vi.mock("cloudflare:workers", () => ({
       public env: unknown,
     ) {}
   },
+  // The warm Durable Objects (M28) are exported from the same module.
+  DurableObject: class {
+    constructor(
+      public ctx: unknown,
+      public env: unknown,
+    ) {}
+  },
 }));
 
 import worker, {
@@ -522,6 +529,8 @@ describe("route-data cache entrypoint", () => {
       } as never,
       {
         DOXA_PROD_ROUTE_DATA_CACHE_MODE: "all",
+        // F14: only the deployed release fills an entry.
+        DOXA_RENDERER_RELEASE_ID: "a".repeat(64),
         ...envOverrides,
       } as never,
     );
@@ -543,6 +552,28 @@ describe("route-data cache entrypoint", () => {
       resolution: expect.objectContaining({ siteId: "site-1" }),
       pathname: "/guide",
     });
+  });
+
+  test("logs a call for another renderer release", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { entrypoint, prepare } = createRouteDataCache(
+      await createRouteDataProps(),
+      { DOXA_RENDERER_RELEASE_ID: "c".repeat(64) },
+    );
+
+    const response = await entrypoint.fetch(new Request(routeDataUrl));
+
+    expect(response.status).toBe(400);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(JSON.parse(String(warn.mock.calls[0]?.[0]))).toEqual({
+      event: "docs_cache_release_rejected",
+      entrypoint: "DocsRouteDataCache",
+      reason: "release_mismatch",
+      siteId: "site-1",
+      requestedReleaseId: "a".repeat(64),
+      deployedReleaseId: "c".repeat(64),
+    });
+    warn.mockRestore();
   });
 
   test("never stores a failed preparation", async () => {
@@ -622,6 +653,16 @@ describe("route-data cache entrypoint", () => {
       url: `${routeDataUrl}?path=/other`,
     },
     { name: "HEAD request", change: (props) => props, method: "HEAD" },
+    {
+      name: "another renderer release",
+      change: (props) => props,
+      env: { DOXA_RENDERER_RELEASE_ID: "c".repeat(64) },
+    },
+    {
+      name: "missing renderer release",
+      change: (props) => props,
+      env: { DOXA_RENDERER_RELEASE_ID: "" },
+    },
   ])("rejects a $name request before rendering", async (scenario) => {
     const props = scenario.change(await createRouteDataProps());
     const { entrypoint, prepare } = createRouteDataCache(props, scenario.env);

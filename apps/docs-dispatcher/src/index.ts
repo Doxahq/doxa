@@ -13,10 +13,10 @@ import {
   type DocsResolverBinding,
 } from "@doxahq/contracts/docs-resolver";
 import type { DocsHostnameMapSync } from "@doxahq/contracts/docs-hostname-map";
+import type { DocsWarmStatus } from "@doxahq/contracts/docs-warm-job";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import {
-  createHtmlCacheProps,
   createDocsCacheTags,
   isCacheableDocsRequest,
   isContentCacheLifetime,
@@ -28,7 +28,14 @@ import {
   type HostCacheProps,
   type HtmlCacheProps,
 } from "./cache-policy";
+import {
+  handleClientAssetFallback,
+  parseClientAssetFallbackMode,
+  type ClientAssetFallbackEnv,
+} from "./client-asset-fallback";
 import { dispatchDocsRequest } from "./dispatcher";
+import { runEdgeGateway } from "./edge-gateway";
+import type { HttpsPolicyEnv } from "./https-policy";
 import { toHostResolution } from "./host-resolution";
 import {
   lookupHost,
@@ -36,10 +43,7 @@ import {
   setHostDiagnostics,
   type HostLookupFacts,
 } from "./host-lookup";
-import {
-  applyHostnameMapUpdates,
-  parseHostnameMapMode,
-} from "./hostname-map";
+import { parseHostnameMapMode } from "./hostname-map";
 import { requireEnvValue } from "./env-values";
 import {
   observeResponseBody,
@@ -65,10 +69,28 @@ import {
   tryPrerenderedHtml,
   type PrerenderAttemptDiagnostics,
 } from "./prerender-routing";
+import {
+  tryPreviousBuildHtml,
+  type FallbackFacts,
+  type PreviousFallbackContext,
+  type PreviousFallbackEnv,
+} from "./previous-build-fallback";
+import { readPreviousRendererBuild } from "./previous-renderer-build";
+import {
+  createHtmlCacheCall,
+  fetchPublicCacheCall,
+  INTERNAL_RENDER_ID_HEADER,
+} from "./public-cache-calls";
 import { parseSiteAllowlist } from "./rollout-policy";
 import { parseRendererMode } from "./routing-policy";
+import {
+  applyRouteDataBrowserCachePolicy,
+  readRouteDataBrowserCacheRollout,
+  type RouteDataBrowserCacheEnv,
+} from "./route-data-browser-cache";
 import { handleRouteDataEndpoint } from "./route-data-endpoint";
 import {
+  planPathnameRouteDataPrefetch,
   planRouteDataPrefetch,
   readRouteDataPrefetchRollout,
   routeDataPrefetches,
@@ -77,12 +99,35 @@ import {
   type RouteDataPrefetchReport,
 } from "./route-data-prefetch";
 import { ROUTE_DATA_PATH } from "./route-data-request";
+import { createRuntimeTrace, requestDocsRuntime } from "./runtime-trace";
 import {
   withDocsPreviewSearchPolicy,
   withDocsSecurityHeaders,
 } from "./security-headers";
 import { handleSiteAssetRequest } from "./site-assets";
+import {
+  DocsTextCacheEntrypoint,
+  fetchDocsTextFromCache,
+  type DocsTextRenderInput,
+} from "./text-cache-entrypoint";
+import {
+  readTextRouteCacheRollout,
+  selectDocsTextCacheRoute,
+  type TextRouteCacheEnv,
+} from "./text-cache-policy";
 import { handleVersionAssetRequest } from "./version-assets";
+import type { WarmEnv } from "./warm/warm-env";
+import {
+  handleWarmQueue,
+  handleWarmSchedule,
+  readWarmStatus,
+  syncHostnamesWithWarm,
+} from "./warm/warm-handlers";
+import {
+  fetchWithoutProbeMarker,
+  serveVersionedEntrypoint,
+  withoutCacheProbeMarker,
+} from "./versioned-entrypoint-protocol";
 import {
   attachInternalServerTiming,
   createServerTiming,
@@ -101,11 +146,22 @@ import {
 export { DocsPrerenderCache } from "./prerender-cache-entrypoint";
 export { DocsRouteDataCache } from "./route-data-cache-entrypoint";
 export { DocsRendererCodeCache } from "./renderer-code-cache-entrypoint";
+export { DocsClientAssetCache } from "./client-asset-cache-entrypoint";
+export { DocsWarmLock } from "./warm/docs-warm-lock";
+export { DocsWarmAnchor } from "./warm/docs-warm-anchor";
+export { DocsRegionalWarmer } from "./warm/docs-regional-warmer";
+export { DocsWarmControl } from "./warm/docs-warm-control";
 
 interface DispatcherEnv
   extends DeliveryRolloutEnv,
+    HttpsPolicyEnv,
     RendererIsolateEnv,
-    RouteDataPrefetchEnv {
+    RouteDataBrowserCacheEnv,
+    RouteDataPrefetchEnv,
+    TextRouteCacheEnv,
+    ClientAssetFallbackEnv,
+    PreviousFallbackEnv,
+    WarmEnv {
   DEBUG?: string;
   DOCS_RESOLVER: DocsResolverBinding;
   DOCS_RUNTIME: DocsRuntimeRpc;
@@ -139,9 +195,15 @@ export class DocsHostCache extends WorkerEntrypoint<
 
   // The API sends entries that it computed from the database. Without the
   // namespace binding the map is not provisioned, and every read misses too.
+  // A changed live version also starts the regional warm job (M28).
   async syncHostnames(input: DocsHostnameMapSync): Promise<void> {
     if (!this.env.DOCS_HOSTNAME_MAP) return;
-    await applyHostnameMapUpdates(this.env.DOCS_HOSTNAME_MAP, input);
+    await syncHostnamesWithWarm(this.env.DOCS_HOSTNAME_MAP, input, this.env);
+  }
+
+  /** M45b: per-pool warm progress of a site; the API checks ownership. */
+  async getWarmStatus(input: { siteId: string }): Promise<DocsWarmStatus> {
+    return readWarmStatus(this.env, input);
   }
 
   async fetch(): Promise<Response> {
@@ -159,40 +221,64 @@ export class DocsHtmlCache extends WorkerEntrypoint<
   HtmlCacheProps
 > {
   async fetch(request: Request): Promise<Response> {
-    const {
-      hostname,
-      rendererBuildId,
-      resolution,
-      lifetime,
-      deliveryRenderId,
-    } = this.ctx.props;
-    if (
-      !isCacheableDocsRequest(request) ||
-      !isPublicProduction(resolution) ||
-      hostname !== new URL(request.url).hostname ||
-      resolution.hostname !== hostname ||
-      rendererBuildId !== this.env.DOXA_RENDERER_BUILD_ID ||
-      !isContentCacheLifetime(lifetime) ||
-      // The HTML embeds this ID, so the key must contain the same value.
-      readInternalRenderId(request) !== deliveryRenderId
-    ) {
-      return withoutResponseCaching(
-        new Response("Invalid cache request", { status: 400 }),
-      );
-    }
-    const timing = createServerTiming(this.env.DEBUG);
-    const rendered = await renderWithDynamicWorker(
+    const props = this.ctx.props;
+    return serveVersionedEntrypoint({
+      entrypoint: "DocsHtmlCache",
       request,
-      resolution,
+      props,
+      build: {
+        requested: props.rendererBuildId,
+        deployed: this.env.DOXA_RENDERER_BUILD_ID ?? null,
+        previous: readPreviousRendererBuild(this.env)?.buildId ?? null,
+      },
+      isTrusted: () => isTrustedHtmlCacheRequest(request, props),
+      rejection: "Invalid cache request",
+      fill: async () => {
+        const timing = createServerTiming(this.env.DEBUG);
+        const rendered = await renderWithDynamicWorker(
+          request,
+          props.resolution,
+          this.env,
+          this.ctx,
+          timing,
+        );
+        return attachInternalServerTiming(
+          withHtmlCachePolicy(rendered, props.lifetime),
+          timing,
+        );
+      },
+    });
+  }
+}
+
+/** Caches `/llms.txt`, `/llms-full.txt` and `/{path}.md` of public production sites. */
+export class DocsTextCache extends DocsTextCacheEntrypoint<DispatcherEnv> {
+  protected render(input: DocsTextRenderInput): Promise<Response> {
+    return renderWithDynamicWorker(
+      input.request,
+      input.resolution,
       this.env,
       this.ctx,
-      timing,
-    );
-    return attachInternalServerTiming(
-      withHtmlCachePolicy(rendered, lifetime),
-      timing,
+      input.timing,
     );
   }
+}
+
+/** The build check is part of the entrypoint protocol, not of this check. */
+function isTrustedHtmlCacheRequest(
+  request: Request,
+  props: HtmlCacheProps,
+): boolean {
+  const { hostname, resolution, lifetime, deliveryRenderId } = props;
+  return (
+    isCacheableDocsRequest(request) &&
+    isPublicProduction(resolution) &&
+    hostname === new URL(request.url).hostname &&
+    resolution.hostname === hostname &&
+    isContentCacheLifetime(lifetime) &&
+    // The HTML embeds this ID, so the key must contain the same value.
+    readInternalRenderId(request) === deliveryRenderId
+  );
 }
 
 /** Narrow private RPC facade over the approved immutable renderer package. */
@@ -201,6 +287,7 @@ export class PrerenderRendererApi extends WorkerEntrypoint<DispatcherEnv> {
     const result = await this.env.DOCS_RUNTIME.request({
       resolution: input.resolution,
       operation: "getPrerenderPlan",
+      trace: createRuntimeTrace("plan"),
     });
     if (!result.ok)
       throw new Error("The docs runtime could not build a pre-render plan.");
@@ -217,6 +304,7 @@ export class PrerenderRendererApi extends WorkerEntrypoint<DispatcherEnv> {
         env: this.env,
         ctx: this.ctx,
         entrypoint: "prepare",
+        prefetchRouteDataFor: input.pathname,
       },
       async (renderer) =>
         parsePublicDocsRouteDataV1(
@@ -283,27 +371,53 @@ export class ScopedDocsContent extends WorkerEntrypoint<
   request(input: RuntimeRequest): Promise<RuntimeResponse> {
     const { resolution, routeDataPrefetchId } = this.ctx.props;
     // A prefetched answer is only ever the answer to this same call, pinned
-    // to this same resolution.
+    // to this same resolution. The trace is made here, never taken from input.
     return routeDataPrefetches.serve(
       routeDataPrefetchId,
       resolution,
       input,
       () =>
-        this.env.DOCS_RUNTIME.request({
-          resolution,
-          operation: input.operation,
-          ...(input.payload === undefined ? {} : { payload: input.payload }),
-        }),
+        requestDocsRuntime(
+          this.env.DOCS_RUNTIME,
+          { resolution, operation: input.operation, payload: input.payload },
+          "content",
+        ),
     );
   }
 }
 
 export default {
+  fetch: (
+    request: Request,
+    env: DispatcherEnv,
+    ctx: ExecutionContext,
+  ): Promise<Response> =>
+    runEdgeGateway(request, env, (trusted) =>
+      docsGateway.fetch(trusted, env, ctx),
+    ),
+  // The regional warm job (M28): both warm queues and the 5-minute sweep.
+  queue: (batch: MessageBatch, env: DispatcherEnv): Promise<void> =>
+    handleWarmQueue(batch, env),
+  scheduled: (_controller: ScheduledController, env: DispatcherEnv): Promise<void> =>
+    handleWarmSchedule(env),
+} satisfies ExportedHandler<DispatcherEnv>;
+
+/** Routing of one request; `runEdgeGateway` has stripped its internal headers. */
+const docsGateway = {
   async fetch(
     request: Request,
     env: DispatcherEnv,
     ctx: ExecutionContext,
   ): Promise<Response> {
+    // Old hashed client files that the static ASSETS binding no longer has.
+    const clientAsset = await handleClientAssetFallback(request, {
+      mode: parseClientAssetFallbackMode(
+        env.DOXA_PROD_CLIENT_ASSET_FALLBACK_MODE,
+      ),
+      cache: () => getWorkerExports(ctx).DocsClientAssetCache,
+    });
+    if (clientAsset) return clientAsset;
+
     const timing = createServerTiming(env.DEBUG);
     const mode = parseRendererMode(env.DOXA_PROD_DYNAMIC_RENDERER_MODE);
     const allowedSiteIds = parseSiteAllowlist(
@@ -323,6 +437,7 @@ export default {
     let usedHtmlCache = false;
     let prerenderFallback = false;
     let prerenderDiagnostics: PrerenderAttemptDiagnostics | null = null;
+    let fallback: FallbackFacts | null = null;
     let resolvedHost: DocsDomainResolution | null | undefined;
     let hostLookup: HostLookupFacts | undefined;
     const resolveHost = (hostname: string) =>
@@ -376,7 +491,15 @@ export default {
     if (isRouteDataEndpoint) {
       const routeData = await handleRouteDataEndpoint(deliveryContext);
       const result = withDocsPreviewSearchPolicy(
-        withDocsSecurityHeaders(withoutResponseCaching(routeData.response)),
+        applyRouteDataBrowserCachePolicy(
+          withDocsSecurityHeaders(withoutResponseCaching(routeData.response)),
+          {
+            request,
+            hintMatched: routeData.hintMatched,
+            resolution: resolvedHost,
+            rollout: readRouteDataBrowserCacheRollout(env),
+          },
+        ),
         resolvedHost,
       );
       setHostDiagnostics(result.headers, hostCacheStatus, hostLookup);
@@ -394,27 +517,49 @@ export default {
       return result;
     }
 
+    const fallbackContext = (): PreviousFallbackContext => ({
+      env,
+      ctx,
+      exports: getWorkerExports(ctx),
+      now: Date.now(),
+    });
+
     if (prerenderable && rollouts.prerender.mode !== "off") {
       const saved = await tryPrerenderedHtml(deliveryContext);
       prerenderDiagnostics = saved.diagnostics;
-      if (saved.response) {
+      let savedResponse = saved.response;
+      let savedStatus = "PRERENDER";
+      // F16: only after a real saved-output 404, probe the previous build's
+      // saved output before the live fallback.
+      if (!savedResponse && saved.eligible && resolvedHost) {
+        const previous = await tryPreviousBuildHtml(fallbackContext(), {
+          request,
+          resolution: resolvedHost,
+          cf: request.cf,
+        });
+        fallback = previous.facts;
+        savedResponse = previous.response;
+        savedStatus = "PREVIOUS";
+      }
+      if (savedResponse) {
         const result = withDocsPreviewSearchPolicy(
-          withDocsSecurityHeaders(withoutResponseCaching(saved.response)),
+          withDocsSecurityHeaders(withoutResponseCaching(savedResponse)),
           resolvedHost,
         );
         setHostDiagnostics(result.headers, hostCacheStatus, hostLookup);
-        result.headers.set("x-doxa-html-cache", "PRERENDER");
+        result.headers.set("x-doxa-html-cache", savedStatus);
         if (prerenderDiagnostics) {
           applyPrerenderDiagnostics(result, prerenderDiagnostics, timing);
         }
-        exposeRequestTiming(result, saved.response, timing, {
+        exposeRequestTiming(result, savedResponse, timing, {
           usedHtmlCache: false,
-          htmlCacheStatus: "PRERENDER",
+          htmlCacheStatus: savedStatus,
         });
         logRequestTiming(request, result, timing, {
           hostCacheStatus,
-          htmlCacheStatus: "PRERENDER",
+          htmlCacheStatus: savedStatus,
           hostLookup,
+          fallback,
         });
         return result;
       }
@@ -447,6 +592,24 @@ export default {
             dynamicRequest,
             deliveryRenderId,
           );
+          const textRoute = selectDocsTextCacheRoute(
+            pinnedRequest,
+            resolution,
+            readTextRouteCacheRollout(env),
+          );
+          if (textRoute) {
+            return fetchDocsTextFromCache({
+              request: pinnedRequest,
+              resolution,
+              route: textRoute,
+              rendererBuildId: requireEnvValue(
+                env.DOXA_RENDERER_BUILD_ID,
+                "DOXA_RENDERER_BUILD_ID",
+              ),
+              deliveryRenderId: deliveryRenderId ?? null,
+              cache: getWorkerExports(ctx).DocsTextCache,
+            });
+          }
           if (!cacheable || !isPublicProduction(resolution)) {
             return renderWithDynamicWorker(
               pinnedRequest,
@@ -457,28 +620,49 @@ export default {
             );
           }
           usedHtmlCache = true;
-          const props = createHtmlCacheProps(pinnedRequest, resolution, {
+          const lifetime = prerenderFallback ? "liveFallback" : "versioned";
+          // A live fallback for saved output already probed the previous
+          // build's saved output above.
+          if (lifetime === "versioned") {
+            const previous = await tryPreviousBuildHtml(fallbackContext(), {
+              request: dynamicRequest,
+              resolution,
+              cf: request.cf,
+            });
+            fallback = previous.facts;
+            if (previous.response) {
+              htmlCacheStatus = "PREVIOUS";
+              return previous.response;
+            }
+          }
+          const call = createHtmlCacheCall({
+            url: pinnedRequest.url,
+            method: pinnedRequest.method === "HEAD" ? "HEAD" : "GET",
+            resolution,
             rendererBuildId: requireEnvValue(
               env.DOXA_RENDERER_BUILD_ID,
               "DOXA_RENDERER_BUILD_ID",
             ),
             deliveryRenderId: deliveryRenderId ?? null,
-            lifetime: prerenderFallback ? "liveFallback" : "versioned",
-          });
-          // Canonical public HTML must not vary with unkeyed visitor headers.
-          const canonicalRequest = new Request(pinnedRequest.url, {
-            method: pinnedRequest.method,
-            headers: compactHeaders({
-              accept: "text/html",
-              [INTERNAL_RENDER_ID_HEADER]: deliveryRenderId,
-            }),
+            lifetime,
           });
           return timing.measure(
             "doxa_html",
             async () => {
-              const cached = await getWorkerExports(ctx)
-                .DocsHtmlCache({ props })
-                .fetch(canonicalRequest);
+              const cached = await fetchWithoutProbeMarker("DocsHtmlCache", () =>
+                fetchPublicCacheCall(getWorkerExports(ctx), call),
+              );
+              if (!cached) {
+                // Not filled twice: render without the cache.
+                htmlCacheStatus = "BYPASS";
+                return renderWithDynamicWorker(
+                  pinnedRequest,
+                  resolution,
+                  env,
+                  ctx,
+                  timing,
+                );
+              }
               htmlCacheStatus =
                 cached.headers.get("cf-cache-status") ?? "UNAVAILABLE";
               return cached;
@@ -491,7 +675,9 @@ export default {
     // The default cache key omits hostname and version. Never cache this gateway,
     // including shared fallback responses which resolve their version separately.
     const result = withDocsPreviewSearchPolicy(
-      withDocsSecurityHeaders(withoutResponseCaching(response)),
+      withDocsSecurityHeaders(
+        withoutResponseCaching(withoutCacheProbeMarker(response)),
+      ),
       resolvedHost,
     );
     if (!result.headers.has("x-doxa-representation-source")) {
@@ -515,12 +701,11 @@ export default {
       hostCacheStatus,
       htmlCacheStatus,
       hostLookup,
+      fallback,
     });
     return result;
   },
-} satisfies ExportedHandler<DispatcherEnv>;
-
-const INTERNAL_RENDER_ID_HEADER = "x-doxa-internal-render-id";
+};
 
 function withInternalRenderId(request: Request, renderId?: string): Request {
   const headers = new Headers(request.headers);
@@ -531,14 +716,6 @@ function withInternalRenderId(request: Request, renderId?: string): Request {
 
 function readInternalRenderId(request: Request): string | null {
   return request.headers.get(INTERNAL_RENDER_ID_HEADER);
-}
-
-function compactHeaders(value: Record<string, string | undefined>): Headers {
-  const headers = new Headers();
-  for (const [name, item] of Object.entries(value)) {
-    if (item !== undefined) headers.set(name, item);
-  }
-  return headers;
 }
 
 async function renderWithDynamicWorker(
@@ -651,17 +828,44 @@ async function withPrivatePrerenderRenderer<T>(
     env: DispatcherEnv;
     ctx: ExecutionContext;
     entrypoint: Exclude<RendererEntrypointName, "fetch">;
+    /**
+     * Only `prepare` sets it: that call always asks for the route data of
+     * this pathname, so a cold start can prefetch it (M41).
+     */
+    prefetchRouteDataFor?: string;
   },
   call: (renderer: PrivatePrerenderRenderer) => Promise<T>,
 ): Promise<T> {
+  const prefetch =
+    input.prefetchRouteDataFor === undefined
+      ? null
+      : planPathnameRouteDataPrefetch({
+          pathname: input.prefetchRouteDataFor,
+          siteId: input.resolution.siteId,
+          rollout: readRouteDataPrefetchRollout(input.env),
+        });
   const isolate = openRendererIsolate({
     env: input.env,
     resolution: input.resolution,
     content: getWorkerExports(input.ctx).ScopedDocsContent({
-      props: { resolution: input.resolution },
+      props: {
+        resolution: input.resolution,
+        ...(prefetch ? { routeDataPrefetchId: prefetch.id } : {}),
+      },
     }),
     codeCache: getWorkerExports(input.ctx).DocsRendererCodeCache,
     timing: createServerTiming(input.env.DEBUG),
+    ...(prefetch
+      ? {
+          onColdStart: () =>
+            startRouteDataPrefetch(
+              prefetch,
+              input.resolution,
+              input.env,
+              input.ctx,
+            ),
+        }
+      : {}),
   });
   const entrypoint: unknown = isolate.getEntrypoint("DocsPrerenderRenderer");
   if (!isPrivatePrerenderRenderer(entrypoint)) {
@@ -670,13 +874,18 @@ async function withPrivatePrerenderRenderer<T>(
     );
   }
   const startedAt = Date.now();
-  const log = (outcome: RendererCallOutcome) =>
+  const log = (outcome: RendererCallOutcome) => {
+    const routeDataPrefetch = prefetch
+      ? routeDataPrefetches.finish(prefetch.id)
+      : undefined;
     logRendererUse(isolate, {
       entrypoint: input.entrypoint,
       resolution: input.resolution,
       startedAt,
       outcome,
+      ...(routeDataPrefetch ? { routeDataPrefetch } : {}),
     });
+  };
   try {
     const result = await call(entrypoint);
     log({ ok: true });

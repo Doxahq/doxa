@@ -213,6 +213,7 @@ On a page whose frontmatter carries \`apiMethod\` and \`apiPath\`, the renderer 
 - Line numbers with \`showLineNumbers\`
 - Line highlighting with \`{3,5-7}\`
 - KaTeX math with inline \`$$...$$\` and fenced \`math\` blocks
+- Size limits: a code block above 32 KB, or the code after 128 KB of highlighted code on one page, renders as plain text without colors. A line above 2,000 characters renders without colors. A page above 512 KB of MDX renders only a "page too large" notice.
 
 \`\`\`\`md
 \`\`\`ts {2} showLineNumbers
@@ -237,6 +238,7 @@ const widget = new Widget({
 10. Do not put real tokens or secrets in examples or prose.
 11. Do not embed a video to show what an image or a short code block shows, or from a provider other than YouTube, Vimeo, or Loom.
 12. Do not leave image alt text empty. Describe what the image shows.
+13. Do not paste very large generated files or minified code into a code block. Show a short excerpt and link to the full file.
 
 ## Composition Rules
 

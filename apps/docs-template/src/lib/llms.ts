@@ -18,6 +18,7 @@ import { readFrontmatter } from "@doxahq/mdx-runtime";
 import type { ResolvedSiteConfig } from "@doxahq/site-config";
 
 import { noPublishedDocsResponse } from "@/src/lib/no-published-docs";
+import { utf8ByteLength } from "@/src/lib/utf8";
 
 export interface LlmsDocument {
   title: string;
@@ -36,10 +37,56 @@ export interface LlmsSite {
   name: string;
   description: string;
   sections: LlmsSection[];
+  /** True when pages were left out to stay within the size limit. */
+  truncated?: boolean;
+}
+
+export interface LlmsLoadOptions {
+  /** False leaves page content out, for the page index. Defaults to true. */
+  includeContent?: boolean;
+  /**
+   * Stop reading pages once their content reaches this many bytes. One
+   * renderer isolate serves many sites, so the corpus must stay bounded.
+   */
+  contentByteBudget?: number;
+  /**
+   * What happens to a page once the budget is spent: "skip" leaves it out
+   * (the corpus is truncated); "nav-title" lists it with its navigation
+   * title and no description, without reading it. Defaults to "skip".
+   */
+  pastBudget?: "skip" | "nav-title";
+}
+
+export interface LlmsCorpus {
+  sections: LlmsSection[];
+  truncated: boolean;
 }
 
 /** Pages read from the runtime at the same time. */
 const PAGE_READ_CONCURRENCY = 8;
+
+/** Largest `/llms-full.txt`, in bytes. Pages after it are left out. */
+export const LLMS_FULL_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Page bytes `/llms.txt` reads for titles and descriptions. Pages after it
+ * are listed with their navigation title, so the index still lists every
+ * page but one request never reads an unbounded corpus.
+ */
+export const LLMS_INDEX_READ_BYTE_BUDGET = 2 * 1024 * 1024;
+
+export const LLMS_INDEX_LOAD_OPTIONS: LlmsLoadOptions = {
+  includeContent: false,
+  contentByteBudget: LLMS_INDEX_READ_BYTE_BUDGET,
+  pastBudget: "nav-title",
+};
+
+export const LLMS_FULL_LOAD_OPTIONS: LlmsLoadOptions = {
+  contentByteBudget: LLMS_FULL_MAX_BYTES,
+};
+
+const LLMS_FULL_TRUNCATION_NOTE =
+  "> This file stops at its 5 MB limit, so some pages are left out. /llms.txt lists every page.";
 
 /**
  * The visible sections of a site with their pages. A page listed in more
@@ -48,35 +95,96 @@ const PAGE_READ_CONCURRENCY = 8;
  */
 export async function loadLlmsSections(
   source: DoxaDocsRuntimeSource,
-  origin: string
+  origin: string,
+  options: LlmsLoadOptions = {}
 ): Promise<LlmsSection[]> {
+  return (await loadLlmsCorpus(source, origin, options)).sections;
+}
+
+/** Like `loadLlmsSections`, and says whether the byte budget cut pages. */
+export async function loadLlmsCorpus(
+  source: DoxaDocsRuntimeSource,
+  origin: string,
+  {
+    includeContent = true,
+    contentByteBudget,
+    pastBudget = "skip",
+  }: LlmsLoadOptions = {}
+): Promise<LlmsCorpus> {
   const sections = (await source.getSections()).filter(
     (section) => !section.hidden
   );
-  const hrefsBySection = await listSectionHrefs(source, sections);
-  const allHrefs = hrefsBySection.flat();
+  const routesBySection = await listSectionRoutes(source, sections);
+  const allRoutes = routesBySection.flat();
+  const budget = createByteBudget(contentByteBudget);
   const documents = await mapWithConcurrency(
-    allHrefs,
+    allRoutes,
     PAGE_READ_CONCURRENCY,
-    (href) => loadLlmsDocument(source, href, origin)
+    async (route) => {
+      if (budget.exhausted()) {
+        if (pastBudget === "nav-title") return navTitleDocument(route, origin);
+        budget.markSkipped();
+        return null;
+      }
+      const document = await loadLlmsDocument(source, route.href, origin);
+      if (!document) return null;
+      budget.spend(utf8ByteLength(document.content));
+      return includeContent ? document : { ...document, content: "" };
+    }
   );
   const documentByHref = new Map(
-    allHrefs.map((href, index) => [href, documents[index]])
+    allRoutes.map((route, index) => [route.href, documents[index]])
   );
 
-  return sections.map((section, index) => ({
-    label: section.label,
-    documents: hrefsBySection[index].flatMap((href) => {
-      const document = documentByHref.get(href);
-      return document ? [document] : [];
-    }),
-  }));
+  return {
+    truncated: budget.skipped(),
+    sections: sections.map((section, index) => ({
+      label: section.label,
+      documents: routesBySection[index].flatMap((route) => {
+        const document = documentByHref.get(route.href);
+        return document ? [document] : [];
+      }),
+    })),
+  };
 }
 
-async function listSectionHrefs(
+interface LlmsRoute {
+  href: string;
+  title: string;
+}
+
+function navTitleDocument(route: LlmsRoute, origin: string): LlmsDocument {
+  return {
+    title: route.title || route.href,
+    url: `${origin}${route.href}`,
+    description: "",
+    content: "",
+  };
+}
+
+/**
+ * A spend limit. Reaching it exactly is not a truncation: only a page
+ * actually left out marks the corpus as truncated.
+ */
+function createByteBudget(limit: number | undefined) {
+  let spent = 0;
+  let skipped = false;
+  return {
+    exhausted: () => limit !== undefined && spent >= limit,
+    spend(bytes: number) {
+      spent += bytes;
+    },
+    markSkipped() {
+      skipped = true;
+    },
+    skipped: () => skipped,
+  };
+}
+
+async function listSectionRoutes(
   source: DoxaDocsRuntimeSource,
   sections: readonly RuntimeSection[]
-): Promise<string[][]> {
+): Promise<LlmsRoute[][]> {
   const routes = await Promise.all(
     sections.map((section) => source.getRoutes(section.slug))
   );
@@ -86,7 +194,7 @@ async function listSectionHrefs(
       const href = normalizeRuntimeHref(route.href);
       if (seen.has(href)) return [];
       seen.add(href);
-      return [href];
+      return [{ href, title: route.title }];
     })
   );
 }
@@ -167,25 +275,52 @@ export function formatLlmsIndex(site: LlmsSite): string {
   return lines.join("\n");
 }
 
-/** `/llms-full.txt`: every page's content, each with its source URL. */
-export function formatLlmsFull(site: LlmsSite): string {
+/**
+ * `/llms-full.txt`: every page's content, each with its source URL. Stops
+ * before `maxBytes`, with a note that pages are left out.
+ */
+export function formatLlmsFull(
+  site: LlmsSite,
+  maxBytes: number = LLMS_FULL_MAX_BYTES
+): string {
   const lines = siteHeader(site);
   const { grouped, sections } = listedSections(site);
+  const noteBytes = utf8ByteLength(LLMS_FULL_TRUNCATION_NOTE) + 2;
+  let bytes = utf8ByteLength(lines.join("\n")) + 1;
+  // The loader's flag only adds the note: the pages it did read are printed.
+  let truncated = false;
+
+  const append = (block: string[]): boolean => {
+    const blockBytes = utf8ByteLength(block.join("\n")) + 1;
+    if (bytes + blockBytes + noteBytes > maxBytes) return false;
+    lines.push(...block);
+    bytes += blockBytes;
+    return true;
+  };
 
   for (const section of sections) {
-    if (grouped) lines.push(`# ${section.label}`, "");
+    if (truncated) break;
+    if (grouped && !append([`# ${section.label}`, ""])) {
+      truncated = true;
+      break;
+    }
     for (const document of section.documents) {
-      lines.push(
+      const block = [
         "---",
         "",
         `## ${document.title}`,
         `Source: ${document.url}`,
         "",
         document.content,
-        ""
-      );
+        "",
+      ];
+      if (!append(block)) {
+        truncated = true;
+        break;
+      }
     }
   }
+  if (truncated || site.truncated) lines.push(LLMS_FULL_TRUNCATION_NOTE, "");
   return lines.join("\n");
 }
 
@@ -201,17 +336,18 @@ const LLMS_HEADERS = {
 export async function createLlmsResponse(
   request: Request,
   context: DocsRequestContext | undefined,
-  format: (site: LlmsSite) => string
+  format: (site: LlmsSite) => string,
+  options: LlmsLoadOptions = {}
 ): Promise<Response> {
   try {
     const source =
       context?.runtimeSource ?? (await createConfiguredRuntimeSource());
     const origin = new URL(request.url).origin;
-    const [config, sections] = await Promise.all([
+    const [config, corpus] = await Promise.all([
       context?.siteConfig ?? loadSiteConfig(source),
-      loadLlmsSections(source, origin),
+      loadLlmsCorpus(source, origin, options),
     ]);
-    return new Response(format(toLlmsSite(config, sections)), {
+    return new Response(format(toLlmsSite(config, corpus)), {
       headers: LLMS_HEADERS,
     });
   } catch (error) {
@@ -220,9 +356,11 @@ export async function createLlmsResponse(
   }
 }
 
-function toLlmsSite(
-  config: ResolvedSiteConfig,
-  sections: LlmsSection[]
-): LlmsSite {
-  return { name: config.name, description: config.description, sections };
+function toLlmsSite(config: ResolvedSiteConfig, corpus: LlmsCorpus): LlmsSite {
+  return {
+    name: config.name,
+    description: config.description,
+    sections: corpus.sections,
+    ...(corpus.truncated ? { truncated: true } : {}),
+  };
 }

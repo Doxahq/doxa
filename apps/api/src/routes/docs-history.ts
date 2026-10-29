@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createApiRouter, type ApiApp } from "../http/app";
 import { withProjectAccess } from "../http/project-access";
 import { isResponse, parseJson } from "../http/body";
+import { readClientWarmPool } from "../http/client-region";
 import { error, json, notFound } from "../http/response";
 import { DocsBranchHistory } from "../services/docs-branches/history";
 import {
@@ -63,11 +64,13 @@ export function createDocsHistoryRoutes(): ApiApp {
           return error("Invalid restore request.", 400);
         }
 
+        const warmRegion = readClientWarmPool(context.req.raw);
         const result = await DocsBranchHistory.fromEnv(context.env).restore({
           userId: access.ownerUserId,
           projectId: access.projectId,
           publicationId,
           expectedMainVersionId: parsed.data.expectedMainVersionId,
+          ...(warmRegion ? { warmRegion } : {}),
         });
 
         return json(result);

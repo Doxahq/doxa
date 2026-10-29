@@ -6,9 +6,14 @@ import {
   type DeliveryRequestContext,
 } from "./delivery-identity";
 import {
+  createSavedOutputCall,
+  fetchPublicCacheCall,
+} from "./public-cache-calls";
+import {
   mergeFreshInternalServerTiming,
   type ServerTimingRecorder,
 } from "./server-timing";
+import { fetchWithoutProbeMarker } from "./versioned-entrypoint-protocol";
 import { getWorkerExports } from "./worker-exports";
 
 export interface PrerenderAttemptDiagnostics {
@@ -55,32 +60,30 @@ export async function tryPrerenderedHtml(
   } catch {
     return NOT_ELIGIBLE;
   }
+  const call = createSavedOutputCall({
+    origin: url.origin,
+    pathname,
+    resolution,
+    identity: active.identity,
+    featureMode,
+    representation: "html",
+    requestUrl: input.request.url,
+  });
   let cacheStatus = "BYPASS";
-  const response = await input.timing.measure(
+  const fetched = await input.timing.measure(
     "doxa_prerender_cache",
     async () => {
-      const result = await getWorkerExports(input.ctx)
-        .DocsPrerenderCache({
-          props: {
-            expected: active.identity,
-            featureMode,
-            hostname: url.hostname,
-            pathname,
-            representation: "html",
-            resolution,
-          },
-        })
-        .fetch(
-          new Request(input.request.url, {
-            method: "GET",
-            headers: { accept: "text/html" },
-          }),
-        );
-      cacheStatus = result.headers.get("cf-cache-status") ?? "BYPASS";
+      const result = await fetchWithoutProbeMarker("DocsPrerenderCache", () =>
+        fetchPublicCacheCall(getWorkerExports(input.ctx), call),
+      );
+      cacheStatus = result?.headers.get("cf-cache-status") ?? "BYPASS";
       return result;
     },
     () => cacheStatus,
   );
+  // Not filled twice: continue as after a saved-output miss.
+  const response =
+    fetched ?? new Response("Saved HTML unavailable", { status: 404 });
   mergeFreshInternalServerTiming(input.timing, response, cacheStatus);
   const diagnostics = readPrerenderDiagnostics(response, cacheStatus);
   if (response.status === 404) {

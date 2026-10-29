@@ -8,6 +8,7 @@ import type { DocsPublishStage } from "@doxahq/contracts/docs-branches";
 import { createApiRouter, type ApiApp, type ApiContext } from "../http/app";
 import { withUser } from "../http/auth";
 import { readValidBody } from "../http/body";
+import { readClientWarmPool } from "../http/client-region";
 import { toSafeErrorLog } from "../http/error-log";
 import { acceptsEventStream, keepRunning, streamProgress } from "../http/progress-stream";
 import { projectIdParam } from "../http/path";
@@ -26,8 +27,15 @@ import {
 
 export type ApprovalServiceFactory = (context: ApiContext) => ApprovalService;
 
+/**
+ * An approved request runs inside the approve request, so the approver's
+ * cache pool orders the warm job of an approved publish or restore (M45).
+ */
 const defaultApprovals: ApprovalServiceFactory = (context) =>
-  createAgentActionRuntime(context.env, { defer: (work) => keepRunning(context, work) }).approvals;
+  createAgentActionRuntime(context.env, {
+    defer: (work) => keepRunning(context, work),
+    warmRegion: readClientWarmPool(context.req.raw),
+  }).approvals;
 
 /** `GET /approval-requests/:id`: the lookup behind the web link `/approve/<id>`. */
 export function createApprovalRequestLinkRoutes(

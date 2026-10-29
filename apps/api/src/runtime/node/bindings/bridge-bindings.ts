@@ -10,6 +10,7 @@ import {
 } from "@doxahq/api-bridge";
 import type { DocsCacheInvalidationRpc, GenerateJobMessage } from "@doxahq/contracts";
 import type { PrerenderQueueRpc } from "@doxahq/contracts/docs-prerender-tasks";
+import type { DocsWarmStatus } from "@doxahq/contracts/docs-warm-job";
 import type { EmailQueueMessage } from "@doxahq/email";
 import type { AgentContainerBinding } from "@doxahq/generation";
 
@@ -105,6 +106,9 @@ export function createBridgedBindings(bridge: BridgeClient): BridgedBindings {
     DOCS_CACHE_INVALIDATOR: {
       invalidate: (input) => bridge.call<void, "DOCS_CACHE_INVALIDATOR">("DOCS_CACHE_INVALIDATOR", "invalidate", [input]),
       syncHostnames: (input) => bridge.call<void, "DOCS_CACHE_INVALIDATOR">("DOCS_CACHE_INVALIDATOR", "syncHostnames", [input]),
+      // An edge whose dispatcher predates M45b throws here; the caller reads that as "unknown".
+      getWarmStatus: (input) =>
+        bridge.call<DocsWarmStatus, "DOCS_CACHE_INVALIDATOR">("DOCS_CACHE_INVALIDATOR", "getWarmStatus", [input]),
     },
     PRERENDER_QUEUE: {
       start: (input) => bridge.call("PRERENDER_QUEUE", "start", [input]),

@@ -9,7 +9,12 @@ import type {
   DoxaDocsRuntimeSource,
   RuntimeRouteData,
 } from "@/src/runtime/runtime-source";
-import { isNoPublishedDocsError } from "@/src/runtime/runtime-source-error";
+import {
+  isNoPublishedDocsError,
+  RENDERER_ERROR_HEADER,
+  RENDERER_PROPS_MISSING_CODE,
+  RendererPropsMissingError,
+} from "@/src/runtime/runtime-source-error";
 import {
   createConfiguredRuntimeSource,
   createDispatcherRuntimeSource,
@@ -116,9 +121,11 @@ export class DocsPrerenderRenderer extends WorkerEntrypoint<RendererWorkerEnv> {
   }
 
   private getRuntimeSource(): DoxaDocsRuntimeSource {
-    const source = createDispatcherRuntimeSource(this.env, {
-      requestScope: readRendererRequestScope(this.ctx.props),
-    });
+    const source = withPropsMissingLog("DocsPrerenderRenderer", () =>
+      createDispatcherRuntimeSource(this.env, {
+        requestScope: readRendererRequestScope(this.ctx.props),
+      })
+    );
     if (!source) {
       throw new Error("The private renderer requires a pinned content source.");
     }
@@ -140,10 +147,47 @@ const server = {
       if (isNoPublishedDocsError(error)) {
         return noPublishedDocsResponse(request);
       }
+      if (error instanceof RendererPropsMissingError) {
+        logRendererPropsMissing("fetch");
+        return rendererPropsMissingResponse();
+      }
       throw error;
     }
   },
 };
+
+/**
+ * Logs a renderer call without its request scope. The dispatcher logs the
+ * same code with the site; this log shows the isolate saw it.
+ */
+function logRendererPropsMissing(entrypoint: string): void {
+  console.error(
+    JSON.stringify({ event: RENDERER_PROPS_MISSING_CODE, entrypoint })
+  );
+}
+
+function withPropsMissingLog<T>(entrypoint: string, create: () => T): T {
+  try {
+    return create();
+  } catch (error) {
+    if (error instanceof RendererPropsMissingError) {
+      logRendererPropsMissing(entrypoint);
+    }
+    throw error;
+  }
+}
+
+/** A 5xx with no content. The code tells the dispatcher why. */
+function rendererPropsMissingResponse(): Response {
+  return new Response("The renderer request has no scope.", {
+    status: 500,
+    headers: {
+      "cache-control": "private, no-store",
+      "content-type": "text/plain; charset=utf-8",
+      [RENDERER_ERROR_HEADER]: RENDERER_PROPS_MISSING_CODE,
+    },
+  });
+}
 
 async function handleDocsRequest(
   request: Request,

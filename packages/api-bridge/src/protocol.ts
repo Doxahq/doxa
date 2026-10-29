@@ -30,6 +30,11 @@ export const BRIDGE_KEY_HEADER = "x-doxa-bridge-key";
 /** The client IP and country as Cloudflare saw them, set by the edge. */
 export const CLIENT_IP_HEADER = "x-doxa-client-ip";
 export const CLIENT_COUNTRY_HEADER = "x-doxa-client-country";
+/**
+ * The client's upper-tier cache pool (`WarmPool`), set by the edge from
+ * `request.cf`. The API reads it to warm the publisher's region first (M45).
+ */
+export const CLIENT_REGION_HEADER = "x-doxa-client-region";
 /** The URL that a bridged fetch goes to inside the fetch binding. */
 export const FORWARD_URL_HEADER = "x-doxa-forward-url";
 /** The URL that the client called at the edge, for example https://api.doxa.so/me. */
@@ -41,6 +46,7 @@ export const EDGE_ONLY_HEADERS = [
   BRIDGE_KEY_HEADER,
   CLIENT_IP_HEADER,
   CLIENT_COUNTRY_HEADER,
+  CLIENT_REGION_HEADER,
   FORWARD_URL_HEADER,
   PUBLIC_URL_HEADER,
 ] as const;
@@ -99,7 +105,7 @@ export type ApiEntrypointMethod<E extends ApiEntrypointName> = (typeof API_ENTRY
 export const BRIDGE_CALL_BINDINGS = {
   GENERATION_QUEUE: ["send", "sendBatch"],
   EMAIL_QUEUE: ["send", "sendBatch"],
-  DOCS_CACHE_INVALIDATOR: ["invalidate", "syncHostnames"],
+  DOCS_CACHE_INVALIDATOR: ["invalidate", "syncHostnames", "getWarmStatus"],
   PRERENDER_QUEUE: ["start", "inspect", "collectRender"],
 } as const;
 

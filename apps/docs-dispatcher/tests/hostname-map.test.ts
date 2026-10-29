@@ -31,12 +31,16 @@ const resolution: DocsDomainResolution = {
 
 function memoryStore(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
-  const puts: Array<{ key: string; ttl: number }> = [];
+  const puts: Array<{ key: string; ttl: number; siteId: string }> = [];
   const store: HostnameMapStore = {
     get: async (key) => values.get(key) ?? null,
     put: async (key, value, options) => {
       values.set(key, value);
-      puts.push({ key, ttl: options.expirationTtl });
+      puts.push({
+        key,
+        ttl: options.expirationTtl,
+        siteId: options.metadata.siteId,
+      });
     },
     delete: async (key) => {
       values.delete(key);
@@ -153,7 +157,37 @@ describe("hostname map writes", () => {
       resolution,
     });
     expect(puts).toEqual([
-      { key: `host:${HOST}`, ttl: DOCS_HOSTNAME_MAP_EXPIRATION_SECONDS },
+      {
+        key: `host:${HOST}`,
+        ttl: DOCS_HOSTNAME_MAP_EXPIRATION_SECONDS,
+        siteId: "site-1",
+      },
+    ]);
+  });
+
+  test("labels every entry with its site ID for the warm sweep (F26)", async () => {
+    const { store, puts } = memoryStore();
+    await applyHostnameMapUpdates(store, {
+      updates: [
+        { hostname: HOST, resolvedAt: NOW, resolution },
+        {
+          hostname: "demo.doxa.page",
+          resolvedAt: NOW,
+          resolution: {
+            ...resolution,
+            siteId: "site-2",
+            hostname: "demo.doxa.page",
+          },
+        },
+      ],
+    });
+    expect(
+      puts.map(({ key, siteId }) => ({ key, siteId })).sort((a, b) =>
+        a.key.localeCompare(b.key),
+      ),
+    ).toEqual([
+      { key: "host:demo.doxa.page", siteId: "site-2" },
+      { key: `host:${HOST}`, siteId: "site-1" },
     ]);
   });
 

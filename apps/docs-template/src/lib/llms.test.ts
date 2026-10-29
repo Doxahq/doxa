@@ -12,6 +12,11 @@ import {
   createLlmsResponse,
   formatLlmsFull,
   formatLlmsIndex,
+  LLMS_FULL_LOAD_OPTIONS,
+  LLMS_FULL_MAX_BYTES,
+  LLMS_INDEX_LOAD_OPTIONS,
+  LLMS_INDEX_READ_BYTE_BUDGET,
+  loadLlmsCorpus,
   loadLlmsSections,
   type LlmsSite,
 } from "./llms";
@@ -214,6 +219,164 @@ describe("formatLlmsFull", () => {
         "",
       ].join("\n")
     );
+  });
+});
+
+describe("llms size limits (M46: one isolate, many sites)", () => {
+  const manyPages = (count: number, bytesPerPage: number): LlmsSite => ({
+    name: "Acme",
+    description: "Acme widgets.",
+    sections: [
+      {
+        label: "Documentation",
+        documents: Array.from({ length: count }, (_, index) => ({
+          title: `Page ${index}`,
+          url: `${ORIGIN}/page-${index}`,
+          description: "",
+          content: "x".repeat(bytesPerPage),
+        })),
+      },
+    ],
+  });
+
+  test("keeps a site under the limit unchanged", () => {
+    const site = manyPages(3, 10);
+    expect(formatLlmsFull(site, 10_000)).toBe(formatLlmsFull(site));
+    expect(formatLlmsFull(site)).not.toContain("5 MB limit");
+  });
+
+  test("stops before the limit and says that pages are left out", () => {
+    const text = formatLlmsFull(manyPages(50, 1_000), 10_000);
+    expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(10_000);
+    expect(text).toContain("## Page 0");
+    expect(text).not.toContain("## Page 49");
+    expect(text.trimEnd().endsWith("/llms.txt lists every page.")).toBe(true);
+  });
+
+  test("defaults to a 5 MB limit", () => {
+    const text = formatLlmsFull(manyPages(12, 512 * 1024));
+    expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(
+      LLMS_FULL_MAX_BYTES
+    );
+    expect(text).toContain("5 MB limit");
+  });
+
+  test("stops reading pages once the content budget is spent", async () => {
+    const pages = Object.fromEntries(
+      Array.from({ length: 40 }, (_, index) => [
+        `/page-${index}`,
+        rawPage(`/page-${index}`, `Page ${index}`, "y".repeat(1_000)),
+      ])
+    );
+    const source = createSource({
+      sections: [{ slug: "docs", label: "Docs", default: true }],
+      routes: {
+        docs: Object.keys(pages).map((href) => ({ title: href, href })),
+      },
+      pages,
+    });
+
+    const corpus = await loadLlmsCorpus(source, ORIGIN, {
+      contentByteBudget: 5_000,
+    });
+
+    expect(corpus.truncated).toBe(true);
+    // At most one batch of concurrent reads past the budget.
+    expect(vi.mocked(source.getRawPage).mock.calls.length).toBeLessThan(
+      5 + 8 + 1
+    );
+  });
+
+  test("prints the pages the loader read when it hit its budget (FC-H1)", () => {
+    const text = formatLlmsFull({ ...manyPages(3, 10), truncated: true });
+    expect(text).toContain("## Page 0");
+    expect(text).toContain("## Page 2");
+    expect(text.trimEnd().endsWith("/llms.txt lists every page.")).toBe(true);
+  });
+
+  const budgetSource = (count: number, bytesPerPage: number) => {
+    const pages = Object.fromEntries(
+      Array.from({ length: count }, (_, index) => [
+        `/page-${index}`,
+        rawPage(`/page-${index}`, `Page ${index}`, "y".repeat(bytesPerPage)),
+      ])
+    );
+    return createSource({
+      sections: [{ slug: "docs", label: "Docs", default: true }],
+      routes: {
+        docs: Object.keys(pages).map((href) => ({
+          title: `Nav ${href}`,
+          href,
+        })),
+      },
+      pages,
+    });
+  };
+
+  test("does not flag a corpus that spends exactly its budget (FC-H1)", async () => {
+    const corpus = await loadLlmsCorpus(budgetSource(4, 1_000), ORIGIN, {
+      contentByteBudget: 4_000,
+    });
+    expect(corpus.truncated).toBe(false);
+    expect(corpus.sections[0].documents).toHaveLength(4);
+  });
+
+  test("flags a corpus only when a page is left out (FC-H1)", async () => {
+    const corpus = await loadLlmsCorpus(budgetSource(20, 1_000), ORIGIN, {
+      contentByteBudget: 4_000,
+    });
+    expect(corpus.truncated).toBe(true);
+    expect(corpus.sections[0].documents.length).toBeGreaterThan(0);
+    expect(corpus.sections[0].documents.length).toBeLessThan(20);
+  });
+
+  test("bounds the bytes the index reads and still lists every page (FS-M2)", async () => {
+    const count = 40;
+    const bytesPerPage = LLMS_INDEX_READ_BYTE_BUDGET / 10;
+    const source = budgetSource(count, bytesPerPage);
+    const corpus = await loadLlmsCorpus(
+      source,
+      ORIGIN,
+      LLMS_INDEX_LOAD_OPTIONS
+    );
+    const documents = corpus.sections[0].documents;
+    expect(documents).toHaveLength(count);
+    expect(corpus.truncated).toBe(false);
+    expect(vi.mocked(source.getRawPage).mock.calls.length).toBeLessThan(
+      10 + 8 + 1
+    );
+    expect(documents[count - 1]).toEqual({
+      title: `Nav /page-${count - 1}`,
+      url: `${ORIGIN}/page-${count - 1}`,
+      description: "",
+      content: "",
+    });
+  });
+
+  test("leaves page content out of the index load", async () => {
+    const corpus = await loadLlmsCorpus(
+      createSource(ACME),
+      ORIGIN,
+      LLMS_INDEX_LOAD_OPTIONS
+    );
+    expect(
+      corpus.sections.flatMap((section) =>
+        section.documents.map((document) => document.content)
+      )
+    ).toEqual(["", "", ""]);
+    expect(corpus.truncated).toBe(false);
+  });
+
+  test("serves llms-full.txt with the 5 MB budget", async () => {
+    const response = await createLlmsResponse(
+      new Request(`${ORIGIN}/llms-full.txt`),
+      { runtimeSource: createSource(ACME) },
+      formatLlmsFull,
+      LLMS_FULL_LOAD_OPTIONS
+    );
+    const text = await response.text();
+    expect(text).toContain("Run `npm install @acme/widget`.");
+    expect(text).not.toContain("5 MB limit");
   });
 });
 

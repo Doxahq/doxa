@@ -27,6 +27,16 @@ test("fills operator values such as an email list", () => {
   assert.deepEqual(JSON.parse(filled), { ADMIN_EMAILS: "a@example.com,b+ops@example.com" });
 });
 
+test("fills the pre-render canary site list of the docs dispatcher", () => {
+  const config = readFileSync(path.join(ROOT, "apps/docs-dispatcher/wrangler.json"), "utf8");
+  assert.ok(placeholdersIn(config).includes("OPS_DOCS_PRERENDER_SITE_IDS"));
+  const siteIds = "cd881737-04c0-4500-a1b5-180a696a4cc8,ef0a576b-88eb-498b-99f0-7099671342d8";
+  const filled = fillPlaceholders('{"DOXA_PROD_PRERENDER_SITE_IDS":"${OPS_DOCS_PRERENDER_SITE_IDS}"}', {
+    OPS_DOCS_PRERENDER_SITE_IDS: siteIds,
+  });
+  assert.equal(JSON.parse(filled).DOXA_PROD_PRERENDER_SITE_IDS, siteIds);
+});
+
 test("checks the shape of a values file", () => {
   assert.deepEqual(parseValues('{"CF_KV_ID":"abc"}'), { CF_KV_ID: "abc" });
   assert.throws(() => parseValues("[]"), /one JSON object/);

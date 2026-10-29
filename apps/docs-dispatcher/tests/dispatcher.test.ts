@@ -115,4 +115,102 @@ describe("dispatchDocsRequest", () => {
     expect(await response.text()).toBe("shared");
     expect(response.headers.get("x-doxa-renderer-mode")).toBe("shared");
   });
+
+  describe("renderer_props_missing (F35)", () => {
+    const propsMissing = () =>
+      new Response("The renderer request has no scope.", {
+        status: 500,
+        headers: { "x-doxa-renderer-error": "renderer_props_missing" },
+      });
+
+    test("logs the code before the shared-renderer fallback", async () => {
+      const error = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+      const renderShared = vi.fn(async () => new Response("shared"));
+      const response = await dispatchDocsRequest({
+        request: new Request("https://docs.example.com/guide"),
+        mode: "all",
+        allowedSiteIds: new Set(),
+        resolveHost: vi.fn(async () => resolution),
+        renderShared,
+        renderDynamic: vi.fn(async () => propsMissing()),
+      });
+
+      expect(await response.text()).toBe("shared");
+      expect(JSON.parse(String(error.mock.calls[0]?.[0]))).toEqual({
+        event: "renderer_props_missing",
+        entrypoint: "fetch",
+        siteId: "site-1",
+        publishedVersionId: "version-1",
+        fallback: true,
+      });
+      expect(error.mock.invocationCallOrder[0]).toBeLessThan(
+        renderShared.mock.invocationCallOrder[0] ?? 0,
+      );
+      error.mockRestore();
+    });
+
+    test("logs a thrown props-missing error", async () => {
+      const error = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+      await dispatchDocsRequest({
+        request: new Request("https://docs.example.com/guide"),
+        mode: "all",
+        allowedSiteIds: new Set(),
+        resolveHost: vi.fn(async () => resolution),
+        renderShared: vi.fn(async () => new Response("shared")),
+        renderDynamic: vi.fn(async () => {
+          throw new Error(
+            "[renderer_props_missing] The renderer call has no request scope in its entrypoint props.",
+          );
+        }),
+      });
+      expect(String(error.mock.calls[0]?.[0])).toContain(
+        '"event":"renderer_props_missing"',
+      );
+      error.mockRestore();
+    });
+
+    test("returns the 5xx without content for an unsafe request", async () => {
+      const error = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+      const response = await dispatchDocsRequest({
+        request: new Request("https://docs.example.com/guide", {
+          method: "POST",
+        }),
+        mode: "all",
+        allowedSiteIds: new Set(),
+        resolveHost: vi.fn(async () => resolution),
+        renderShared: vi.fn(async () => new Response("shared")),
+        renderDynamic: vi.fn(async () => propsMissing()),
+      });
+      expect(response.status).toBe(500);
+      expect(JSON.parse(String(error.mock.calls[0]?.[0]))).toMatchObject({
+        event: "renderer_props_missing",
+        fallback: false,
+      });
+      error.mockRestore();
+    });
+
+    test("does not log other server errors as missing props", async () => {
+      const error = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+      await dispatchDocsRequest({
+        request: new Request("https://docs.example.com/guide"),
+        mode: "all",
+        allowedSiteIds: new Set(),
+        resolveHost: vi.fn(async () => resolution),
+        renderShared: vi.fn(async () => new Response("shared")),
+        renderDynamic: vi.fn(
+          async () => new Response("failed", { status: 503 }),
+        ),
+      });
+      expect(error).not.toHaveBeenCalled();
+      error.mockRestore();
+    });
+  });
 });

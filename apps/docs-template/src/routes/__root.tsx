@@ -22,6 +22,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 
+import { isChatAvailable } from "@/src/lib/chat-availability";
 import {
   DOCS_SCROLL_RESTORATION_ID,
   useDocsScrollReset,
@@ -191,7 +192,7 @@ function NoChat() {
 function ChatInterface({ isDemoMode }: { isDemoMode: boolean }) {
   const { isOpen } = useChatContext();
   const { features } = useSiteConfig();
-  if (!features.ai.chat) return null;
+  if (!isChatAvailable(features)) return null;
 
   return (
     <>

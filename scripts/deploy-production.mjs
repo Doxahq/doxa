@@ -8,6 +8,10 @@
 //   node scripts/deploy-production.mjs --step <step>    one step
 //   node scripts/deploy-production.mjs --list           print the steps
 //
+// The docs-rendering step needs --previous-fallback on|off (or the
+// DOXA_RENDERER_PREVIOUS_FALLBACK variable): see apps/docs-template/scripts/
+// deploy-renderer.mjs. It is checked before the first step runs.
+//
 // A local run refuses a dirty working tree, because it deploys the files on
 // disk. Pass --allow-dirty to deploy them anyway.
 
@@ -62,6 +66,15 @@ if (options.list) {
 }
 
 const selected = selectSteps(options);
+const previousFallback = options.previousFallback ?? process.env.DOXA_RENDERER_PREVIOUS_FALLBACK?.trim();
+if (selected.some((step) => step.name === "docs-rendering") && previousFallback !== "on" && previousFallback !== "off") {
+  fail(
+    previousFallback
+      ? `Invalid --previous-fallback value "${previousFallback}". Expected on or off.`
+      : "The docs-rendering step needs --previous-fallback on|off. Pass off for a security fix or a bad renderer build; pass on otherwise.",
+  );
+}
+if (previousFallback) process.env.DOXA_RENDERER_PREVIOUS_FALLBACK = previousFallback;
 if (!options.allowDirty && !process.env.CI) assertCleanTree();
 // The ops repo fills the Cloudflare IDs before a deploy (scripts/apply-production-ids.mjs).
 try {
@@ -135,7 +148,7 @@ function withNodeOption(current, option) {
 }
 
 function parseArgs(args) {
-  const parsed = { allowDirty: false, list: false, step: undefined, from: undefined };
+  const parsed = { allowDirty: false, list: false, step: undefined, from: undefined, previousFallback: undefined };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--") continue;
@@ -145,8 +158,12 @@ function parseArgs(args) {
       const value = args[++i];
       if (!value) fail(`${arg} needs a step name.`);
       parsed[arg.slice(2)] = value;
+    } else if (arg === "--previous-fallback") {
+      const value = args[++i];
+      if (!value) fail("--previous-fallback needs on or off.");
+      parsed.previousFallback = value;
     } else {
-      fail(`Unknown argument "${arg}". Use --step, --from, --list or --allow-dirty.`);
+      fail(`Unknown argument "${arg}". Use --step, --from, --list, --allow-dirty or --previous-fallback.`);
     }
   }
   if (parsed.step && parsed.from) fail("Use --step or --from, not both.");

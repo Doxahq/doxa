@@ -14,6 +14,7 @@ describe("docs preload policy", () => {
       defaultPreload: "intent",
       defaultPreloadDelay: 75,
       defaultPreloadIntentProximity: 48,
+      defaultPreloadStaleTime: 600_000,
     });
   });
 

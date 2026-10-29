@@ -5,6 +5,11 @@ import process from "node:process";
 import { validateDocsPlacementConfigs } from "./lib/docs-placement-config.mjs";
 import { validateDocsRuntimeConfig } from "./lib/docs-runtime-config.mjs";
 import { validateMcpProductionConfig } from "./lib/mcp-production-config.mjs";
+import {
+  validatePrerenderRollout,
+  validatePreviousFallbackVars,
+} from "./lib/dispatcher-fallback-config.mjs";
+import { validateWarmJobConfig } from "./lib/dispatcher-warm-config.mjs";
 
 const DEFAULT_API_CONFIG = "apps/api/wrangler.json";
 const DEFAULT_SHARED_RENDERER_CONFIG =
@@ -99,11 +104,9 @@ function validateDocsRenderingConfigs() {
       `${DEFAULT_DISPATCHER_CONFIG} must default dynamic rendering to all.`,
     );
   }
-  if (dispatcher.vars?.DOXA_PROD_PRERENDER_MODE !== "off") {
-    throw new Error(
-      `${DEFAULT_DISPATCHER_CONFIG} must default pre-rendering to off.`,
-    );
-  }
+  validatePrerenderRollout(dispatcher.vars, DEFAULT_DISPATCHER_CONFIG);
+  validatePreviousFallbackVars(dispatcher.vars, DEFAULT_DISPATCHER_CONFIG);
+  validateWarmJobConfig(dispatcher, DEFAULT_DISPATCHER_CONFIG);
   if (dispatcher.vars?.DOXA_PROD_ROUTE_DATA_CACHE_MODE !== "all") {
     throw new Error(
       `${DEFAULT_DISPATCHER_CONFIG} must default the route-data cache to all.`,
@@ -139,6 +142,50 @@ function validateDocsRenderingConfigs() {
   ) {
     throw new Error(
       `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_KV_HOSTNAME_MODE to off, shadow or on.`,
+    );
+  }
+  // HTTP → HTTPS and HSTS. A typo fails closed to off at runtime.
+  if (!["off", "on"].includes(dispatcher.vars?.DOXA_PROD_HTTPS_REDIRECT_MODE)) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_HTTPS_REDIRECT_MODE to off or on.`,
+    );
+  }
+  // Route data in the browser cache rolls out per site.
+  if (
+    !["off", "allowlist", "all"].includes(
+      dispatcher.vars?.DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE to off, allowlist or all.`,
+    );
+  }
+  if (
+    typeof dispatcher.vars?.DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_SITE_IDS !==
+    "string"
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must define DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_SITE_IDS.`,
+    );
+  }
+  // Text routes and old client assets roll out from off. A typo fails closed
+  // to off at runtime, so only the documented modes are accepted here.
+  if (
+    !["off", "allowlist", "all"].includes(
+      dispatcher.vars?.DOXA_PROD_TEXT_ROUTE_CACHE_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_TEXT_ROUTE_CACHE_MODE to off, allowlist or all.`,
+    );
+  }
+  if (
+    !["off", "on"].includes(
+      dispatcher.vars?.DOXA_PROD_CLIENT_ASSET_FALLBACK_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_CLIENT_ASSET_FALLBACK_MODE to off or on.`,
     );
   }
   if (
@@ -204,6 +251,15 @@ function validateDocsRenderingConfigs() {
     throw new Error(
       `${DEFAULT_DISPATCHER_CONFIG} must cache DocsRendererCodeCache internally.`,
     );
+  }
+  // Without them, the text routes and old client assets reach R2 or the
+  // renderer on every request.
+  for (const entrypoint of ["DocsTextCache", "DocsClientAssetCache"]) {
+    if (dispatcher.exports?.[entrypoint]?.cache?.enabled !== true) {
+      throw new Error(
+        `${DEFAULT_DISPATCHER_CONFIG} must cache ${entrypoint} internally.`,
+      );
+    }
   }
   if (dispatcher.assets?.html_handling !== "none") {
     throw new Error(

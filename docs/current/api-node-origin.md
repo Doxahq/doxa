@@ -39,7 +39,7 @@ edge → origin   header x-doxa-origin-key (ORIGIN_SHARED_SECRET)
   anything else                     a public request, proxied as it is
 
 origin → edge   header x-doxa-bridge-key (BRIDGE_SHARED_SECRET)
-  POST /__bridge/call/:binding/:method   GENERATION_QUEUE, EMAIL_QUEUE, DOCS_CACHE_INVALIDATOR (invalidate, syncHostnames), PRERENDER_QUEUE
+  POST /__bridge/call/:binding/:method   GENERATION_QUEUE, EMAIL_QUEUE, DOCS_CACHE_INVALIDATOR (invalidate, syncHostnames, getWarmStatus), PRERENDER_QUEUE
   ANY  /__bridge/fetch/AGENT_CONTAINER   a fetch to the agent container
 ```
 
@@ -48,6 +48,19 @@ origin → edge   header x-doxa-bridge-key (BRIDGE_SHARED_SECRET)
 - The edge sends the public URL (`x-doxa-public-url`) and the client IP and
   country. The origin rebuilds the request with them, so the API sees
   `https://api.doxa.so/...` and `cf-connecting-ip`, as in the Worker.
+- The edge also sends the client's upper-tier cache pool
+  (`x-doxa-client-region`, one of the eight `WarmPool` names), from
+  `warmPoolForLocation(request.cf)` in `@doxahq/contracts/docs-warm-region`.
+  It sends no header when the pool is unknown. The origin keeps the header
+  under the same name only when it names a known pool. The API reads it with
+  `readClientWarmPool` (`apps/api/src/http/client-region.ts`): a publish,
+  restore or approve request puts the pool first in the regional warm job
+  (M45), and `GET /projects/:projectId/warm-status` returns it as
+  `clientRegion`. When the API runs as a Worker, the helper reads
+  `request.cf` and never the header.
+- `DOCS_CACHE_INVALIDATOR.getWarmStatus` reads a site's warm progress from
+  the docs dispatcher. A dispatcher deployed before that method makes the
+  bridge call throw; the API then answers `status: null`.
 - RPC values go through `devalue`: `Date`, `Map`, `Set`, `undefined`, `BigInt`
   and typed arrays survive. A thrown error keeps its name and message, as with
   Workers RPC.
@@ -76,7 +89,8 @@ origin → edge   header x-doxa-bridge-key (BRIDGE_SHARED_SECRET)
   custom headers on a redirect, which would send the key to the `Location`.
 - The origin drops client-sent `cf-connecting-ip`, `cf-ipcountry`,
   `x-real-ip` and `x-forwarded-for`, and sets the IP and country that the
-  edge saw.
+  edge saw. `x-doxa-client-region` is an edge-only header: the edge drops a
+  client-sent copy before it sets its own.
 - The API `env` on Node holds only API variables: the server settings (shared
   keys, R2 and Valkey settings) and the `AWS_*` and `ECS_*` task variables
   stay out of it.

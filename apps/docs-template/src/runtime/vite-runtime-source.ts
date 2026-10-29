@@ -95,6 +95,7 @@ const siteUrl = resolveSiteUrl(import.meta.env);
 
 export function createViteRuntimeSource(): DoxaDocsRuntimeSource {
   const source: DoxaDocsRuntimeSource = {
+    cacheScope: "local",
     async getResolvedSiteConfig() {
       return siteConfig;
     },

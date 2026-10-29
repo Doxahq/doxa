@@ -202,6 +202,83 @@ describe("hostname map sync for cache invalidation tasks", () => {
   });
 });
 
+describe("hostname map warm hint", () => {
+  test("sends the publish's warm hint with every batch of the sync", async () => {
+    const hostnames = Array.from({ length: 130 }, (_, index) => `h${index}.acme.com`);
+    const { source } = fakeSource({ sites: { "site-1": hostnames } });
+    const { rpc, calls } = fakeRpc();
+    const warm = { regions: ["asia-ne" as const], paths: ["/guide"] };
+    await new DocsHostnameMapSync(source, rpc, () => NOW, warm).syncTask({
+      siteId: "site-1",
+      hostname: null,
+    });
+    expect(calls.map((call) => call.warm)).toEqual([warm, warm]);
+  });
+
+  test("retries a batch once without the warm field when the call with it fails", async () => {
+    // An older dispatcher's strict schema rejects the unknown `warm` field.
+    const { source } = fakeSource({ sites: { "site-1": ["demo.doxa.page"] } });
+    const calls: SyncInput[] = [];
+    const rpc = {
+      syncHostnames: async (sync: SyncInput) => {
+        calls.push(sync);
+        if (sync.warm) throw new Error("Unrecognized key: warm");
+      },
+    };
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const warm = { regions: ["asia-ne" as const], paths: ["/guide"] };
+    await new DocsHostnameMapSync(source, rpc, () => NOW, warm).syncTask({
+      siteId: "site-1",
+      hostname: null,
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.warm).toEqual(warm);
+    expect(calls[1]).not.toHaveProperty("warm");
+    expect(calls[1]?.updates).toEqual(calls[0]?.updates);
+  });
+
+  test("fails the sync when the retry without warm fails too", async () => {
+    const { source } = fakeSource({ sites: { "site-1": ["demo.doxa.page"] } });
+    const syncHostnames = vi.fn(async () => {
+      throw new Error("dispatcher down");
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const warm = { regions: ["asia-ne" as const], paths: ["/guide"] };
+    await expect(
+      new DocsHostnameMapSync(source, { syncHostnames }, () => NOW, warm).syncTask({
+        siteId: "site-1",
+        hostname: null,
+      }),
+    ).rejects.toThrow("dispatcher down");
+    expect(syncHostnames).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not retry a failed call that carried no warm field", async () => {
+    const { source } = fakeSource({ sites: { "site-1": ["demo.doxa.page"] } });
+    const syncHostnames = vi.fn(async () => {
+      throw new Error("dispatcher down");
+    });
+    await expect(
+      new DocsHostnameMapSync(source, { syncHostnames }, () => NOW).syncTask({
+        siteId: "site-1",
+        hostname: null,
+      }),
+    ).rejects.toThrow("dispatcher down");
+    expect(syncHostnames).toHaveBeenCalledTimes(1);
+  });
+
+  test("sends no warm field without a hint", async () => {
+    const { source } = fakeSource({ sites: { "site-1": ["demo.doxa.page"] } });
+    const { rpc, calls } = fakeRpc();
+    await new DocsHostnameMapSync(source, rpc, () => NOW).syncTask({
+      siteId: "site-1",
+      hostname: null,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).not.toHaveProperty("warm");
+  });
+});
+
 describe("hostname map refresh slots", () => {
   const hostnames = Array.from({ length: 500 }, (_, index) => `site-${index}.doxa.page`);
 

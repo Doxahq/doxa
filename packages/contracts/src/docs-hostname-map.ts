@@ -4,6 +4,7 @@ import {
   docsDomainResolutionSchema,
   type DocsDomainResolution,
 } from "./index";
+import { docsWarmHintSchema } from "./docs-warm-job";
 
 /**
  * The hostname map is a Workers KV copy of public production hostname
@@ -70,6 +71,13 @@ export const docsHostnameMapSyncSchema = z
     updates: z
       .array(docsHostnameMapUpdateSchema)
       .max(DOCS_HOSTNAME_MAP_SYNC_LIMIT),
+    /**
+     * Warm-job ordering for the sites whose live version this sync changes
+     * (M45): the publisher's pool and the changed pages. Only the API's
+     * immediate sync after a publish sends it; retries and the reconcile
+     * never do. It never selects what is stored or warmed.
+     */
+    warm: docsWarmHintSchema.optional(),
   })
   .strict();
 

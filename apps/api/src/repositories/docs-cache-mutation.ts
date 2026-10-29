@@ -1,4 +1,5 @@
 import type { DocsCacheInvalidation } from "@doxahq/contracts";
+import type { DocsWarmHint } from "@doxahq/contracts/docs-warm-job";
 import type { DoxaDb } from "@doxahq/db";
 import { DocsCacheInvalidationWorker } from "../services/docs-cache-invalidation";
 import type { DocsResolutionEnv } from "../services/docs-host-resolution";
@@ -48,6 +49,14 @@ export async function withDocsCacheInvalidation<T>(
   return result;
 }
 
+export interface DocsPublicationEffectsOptions {
+  /**
+   * Warm-job ordering for this publish (M45): the publisher's pool and the
+   * changed pages. Sent only with the immediate post-commit delivery.
+   */
+  warm?: DocsWarmHint;
+}
+
 /** The production pointer, cache purge, and pre-render intent commit together. */
 export async function withDocsPublicationEffects<T>(
   db: DoxaDb,
@@ -68,6 +77,7 @@ export async function withDocsPublicationEffects<T>(
     enqueueInvalidation: EnqueueInvalidation,
     enqueuePrerender: EnqueuePrerender,
   ) => Promise<T>,
+  options: DocsPublicationEffectsOptions = {},
 ): Promise<T> {
   const invalidationIds: string[] = [];
   const prerenderTaskIds: string[] = [];
@@ -89,7 +99,7 @@ export async function withDocsPublicationEffects<T>(
       },
     ),
   );
-  await deliverCacheInvalidations(db, env, invalidationIds);
+  await deliverCacheInvalidations(db, env, invalidationIds, options.warm);
   if (env.PRERENDER_QUEUE && prerenderTaskIds.length > 0) {
     try {
       await dispatchDocsPrerenderTasks(
@@ -111,6 +121,7 @@ async function deliverCacheInvalidations(
   db: DoxaDb,
   env: DocsCacheDeliveryEnv,
   ids: string[],
+  warm?: DocsWarmHint,
 ): Promise<void> {
   if (!env.DOCS_CACHE_INVALIDATOR || ids.length === 0) return;
   try {
@@ -118,7 +129,7 @@ async function deliverCacheInvalidations(
       new DocsCacheInvalidationsRepository(db),
       env.DOCS_CACHE_INVALIDATOR,
       new DocsHostnameSourceRepository(env),
-    ).process(ids);
+    ).process(ids, warm ? { warm } : {});
   } catch {
     // The committed outbox survives failed delivery. Publication must not be
     // reported as failed after its database transaction commits.

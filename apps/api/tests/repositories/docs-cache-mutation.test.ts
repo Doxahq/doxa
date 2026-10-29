@@ -8,7 +8,10 @@ vi.mock("../../src/services/docs-cache-invalidation", () => ({
   },
 }));
 
-import { withDocsCacheInvalidation } from "../../src/repositories/docs-cache-mutation";
+import {
+  withDocsCacheInvalidation,
+  withDocsPublicationEffects,
+} from "../../src/repositories/docs-cache-mutation";
 
 function fixture() {
   const events: string[] = [];
@@ -123,6 +126,27 @@ describe("docs cache mutation transaction", () => {
     ).resolves.toBe("published-version");
     expect(state.persisted).toHaveLength(1);
     warning.mockRestore();
+  });
+
+  test("delivers a publication with its warm hint, and other mutations without one", async () => {
+    const state = fixture();
+    const warm = { regions: ["eu-east" as const], paths: ["/intro"] };
+    await withDocsPublicationEffects(
+      state.db as never,
+      { DOCS_CACHE_INVALIDATOR: state.binding },
+      async (_tx, enqueue) => {
+        await enqueue({ siteId: "site-1" });
+      },
+      { warm },
+    );
+    await withDocsPublicationEffects(
+      state.db as never,
+      { DOCS_CACHE_INVALIDATOR: state.binding },
+      async (_tx, enqueue) => {
+        await enqueue({ siteId: "site-1" });
+      },
+    );
+    expect(delivery.process.mock.calls.map((call) => call[1])).toEqual([{ warm }, {}]);
   });
 
   test("retains the task locally without a configured binding", async () => {

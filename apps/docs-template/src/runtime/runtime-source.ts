@@ -166,6 +166,12 @@ export interface RuntimeRoutePageData {
 }
 
 export interface DoxaDocsRuntimeSource {
+  /**
+   * Names whose content this source reads, for caches that one renderer
+   * isolate shares between sites, for example `site:{siteId}:{versionId}`.
+   * A source without it is never cached across requests.
+   */
+  readonly cacheScope?: string;
   getAsset?(hash: string): Promise<Response>;
   /**
    * An image of the served version, at `/assets/{name}`. `version` is the

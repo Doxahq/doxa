@@ -8,6 +8,13 @@ vi.mock("cloudflare:workers", () => ({
       public env: unknown,
     ) {}
   },
+  // The warm Durable Objects (M28) are exported from the same module.
+  DurableObject: class {
+    constructor(
+      public ctx: unknown,
+      public env: unknown,
+    ) {}
+  },
 }));
 
 import worker, { DocsHostCache, DocsRouteDataCache } from "../src/index";
@@ -209,6 +216,96 @@ describe("HTML delivery capability", () => {
     expect(
       htmlFetch.mock.calls[0]?.[0].headers.has("x-doxa-internal-render-id"),
     ).toBe(false);
+  });
+});
+
+describe("route data in the browser cache", () => {
+  const BROWSER_CACHE = "private, max-age=3600";
+
+  test.each<[string, Record<string, string>, string]>([
+    ["mode all", { DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE: "all" }, BROWSER_CACHE],
+    [
+      "an allowlist with the site",
+      {
+        DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE: "allowlist",
+        DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_SITE_IDS: "site-2, site-1",
+      },
+      BROWSER_CACHE,
+    ],
+    [
+      "an allowlist without the site",
+      {
+        DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE: "allowlist",
+        DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_SITE_IDS: "site-2",
+      },
+      "private, no-store",
+    ],
+    ["the default mode", {}, "private, no-store"],
+  ])("a matched hint with %s gets %s", async (_case, env, expected) => {
+    const fixture = await createFixture(env);
+    const response = await fetchRouteData(fixture, {
+      render: fixture.renderId,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe(expected);
+    // Shared caches never store the answer.
+    expect(response.headers.get("cdn-cache-control")).toBe("private, no-store");
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
+      "private, no-store",
+    );
+  });
+
+  test("an answer without a render hint stays out of the browser cache", async () => {
+    const fixture = await createFixture({
+      DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE: "all",
+    });
+    const response = await fetchRouteData(fixture);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  test("a stale hint gets an uncached 409", async () => {
+    const fixture = await createFixture({
+      DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE: "all",
+    });
+    const response = await fetchRouteData(fixture, {
+      render: "b".repeat(64),
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  test.each([["cookie"], ["authorization"]])(
+    "a request with %s stays out of the browser cache",
+    async (header) => {
+      const fixture = await createFixture({
+        DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE: "all",
+      });
+      const response = await fetchRouteData(
+        fixture,
+        { render: fixture.renderId },
+        { [header]: "secret" },
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+    },
+  );
+
+  test("a failed preparation stays out of the browser cache", async () => {
+    const fixture = await createFixture({
+      DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE: "all",
+    });
+    fixture.prepare.mockRejectedValue(new Error("MDX parse failure"));
+    const response = await fetchRouteData(fixture, {
+      render: fixture.renderId,
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
   });
 });
 

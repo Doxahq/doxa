@@ -4,6 +4,7 @@ import type {
   BindingRuntimeResolution,
   DocsContentBinding,
 } from "./binding-runtime-source";
+import { RendererPropsMissingError } from "./runtime-source-error";
 import {
   createDispatcherRuntimeSource,
   getPlatformRuntimeSourceConfig,
@@ -199,6 +200,21 @@ describe("renderer request scope", () => {
   test("a shared isolate without a request scope fails closed", () => {
     expect(() =>
       createDispatcherRuntimeSource({ DOXA_DOCS_RUNTIME_SOURCE: "binding" })
-    ).toThrow("Binding runtime mode requires a content binding.");
+    ).toThrow(RendererPropsMissingError);
+  });
+
+  test("a shared isolate with invalid props fails closed, even with a hostname", () => {
+    expect(() =>
+      createDispatcherRuntimeSource(
+        { DOXA_DOCS_RUNTIME_SOURCE: "binding" },
+        {
+          requestScope: readRendererRequestScope({
+            content: {},
+            resolution: {},
+          }),
+          hostname: "docs.example.com",
+        }
+      )
+    ).toThrow("[renderer_props_missing]");
   });
 });

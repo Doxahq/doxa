@@ -18,6 +18,7 @@ import {
   normalizeHref,
   sourcePathForHref,
 } from "@doxahq/docs-engine";
+import type { WarmPool } from "@doxahq/contracts/docs-warm-state";
 import type { Env } from "../../env";
 import type { StoredBranchChange } from "../../repositories/docs-branch-records";
 import { toReviewPageDto } from "../../repositories/generation-review-records";
@@ -340,6 +341,7 @@ export class GenerationReviewService {
   async publish(
     scope: ActorScope,
     input: PublishGenerationReviewInput,
+    options: { warmRegion?: WarmPool | null } = {},
   ): Promise<PublishGenerationReviewResult> {
     const { branch } = await this.requireOpenReview(scope);
     const published = await this.deps.publisher.publishBranch({
@@ -347,6 +349,7 @@ export class GenerationReviewService {
       projectId: scope.projectId,
       branch: branch.id,
       request: { ...input, eraseBranch: true },
+      ...(options.warmRegion ? { warmRegion: options.warmRegion } : {}),
     });
 
     return {

@@ -2,6 +2,7 @@ import type { DocsHostResolution } from "@doxahq/contracts";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
+  isRendererPropsMissing,
   logRendererUse,
   openRendererIsolate,
   readSharedIsolateRollout,
@@ -133,6 +134,15 @@ describe("openRendererIsolate", () => {
     expect(isolate.cold).toBe(true);
   });
 
+  test("limits each call to 5 s of CPU and 50 subrequests (M46)", async () => {
+    const { env, loads, settle } = createEnv({
+      DOXA_PROD_SHARED_ISOLATE_MODE: "all",
+    });
+    open(env).isolate.getEntrypoint();
+    await settle();
+    expect(loads[0]?.code.limits).toEqual({ cpuMs: 5_000, subRequests: 50 });
+  });
+
   test("build scope keeps site content out of the env and sends it as props", async () => {
     const { env, get, getEntrypoint, loads, settle } = createEnv({
       DOXA_PROD_SHARED_ISOLATE_MODE: "all",
@@ -227,6 +237,57 @@ describe("logRendererUse", () => {
       totalMs: expect.any(Number),
       ok: false,
       error: "Error: boom",
+    });
+  });
+});
+
+describe("renderer_props_missing (F35)", () => {
+  test("reads the code from a response header or an RPC error message", () => {
+    expect(
+      isRendererPropsMissing(
+        new Response(null, {
+          status: 500,
+          headers: { "x-doxa-renderer-error": "renderer_props_missing" },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isRendererPropsMissing(new Error("[renderer_props_missing] no scope")),
+    ).toBe(true);
+    expect(isRendererPropsMissing("Error: [renderer_props_missing] x")).toBe(
+      true,
+    );
+    expect(isRendererPropsMissing(new Response(null, { status: 500 }))).toBe(
+      false,
+    );
+    expect(isRendererPropsMissing(new Error("boom"))).toBe(false);
+  });
+
+  test("a prepare call that failed for missing props gets its own log", async () => {
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { env } = createEnv({ DOXA_PROD_SHARED_ISOLATE_MODE: "all" });
+    const { isolate } = open(env);
+
+    logRendererUse(isolate, {
+      entrypoint: "prepare",
+      resolution: resolutionFor(SITE_A),
+      startedAt: Date.now(),
+      outcome: {
+        ok: false,
+        error:
+          "Error: [renderer_props_missing] The renderer call has no request scope.",
+      },
+    });
+
+    expect(JSON.parse(String(error.mock.calls[0]?.[0]))).toEqual({
+      event: "renderer_props_missing",
+      entrypoint: "prepare",
+      siteId: SITE_A,
+      publishedVersionId: "version-site-a",
+      fallback: false,
     });
   });
 });

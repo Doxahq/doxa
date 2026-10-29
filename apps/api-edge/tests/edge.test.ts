@@ -3,6 +3,7 @@ import {
   API_ENTRYPOINT_METHODS,
   BRIDGE_KEY_HEADER,
   CLIENT_IP_HEADER,
+  CLIENT_REGION_HEADER,
   FORWARD_URL_HEADER,
   ORIGIN_KEY_HEADER,
   PUBLIC_URL_HEADER,
@@ -153,6 +154,12 @@ describe("origin", () => {
   });
 });
 
+/** A request as Cloudflare delivers it, with `request.cf`. */
+function withCf(request: Request, cf: Record<string, unknown>): Request {
+  Object.defineProperty(request, "cf", { value: cf });
+  return request;
+}
+
 describe("public proxy", () => {
   it("sends the request through the ORIGIN binding with the key, the public URL and the client IP", async () => {
     const origin = stubOrigin();
@@ -186,6 +193,33 @@ describe("public proxy", () => {
 
     expect(requests[0]!.headers.get(ORIGIN_KEY_HEADER)).toBe(ORIGIN_KEY);
     expect(requests[0]!.headers.get(PUBLIC_URL_HEADER)).toBe("https://api.doxa.so/me");
+  });
+
+  it("sets the client's cache pool from request.cf, and drops one that the client sends", async () => {
+    const { binding, requests } = stubOrigin();
+    const request = withCf(
+      new Request("https://api.doxa.so/me", { headers: { [CLIENT_REGION_HEADER]: "oceania" } }),
+      { colo: "CDG", country: "FR" },
+    );
+
+    await worker.fetch(request, createEnv({ ORIGIN: binding }));
+
+    expect(requests[0]!.headers.get(CLIENT_REGION_HEADER)).toBe("eu-west");
+  });
+
+  it("sends no cache pool when the location is unknown, even when the client sends one", async () => {
+    const { binding, requests } = stubOrigin();
+
+    await worker.fetch(
+      withCf(new Request("https://api.doxa.so/me", { headers: { [CLIENT_REGION_HEADER]: "us-east" } }), { country: "IN", continent: "AS" }),
+      createEnv({ ORIGIN: binding }),
+    );
+    await worker.fetch(
+      new Request("https://api.doxa.so/me", { headers: { [CLIENT_REGION_HEADER]: "us-east" } }),
+      createEnv({ ORIGIN: binding }),
+    );
+
+    expect(requests.map((sent) => sent.headers.get(CLIENT_REGION_HEADER))).toEqual([null, null]);
   });
 
   it("keeps the origin host for a path that starts with two slashes, so the key never leaves", async () => {
@@ -261,6 +295,21 @@ describe("bridge", () => {
     await expect(bridgeCall(env, "GENERATION_QUEUE", "metrics", [])).rejects.toThrow(/HTTP 404/);
     await expect(bridgeCall(env, "DOCS_BUCKET", "get", [])).rejects.toThrow(/HTTP 404/);
     expect(env.GENERATION_QUEUE.send).not.toHaveBeenCalled();
+  });
+
+  it("forwards the docs dispatcher's warm status call", async () => {
+    const status = { siteId: "site-1", releaseId: null, startedAt: null, finishedAt: null, pools: [] };
+    const getWarmStatus = vi.fn(async () => status);
+    const env = createEnv({ DOCS_CACHE_INVALIDATOR: { getWarmStatus } as unknown as Service });
+
+    await expect(bridgeCall(env, "DOCS_CACHE_INVALIDATOR", "getWarmStatus", [{ siteId: "site-1" }])).resolves.toEqual(status);
+    expect(getWarmStatus).toHaveBeenCalledWith({ siteId: "site-1" });
+  });
+
+  it("fails the warm status call when the dispatcher has no such method", async () => {
+    const env = createEnv({ DOCS_CACHE_INVALIDATOR: { invalidate: vi.fn() } as unknown as Service });
+
+    await expect(bridgeCall(env, "DOCS_CACHE_INVALIDATOR", "getWarmStatus", [{ siteId: "site-1" }])).rejects.toThrow(/not a method/);
   });
 
   it("forwards a fetch to the agent container at the forward URL", async () => {

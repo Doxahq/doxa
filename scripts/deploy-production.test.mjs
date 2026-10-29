@@ -45,3 +45,23 @@ test("rejects an unknown step", () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Unknown step "nope"/);
 });
+
+function runWithoutFallbackEnv(args) {
+  const env = { ...process.env };
+  delete env.DOXA_RENDERER_PREVIOUS_FALLBACK;
+  return spawnSync(process.execPath, [script, ...args], { encoding: "utf8", env });
+}
+
+test("refuses the docs-rendering step without an explicit previous-fallback choice", () => {
+  for (const args of [["--step", "docs-rendering"], ["--from", "docs-runtime"], []]) {
+    const result = runWithoutFallbackEnv(args);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /needs --previous-fallback on\|off/);
+  }
+});
+
+test("rejects an invalid previous-fallback value", () => {
+  const result = runWithoutFallbackEnv(["--step", "docs-rendering", "--previous-fallback", "yes"]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Expected on or off/);
+});

@@ -1,4 +1,5 @@
 import type { DocsCacheInvalidationRpc } from "@doxahq/contracts";
+import type { DocsWarmHint } from "@doxahq/contracts/docs-warm-job";
 import { createDb } from "@doxahq/db";
 import type { Env } from "../env";
 import {
@@ -30,6 +31,14 @@ const HOSTNAME_SYNC_TIMEOUT_MS = 3_000;
 const INITIAL_RETRY_DELAY_SECONDS = 30;
 const MAX_RETRY_DELAY_SECONDS = 3_600;
 
+export interface DocsCacheInvalidationProcessOptions {
+  /**
+   * Warm-job ordering for the map sync (M45). Only the immediate delivery
+   * after a publish passes it; scheduler retries never do.
+   */
+  warm?: DocsWarmHint;
+}
+
 export interface DocsCacheInvalidationProcessResult {
   completed: number;
   failed: number;
@@ -56,9 +65,12 @@ export class DocsCacheInvalidationWorker {
     );
   }
 
-  async process(ids?: string[]): Promise<DocsCacheInvalidationProcessResult> {
+  async process(
+    ids?: string[],
+    options: DocsCacheInvalidationProcessOptions = {},
+  ): Promise<DocsCacheInvalidationProcessResult> {
     const tasks = await this.store.claim(ids);
-    const hostnameSync = this.createHostnameSync();
+    const hostnameSync = this.createHostnameSync(options.warm);
     let completed = 0;
     let failed = 0;
     for (const task of tasks) {
@@ -86,9 +98,9 @@ export class DocsCacheInvalidationWorker {
   }
 
   /** One sync per claimed batch, so each hostname is read and written once. */
-  private createHostnameSync(): DocsHostnameMapSync | null {
+  private createHostnameSync(warm?: DocsWarmHint): DocsHostnameMapSync | null {
     return this.binding && this.hostnames
-      ? new DocsHostnameMapSync(this.hostnames, this.binding)
+      ? new DocsHostnameMapSync(this.hostnames, this.binding, Date.now, warm)
       : null;
   }
 

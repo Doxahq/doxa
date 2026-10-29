@@ -153,6 +153,19 @@ describe("docs cache invalidation worker", () => {
       expect(state.completed).toEqual(["task-1"]);
     });
 
+    test("passes the publish's warm hint to the map sync, and none on a retry run", async () => {
+      const warm = { regions: ["us-west" as const] };
+      const seen: Array<DocsHostnameMapSync["warm"]> = [];
+      const { rpc } = binding({
+        syncHostnames: async (input) => {
+          seen.push(input.warm);
+        },
+      });
+      await new DocsCacheInvalidationWorker(fixture().store, rpc, hostnames).process(["task-1"], { warm });
+      await new DocsCacheInvalidationWorker(fixture().store, rpc, hostnames).process();
+      expect(seen).toEqual([warm, undefined]);
+    });
+
     test("syncs a hostname once for several tasks of one batch", async () => {
       const state = fixture([task, { ...task, id: "task-2" }]);
       const { rpc, calls } = binding();

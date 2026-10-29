@@ -1,7 +1,7 @@
 # Production Docs Content Injection
 
 **Status:** Describes the implemented state
-**Last reviewed:** 2026-09-30
+**Last reviewed:** 2026-10-29
 
 This document explains how published docs artifacts reach the docs-template
 renderer. It also explains the renderer code package and every identity value
@@ -87,7 +87,8 @@ The live path runs when a visitor opens a page and no saved HTML exists.
 - A page loader calls one of these methods. The method sends an RPC call to
   `ScopedDocsContent`.
 - `ScopedDocsContent` lives in `apps/docs-dispatcher/src/index.ts`. It adds
-  the pinned resolution to every call and forwards the call to docs-runtime.
+  the pinned resolution and a new trace to every call and forwards the call to
+  docs-runtime. See [Route-Data Trace](#route-data-trace).
 - docs-template can never change the resolution. The dispatcher sets it once
   when it creates the Dynamic Worker.
 - On a cold start, the dispatcher may already have asked docs-runtime for the
@@ -148,7 +149,60 @@ site. Both scopes run the same renderer code.
   and fails closed.
 - Module state in docs-template is shared by every site of a `build` isolate.
   Keep per-request data in the request context. Key a module cache by a content
-  hash, never by path, hostname or site alone.
+  hash, or by the source's `cacheScope` (`site:{siteId}:{publishedVersionId}`)
+  plus a content key, never by path, hostname or a content version alone. Bound
+  every module cache.
+
+### Limits of the shared isolate (M46 hardening)
+
+One site must not use up the memory or the CPU of the isolate that every site
+shares. These limits apply in both scopes:
+
+| Limit | Value | Where | Above the limit |
+| --- | --- | --- | --- |
+| CPU per renderer call | 5 s (`RENDERER_LIMITS.cpuMs`) | `apps/docs-dispatcher/src/renderer-isolate.ts` | The call fails; a safe request falls back to the shared renderer |
+| Search engine cache | 20 MB of serialized index, least recently used out first; key `{cacheScope}:{contentVersion}` | `apps/docs-template/src/lib/search/server-search.ts` | One site keeps at most 5 MB. A serialized index above 8 MB is not parsed: the search answers no results and logs `docs_search_index_too_large`; for an immutable `site:{id}:{version}` scope the marker is kept, so later searches skip the read |
+| Page MDX at render | 512 KB (UTF-8) | `MAX_RENDERED_PAGE_BYTES` in `apps/docs-template/src/runtime/docs-route-data.ts` | A short "page too large" notice, and the log `docs_page_too_large` (`href`, `bytes`, `limitBytes`, `scope`) |
+| Shiki line length | 2,000 characters (`tokenizeMaxLineLength`) | `packages/mdx-runtime/src/parser.ts` | The line is drawn without colors |
+| Code block size | 32 KB (characters) | `MAX_HIGHLIGHTED_CODE_BLOCK_CHARS`, same file | The block is drawn as plain text |
+| Code highlighted per page | 128 KB (characters) | `MAX_HIGHLIGHTED_CHARS_PER_PAGE`, same file | Later blocks are drawn as plain text |
+| `/llms-full.txt` | 5 MB | `LLMS_FULL_MAX_BYTES` in `apps/docs-template/src/lib/llms.ts` | Page reads stop at the budget; the file keeps every page it read and ends with a note that `/llms.txt` lists every page. A corpus that fits the budget exactly is not marked truncated |
+| `/llms.txt` | 2 MB of page bodies read for descriptions | `LLMS_INDEX_LOAD_OPTIONS`, same file | Later pages are listed with their navigation title and no description |
+| Card icon components | 512 names, least recently used out first | `apps/docs-template/src/components/docs-icon.tsx` | An evicted name gets a new component with the same output |
+
+The worst renderer call in the 29 Oct production tail took 2.4 s of wall time
+after its code load (a `COLD` render), and the slowest `prepare` RPC used
+148 ms of CPU in the dispatcher. Wall time bounds CPU time, so 5 s leaves
+headroom. Shiki's JavaScript engine needs about 0.25 s of CPU for a 32 KB
+block, so the page budget keeps highlighting near 1 s.
+
+A call in the `build` scope without valid props fails closed with the code
+`renderer_props_missing` (F35):
+
+- `fetch` answers `500` with no content, `cache-control: private, no-store`
+  and `x-doxa-renderer-error: renderer_props_missing`.
+- `DocsPrerenderRenderer` throws an error whose message starts with
+  `[renderer_props_missing]`.
+- The renderer logs `{"event":"renderer_props_missing","entrypoint":…}`. The
+  dispatcher logs `renderer_props_missing` with `siteId`,
+  `publishedVersionId`, `entrypoint` and `fallback` before it falls back to
+  the shared renderer (`apps/docs-dispatcher/src/dispatcher.ts`), or from
+  `logRendererUse` for `prepare` and `render`.
+
+Tests that prove the isolation:
+
+- `apps/docs-template/src/shared-isolate.test.ts`: two sites with unique
+  markers in name, navigation, body, theme colour, icons and search documents
+  (the same `contentVersion`), 64 mixed concurrent calls with random delays
+  through `server.fetch` and `DocsPrerenderRenderer` with per-call props (HTML,
+  `/_serverFn` route data, `/llms.txt`, `/llms-full.txt`, `.md`,
+  `/api/search`, `prepare`, `render`). No response carries the other site's
+  markers. The same file checks missing and invalid props.
+- `apps/docs-template/src/lib/search/server-search.test.ts`: separate engines
+  for one `contentVersion` under two sites, and the byte budget.
+- `apps/docs-dispatcher/tests/shared-isolate-props.test.ts`: two sites
+  interleaved on one isolate ID each get their own props for `fetch`,
+  `DocsPrerenderRenderer` and the `DocsHtmlCache` path.
 
 The rollout uses two dispatcher variables:
 
@@ -224,6 +278,12 @@ more (production, 28 Oct). The two waits were in sequence.
    isolate, its 60-second memory cache and its `caches.default` blob cache in
    that data center.
 
+The private `prepare` entrypoint (route-data cache fills, saved route data and
+the pre-render Worker) prefetches too. It has no request, but it always asks
+for the route data of its own pathname. So `withPrivatePrerenderRenderer`
+builds the plan from that pathname (`planPathnameRouteDataPrefetch`) and starts
+it on a cold start, in the same way. `render` and `getPlan` do not prefetch.
+
 The renderer and its public contract do not change: it makes the same RPC,
 and the HTML comes from the same `fetch` path. The prefetch ID is set only by
 the dispatcher, and a prefetched answer is only ever the answer to the same
@@ -239,6 +299,17 @@ one minute at most.
 | `prefetchMs` | Duration of the prefetch RPC |
 | `leadMs` | Prefetch start until the renderer asked for route data |
 | `waitMs` | How long the renderer still waited for the prefetched answer. `0` means full overlap |
+| `traceId` | The trace ID of the prefetch call. Find the same ID in `docs_runtime_reads` |
+| `calleeMs` | Time inside docs-runtime (its `timing.totalMs`) |
+| `outsideMs` | `prefetchMs` minus `calleeMs`: the RPC transport and queueing |
+| `runtimeIsolate` | The docs-runtime isolate: `id`, `requests` (calls it ran) and `ageMs` |
+| `reads`, `r2Reads`, `readMs` | Storage reads of the call, the reads that went to R2, and their total time |
+| `manifestMs` | Time to read the manifest |
+| `responseBytes` | JSON size of the route data |
+
+The fields from `calleeMs` on come from docs-runtime. They are absent when
+docs-runtime sent no timing (an older deploy) or the call failed.
+`entrypoint` tells a `fetch` render from a `prepare` call.
 
 Compare `phases.routeDataMs` of `COLD` renders with and without the field.
 For `notTaken`, `phases.routeDataMs` shows what the warm-up alone gave.
@@ -254,7 +325,40 @@ The rollout uses two dispatcher variables:
 
 To revert, set `DOXA_PROD_ROUTE_DATA_PREFETCH_MODE` to `off` in
 `apps/docs-dispatcher/wrangler.json`, then deploy the `docs-rendering` step.
-The renderer needs no change.
+The renderer needs no change. The same mode controls the `fetch` and the
+`prepare` prefetch.
+
+## Route-Data Trace
+
+The dispatcher traces every `request` call that it sends to docs-runtime, so
+one call can be followed from `docs_renderer_load` to `docs_runtime_reads`.
+
+- The dispatcher makes the trace: `{ id, caller }`. `id` is
+  `crypto.randomUUID()`. `caller` is `prefetch` (the route-data prefetch),
+  `content` (a renderer call through `ScopedDocsContent`) or `plan`
+  (`PrerenderRendererApi.getPlan`). The dispatcher never takes a trace from
+  renderer input.
+- docs-runtime parses the trace (`readDocsRuntimeTrace` in
+  `packages/contracts/src/docs-runtime-trace.ts`). An invalid trace counts as
+  none.
+- For a traced call, docs-runtime adds `timing` to its answer:
+  `manifestMs`, `operationMs`, `firstReadMs`, `totalMs`, `reads`, `r2Reads`,
+  `readMs`, `responseBytes` (route data only), `versionColdInIsolate` and
+  `isolate { id, requests, ageMs }`. The isolate ID is random. The first call
+  in an isolate makes it.
+- The dispatcher parses `timing` and removes it before the answer goes to the
+  renderer. So the renderer contract does not change.
+- `docs_runtime_reads` gets `traceId`, `caller`, `isolate`, `manifestMs`,
+  `operationMs` and `versionColdInIsolate`. `versionColdInIsolate` is true for
+  the first call for a version in that docs-runtime isolate.
+- docs-runtime also writes `docs_runtime_reads` with `ok: false` and
+  `errorCode` for `invalid_request` and `version_not_found`, for every
+  operation. The line has IDs only, never the payload.
+
+Both fields are optional. An old dispatcher sends no trace and gets the old
+answer. An old docs-runtime ignores the trace and sends no timing. Deploy
+docs-runtime before docs-rendering, so the timing fields are there from the
+first dispatcher request.
 
 ## Renderer Code Package
 
@@ -288,8 +392,11 @@ docs-template as plain JavaScript text.
 | Compressed size           | 10 MiB  |
 | Module count              | 500     |
 
-The client assets (CSS, browser JavaScript, fonts) are not in this bucket. The
-dispatcher serves them from its own `ASSETS` binding.
+The client assets (CSS, browser JavaScript, fonts) are not in the renderer
+package. The dispatcher serves the current build's files from its own `ASSETS`
+binding. The deploy also copies them into this bucket under
+`client-assets/v1/assets/`, for pages loaded before a later deploy (see
+[Old client assets](#old-client-assets)).
 
 The deploy builds the renderer with `DOXA_RENDERER_BUILD=platform`. That
 build minifies the server code and leaves out the local content source
@@ -342,7 +449,11 @@ chat: its build leaves out `apps/docs-template/src/lib/chat-stream.ts` (the AI
 provider SDKs and the assistant tools) and the server copy of the chat UI. The
 `chatWithDocsStream` server function stays registered and answers `403` when
 the site has chat turned off, or `503` otherwise. This removed about 1.2 MB
-from the server package.
+from the server package. The chat controls (the navbar button, "Chat with
+page" and the chat panel) draw only when `isChatAvailable(features)` is true
+(`apps/docs-template/src/lib/chat-availability.ts`): the site turns chat on
+and the build is not the platform renderer. The template's own build keeps
+chat.
 
 `/llms.txt`, `/llms-full.txt` and the `.md` routes read the requesting site's
 pages through its runtime source (`apps/docs-template/src/lib/llms.ts`,
@@ -379,14 +490,23 @@ in order:
 10. The generated dispatcher config carries `DOXA_RENDERER_BUILD_ID`,
     `DOXA_RENDERER_PACKAGE_KEY`, and `DOXA_RENDERER_RELEASE_ID`. The API and
     the pre-render Worker get the same release ID in their generated configs.
+11. It also carries the previous build (`DOXA_PREVIOUS_RENDERER_BUILD_ID`,
+    `DOXA_PREVIOUS_RENDERER_RELEASE_ID`) and `DOXA_RENDERER_DEPLOYED_AT`,
+    planned from the release record and the required `--previous-fallback`
+    choice. See
+    [Docs Artifact Compatibility](./docs-artifact-compatibility.md#previous-build-fallback).
 
 ### When the object is stored
 
 - The upload happens only during `pnpm deploy:docs-template`. The production
   GitHub workflow runs this command with `--skip-secret`.
-- The deploy order is fixed. First the shared renderer deploys. Second the
-  package uploads to R2. Third the dispatcher deploys with the new build ID.
-  Fourth the pre-render Worker and the API deploy.
+- The deploy order is fixed. First the deploy reads the release record
+  `renderer-code/releases/current.json` from the renderer code bucket. Second
+  the client assets upload to R2 (see [Old client assets](#old-client-assets)).
+  Third the shared renderer deploys. Fourth the package uploads to R2. Fifth
+  the dispatcher deploys with the new build ID and the previous build. Then
+  the deploy writes the new release record. Last the pre-render Worker and the
+  API deploy.
 - The upload command is `wrangler r2 object put` with
   `--content-encoding gzip` and `--force`. A rerun with the same code
   overwrites the same key with the same bytes.
@@ -399,6 +519,32 @@ in order:
   exists. This restores the Dynamic Worker package selection only. A complete
   rollback also coordinates the shared renderer, runtime, and release settings.
   See [Rollout And Rollback](./docs-artifact-compatibility.md#rollout-and-rollback).
+
+### Old client assets
+
+A page that a visitor loaded before a renderer deploy still asks for the
+hashed client files of its build, for example on a client navigation. The new
+dispatcher's `ASSETS` binding has only the new files.
+
+- Upload: after packaging and before the shared renderer deploy,
+  `deploy-renderer.mjs` puts every file of `apps/docs-template/dist/client/assets/`
+  to `client-assets/v1/assets/{file}` in the renderer code bucket, with the
+  content type from the extension and
+  `cache-control: public, max-age=31536000, immutable`. It runs
+  `wrangler r2 object put --remote`, 6 at a time, and re-puts every file on
+  every deploy. A dry run skips it. The plan is a pure function in
+  `scripts/lib/client-assets-upload.mjs`. The upload does not change the
+  release ID.
+- Expiry: a lifecycle rule on the prefix `client-assets/` (exactly that prefix)
+  deletes the files 30 days after their last upload. A rule on a wider prefix
+  would delete renderer packages and break every site.
+- Serving: with `DOXA_PROD_CLIENT_ASSET_FALLBACK_MODE=on`,
+  `apps/docs-dispatcher/src/client-asset-fallback.ts` answers a `GET` or `HEAD`
+  for a hashed `.js` or `.css` name under `/assets/` that `ASSETS` did not
+  serve, through `DocsClientAssetCache`
+  (`client-asset-cache-entrypoint.ts`). Headers come from an allowlist; R2
+  metadata is never copied. See
+  [Production Docs Caching](production-docs-caching.md#old-client-assets).
 
 ### How the object is read
 
@@ -544,14 +690,22 @@ in `packages/contracts/src/docs-prerender.ts` and
 ## Main Files
 
 - `apps/docs-dispatcher/src/index.ts`
+- `apps/docs-dispatcher/src/route-data-prefetch.ts`
+- `apps/docs-dispatcher/src/runtime-trace.ts`
 - `apps/docs-dispatcher/src/renderer-code-package.ts`
 - `apps/docs-dispatcher/src/routing-policy.ts`
 - `apps/docs-dispatcher/scripts/package-renderer.mjs`
 - `apps/docs-template/scripts/deploy-renderer.mjs`
+- `scripts/lib/client-assets-upload.mjs`
+- `apps/docs-dispatcher/src/client-asset-fallback.ts`
+- `apps/docs-dispatcher/src/client-asset-cache-entrypoint.ts`
+- `apps/docs-dispatcher/src/text-cache-entrypoint.ts`
 - `apps/docs-template/src/server.ts`
 - `apps/docs-template/src/runtime/runtime-source-selection.ts`
 - `apps/docs-template/src/runtime/binding-runtime-source.ts`
 - `apps/docs-runtime/src/runtime-source.ts`
 - `packages/contracts/src/index.ts`
 - `packages/contracts/src/docs-prerender.ts`
+- `packages/contracts/src/docs-runtime-trace.ts`
+- `apps/docs-runtime/src/runtime-trace.ts`
 - `packages/docs-engine/src/index.ts`

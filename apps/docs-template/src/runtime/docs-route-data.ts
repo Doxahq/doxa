@@ -4,11 +4,13 @@ import {
 } from "@doxahq/contracts/docs-assets";
 import {
   parseRuntimeMdx,
+  readFrontmatter,
   runtimeMdxHeadings,
   type RuntimeMdxDocument,
   type RuntimeMdxParseOptions,
 } from "@doxahq/mdx-runtime";
 
+import { utf8ByteLength } from "../lib/utf8";
 import { loadRouteIcons, type RouteIcons } from "./route-icons";
 import {
   filterLinkableRuntimePages,
@@ -299,7 +301,7 @@ async function resolveDocsRouteDataWithoutIcons(
       ? await measureDocsRouteStep(
           timing,
           "route.parseRuntimeDocument",
-          () => parseDocsRoutePage(page, options),
+          () => parseDocsRoutePage(page, options, source.cacheScope),
           { sourceBytes: page.body.length }
         )
       : null;
@@ -443,7 +445,7 @@ async function buildDocsRoutePageDataFromRuntimeRouteData(
       ? await measureDocsRouteStep(
           options.timing,
           "route.parseRuntimeDocument",
-          () => parseDocsRoutePage(page, options),
+          () => parseDocsRoutePage(page, options, source.cacheScope),
           { sourceBytes: page.body.length }
         )
       : null;
@@ -534,13 +536,55 @@ export async function resolveDocsRootRouteData(
 
 async function parseDocsRoutePage(
   page: RuntimePage,
-  options: Pick<ResolveDocsRouteDataOptions, "highlighter" | "highlighting">
+  options: Pick<ResolveDocsRouteDataOptions, "highlighter" | "highlighting">,
+  cacheScope?: string
 ): Promise<ParsedDocument> {
+  const bytes = utf8ByteLength(page.body);
+  if (bytes > MAX_RENDERED_PAGE_BYTES) {
+    logPageTooLarge({ href: page.href, bytes, cacheScope });
+    return pageTooLargeDocument(page.body);
+  }
   const parse = (highlighter?: DocsParserHighlighter) =>
     parseDocsRouteDocument(page.body, page.href, highlighter, page.assets);
   return options.highlighting
     ? options.highlighting.parse(page.body, parse)
     : parse(options.highlighter);
+}
+
+/**
+ * Pages above this much MDX render a short notice instead of their content.
+ * Not every write path enforces this size, and one renderer isolate serves
+ * many sites, so the renderer checks it too.
+ */
+export const MAX_RENDERED_PAGE_BYTES = 512 * 1024;
+
+const PAGE_TOO_LARGE_NOTICE =
+  "> This page is too large to display. Its source is above the 512 KB limit for one page.";
+
+function pageTooLargeDocument(body: string): ParsedDocument {
+  return {
+    ok: true,
+    document: {
+      frontmatter: readFrontmatter(body).frontmatter,
+      nodes: parseRuntimeMdx(PAGE_TOO_LARGE_NOTICE).nodes,
+    },
+  };
+}
+
+function logPageTooLarge(input: {
+  href: string;
+  bytes: number;
+  cacheScope: string | undefined;
+}): void {
+  console.warn(
+    JSON.stringify({
+      event: "docs_page_too_large",
+      href: input.href,
+      bytes: input.bytes,
+      limitBytes: MAX_RENDERED_PAGE_BYTES,
+      ...(input.cacheScope ? { scope: input.cacheScope } : {}),
+    })
+  );
 }
 
 export function parseDocsRouteDocument(

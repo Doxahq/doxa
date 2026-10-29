@@ -100,8 +100,10 @@ export function createPlatformRuntimeSource(
       },
     });
   };
+  const scope = resolveRuntimeScope(config);
 
   return {
+    cacheScope: `${scope.kind}:${scope.value}`,
     getAsset: (hash) => fetchAsset(`assets/${encodeURIComponent(hash)}`),
     getVersionAsset: (name, version) =>
       fetchAsset(

@@ -12,13 +12,22 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 
-import { createLlmsResponse, formatLlmsFull } from "@/src/lib/llms";
+import {
+  createLlmsResponse,
+  formatLlmsFull,
+  LLMS_FULL_LOAD_OPTIONS,
+} from "@/src/lib/llms";
 
 export const Route = createFileRoute("/llms-full.txt")({
   server: {
     handlers: {
       GET: ({ request, context }) =>
-        createLlmsResponse(request, context, formatLlmsFull),
+        createLlmsResponse(
+          request,
+          context,
+          formatLlmsFull,
+          LLMS_FULL_LOAD_OPTIONS
+        ),
     },
   },
 });

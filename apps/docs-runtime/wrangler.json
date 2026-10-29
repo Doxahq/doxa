@@ -50,7 +50,7 @@
         "API_BASE_URL": "",
         "ALLOW_INTERNAL_HTTP": "false",
         "DOCS_PUBLIC_BASE_URL": "https://preview.doxa.so",
-        "DOXA_PROD_BLOB_CACHE_MODE": "allowlist",
+        "DOXA_PROD_BLOB_CACHE_MODE": "all",
         "DOXA_PROD_BLOB_CACHE_SITE_IDS": "${OPS_DOCS_BLOB_CACHE_SITE_IDS}"
       },
       "services": [

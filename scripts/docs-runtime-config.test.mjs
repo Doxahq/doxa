@@ -27,13 +27,13 @@ test("caches only the DocsBlobCache entrypoint of the docs runtime", () => {
   assert.doesNotThrow(() => validateDocsRuntimeConfig(config));
 });
 
-test("rolls the blob cache out to the operator's canary sites", () => {
+test("reads every site's blobs through the tiered blob cache", () => {
   const config = runtimeConfig();
 
-  // Canary sites only. The site IDs are an operator value in the ops repo.
+  // Set allowlist (with the ops site IDs) or off to narrow or revert.
   assert.equal(
     config.env.production.vars.DOXA_PROD_BLOB_CACHE_MODE,
-    "allowlist",
+    "all",
   );
   assert.equal(
     config.env.production.vars.DOXA_PROD_BLOB_CACHE_SITE_IDS,

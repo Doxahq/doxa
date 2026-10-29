@@ -55,8 +55,8 @@ describe("createRendererPackage", () => {
       DocsTextCache: { type: "worker", cache: { enabled: true } },
       DocsClientAssetCache: { type: "worker", cache: { enabled: true } },
     });
-    expect(config.vars.DOXA_PROD_TEXT_ROUTE_CACHE_MODE).toBe("off");
-    expect(config.vars.DOXA_PROD_CLIENT_ASSET_FALLBACK_MODE).toBe("off");
+    expect(config.vars.DOXA_PROD_TEXT_ROUTE_CACHE_MODE).toBe("all");
+    expect(config.vars.DOXA_PROD_CLIENT_ASSET_FALLBACK_MODE).toBe("on");
     expect(config.vars.DEBUG).toBe("false");
     expect(config.vars.DOXA_PROD_ROUTE_DATA_PREFETCH_MODE).toBe("all");
   });
@@ -113,8 +113,8 @@ describe("createRendererPackage", () => {
       },
     ]);
     expect(config.triggers).toEqual({ crons: ["*/5 * * * *"] });
-    expect(config.vars.DOXA_PROD_WARM_MODE).toBe("off");
-    expect(config.vars.DOXA_PROD_WARM_DEPLOY_SWEEP).toBe("off");
+    expect(config.vars.DOXA_PROD_WARM_MODE).toBe("allowlist");
+    expect(config.vars.DOXA_PROD_WARM_DEPLOY_SWEEP).toBe("on");
   });
 
   test("rejects an invalid route-data cache rollout", async () => {

@@ -24,10 +24,10 @@ function readDispatcherConfig() {
   return JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 }
 
-test("keeps the warm job off by default with the documented limits", () => {
+test("warms the canary sites, with the deploy sweep and the documented limits", () => {
   const { vars } = readDispatcherConfig();
-  assert.equal(vars.DOXA_PROD_WARM_MODE, "off");
-  assert.equal(vars.DOXA_PROD_WARM_DEPLOY_SWEEP, "off");
+  assert.equal(vars.DOXA_PROD_WARM_MODE, "allowlist");
+  assert.equal(vars.DOXA_PROD_WARM_DEPLOY_SWEEP, "on");
   assert.equal(vars.DOXA_WARM_MAX_ACTIVE_WARMERS, "24");
   assert.equal(vars.DOXA_WARM_MAX_ACTIVE_WARMERS_PER_SITE, "4");
   assert.equal(vars.DOXA_WARM_SWEEP_SITES_PER_TICK, "200");

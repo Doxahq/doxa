@@ -38,10 +38,11 @@ test("enables Dynamic Workers for all production sites by default", () => {
   assert.equal(config.vars.DOXA_PRERENDER_REPAIR_ENABLED, "false");
 });
 
-test("rolls pre-rendering (M36) out to the operator's canary sites", () => {
+test("serves pre-rendered pages (M36) for every site", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 
-  assert.equal(config.vars.DOXA_PROD_PRERENDER_MODE, "allowlist");
+  // Set allowlist (with the ops site IDs) or off to narrow or revert.
+  assert.equal(config.vars.DOXA_PROD_PRERENDER_MODE, "all");
   // The site IDs are an operator value, kept in the ops repo.
   assert.equal(
     config.vars.DOXA_PROD_PRERENDER_SITE_IDS,
@@ -49,13 +50,14 @@ test("rolls pre-rendering (M36) out to the operator's canary sites", () => {
   );
 });
 
-test("keeps the previous-build fallback and the warm rollout off by default", () => {
+test("keeps the previous-build fallback off and warms the operator's canary sites", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 
   assert.equal(config.vars.DOXA_PROD_PREVIOUS_FALLBACK_MODE, "off");
   assert.equal(config.vars.DOXA_PREVIOUS_FALLBACK_BUILD_WINDOW_SECONDS, "86400");
-  assert.equal(config.vars.DOXA_PROD_WARM_MODE, "off");
-  assert.equal(config.vars.DOXA_PROD_WARM_SITE_IDS, "");
+  assert.equal(config.vars.DOXA_PROD_WARM_MODE, "allowlist");
+  // The site IDs are an operator value, kept in the ops repo.
+  assert.equal(config.vars.DOXA_PROD_WARM_SITE_IDS, "${OPS_DOCS_WARM_SITE_IDS}");
   // The renderer deploy writes these from the release record.
   assert.equal(config.vars.DOXA_PREVIOUS_RENDERER_BUILD_ID, "");
   assert.equal(config.vars.DOXA_PREVIOUS_RENDERER_RELEASE_ID, "");
@@ -129,10 +131,11 @@ test("enables the lazy route-data cache for all production sites by default", ()
   });
 });
 
-test("rolls the shared renderer isolate out to the operator's canary sites", () => {
+test("shares one renderer isolate per build for every site (M46)", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 
-  assert.equal(config.vars.DOXA_PROD_SHARED_ISOLATE_MODE, "allowlist");
+  // Set allowlist (with the ops site IDs) or off to narrow or revert.
+  assert.equal(config.vars.DOXA_PROD_SHARED_ISOLATE_MODE, "all");
   // The site IDs are an operator value, kept in the ops repo.
   assert.equal(
     config.vars.DOXA_PROD_SHARED_ISOLATE_SITE_IDS,
@@ -149,13 +152,13 @@ test("caches the renderer code package in Workers Cache", () => {
   });
 });
 
-test("caches text routes and old client assets, both off by default", () => {
+test("caches text routes for every site and serves old client assets", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 
-  assert.equal(config.vars.DOXA_PROD_TEXT_ROUTE_CACHE_MODE, "off");
+  // Set off to revert either one.
+  assert.equal(config.vars.DOXA_PROD_TEXT_ROUTE_CACHE_MODE, "all");
   assert.equal(config.vars.DOXA_PROD_TEXT_ROUTE_CACHE_SITE_IDS, "");
-  // Turn it on after the second renderer deploy that uploads client assets.
-  assert.equal(config.vars.DOXA_PROD_CLIENT_ASSET_FALLBACK_MODE, "off");
+  assert.equal(config.vars.DOXA_PROD_CLIENT_ASSET_FALLBACK_MODE, "on");
   assert.deepEqual(config.exports.DocsTextCache, {
     type: "worker",
     cache: { enabled: true },
@@ -174,23 +177,24 @@ test("prefetches route data on cold renderer starts for every site", () => {
   assert.equal(config.vars.DOXA_PROD_ROUTE_DATA_PREFETCH_SITE_IDS, "");
 });
 
-test("reads the hostname map in shadow mode during the rollout", () => {
+test("serves hostnames from the KV map", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 
-  // Shadow reads KV and logs agreement, but still serves the old path.
-  assert.equal(config.vars.DOXA_PROD_KV_HOSTNAME_MODE, "shadow");
+  // On reads KV first and falls back to the hostname cache on a miss.
+  // Set shadow to serve the old path again while KV still logs agreement.
+  assert.equal(config.vars.DOXA_PROD_KV_HOSTNAME_MODE, "on");
   // The namespace ID is account-issued, so the ops repo holds it.
   assert.deepEqual(config.kv_namespaces, [
     { binding: "DOCS_HOSTNAME_MAP", id: "${CF_DOCS_HOSTNAME_MAP_KV_ID}" },
   ]);
 });
 
-test("keeps the HTTPS redirect and the route-data browser cache off by default", () => {
+test("redirects HTTP to HTTPS and lets browsers cache route data", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 
-  // Turn each on in this file after its runbook step; off reverts.
-  assert.equal(config.vars.DOXA_PROD_HTTPS_REDIRECT_MODE, "off");
-  assert.equal(config.vars.DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE, "off");
+  // Set off to revert either one.
+  assert.equal(config.vars.DOXA_PROD_HTTPS_REDIRECT_MODE, "on");
+  assert.equal(config.vars.DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE, "all");
   assert.equal(config.vars.DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_SITE_IDS, "");
 });
 

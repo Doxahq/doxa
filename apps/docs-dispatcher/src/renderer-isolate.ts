@@ -87,8 +87,14 @@ export type RendererCallOutcome =
  * isolate (M46), so one call must not hold its CPU for long. The slowest
  * cold render seen in production (29 Oct tail) took 2.4 s of wall time,
  * which bounds its CPU time, so 5 s leaves headroom.
+ *
+ * Every content read through the props binding counts as a subrequest.
+ * `/llms.txt` and `/llms-full.txt` read every page of a site, plus its
+ * sections, routes and config, so the limit must cover the largest page plan
+ * (2,000 routes). At 50, every site with 50 or more pages lost its llms
+ * routes to the shared fallback (29 Oct production test).
  */
-const RENDERER_LIMITS = { cpuMs: 5_000, subRequests: 50 } as const;
+const RENDERER_LIMITS = { cpuMs: 5_000, subRequests: 3_000 } as const;
 
 /**
  * The code a renderer returns (in `x-doxa-renderer-error`) or throws (in the

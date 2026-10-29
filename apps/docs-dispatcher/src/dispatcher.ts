@@ -47,12 +47,43 @@ export async function dispatchDocsRequest(
     if (response.status < 500 || !replayable) {
       return withRendererMode(response, "dynamic");
     }
+    // The failed body is never read, so the render log that waits for it
+    // never runs: log the fallback here instead.
+    await response.body?.cancel();
+    logRendererFallback(input.request, resolution, {
+      status: response.status,
+    });
   } catch (error) {
     reportPropsMissing(error, resolution, replayable);
     if (!replayable) throw error;
+    logRendererFallback(input.request, resolution, {
+      error: describeFallbackError(error),
+    });
   }
 
   return renderShared(input, "shared-fallback");
+}
+
+/** One line per request that the shared renderer answered after a failure. */
+function logRendererFallback(
+  request: Request,
+  resolution: DocsDomainResolution,
+  failure: { status: number } | { error: string },
+): void {
+  console.warn(
+    JSON.stringify({
+      event: "docs_renderer_fallback",
+      siteId: resolution.siteId,
+      publishedVersionId: resolution.publishedVersionId,
+      path: new URL(request.url).pathname,
+      ...failure,
+    }),
+  );
+}
+
+function describeFallbackError(error: unknown): string {
+  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return text.slice(0, 300);
 }
 
 function reportPropsMissing(

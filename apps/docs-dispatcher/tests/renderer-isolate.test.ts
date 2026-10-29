@@ -140,7 +140,7 @@ describe("openRendererIsolate", () => {
     });
     open(env).isolate.getEntrypoint();
     await settle();
-    expect(loads[0]?.code.limits).toEqual({ cpuMs: 5_000, subRequests: 50 });
+    expect(loads[0]?.code.limits).toEqual({ cpuMs: 5_000, subRequests: 3_000 });
   });
 
   test("build scope keeps site content out of the env and sends it as props", async () => {

@@ -80,6 +80,47 @@ describe("dispatchDocsRequest", () => {
     );
   });
 
+  test("logs each fallback with the status or the error, and the path", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const input = {
+      mode: "all" as const,
+      allowedSiteIds: new Set<string>(),
+      resolveHost: vi.fn(async () => resolution),
+      renderShared: vi.fn(async () => new Response("shared")),
+    };
+
+    await dispatchDocsRequest({
+      ...input,
+      request: new Request("https://docs.example.com/llms.txt"),
+      renderDynamic: vi.fn(async () => new Response("failed", { status: 503 })),
+    });
+    await dispatchDocsRequest({
+      ...input,
+      request: new Request("https://docs.example.com/guide"),
+      renderDynamic: vi.fn(async () => {
+        throw new Error("subrequest limit");
+      }),
+    });
+
+    expect(warn.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+      {
+        event: "docs_renderer_fallback",
+        siteId: "site-1",
+        publishedVersionId: "version-1",
+        path: "/llms.txt",
+        status: 503,
+      },
+      {
+        event: "docs_renderer_fallback",
+        siteId: "site-1",
+        publishedVersionId: "version-1",
+        path: "/guide",
+        error: "Error: subrequest limit",
+      },
+    ]);
+    warn.mockRestore();
+  });
+
   test("does not replay an unsafe request through the shared renderer", async () => {
     const renderShared = vi.fn(async () => new Response("shared"));
 

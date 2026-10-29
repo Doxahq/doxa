@@ -150,6 +150,25 @@ variable "max_task_count" {
   }
 }
 
+variable "daily_pause" {
+  description = "Daily window with no running task, to save cost: the service stops at stop_hour and starts again at start_hour. Both are whole hours in timezone, an IANA name such as Africa/Algiers. Null runs the service all day."
+  type = object({
+    stop_hour  = number
+    start_hour = number
+    timezone   = string
+  })
+  default = null
+
+  validation {
+    condition = var.daily_pause == null ? true : (
+      alltrue([for hour in [var.daily_pause.stop_hour, var.daily_pause.start_hour] : hour == floor(hour) && hour >= 0 && hour <= 23])
+      && var.daily_pause.stop_hour != var.daily_pause.start_hour
+      && length(var.daily_pause.timezone) > 0
+    )
+    error_message = "daily_pause needs two different whole hours from 0 to 23 and a timezone."
+  }
+}
+
 variable "cpu_target_percent" {
   description = "Average CPU use that autoscaling keeps the service at."
   type        = number

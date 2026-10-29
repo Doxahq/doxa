@@ -45,3 +45,13 @@ variable "monthly_budget_usd" {
   type        = number
   default     = 100
 }
+
+variable "daily_pause" {
+  description = "Daily window in which the API runs no task on purpose (see the api-service module). The no-running-task alarm is muted then. Null keeps the alarm on all day."
+  type = object({
+    stop_hour  = number
+    start_hour = number
+    timezone   = string
+  })
+  default = null
+}

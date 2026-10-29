@@ -1,6 +1,6 @@
 # Alerts for the API service, sent by email through one SNS topic:
 #
-#   no running task   no CPU samples for 3 minutes
+#   no running task   no CPU samples for 3 minutes, muted in the daily pause
 #   high CPU / memory the task is close to its size
 #   failed deploy     ECS rolled a deploy back or cannot start tasks
 #   monthly budget    the AWS bill passes the limit
@@ -15,6 +15,10 @@ locals {
     ClusterName = var.cluster_name
     ServiceName = var.service_name
   }
+
+  # The task needs a few minutes after start_hour to report CPU again.
+  pause_start_grace_minutes = 15
+  pause_hours               = var.daily_pause == null ? 0 : (var.daily_pause.start_hour - var.daily_pause.stop_hour + 24) % 24
 }
 
 resource "aws_sns_topic" "alerts" {
@@ -68,6 +72,27 @@ resource "aws_cloudwatch_metric_alarm" "no_running_task" {
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+# The alarm keeps its state during the mute, but sends nothing. If the task is
+# still down when the mute ends, CloudWatch sends the ALARM email then.
+resource "aws_cloudwatch_alarm_mute_rule" "daily_pause" {
+  count = var.daily_pause == null ? 0 : 1
+
+  name        = "${var.name}-daily-pause"
+  description = "The API runs no task during its daily pause."
+
+  rule {
+    schedule {
+      expression = "cron(0 ${var.daily_pause.stop_hour} * * ?)"
+      duration   = format("PT%dH%dM", local.pause_hours, local.pause_start_grace_minutes)
+      timezone   = var.daily_pause.timezone
+    }
+  }
+
+  mute_targets {
+    alarm_names = [aws_cloudwatch_metric_alarm.no_running_task.alarm_name]
+  }
 }
 
 resource "aws_cloudwatch_metric_alarm" "high_usage" {

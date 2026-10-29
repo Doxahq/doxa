@@ -53,6 +53,16 @@ variable "max_task_count" {
   default     = 1
 }
 
+variable "daily_pause" {
+  description = "Daily window with no running API task, to save cost before launch. Hours are local to timezone. Null runs the API all day."
+  type = object({
+    stop_hour  = number
+    start_hour = number
+    timezone   = string
+  })
+  default = null
+}
+
 variable "api_environment" {
   description = "Plain environment variables of the API. PORT and VALKEY_URL come from this stack."
   type        = map(string)

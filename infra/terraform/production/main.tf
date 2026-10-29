@@ -89,6 +89,7 @@ module "api_service" {
 
   min_task_count = var.min_task_count
   max_task_count = var.max_task_count
+  daily_pause    = var.daily_pause
 }
 
 module "github_deploy" {
@@ -111,4 +112,5 @@ module "monitoring" {
   service_arn        = module.api_service.service_arn
   alert_emails       = var.alert_emails
   monthly_budget_usd = var.monthly_budget_usd
+  daily_pause        = var.daily_pause
 }

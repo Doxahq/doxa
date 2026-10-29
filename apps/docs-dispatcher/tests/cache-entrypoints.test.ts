@@ -163,7 +163,7 @@ describe("cache entrypoints", () => {
     const response = await entrypoint.fetch(htmlRequest());
     expect(await response.text()).toBe("<h1>Guide</h1>");
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800",
+      "public, max-age=2592000, stale-while-revalidate=604800, stale-if-error=604800",
     );
     expect(env.LOADER.get).toHaveBeenCalledWith(
       "docs:site-1:version-1:build-1",
@@ -537,7 +537,7 @@ describe("route-data cache entrypoint", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(createRouteData());
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800",
+      "public, max-age=2592000, stale-while-revalidate=604800, stale-if-error=604800",
     );
     expect(prepare).toHaveBeenCalledWith({
       resolution: expect.objectContaining({ siteId: "site-1" }),

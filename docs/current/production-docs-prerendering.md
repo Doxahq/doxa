@@ -20,7 +20,7 @@ Client navigation uses `/_doxa/route-data/v1`. This endpoint returns saved route
 
 The endpoint also works without pre-rendering. The lazy route-data cache (`DOXA_PROD_ROUTE_DATA_CACHE_MODE`) stores live route data in `DocsRouteDataCache` on first request. If both rollouts include a site, saved output has priority. See [production-docs-caching.md](./production-docs-caching.md).
 
-The public gateway always returns `Cache-Control: private, no-store`. The internal Worker entrypoints cache valid immutable output for 1 year.
+The public gateway always returns `Cache-Control: private, no-store`. The internal Worker entrypoints cache valid immutable output for 30 days.
 
 Missing saved output uses a 30-second internal fallback TTL. This limit lets repaired output replace the live fallback quickly.
 

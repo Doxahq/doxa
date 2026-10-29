@@ -20,9 +20,9 @@ not a strict global read-after-write guarantee.
 | -------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Hostname map (Workers KV)  | Used for 1 day after the API read it; KV expires it after 2 days | Normalized hostname (`host:<hostname>`) and `DOCS_HOSTNAME_MAP_FORMAT` in the value                                     |
 | `DocsHostCache`            | 1 day, stale on error       | Trusted hostname and `DOCS_HOST_CACHE_FORMAT` in `ctx.props`                                                                   |
-| `DocsHtmlCache`            | 1 year, then 7 days stale   | Trusted hostname, resolved site/version/artifact data, renderer build, delivery render ID in `ctx.props`, plus URL path        |
-| `DocsRouteDataCache`       | 1 year, then 7 days stale   | Trusted hostname, resolved site/version/artifact data, delivery identity (`renderId`) in `ctx.props`, plus the route-data path |
-| `DocsRendererCodeCache`    | 1 year, then 7 days stale   | The deployed `DOXA_RENDERER_BUILD_ID`, `DOXA_RENDERER_PACKAGE_KEY` and `RENDERER_CODE_CACHE_FORMAT` in `ctx.props`, plus `/v1/{buildId}` |
+| `DocsHtmlCache`            | 30 days, then 7 days stale  | Trusted hostname, resolved site/version/artifact data, renderer build, delivery render ID in `ctx.props`, plus URL path        |
+| `DocsRouteDataCache`       | 30 days, then 7 days stale  | Trusted hostname, resolved site/version/artifact data, delivery identity (`renderId`) in `ctx.props`, plus the route-data path |
+| `DocsRendererCodeCache`    | 30 days, then 7 days stale  | The deployed `DOXA_RENDERER_BUILD_ID`, `DOXA_RENDERER_PACKAGE_KEY` and `RENDERER_CODE_CACHE_FORMAT` in `ctx.props`, plus `/v1/{buildId}` |
 | Public dispatcher response | Not stored                  | Explicit `private, no-store`                                                                                                   |
 
 The constants live in `apps/docs-dispatcher/src/cache-policy.ts`. The dispatcher
@@ -127,7 +127,7 @@ HTML cache. A promotion changes the published database version ID, even when it
 reuses an older artifact prefix. That new ID selects a different HTML cache
 entry. An in-flight fill for the previous version cannot overwrite it.
 
-The 1-year HTML lifetime does **not** make production changes wait.
+The 30-day HTML lifetime does **not** make production changes wait.
 After commit, the API attempts to purge all hostname mappings tagged with the
 site ID. That removes the intentional TTL wait during normal publishing. The
 next lookup reads the new pointer and selects its version-specific HTML entry.
@@ -151,13 +151,15 @@ Cache lifetimes have names in `cache-policy.ts`:
 | -------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `hostname`     | `DocsHostCache`                                            | `public, max-age=86400, stale-if-error=604800`                                  |
 | `liveFallback` | Live output after a saved-output miss                      | `public, max-age=30, must-revalidate`                                           |
-| `versioned`    | HTML, saved HTML and data, and `DocsRouteDataCache` output | `public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800` |
+| `versioned`    | HTML, saved HTML and data, `DocsRouteDataCache` output, and the renderer code package | `public, max-age=2592000, stale-while-revalidate=604800, stale-if-error=604800` |
 
 Version-keyed entries can serve stale copies, because a publish selects a new
 key and never changes content under an existing key. A stale copy is identical
-to a fresh one. The lifetime is 1 year because only a new key or a purge can
-make an entry wrong. Cloudflare can still evict an entry that gets no traffic.
-After 1 year Cloudflare returns the stored copy and refreshes
+to a fresh one. Only a new key or a purge can make an entry out of date, so the
+lifetime does not control freshness. It is 30 days, like the 15 days that
+Mintlify uses for its page cache, so that an entry stored wrong (for example a
+bad render) ends without a new key. Cloudflare can still evict an entry that
+gets no traffic. After 30 days Cloudflare returns the stored copy and refreshes
 it in the background. If the refresh fails, it keeps the stored copy. Do not add
 `must-revalidate`, `s-maxage`, or `proxy-revalidate` to `versioned`: each one
 disables stale serving.

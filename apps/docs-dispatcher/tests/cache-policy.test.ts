@@ -206,7 +206,7 @@ describe("docs cache policy", () => {
       }),
     );
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800",
+      "public, max-age=2592000, stale-while-revalidate=604800, stale-if-error=604800",
     );
     expect(await response.text()).toBe("<h1>Guide</h1>");
   });
@@ -242,7 +242,7 @@ describe("docs cache policy", () => {
     {
       lifetime: "versioned" as const,
       expected:
-        "public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800",
+        "public, max-age=2592000, stale-while-revalidate=604800, stale-if-error=604800",
     },
   ])("uses one exact header for the $lifetime lifetime", ({ lifetime, expected }) => {
     expect(cacheControlFor(lifetime)).toBe(expected);

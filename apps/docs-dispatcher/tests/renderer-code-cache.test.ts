@@ -58,7 +58,7 @@ describe("DocsRendererCodeCache", () => {
 
     expect(get).toHaveBeenCalledWith(OBJECT_KEY);
     expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toContain("max-age=31536000");
+    expect(response.headers.get("cache-control")).toContain("max-age=2592000");
     expect(response.headers.has("content-encoding")).toBe(false);
     expect(await response.text()).toBe("gzip-bytes");
   });

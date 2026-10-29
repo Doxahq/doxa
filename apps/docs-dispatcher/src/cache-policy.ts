@@ -6,14 +6,16 @@ import {
 
 // The hostname TTL is a freshness trade-off, not an invalidation guarantee.
 // Versioned output never changes under its key: only a new key (site version,
-// renderer build, render ID) or a purge ends an entry. One year is the longest
-// conventional HTTP lifetime. Cloudflare can still evict entries that see no
-// traffic.
+// renderer build, render ID) or a purge ends an entry. The 30-day lifetime is
+// not for freshness. It bounds how long an entry that was stored wrong, for
+// example a bad render, can live without a new key. A page that keeps getting
+// traffic refreshes in the background through stale-while-revalidate.
+// Cloudflare can still evict entries that see no traffic.
 // Keep these together so the early cache policy has one place to change.
 const DOCS_CACHE_POLICY = {
   hostnameTtlSeconds: DOCS_HOSTNAME_CACHE_TTL_SECONDS,
   hostnameStaleIfErrorSeconds: 604_800,
-  versionedTtlSeconds: 31_536_000,
+  versionedTtlSeconds: 2_592_000,
   versionedStaleSeconds: 604_800,
   liveFallbackTtlSeconds: 30,
 } as const;

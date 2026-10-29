@@ -112,7 +112,7 @@ The live path runs when a visitor opens a page and no saved HTML exists.
 - It parses the MDX body at request time with `@doxahq/mdx-runtime`.
 - TanStack Start renders the HTML on the server and returns it to the
   dispatcher.
-- The dispatcher stores this HTML in the Workers Cache for 1 year. The cache
+- The dispatcher stores this HTML in the Workers Cache for 30 days. The cache
   key includes the version ID and the renderer build.
 
 ### Other renderers
@@ -411,7 +411,7 @@ in order:
   format number, and its URL is `https://renderer-code.internal/v1/{buildId}`.
   It refuses any other build, key, format or URL, so no request value can
   select a package. A cache fill reads the gzip bytes from R2 and stores them
-  unchanged for one year: a package key names one immutable build. With
+  unchanged for 30 days: a package key names one immutable build. With
   `cross_version_cache`, the next dispatcher deploy with the same build reads
   the same entry.
 - Fills often run in a new dispatcher isolate, in the upper cache tier. Before

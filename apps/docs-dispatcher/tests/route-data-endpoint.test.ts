@@ -70,7 +70,7 @@ describe("route-data endpoint with the lazy route-data cache", () => {
     expect(
       fixture.routeDataCacheResponses[0]?.headers.get("cache-control"),
     ).toBe(
-      "public, max-age=31536000, stale-while-revalidate=604800, stale-if-error=604800",
+      "public, max-age=2592000, stale-while-revalidate=604800, stale-if-error=604800",
     );
   });
 

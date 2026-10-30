@@ -156,7 +156,10 @@ async function readLiveTargets(
     const { resolution, resolvedAt } = lookup.entry;
     if (
       resolution.siteId !== message.siteId ||
-      !isStorableHostnameResolution(hostname, resolution)
+      !isStorableHostnameResolution(hostname, resolution) ||
+      // A `doxa.page` hostname that redirects to the custom domain serves no
+      // pages, so warming it would fill entries that nobody reads.
+      resolution.canonicalHostname !== undefined
     ) {
       return [];
     }

@@ -1,3 +1,4 @@
+import { DOCS_HOSTNAME_MAP_FORMAT } from "@doxahq/contracts/docs-hostname-map";
 import type { DocsWarmMessage } from "@doxahq/contracts/docs-warm-job";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
@@ -262,9 +263,9 @@ describe("supersede check", () => {
   const read = (lookup: Awaited<ReturnType<typeof lookupHostnameMapEntry>>) => async () => lookup;
 
   test.each<[string, Parameters<typeof findSupersedeReason>[1], string | null]>([
-    ["nothing changed", { config, deployedReleaseId: RELEASE, readEntry: read({ status: "hit", entry: { format: 1, resolvedAt: 5_000, resolution: siteResolution() } }) }, null],
-    ["a 12-hour rewrite of the same version", { config, deployedReleaseId: RELEASE, readEntry: read({ status: "hit", entry: { format: 1, resolvedAt: 9_999_999, resolution: siteResolution() } }) }, null],
-    ["a newer version", { config, deployedReleaseId: RELEASE, readEntry: read({ status: "hit", entry: { format: 1, resolvedAt: 6_000, resolution: siteResolution({ publishedVersionId: "version-3" }) } }) }, "version_changed"],
+    ["nothing changed", { config, deployedReleaseId: RELEASE, readEntry: read({ status: "hit", entry: { format: DOCS_HOSTNAME_MAP_FORMAT, resolvedAt: 5_000, resolution: siteResolution() } }) }, null],
+    ["a 12-hour rewrite of the same version", { config, deployedReleaseId: RELEASE, readEntry: read({ status: "hit", entry: { format: DOCS_HOSTNAME_MAP_FORMAT, resolvedAt: 9_999_999, resolution: siteResolution() } }) }, null],
+    ["a newer version", { config, deployedReleaseId: RELEASE, readEntry: read({ status: "hit", entry: { format: DOCS_HOSTNAME_MAP_FORMAT, resolvedAt: 6_000, resolution: siteResolution({ publishedVersionId: "version-3" }) } }) }, "version_changed"],
     ["a removed hostname", { config, deployedReleaseId: RELEASE, readEntry: read({ status: "miss" }) }, "hostname_removed"],
     ["a read error", { config, deployedReleaseId: RELEASE, readEntry: read({ status: "error" }) }, null],
     ["a new renderer release", { config, deployedReleaseId: "d".repeat(64), readEntry: read({ status: "miss" }) }, "release_changed"],

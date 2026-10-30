@@ -1,3 +1,4 @@
+import { DOCS_HOSTNAME_MAP_FORMAT } from "@doxahq/contracts/docs-hostname-map";
 import { describe, expect, test, vi } from "vitest";
 import type { DocsDomainResolution } from "@doxahq/contracts";
 
@@ -33,7 +34,7 @@ const previous: DocsDomainResolution = {
 function mapWith(resolution: DocsDomainResolution | null) {
   const get = vi.fn(async () =>
     resolution
-      ? JSON.stringify({ format: 1, resolvedAt: NOW - 1_000, resolution })
+      ? JSON.stringify({ format: DOCS_HOSTNAME_MAP_FORMAT, resolvedAt: NOW - 1_000, resolution })
       : null,
   );
   const store: HostnameMapStore = {

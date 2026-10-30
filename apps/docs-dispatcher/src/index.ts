@@ -28,6 +28,7 @@ import {
   type HostCacheProps,
   type HtmlCacheProps,
 } from "./cache-policy";
+import { createCanonicalHostRedirect } from "./canonical-host-redirect";
 import {
   handleClientAssetFallback,
   parseClientAssetFallbackMode,
@@ -474,6 +475,16 @@ const docsGateway = {
       resolveHost,
     };
 
+    // Route data is internal JSON for the pages of the same host, which a
+    // redirecting host never serves: it keeps its own lookup rules.
+    if (!isRouteDataEndpoint) {
+      const canonicalRedirect = createCanonicalHostRedirect(
+        request,
+        await resolveHostOrNull(resolveHost, request),
+      );
+      if (canonicalRedirect) return canonicalRedirect;
+    }
+
     const assetResponse =
       (await handleSiteAssetRequest(request, {
         resolveHost,
@@ -706,6 +717,18 @@ const docsGateway = {
     return result;
   },
 };
+
+/** The host resolution, or null when the lookup fails: routing continues. */
+async function resolveHostOrNull(
+  resolveHost: (hostname: string) => Promise<DocsDomainResolution | null>,
+  request: Request,
+): Promise<DocsDomainResolution | null> {
+  try {
+    return await resolveHost(new URL(request.url).hostname);
+  } catch {
+    return null;
+  }
+}
 
 function withInternalRenderId(request: Request, renderId?: string): Request {
   const headers = new Headers(request.headers);

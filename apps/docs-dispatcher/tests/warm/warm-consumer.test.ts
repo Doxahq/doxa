@@ -1,3 +1,4 @@
+import { DOCS_HOSTNAME_MAP_FORMAT } from "@doxahq/contracts/docs-hostname-map";
 import type { DocsWarmMessage } from "@doxahq/contracts/docs-warm-job";
 import type { WarmPool } from "@doxahq/contracts/docs-warm-state";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -22,7 +23,7 @@ afterEach(() => {
 });
 
 function hit(resolution = siteResolution(), resolvedAt = 5_000): HostnameMapEntryLookup {
-  return { status: "hit", entry: { format: 1, resolvedAt, resolution } };
+  return { status: "hit", entry: { format: DOCS_HOSTNAME_MAP_FORMAT, resolvedAt, resolution } };
 }
 
 function createDeps(overrides: Partial<WarmConsumerDeps> = {}) {
@@ -76,6 +77,21 @@ describe("warm consumer: drop, retry and ack", () => {
       "a private entry",
       warmMessage({ publishedVersionId: undefined }),
       { readEntry: async () => hit(siteResolution({ accessPolicy: "authenticated" })) },
+      "nothing_public",
+    ],
+    [
+      "a doxa.page entry that redirects to the custom domain",
+      warmMessage({ publishedVersionId: undefined, hostnames: ["demo.doxa.page"] }),
+      {
+        readEntry: async () =>
+          hit(
+            siteResolution({
+              hostname: "demo.doxa.page",
+              domainKind: "doxa_subdomain",
+              canonicalHostname: "docs.example.com",
+            }),
+          ),
+      },
       "nothing_public",
     ],
     ["a running job (pending, newest wins)", warmMessage(), { submit: async () => "pending" }, "pending"],

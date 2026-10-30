@@ -1,3 +1,4 @@
+import { DOCS_HOSTNAME_MAP_FORMAT } from "@doxahq/contracts/docs-hostname-map";
 import type { DocsWarmMessage } from "@doxahq/contracts/docs-warm-job";
 import { WARM_POOL_COLOS, WARM_POOL_LOCATION_HINTS } from "@doxahq/contracts/docs-warm-region";
 import { WARM_POOLS, docsWarmStateKey, docsWarmStateSchema } from "@doxahq/contracts/docs-warm-state";
@@ -209,7 +210,7 @@ describe("regional warm job, end to end", () => {
   test("a second message for the same target while the job runs is a duplicate", async () => {
     const flow = createFlow();
     const first = { v: 1, reason: "deploy", siteId: "site-1", hostnames: [resolution.hostname], releaseId: flow.world.env.DOXA_RENDERER_RELEASE_ID, jobId: "00000000-0000-4000-8000-000000000001", enqueuedAt: 1 } as DocsWarmMessage;
-    flow.kv.set("host:docs.example.com", JSON.stringify({ format: 1, resolvedAt: Date.now(), resolution }));
+    flow.kv.set("host:docs.example.com", JSON.stringify({ format: DOCS_HOSTNAME_MAP_FORMAT, resolvedAt: Date.now(), resolution }));
     expect((await flow.deliver(first)).acked).toBe(true);
     const second = { ...first, reason: "publish", jobId: "00000000-0000-4000-8000-000000000002", enqueuedAt: 2 } as DocsWarmMessage;
     expect((await flow.deliver(second)).acked).toBe(true);
@@ -238,7 +239,7 @@ describe("regional warm job, end to end", () => {
     expect(off.instances.size).toBe(0);
 
     const on = createFlow({ DOXA_PROD_WARM_DEPLOY_SWEEP: "on" });
-    on.kv.set("host:docs.example.com", JSON.stringify({ format: 1, resolvedAt: Date.now(), resolution }));
+    on.kv.set("host:docs.example.com", JSON.stringify({ format: DOCS_HOSTNAME_MAP_FORMAT, resolvedAt: Date.now(), resolution }));
     await worker.scheduled({} as never, on.world.env as never);
     expect(on.sweepQueue).toEqual([
       expect.objectContaining({ reason: "deploy", siteId: "site-1", hostnames: ["docs.example.com"] }),
@@ -256,7 +257,7 @@ describe("regional warm job, end to end", () => {
     Object.assign(flow.world.env, {
       DOCS_RUNTIME: { request: async () => Promise.reject(new Error("runtime down")) },
     });
-    flow.kv.set("host:docs.example.com", JSON.stringify({ format: 1, resolvedAt: Date.now(), resolution }));
+    flow.kv.set("host:docs.example.com", JSON.stringify({ format: DOCS_HOSTNAME_MAP_FORMAT, resolvedAt: Date.now(), resolution }));
     const failing: WarmQueueMessage = {
       body: {
         v: 1,

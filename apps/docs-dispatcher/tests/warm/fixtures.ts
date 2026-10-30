@@ -1,3 +1,4 @@
+import { DOCS_HOSTNAME_MAP_FORMAT } from "@doxahq/contracts/docs-hostname-map";
 import type { DocsDomainResolution } from "@doxahq/contracts";
 import type { DocsWarmMessage } from "@doxahq/contracts/docs-warm-job";
 
@@ -62,7 +63,7 @@ export function warmJob(overrides: Partial<WarmJob> = {}): WarmJob {
 
 /** A hostname map entry as `syncHostnames` stores it. */
 export function mapEntry(resolution: DocsDomainResolution, resolvedAt: number): string {
-  return JSON.stringify({ format: 1, resolvedAt, resolution });
+  return JSON.stringify({ format: DOCS_HOSTNAME_MAP_FORMAT, resolvedAt, resolution });
 }
 
 /** Durable Object storage in memory; values are cloned like the real one. */

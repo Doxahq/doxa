@@ -565,6 +565,12 @@ export const docsDomainResolutionSchema = docsHostResolutionSchema.extend({
   hostname: z.string(),
   domainKind: docsDomainKindSchema,
   renderTarget: docsRenderTargetSchema.optional(),
+  /**
+   * Set only on the production `doxa.page` hostname of a site that has a
+   * working custom domain: the dispatcher answers every request there with a
+   * permanent redirect to this hostname, so the site has one public address.
+   */
+  canonicalHostname: z.string().optional(),
 });
 
 export const createDocsDomainInputSchema = z.object({

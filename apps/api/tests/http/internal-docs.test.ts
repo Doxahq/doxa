@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   },
   docsDomainsRepository: {
     resolveByHostname: vi.fn(),
+    findCanonicalHostname: vi.fn(async (): Promise<string | null> => null),
   },
   previewChannelsRepository: {
     resolveByHostname: vi.fn(),
@@ -136,6 +137,33 @@ describe("internal docs host routes", () => {
         domainKind: "doxa_subdomain",
       }),
     });
+  });
+
+  test("marks the doxa.page hostname of a site with a working custom domain for a redirect", async () => {
+    mocks.docsDomainsRepository.resolveByHostname.mockResolvedValue(null);
+    mocks.docsRepository.resolveBySlug.mockResolvedValue(
+      createSiteResolution(),
+    );
+    mocks.docsDomainsRepository.findCanonicalHostname.mockResolvedValueOnce(
+      "docs.example.com",
+    );
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/internal/docs-hosts/doxa-demo.doxa.page"),
+      createEnv({ DOCS_BASE_DOMAIN: "doxa.page" }),
+      createExecutionContext(),
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      site: createResolution({
+        hostname: "doxa-demo.doxa.page",
+        domainKind: "doxa_subdomain",
+        canonicalHostname: "docs.example.com",
+      }),
+    });
+    expect(mocks.docsDomainsRepository.findCanonicalHostname).toHaveBeenCalledWith(
+      createSiteResolution().siteId,
+    );
   });
 
   test("resolves an active pull-request preview before the production slug", async () => {

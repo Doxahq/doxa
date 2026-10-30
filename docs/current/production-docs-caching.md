@@ -919,6 +919,17 @@ HTML response, and a new HTML prop would change every HTML key.
   sitemap lists the linked pages of the visible sections on the request origin,
   and `robots.txt` names that sitemap. The platform renderer build ships no
   static `sitemap.xml`, which Workers Assets would serve first.
+- A site with a working custom domain has one public address: its
+  `<slug>.doxa.page` hostname answers every request with a 301 (308 for
+  writes) to the custom domain, path and query kept, before any cache or
+  render (`canonical-host-redirect.ts`). The resolver sets
+  `canonicalHostname` on the production `doxa.page` resolution to the oldest
+  custom domain that is active, verified and routing `healthy`
+  (`DocsDomainsRepository.findCanonicalHostname`). A change of that state,
+  or a deleted domain, resyncs every hostname of the site. Certificate paths
+  and the route-data endpoint never redirect, and the warm job skips a
+  redirecting hostname. Host cache and hostname map formats are 2 since this
+  field, so no older entry skips the redirect.
 - Canonical links use the requesting hostname: `toHostResolution` sets
   `siteUrl` (`https://{hostname}`) on the pinned resolution, the pre-renderer
   sets it from the task's `trustedRequestOrigin`, and docs-runtime makes it

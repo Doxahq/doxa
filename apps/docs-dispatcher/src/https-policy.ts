@@ -23,7 +23,7 @@ const CERTIFICATE_VALIDATION_PATH_PREFIXES = [
 ] as const;
 
 /** A browser keeps a 301 a long time; shared caches keep it one hour. */
-const REDIRECT_CACHE_CONTROL = "public, max-age=3600";
+export const REDIRECT_CACHE_CONTROL = "public, max-age=3600";
 
 /** About one redirect in a hundred writes `docs_https_redirect`. */
 export const HTTPS_REDIRECT_LOG_SAMPLE_RATE = 0.01;

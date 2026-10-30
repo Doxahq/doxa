@@ -399,6 +399,39 @@ describe("cache entrypoints", () => {
     },
   );
 
+  test("sends every page of a doxa.page hostname with a custom domain there, before any render", async () => {
+    const generated = {
+      ...resolution,
+      hostname: "demo.doxa.page",
+      domainKind: "doxa_subdomain" as const,
+      canonicalHostname: "docs.example.com",
+    };
+    const env = createEnv(generated);
+    const ctx = {
+      exports: {
+        DocsHostCache: vi.fn(
+          ({ props }: { props: { hostname: string } }) =>
+            new DocsHostCache({ props } as never, env as never),
+        ),
+        DocsHtmlCache: vi.fn(),
+      },
+    };
+    const response = await worker.fetch(
+      new Request("https://demo.doxa.page/guides/start?tab=npm", {
+        headers: { accept: "text/html" },
+      }),
+      env as never,
+      ctx as never,
+    );
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe(
+      "https://docs.example.com/guides/start?tab=npm",
+    );
+    expect(ctx.exports.DocsHtmlCache).not.toHaveBeenCalled();
+    expect(env.render).not.toHaveBeenCalled();
+  });
+
   describe("a visitor with a cookie (RES-1)", () => {
     const cookie = { headers: { cookie: "_ga=GA1.1.123.456" } };
 

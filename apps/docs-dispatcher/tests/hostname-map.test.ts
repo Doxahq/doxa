@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import type { DocsDomainResolution } from "@doxahq/contracts";
-import {
+import { DOCS_HOSTNAME_MAP_FORMAT,
   DOCS_HOSTNAME_MAP_EXPIRATION_SECONDS,
   DOCS_HOSTNAME_MAP_MAX_AGE_SECONDS,
 } from "@doxahq/contracts/docs-hostname-map";
@@ -51,7 +51,7 @@ function memoryStore(initial: Record<string, string> = {}) {
 
 function storedEntry(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
-    format: 1,
+    format: DOCS_HOSTNAME_MAP_FORMAT,
     resolvedAt: NOW - 1_000,
     resolution,
     ...overrides,
@@ -152,7 +152,7 @@ describe("hostname map writes", () => {
       updates: [{ hostname: HOST, resolvedAt: NOW, resolution }],
     });
     expect(JSON.parse(values.get(`host:${HOST}`) ?? "null")).toEqual({
-      format: 1,
+      format: DOCS_HOSTNAME_MAP_FORMAT,
       resolvedAt: NOW,
       resolution,
     });

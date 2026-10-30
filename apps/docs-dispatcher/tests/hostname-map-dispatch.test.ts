@@ -1,3 +1,4 @@
+import { DOCS_HOSTNAME_MAP_FORMAT } from "@doxahq/contracts/docs-hostname-map";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { DocsDomainResolution } from "@doxahq/contracts";
 
@@ -47,7 +48,7 @@ function kvWith(resolution: DocsDomainResolution | null) {
   return {
     get: vi.fn(async () =>
       resolution
-        ? JSON.stringify({ format: 1, resolvedAt: Date.now(), resolution })
+        ? JSON.stringify({ format: DOCS_HOSTNAME_MAP_FORMAT, resolvedAt: Date.now(), resolution })
         : null,
     ),
     put: vi.fn(async () => {}),

@@ -18,7 +18,8 @@ import { docsWarmHintSchema } from "./docs-warm-job";
  * Increase when the stored entry changes shape. The dispatcher reads only
  * the format it writes, so a new deploy treats older entries as misses.
  */
-export const DOCS_HOSTNAME_MAP_FORMAT = 1;
+// 2: resolutions carry `canonicalHostname`; a format-1 entry never redirects.
+export const DOCS_HOSTNAME_MAP_FORMAT = 2;
 
 /**
  * The dispatcher ignores an entry resolved longer ago than this. It bounds a

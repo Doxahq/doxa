@@ -48,7 +48,8 @@ export function isContentCacheLifetime(
  * that an older deploy stored. Increase this value when the cached hostname
  * resolution JSON changes shape. The new deploy then uses new keys.
  */
-export const DOCS_HOST_CACHE_FORMAT = 1;
+// 2: resolutions carry `canonicalHostname`.
+export const DOCS_HOST_CACHE_FORMAT = 2;
 
 export interface HostCacheProps {
   hostname: string;

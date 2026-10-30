@@ -15,7 +15,12 @@ import {
   type SlotDecision,
   type SlotState,
 } from "./warm-slots";
-import { parseSweepState, runSweepTick, sweepSiteCap } from "./warm-sweep";
+import {
+  describeWarmRollout,
+  parseSweepState,
+  runSweepTick,
+  sweepSiteCap,
+} from "./warm-sweep";
 import { readStored, type WarmStorage } from "./warm-storage";
 
 /**
@@ -101,6 +106,7 @@ export class DocsWarmControl extends DurableObject<WarmEnv> implements WarmContr
         stored,
         {
           releaseId,
+          rollout: describeWarmRollout(config.rollout),
           cap: sweepSiteCap({
             sitesPerTick: config.sweepSitesPerTick,
             freeSlots: free,
@@ -121,6 +127,7 @@ export class DocsWarmControl extends DurableObject<WarmEnv> implements WarmContr
       await this.storage.put(SWEEP_KEY, result.state);
       logWarm("docs_warm_sweep", {
         releaseId,
+        rollout: result.state.rollout,
         reset: result.reset,
         enqueued: result.enqueued,
         total: result.state.enqueued,

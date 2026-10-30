@@ -5,11 +5,15 @@ import {
 } from "@doxahq/contracts/docs-warm-job";
 import { z } from "zod";
 
+import type { SiteRollout } from "../rollout-policy";
+
 /**
  * The renderer-deploy sweep (M28): on each cron tick, list the hostname map
  * from a stored cursor, group the keys by site and enqueue at most `cap`
- * sites to the sweep queue. A new release resets the cursor; a finished
- * list stays done until the next release. Idempotent: the state is saved
+ * sites to the sweep queue. A new release or a new warm rollout resets the
+ * cursor; a finished list stays done until one of them changes. Without the
+ * rollout reset, widening the rollout (for example `allowlist` → `all`)
+ * would warm the new sites only at the next release. Idempotent: the state is saved
  * only after the messages were sent, and the site lock drops duplicates.
  */
 
@@ -22,6 +26,8 @@ const SEND_BATCH_LIMIT = 100;
 export const sweepStateSchema = z
   .object({
     releaseId: z.string().regex(/^[a-f0-9]{64}$/),
+    /** The warm rollout that the sweep covers (`describeWarmRollout`). */
+    rollout: z.string().min(1),
     /** The list cursor of the current page; null for the first page. */
     cursor: z.string().min(1).nullable(),
     /** Keys of the current page that earlier ticks already took. */
@@ -79,17 +85,28 @@ export function sweepSiteCap(input: {
   return Math.max(0, Math.min(input.sitesPerTick, Math.floor(input.freeSlots / perSite)));
 }
 
+/** A stable name of a warm rollout: the mode, and the sorted sites of an allowlist. */
+export function describeWarmRollout(rollout: SiteRollout): string {
+  return rollout.mode === "allowlist"
+    ? `allowlist:${[...rollout.siteIds].sort().join(",")}`
+    : rollout.mode;
+}
+
 export async function runSweepTick(
   stored: SweepState | null,
-  input: { releaseId: string; cap: number },
+  input: { releaseId: string; rollout: string; cap: number },
   deps: SweepDeps,
 ): Promise<SweepTickResult> {
-  const reset = !stored || stored.releaseId !== input.releaseId;
+  const reset =
+    !stored ||
+    stored.releaseId !== input.releaseId ||
+    stored.rollout !== input.rollout;
   let state: SweepState =
     stored && !reset
       ? stored
       : {
           releaseId: input.releaseId,
+          rollout: input.rollout,
           cursor: null,
           offset: 0,
           done: false,

@@ -1,8 +1,17 @@
 import type { DocsWarmMessage } from "@doxahq/contracts/docs-warm-job";
 import { describe, expect, test, vi } from "vitest";
 
-import { runSweepTick, type SweepDeps, type SweepListKey } from "../../src/warm/warm-sweep";
+import type { SiteRollout } from "../../src/rollout-policy";
+import {
+  describeWarmRollout,
+  parseSweepState,
+  runSweepTick,
+  type SweepDeps,
+  type SweepListKey,
+} from "../../src/warm/warm-sweep";
 import { OTHER_RELEASE, RELEASE, mapEntry, siteResolution } from "./fixtures";
+
+const ROLLOUT = "all";
 
 /** A KV namespace listing `keys` in pages of `pageSize`. */
 function createKv(keys: SweepListKey[], pageSize: number, values = new Map<string, string>()) {
@@ -55,7 +64,7 @@ describe("deploy sweep", () => {
   test("groups keys by metadata site and pages through the list with a cursor", async () => {
     const kv = createKv(KEYS, 4);
     const { deps, sent } = createDeps(kv);
-    const first = await runSweepTick(null, { releaseId: RELEASE, cap: 2 }, deps);
+    const first = await runSweepTick(null, { releaseId: RELEASE, rollout: ROLLOUT, cap: 2 }, deps);
     expect(first).toMatchObject({ reset: true, enqueued: 2 });
     expect(sent[0]?.map((m) => [m.siteId, m.hostnames])).toEqual([
       ["site-a", ["a1.example.com", "a2.example.com"]],
@@ -72,7 +81,7 @@ describe("deploy sweep", () => {
     });
     expect(first.state).toMatchObject({ cursor: null, offset: 3, done: false, enqueued: 2 });
 
-    const second = await runSweepTick(first.state, { releaseId: RELEASE, cap: 2 }, deps);
+    const second = await runSweepTick(first.state, { releaseId: RELEASE, rollout: ROLLOUT, cap: 2 }, deps);
     expect(sent[1]?.map((m) => [m.siteId, m.hostnames])).toEqual([
       ["site-c", ["c1.example.com", "c2.example.com"]],
       ["site-d", ["d1.example.com"]],
@@ -81,7 +90,7 @@ describe("deploy sweep", () => {
     expect(kv.lists).toEqual([undefined, undefined, "4"]);
 
     // Done stays done until the next release.
-    const third = await runSweepTick(second.state, { releaseId: RELEASE, cap: 2 }, deps);
+    const third = await runSweepTick(second.state, { releaseId: RELEASE, rollout: ROLLOUT, cap: 2 }, deps);
     expect(third.enqueued).toBe(0);
     expect(kv.list).toHaveBeenCalledTimes(3);
   });
@@ -89,19 +98,54 @@ describe("deploy sweep", () => {
   test("a new release restarts from the first key", async () => {
     const kv = createKv(KEYS, 10);
     const { deps } = createDeps(kv);
-    const done = (await runSweepTick(null, { releaseId: RELEASE, cap: 100 }, deps)).state;
+    const done = (await runSweepTick(null, { releaseId: RELEASE, rollout: ROLLOUT, cap: 100 }, deps)).state;
     expect(done.done).toBe(true);
-    const next = await runSweepTick(done, { releaseId: OTHER_RELEASE, cap: 100 }, deps);
+    const next = await runSweepTick(done, { releaseId: OTHER_RELEASE, rollout: ROLLOUT, cap: 100 }, deps);
     expect(next).toMatchObject({ reset: true, enqueued: 4 });
     expect(next.state.releaseId).toBe(OTHER_RELEASE);
+  });
+
+  test("a wider warm rollout restarts a finished sweep of the same release", async () => {
+    const kv = createKv(KEYS, 10);
+    const { deps } = createDeps(kv);
+    const done = (await runSweepTick(null, { releaseId: RELEASE, rollout: "allowlist:site-1", cap: 100 }, deps)).state;
+    expect(done.done).toBe(true);
+
+    const same = await runSweepTick(done, { releaseId: RELEASE, rollout: "allowlist:site-1", cap: 100 }, deps);
+    expect(same).toMatchObject({ reset: false, enqueued: 0 });
+
+    const wider = await runSweepTick(done, { releaseId: RELEASE, rollout: "all", cap: 100 }, deps);
+    expect(wider).toMatchObject({ reset: true, enqueued: 4 });
+    expect(wider.state.rollout).toBe("all");
+  });
+
+  test("a state stored before the rollout field restarts once", () => {
+    expect(
+      parseSweepState({
+        releaseId: RELEASE,
+        cursor: null,
+        offset: 0,
+        done: true,
+        enqueued: 3,
+        startedAt: 1,
+      }),
+    ).toBeNull();
+  });
+
+  test.each<[SiteRollout, string]>([
+    [{ mode: "all", siteIds: new Set(["b", "a"]) }, "all"],
+    [{ mode: "off", siteIds: new Set() }, "off"],
+    [{ mode: "allowlist", siteIds: new Set(["b", "a"]) }, "allowlist:a,b"],
+  ])("describes the rollout %#", (rollout, expected) => {
+    expect(describeWarmRollout(rollout)).toBe(expected);
   });
 
   test("never enqueues more sites than the cap; no free slots means no work", async () => {
     const kv = createKv(KEYS, 10);
     const { deps, sent } = createDeps(kv);
-    expect((await runSweepTick(null, { releaseId: RELEASE, cap: 1 }, deps)).enqueued).toBe(1);
+    expect((await runSweepTick(null, { releaseId: RELEASE, rollout: ROLLOUT, cap: 1 }, deps)).enqueued).toBe(1);
     expect(sent.flat()).toHaveLength(1);
-    const none = await runSweepTick(null, { releaseId: RELEASE, cap: 0 }, deps);
+    const none = await runSweepTick(null, { releaseId: RELEASE, rollout: ROLLOUT, cap: 0 }, deps);
     expect(none.enqueued).toBe(0);
     expect(kv.list).toHaveBeenCalledTimes(1);
   });
@@ -117,7 +161,7 @@ describe("deploy sweep", () => {
       values,
     );
     const { deps, sent } = createDeps(kv, (siteId) => siteId !== "site-x");
-    const result = await runSweepTick(null, { releaseId: RELEASE, cap: 10 }, deps);
+    const result = await runSweepTick(null, { releaseId: RELEASE, rollout: ROLLOUT, cap: 10 }, deps);
     expect(sent.flat().map((m) => [m.siteId, m.hostnames])).toEqual([["site-old", ["old.example.com"]]]);
     expect(kv.get).toHaveBeenCalledTimes(2);
     expect(result.state.done).toBe(true);
@@ -127,6 +171,6 @@ describe("deploy sweep", () => {
     const kv = createKv(KEYS, 10);
     const { deps } = createDeps(kv);
     deps.send = async () => Promise.reject(new Error("queue down"));
-    await expect(runSweepTick(null, { releaseId: RELEASE, cap: 10 }, deps)).rejects.toThrow("queue down");
+    await expect(runSweepTick(null, { releaseId: RELEASE, rollout: ROLLOUT, cap: 10 }, deps)).rejects.toThrow("queue down");
   });
 });

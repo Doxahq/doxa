@@ -927,8 +927,12 @@ HTML response, and a new HTML prop would change every HTML key.
   custom domain that is active, verified and routing `healthy`
   (`DocsDomainsRepository.findCanonicalHostname`). A change of that state,
   or a deleted domain, resyncs every hostname of the site. Certificate paths
-  and the route-data endpoint never redirect, and the warm job skips a
-  redirecting hostname. Host cache and hostname map formats are 2 since this
+  and the route-data endpoint never redirect. The warm job skips a
+  redirecting hostname, and so does pre-rendering: publications and the
+  reconcile create no task for it, and its existing tasks become obsolete,
+  so the storage collector removes their output. When the redirect stops,
+  the next reconcile renders the `doxa.page` hostname again. The rule lives
+  once in `repositories/docs-canonical-domain.ts`. Host cache and hostname map formats are 2 since this
   field, so no older entry skips the redirect.
 - Canonical links use the requesting hostname: `toHostResolution` sets
   `siteUrl` (`https://{hostname}`) on the pinned resolution, the pre-renderer

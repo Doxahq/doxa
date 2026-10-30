@@ -40,6 +40,10 @@ import {
 import { isDocsPreviewGateEnabled, type Env } from "../env";
 import { resolveProductionDocsAccessPolicy } from "../services/docs-access";
 import { createGeneratedDocsHostname } from "../utils/docs-url";
+import {
+  isCanonicalCustomDomain,
+  siteRedirectsToCustomDomain,
+} from "./docs-canonical-domain";
 import type { DocsMutationTransaction } from "./docs-cache-invalidations";
 import { oldestOpenRowAgeSeconds } from "./health-sql";
 import { enqueueStorageCollection } from "./storage-gc";
@@ -161,7 +165,8 @@ export function createObsoletePrerenderTaskCondition(
 ) {
   // A succeeded task is included. Its stored render stops serving production
   // as soon as the publication, the hostname, or the release changes, and the
-  // garbage collector needs that transition to find the objects.
+  // garbage collector needs that transition to find the objects. A `doxa.page`
+  // hostname that redirects to a custom domain serves nothing either.
   return and(
     inArray(schema.docsPrerenderTasks.status, [
       "pending",
@@ -179,7 +184,10 @@ export function createObsoletePrerenderTaskCondition(
         where ${schema.docsSites.id} = ${schema.docsPrerenderTasks.siteId}
           and ${schema.docsSites.publishedVersionId} = ${schema.docsPrerenderTasks.publishedVersionId}
           and (
-            ${schema.docsPrerenderTasks.hostname} = (${schema.docsSites.slug} || '.' || ${config.docsBaseDomain})
+            (
+              ${schema.docsPrerenderTasks.hostname} = (${schema.docsSites.slug} || '.' || ${config.docsBaseDomain})
+              and not ${siteRedirectsToCustomDomain(schema.docsSites.id)}
+            )
             or exists (
               select 1 from ${schema.docsDomains}
               where ${schema.docsDomains.siteId} = ${schema.docsSites.id}
@@ -988,14 +996,17 @@ export class DocsPrerenderTasksRepository implements PrerenderTaskApiRpc {
         ),
       )
       .where(
-        sql`not exists (
-          select 1 from ${schema.docsPrerenderTasks}
-          where ${schema.docsPrerenderTasks.siteId} = ${schema.docsSites.id}
-            and ${schema.docsPrerenderTasks.publishedVersionId} = ${schema.docsVersions.id}
-            and ${schema.docsPrerenderTasks.rendererReleaseId} = ${this.config.rendererReleaseId}
-            and ${schema.docsPrerenderTasks.status} <> 'obsolete'
-            and ${schema.docsPrerenderTasks.hostname} = (${schema.docsSites.slug} || '.' || ${this.config.docsBaseDomain})
-        )`,
+        and(
+          sql`not exists (
+            select 1 from ${schema.docsPrerenderTasks}
+            where ${schema.docsPrerenderTasks.siteId} = ${schema.docsSites.id}
+              and ${schema.docsPrerenderTasks.publishedVersionId} = ${schema.docsVersions.id}
+              and ${schema.docsPrerenderTasks.rendererReleaseId} = ${this.config.rendererReleaseId}
+              and ${schema.docsPrerenderTasks.status} <> 'obsolete'
+              and ${schema.docsPrerenderTasks.hostname} = (${schema.docsSites.slug} || '.' || ${this.config.docsBaseDomain})
+          )`,
+          sql`not ${siteRedirectsToCustomDomain(schema.docsSites.id)}`,
+        ),
       )
       .orderBy(asc(schema.docsSites.id))
       .limit(RECONCILE_LIMIT);
@@ -1056,12 +1067,14 @@ async function listActiveProductionHostnames(
   published: Pick<PrerenderTaskContext, "siteId" | "projectSlug">,
   docsBaseDomain: string,
 ): Promise<string[]> {
-  const generated = createGeneratedDocsHostname(
-    published.projectSlug,
-    docsBaseDomain,
-  );
   const custom = await reader
-    .select({ hostname: schema.docsDomains.hostname })
+    .select({
+      hostname: schema.docsDomains.hostname,
+      kind: schema.docsDomains.kind,
+      status: schema.docsDomains.status,
+      verificationStatus: schema.docsDomains.verificationStatus,
+      routingStatus: schema.docsDomains.routingStatus,
+    })
     .from(schema.docsDomains)
     .where(
       and(
@@ -1072,6 +1085,11 @@ async function listActiveProductionHostnames(
       ),
     )
     .orderBy(asc(schema.docsDomains.createdAt), asc(schema.docsDomains.id));
+  // The `doxa.page` hostname of a site with a canonical custom domain only
+  // redirects there, so it gets no pre-render.
+  const generated = custom.some(isCanonicalCustomDomain)
+    ? null
+    : createGeneratedDocsHostname(published.projectSlug, docsBaseDomain);
   return [generated, ...custom.map(({ hostname }) => hostname)].filter(
     (hostname): hostname is string => Boolean(hostname),
   );

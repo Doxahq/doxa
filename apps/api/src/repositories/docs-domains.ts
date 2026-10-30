@@ -4,7 +4,6 @@ import type {
   DocsDomainDto,
   DocsDomainProvider,
   DocsDomainResolution,
-  DocsDomainRoutingStatus,
   DocsDomainSslValidationRecord,
   DocsDomainStatus,
   DocsDomainVerificationStatus,
@@ -17,6 +16,10 @@ import {
   withDocsCacheInvalidation,
   withDocsPublicationEffects,
 } from "./docs-cache-mutation";
+import {
+  canonicalCustomDomainCondition,
+  isCanonicalCustomDomain,
+} from "./docs-canonical-domain";
 
 export const RETIRED_DOCS_BASE_DOMAINS = ["docs.doxa.so"] as const;
 
@@ -330,22 +333,14 @@ export class DocsDomainsRepository {
 
   /**
    * The custom domain that the site's `doxa.page` hostname redirects to: the
-   * oldest one that `isCanonicalCustomDomain` accepts. Null while the site has
+   * oldest one that `canonicalCustomDomainCondition` accepts. Null while the site has
    * none, so the `doxa.page` hostname serves the site itself.
    */
   async findCanonicalHostname(siteId: string): Promise<string | null> {
     const [row] = await this.db
       .select({ hostname: schema.docsDomains.hostname })
       .from(schema.docsDomains)
-      .where(
-        and(
-          eq(schema.docsDomains.siteId, siteId),
-          eq(schema.docsDomains.kind, "custom_domain"),
-          eq(schema.docsDomains.status, "active"),
-          eq(schema.docsDomains.verificationStatus, "verified"),
-          eq(schema.docsDomains.routingStatus, "healthy"),
-        ),
-      )
+      .where(canonicalCustomDomainCondition(siteId))
       .orderBy(asc(schema.docsDomains.createdAt), asc(schema.docsDomains.id))
       .limit(1);
     return row?.hostname ?? null;
@@ -435,24 +430,7 @@ function isRoutableDomain(domain: {
   return domain.status === "active" && domain.verificationStatus === "verified";
 }
 
-/**
- * A custom domain that the `doxa.page` hostname may redirect to: routable,
- * and its last routing check reached Doxa. A redirect to a domain whose DNS
- * does not point here would take the site down. `findCanonicalHostname`
- * holds the same rule in SQL.
- */
-function isCanonicalCustomDomain(domain: {
-  kind: "doxa_subdomain" | "custom_domain";
-  status: DocsDomainStatus;
-  verificationStatus: DocsDomainVerificationStatus;
-  routingStatus: DocsDomainRoutingStatus;
-}): boolean {
-  return (
-    domain.kind === "custom_domain" &&
-    isRoutableDomain(domain) &&
-    domain.routingStatus === "healthy"
-  );
-}
+
 
 function toDocsDomainDto(
   domain: typeof schema.docsDomains.$inferSelect,

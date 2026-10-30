@@ -901,8 +901,8 @@ probe of the previous release may use it.
 ### Text routes
 
 `DocsTextCache` (`text-cache-entrypoint.ts`, `text-cache-policy.ts`) stores
-`/llms.txt`, `/llms-full.txt` and the raw Markdown of a page at `/{path}.md` for
-public production sites in the `DOXA_PROD_TEXT_ROUTE_CACHE_MODE` rollout
+`/llms.txt`, `/llms-full.txt`, `/sitemap.xml`, `/robots.txt` and the raw
+Markdown of a page at `/{path}.md` for public production sites in the `DOXA_PROD_TEXT_ROUTE_CACHE_MODE` rollout
 (`off|allowlist|all`, site IDs in `DOXA_PROD_TEXT_ROUTE_CACHE_SITE_IDS`; default
 `off`). `DocsHtmlCache` cannot serve them: it requires an HTML `accept` and an
 HTML response, and a new HTML prop would change every HTML key.
@@ -914,7 +914,16 @@ HTML response, and a new HTML prop would change every HTML key.
   visitor gets the full 200. Private and preview sites render uncached, so
   the access gate still sees the cookie. The `.md` path has segments from
   `[A-Za-z0-9_-]` and one `.md` suffix: no `%`, `..`, dot segment, segment
-  starting with `_`, or `api` segment.
+  starting with `_`, and not a renderer server route (`RENDERER_API_ROUTES`).
+- `/sitemap.xml` and `/robots.txt` are per site and per hostname (RES-7): the
+  sitemap lists the linked pages of the visible sections on the request origin,
+  and `robots.txt` names that sitemap. The platform renderer build ships no
+  static `sitemap.xml`, which Workers Assets would serve first.
+- Canonical links use the requesting hostname: `toHostResolution` sets
+  `siteUrl` (`https://{hostname}`) on the pinned resolution, the pre-renderer
+  sets it from the task's `trustedRequestOrigin`, and docs-runtime makes it
+  the site URL. `DOCS_PUBLIC_BASE_URL` is only the fallback for calls without
+  a resolved hostname.
 - The dispatcher builds the cache request from scratch: always `GET`, only
   `accept: */*`, no query. A visitor `HEAD` gets the stored response without a
   body.

@@ -133,7 +133,7 @@ export function isPrerenderableDocsRequest(request: Request): boolean {
 }
 
 /** A renderer server route, with its subpaths. Routing ignores case. */
-function isRendererApiRoute(pathname: string): boolean {
+export function isRendererApiRoute(pathname: string): boolean {
   const [, first, second] = pathname.toLowerCase().split("/");
   return (
     first === "api" && RENDERER_API_ROUTES.some((route) => route === second)

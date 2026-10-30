@@ -445,6 +445,62 @@ describe("docs runtime fetch", () => {
     expect(resolveDocsHost).not.toHaveBeenCalled();
   });
 
+  test("uses the resolved hostname as the site URL of canonical links", async () => {
+    const env = {
+      ...createEnv({
+        objects: {
+          "sites/site-1/versions/version-1/manifest.json": JSON.stringify({
+            siteId: "site-1",
+            versionId: "version-1",
+            projectSlug: "doxa-demo",
+            generatedAt: "2026-09-09T00:00:00.000Z",
+            pages: [
+              { title: "Overview", href: "/", sourcePath: "source/index.mdx" },
+            ],
+          }),
+          "sites/site-1/versions/version-1/source/index.mdx": "# Overview",
+        },
+      }),
+      DOCS_PUBLIC_BASE_URL: "https://preview.doxa.so",
+    };
+    const resolution = {
+      siteId: "site-1",
+      projectId: "project-1",
+      projectSlug: "doxa-demo",
+      publishedVersionId: "version-1",
+      artifactPrefix: "sites/site-1/versions/version-1",
+      manifestPath: "sites/site-1/versions/version-1/manifest.json",
+      accessPolicy: "public" as const,
+    };
+    const siteUrl = (siteUrlValue?: string) =>
+      runResolvedRuntimeRequest(env, {
+        resolution: {
+          ...resolution,
+          ...(siteUrlValue ? { siteUrl: siteUrlValue } : {}),
+        },
+        operation: "getSiteConfig",
+      });
+
+    expect(await siteUrl("https://docs.acme.com")).toMatchObject({
+      ok: true,
+      data: { url: "https://docs.acme.com" },
+    });
+    expect(await siteUrl("https://acme.doxa.page")).toMatchObject({
+      ok: true,
+      data: { url: "https://acme.doxa.page" },
+    });
+    // A call without a resolved hostname keeps the environment value.
+    expect(await siteUrl()).toMatchObject({
+      ok: true,
+      data: { url: "https://preview.doxa.so" },
+    });
+    // A site URL with a path is not an origin: the request is refused.
+    expect(await siteUrl("https://docs.acme.com/evil")).toMatchObject({
+      ok: false,
+      error: { code: "invalid_request" },
+    });
+  });
+
   test("serves a promoted version that reuses an immutable artifact", async () => {
     const env = createEnv({
       objects: {

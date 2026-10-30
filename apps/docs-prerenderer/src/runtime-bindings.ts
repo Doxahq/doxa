@@ -30,7 +30,9 @@ export interface Env {
 
 export function createRendererAdapter(
   service: PrerenderRendererService,
-  resolution: DocsHostResolution,
+  taskResolution: DocsHostResolution,
+  /** The trusted origin of the render identity: the task's own hostname. */
+  siteUrl: string,
 ): {
   getPlan(): Promise<unknown>;
   prepare(pathname: string): Promise<unknown>;
@@ -41,6 +43,7 @@ export function createRendererAdapter(
     routeData: PublicDocsRouteDataV1;
   }): Promise<Response>;
 } {
+  const resolution: DocsHostResolution = { ...taskResolution, siteUrl };
   return {
     getPlan: () => service.getPlan({ resolution }),
     prepare: (pathname) => service.prepare({ resolution, pathname }),

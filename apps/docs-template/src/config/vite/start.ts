@@ -18,7 +18,11 @@ export const prerenderConfig = {
 
 export function createStartConfig(
   deploymentTarget: DeploymentTarget,
-  sitemapHost: string
+  sitemapHost: string,
+  // The platform renderer serves every published site, so it must not ship
+  // a static sitemap.xml of this template's own pages: Workers Assets would
+  // serve it before the per-site /sitemap.xml route (RES-7).
+  { staticSitemap }: { staticSitemap: boolean }
 ) {
   return {
     server: {
@@ -29,7 +33,7 @@ export function createStartConfig(
       ? { prerender: prerenderConfig }
       : {}),
     sitemap: {
-      enabled: true,
+      enabled: staticSitemap,
       host: sitemapHost,
     },
   };

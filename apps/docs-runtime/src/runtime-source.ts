@@ -253,6 +253,8 @@ export interface ProjectRuntimeContext {
   artifactPrefix: string;
   manifestPath: string;
   manifest: DocsManifest;
+  /** The public origin of the requesting hostname, set by the dispatcher. */
+  siteUrl?: string;
 }
 
 /**
@@ -651,6 +653,7 @@ export async function runResolvedRuntimeRequest(
     artifactPrefix: resolution.data.artifactPrefix,
     manifestPath: resolution.data.manifestPath,
     manifest: manifestRead.manifest,
+    ...(resolution.data.siteUrl ? { siteUrl: resolution.data.siteUrl } : {}),
   };
 
   const operationStartedAt = now();
@@ -1395,8 +1398,20 @@ async function getSiteConfig(
   return {
     name: config.name,
     description: config.description,
-    url: env.DOCS_PUBLIC_BASE_URL?.replace(/\/+$/, "") ?? "",
+    url: getSiteUrl(env, context),
   };
+}
+
+/**
+ * The origin of canonical links. Each hostname of a site links to itself; the
+ * environment value is only for calls without a resolved hostname, such as
+ * local development.
+ */
+function getSiteUrl(
+  env: RuntimeSourceEnv,
+  context: ProjectRuntimeContext,
+): string {
+  return (context.siteUrl ?? env.DOCS_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
 }
 
 async function getFeatureConfig(

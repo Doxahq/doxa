@@ -3,6 +3,7 @@ import type { DocsDomainResolution } from "@doxahq/contracts";
 import {
   cacheControlFor,
   isPublicProduction,
+  isRendererApiRoute,
   withoutResponseCaching,
 } from "./cache-policy";
 import {
@@ -13,12 +14,14 @@ import {
 } from "./rollout-policy";
 
 /**
- * Text routes of a docs site: `/llms.txt`, `/llms-full.txt` and the raw
- * Markdown of a page at `/{path}.md`. They have their own cache entrypoint,
+ * Text routes of a docs site: `/llms.txt`, `/llms-full.txt`, `/sitemap.xml`,
+ * `/robots.txt` and the raw Markdown of a page at `/{path}.md`. Each answer
+ * depends only on the hostname, the path and the published version. They
+ * have their own cache entrypoint,
  * `DocsTextCache`, because the HTML entrypoint accepts only HTML requests and
  * HTML responses, and a new HTML prop would change every HTML key.
  */
-export type DocsTextRoute = "llms" | "llms-full" | "md";
+export type DocsTextRoute = "llms" | "llms-full" | "sitemap" | "robots" | "md";
 
 /**
  * Increase this value when the cached text response changes shape. With
@@ -45,12 +48,16 @@ export interface TextRouteCacheEnv {
 const EXACT_TEXT_ROUTES: ReadonlyMap<string, DocsTextRoute> = new Map([
   ["/llms.txt", "llms"],
   ["/llms-full.txt", "llms-full"],
+  ["/sitemap.xml", "sitemap"],
+  ["/robots.txt", "robots"],
 ]);
 
 /** The one content type that each route may store. */
 const TEXT_ROUTE_CONTENT_TYPES: Readonly<Record<DocsTextRoute, string>> = {
   llms: "text/plain",
   "llms-full": "text/plain",
+  sitemap: "application/xml",
+  robots: "text/plain",
   md: "text/markdown",
 };
 
@@ -90,14 +97,14 @@ function isMarkdownPagePath(pathname: string): boolean {
   if (!pathname.startsWith("/") || !pathname.endsWith(MARKDOWN_SUFFIX)) {
     return false;
   }
-  return pathname
-    .slice(1, -MARKDOWN_SUFFIX.length)
+  const pagePath = pathname.slice(0, -MARKDOWN_SUFFIX.length);
+  if (isRendererApiRoute(pagePath)) return false;
+  return pagePath
+    .slice(1)
     .split("/")
     .every(
       (segment) =>
-        MARKDOWN_SEGMENT_PATTERN.test(segment) &&
-        !segment.startsWith("_") &&
-        segment.toLowerCase() !== "api",
+        MARKDOWN_SEGMENT_PATTERN.test(segment) && !segment.startsWith("_"),
     );
 }
 

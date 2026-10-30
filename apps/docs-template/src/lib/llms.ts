@@ -9,7 +9,6 @@ import type { DocsRequestContext } from "@/src/runtime/request-context";
 import {
   normalizeRuntimeHref,
   type DoxaDocsRuntimeSource,
-  type RuntimeSection,
 } from "@/src/runtime/runtime-source";
 import { isNoPublishedDocsError } from "@/src/runtime/runtime-source-error";
 import { createConfiguredRuntimeSource } from "@/src/runtime/runtime-source-selection";
@@ -18,6 +17,11 @@ import { readFrontmatter } from "@doxahq/mdx-runtime";
 import type { ResolvedSiteConfig } from "@doxahq/site-config";
 
 import { noPublishedDocsResponse } from "@/src/lib/no-published-docs";
+import {
+  listSectionRoutes,
+  listVisibleSections,
+  type SiteRoute,
+} from "@/src/lib/site-routes";
 import { utf8ByteLength } from "@/src/lib/utf8";
 
 export interface LlmsDocument {
@@ -111,9 +115,7 @@ export async function loadLlmsCorpus(
     pastBudget = "skip",
   }: LlmsLoadOptions = {}
 ): Promise<LlmsCorpus> {
-  const sections = (await source.getSections()).filter(
-    (section) => !section.hidden
-  );
+  const sections = await listVisibleSections(source);
   const routesBySection = await listSectionRoutes(source, sections);
   const allRoutes = routesBySection.flat();
   const budget = createByteBudget(contentByteBudget);
@@ -148,12 +150,7 @@ export async function loadLlmsCorpus(
   };
 }
 
-interface LlmsRoute {
-  href: string;
-  title: string;
-}
-
-function navTitleDocument(route: LlmsRoute, origin: string): LlmsDocument {
+function navTitleDocument(route: SiteRoute, origin: string): LlmsDocument {
   return {
     title: route.title || route.href,
     url: `${origin}${route.href}`,
@@ -179,24 +176,6 @@ function createByteBudget(limit: number | undefined) {
     },
     skipped: () => skipped,
   };
-}
-
-async function listSectionRoutes(
-  source: DoxaDocsRuntimeSource,
-  sections: readonly RuntimeSection[]
-): Promise<LlmsRoute[][]> {
-  const routes = await Promise.all(
-    sections.map((section) => source.getRoutes(section.slug))
-  );
-  const seen = new Set<string>();
-  return routes.map((sectionRoutes) =>
-    sectionRoutes.flatMap((route) => {
-      const href = normalizeRuntimeHref(route.href);
-      if (seen.has(href)) return [];
-      seen.add(href);
-      return [{ href, title: route.title }];
-    })
-  );
 }
 
 async function loadLlmsDocument(

@@ -48,6 +48,7 @@ export class DocsPrerenderWorkflow extends WorkflowEntrypoint<
         renderer: createRendererAdapter(
           this.env.PRERENDER_RENDERER,
           task.resolution,
+          new URL(task.identity.trustedRequestOrigin).origin,
         ),
         bucket: createBucketAdapter(this.env.DOCS_RENDERED_BUCKET),
         now: () => new Date(),

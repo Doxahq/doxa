@@ -321,7 +321,8 @@ function isSameResolution(
     left.publishedVersionId === right.publishedVersionId &&
     left.artifactPrefix === right.artifactPrefix &&
     left.manifestPath === right.manifestPath &&
-    left.accessPolicy === right.accessPolicy
+    left.accessPolicy === right.accessPolicy &&
+    left.siteUrl === right.siteUrl
   );
 }
 

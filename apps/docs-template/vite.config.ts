@@ -44,7 +44,9 @@ export default defineConfig(({ mode }) => {
         }
       : undefined;
 
-  const startConfig = createStartConfig(deploymentTarget, sitemapHost);
+  const startConfig = createStartConfig(deploymentTarget, sitemapHost, {
+    staticSitemap: !isPlatformRendererBuild,
+  });
 
   return {
     base: "/",

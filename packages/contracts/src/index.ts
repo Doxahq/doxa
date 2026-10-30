@@ -452,6 +452,28 @@ export const updateDocsPreviewVisibilityInputSchema = z
   .strict();
 export const docsAccessPolicySchema = z.enum(["public", "authenticated"]);
 
+/**
+ * The public origin that a resolution serves, such as `https://acme.doxa.page`:
+ * a scheme and a host, with no path. Only the dispatcher and the pre-renderer
+ * set it, from the resolved hostname. docs-runtime makes it the site URL, so
+ * the canonical links of every hostname point to that hostname.
+ */
+export const docsSiteOriginSchema = z
+  .string()
+  .refine(isHttpOrigin, "Expected an HTTP(S) origin without a path");
+
+function isHttpOrigin(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      url.origin === value
+    );
+  } catch {
+    return false;
+  }
+}
+
 export const docsHostResolutionSchema = z.object({
   siteId: z.string(),
   projectId: z.string(),
@@ -460,6 +482,7 @@ export const docsHostResolutionSchema = z.object({
   artifactPrefix: z.string(),
   manifestPath: z.string(),
   accessPolicy: docsAccessPolicySchema,
+  siteUrl: docsSiteOriginSchema.optional(),
 });
 
 export const docsDomainKindSchema = z.enum(["doxa_subdomain", "custom_domain"]);

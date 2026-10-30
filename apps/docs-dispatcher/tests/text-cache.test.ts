@@ -59,11 +59,16 @@ describe("text route allowlist", () => {
   test.each<[string, DocsTextRoute]>([
     ["/llms.txt", "llms"],
     ["/llms-full.txt", "llms-full"],
+    ["/sitemap.xml", "sitemap"],
+    ["/robots.txt", "robots"],
     ["/guide.md", "md"],
     ["/index.md", "md"],
     ["/llms.md", "md"],
     ["/guides/Get_started-2.md", "md"],
     ["/a/b/c/d.md", "md"],
+    // Docs pages under an api path (RES-2).
+    ["/docs/api.md", "md"],
+    ["/api/notes/create.md", "md"],
   ])("accepts %s", (path, route) => {
     expect(matchDocsTextRoute(path)).toBe(route);
     expect(isCacheableDocsTextRequest(request(path))).toBe(true);
@@ -78,6 +83,9 @@ describe("text route allowlist", () => {
     "/LLMS.txt",
     "/docs/llms.txt",
     "/llms.txt.md",
+    "/Sitemap.xml",
+    "/docs/sitemap.xml",
+    "/robots.txt/",
     // One `.md` suffix, segments from [A-Za-z0-9_-].
     "/.md",
     "/guide.md/",
@@ -92,12 +100,12 @@ describe("text route allowlist", () => {
     "/%2e%2e/guide.md",
     "/a/../b.md",
     "/a\\b.md",
-    // Private and API segments.
+    // Private segments and the renderer's own server routes.
     "/_doxa/guide.md",
     "/docs/_hidden.md",
     "/api/search.md",
-    "/docs/api.md",
-    "/API/x.md",
+    "/API/search.md",
+    "/api/echo/v1/notes.md",
   ])("rejects the path %s", (path) => {
     expect(matchDocsTextRoute(path)).toBeNull();
   });
@@ -126,9 +134,9 @@ describe("text route allowlist", () => {
       "https://docs.example.com/_doxa/x.md",
     );
     expect(isCacheableDocsTextRequest(request("/a/../_doxa/x.md"))).toBe(false);
-    expect(isCacheableDocsTextRequest(request("/a/%2e%2e/api/x.md"))).toBe(
-      false,
-    );
+    expect(
+      isCacheableDocsTextRequest(request("/a/%2e%2e/api/search.md")),
+    ).toBe(false);
   });
 });
 
@@ -212,6 +220,8 @@ describe("withDocsTextCachePolicy", () => {
   test.each<[DocsTextRoute, string]>([
     ["llms", "text/plain; charset=utf-8"],
     ["llms-full", "text/plain"],
+    ["sitemap", "application/xml; charset=utf-8"],
+    ["robots", "text/plain; charset=utf-8"],
     ["md", "text/markdown; charset=utf-8"],
   ])("stores %s as %s for the versioned lifetime", (route, contentType) => {
     const response = withDocsTextCachePolicy(respond(contentType), route);
@@ -230,6 +240,10 @@ describe("withDocsTextCachePolicy", () => {
     ["md", "text/markdown", { status: 404 }],
     ["llms", "text/plain", { status: 500 }],
     ["llms", "text/plain", { status: 301 }],
+    // A static template sitemap or an HTML page is never stored as a sitemap.
+    ["sitemap", "text/html", {}],
+    ["sitemap", "application/xml", { status: 404 }],
+    ["robots", "text/html", {}],
     ["llms", "text/plain", { headers: { "set-cookie": "a=b" } }],
     ["llms", "text/plain", { headers: { vary: "accept" } }],
     ["md", "text/markdown", { headers: { "cache-control": "no-store" } }],

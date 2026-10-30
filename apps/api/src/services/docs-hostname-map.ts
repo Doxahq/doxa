@@ -188,22 +188,53 @@ export function selectHostnamesDue(
 
 export interface DocsHostnameMapReconcileResult {
   slot: number;
+  /** True when the run rewrote every public hostname, not only its slot. */
+  full: boolean;
   due: number;
   stored: number;
   deleted: number;
 }
 
 /**
+ * Whether this process still owes a full rewrite of the map. The dispatcher
+ * reads only entries of its own `DOCS_HOSTNAME_MAP_FORMAT`, so a format change
+ * makes every stored entry invalid until it is rewritten. A format change
+ * always ships with an API restart (the dispatcher deploys first), so the
+ * first run of each process rewrites every public hostname instead of waiting
+ * up to 12 hours for each slot. The flag clears only after a full run
+ * succeeds, so a failed one is retried on the next tick.
+ */
+export class HostnameMapFullRewrite {
+  private done = false;
+
+  get pending(): boolean {
+    return !this.done;
+  }
+
+  markDone(): void {
+    this.done = true;
+  }
+}
+
+/**
+ * Lives for the process. `fromEnv` builds a new reconciler on every tick, so
+ * the state cannot live on the reconciler itself.
+ */
+const processFullRewrite = new HostnameMapFullRewrite();
+
+/**
  * Rewrites every public hostname once per refresh period, a slot per
- * scheduler run. It fills the map for existing sites, keeps live entries
- * younger than the dispatcher's maximum age, and repairs an entry that a
- * failed sync left behind. It reads the database and writes only the map.
+ * scheduler run, and every public hostname on the first run of the process.
+ * It fills the map for existing sites, keeps live entries younger than the
+ * dispatcher's maximum age, and repairs an entry that a failed sync or a
+ * format change left behind. It reads the database and writes only the map.
  */
 export class DocsHostnameMapReconciler {
   constructor(
     private readonly source: DocsHostnameSource,
     private readonly rpc: DocsHostnameMapRpc,
     private readonly now: () => number = Date.now,
+    private readonly fullRewrite: HostnameMapFullRewrite = new HostnameMapFullRewrite(),
   ) {}
 
   /** Null without the dispatcher binding, as in local development. */
@@ -212,20 +243,25 @@ export class DocsHostnameMapReconciler {
       ? new DocsHostnameMapReconciler(
           new DocsHostnameSourceRepository(env),
           env.DOCS_CACHE_INVALIDATOR,
+          Date.now,
+          processFullRewrite,
         )
       : null;
   }
 
   async run(scheduledTime: number): Promise<DocsHostnameMapReconcileResult> {
-    const due = selectHostnamesDue(
-      await this.source.listPublicHostnames(),
-      scheduledTime,
-    );
+    const full = this.fullRewrite.pending;
+    const publicHostnames = await this.source.listPublicHostnames();
+    const due = full
+      ? uniqueHostnames(publicHostnames)
+      : selectHostnamesDue(publicHostnames, scheduledTime);
     const updates = await readHostnameMapUpdates(this.source, due, this.now);
     await sendHostnameMapUpdates(this.rpc, updates);
+    if (full) this.fullRewrite.markDone();
     const stored = updates.filter((update) => update.resolution).length;
     const result = {
       slot: refreshSlotAt(scheduledTime),
+      full,
       due: due.length,
       stored,
       deleted: updates.length - stored,

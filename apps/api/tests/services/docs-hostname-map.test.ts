@@ -6,6 +6,7 @@ import {
   DocsHostnameMapReconciler,
   DocsHostnameMapSync,
   HOSTNAME_MAP_REFRESH_SLOTS,
+  HostnameMapFullRewrite,
   hostnamesForTask,
   readHostnameMapUpdates,
   refreshSlotAt,
@@ -311,6 +312,12 @@ describe("hostname map refresh slots", () => {
   });
 });
 
+function fullRewriteDone(): HostnameMapFullRewrite {
+  const state = new HostnameMapFullRewrite();
+  state.markDone();
+  return state;
+}
+
 describe("hostname map reconcile", () => {
   test("rewrites the hostnames of the current slot from the database", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
@@ -327,11 +334,17 @@ describe("hostname map reconcile", () => {
       ),
     });
     const { rpc, calls } = fakeRpc();
-    const result = await new DocsHostnameMapReconciler(source, rpc, () => NOW).run(NOW);
+    const result = await new DocsHostnameMapReconciler(
+      source,
+      rpc,
+      () => NOW,
+      fullRewriteDone(),
+    ).run(NOW);
     const expected = new Set([...due, ...slotHostnames]);
     expect(new Set(resolve.mock.calls.map(([hostname]) => hostname))).toEqual(expected);
     expect(result).toEqual({
       slot: refreshSlotAt(NOW),
+      full: false,
       due: expected.size,
       stored: slotHostnames.length - 1,
       deleted: expected.size - (slotHostnames.length - 1),
@@ -351,5 +364,81 @@ describe("hostname map reconcile", () => {
 
   test("is not built without the dispatcher binding", () => {
     expect(DocsHostnameMapReconciler.fromEnv({} as never)).toBeNull();
+  });
+});
+
+describe("hostname map full rewrite after a process start", () => {
+  const hostnames = Array.from({ length: 230 }, (_, index) => `site-${index}.doxa.page`);
+  const slotHostnames = selectHostnamesDue(hostnames, NOW);
+
+  function publicSource() {
+    return fakeSource({
+      publicHostnames: hostnames,
+      resolutions: Object.fromEntries(
+        hostnames.map((hostname) => [hostname, resolutionFor(hostname)]),
+      ),
+    });
+  }
+
+  test("rewrites every public hostname on the first run, in sync-limit chunks", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const { source } = publicSource();
+    const { rpc, calls } = fakeRpc();
+    const result = await new DocsHostnameMapReconciler(source, rpc, () => NOW).run(NOW);
+    expect(result).toEqual({
+      slot: refreshSlotAt(NOW),
+      full: true,
+      due: hostnames.length,
+      stored: hostnames.length,
+      deleted: 0,
+    });
+    expect(calls.map(({ updates }) => updates.length)).toEqual([100, 100, 30]);
+    expect(new Set(calls.flatMap(({ updates }) => updates.map((update) => update.hostname)))).toEqual(
+      new Set(hostnames),
+    );
+    expect(JSON.parse(String(info.mock.calls[0]?.[0]))).toMatchObject({
+      event: "docs_hostname_map_reconcile",
+      full: true,
+    });
+  });
+
+  test("rewrites only the due slot on the next run", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const { source } = publicSource();
+    const { rpc, calls } = fakeRpc();
+    const reconciler = new DocsHostnameMapReconciler(source, rpc, () => NOW);
+    await reconciler.run(NOW);
+    calls.length = 0;
+    const result = await reconciler.run(NOW + FIVE_MINUTES);
+    const nextSlot = selectHostnamesDue(hostnames, NOW + FIVE_MINUTES);
+    expect(result).toMatchObject({ full: false, due: nextSlot.length });
+    expect(calls.flatMap(({ updates }) => updates.map((update) => update.hostname))).toEqual(nextSlot);
+  });
+
+  test("retries a failed full run as a full run on the next tick", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    expect(slotHostnames.length).toBeLessThan(hostnames.length);
+    const { source } = publicSource();
+    const syncHostnames = vi
+      .fn<(input: SyncInput) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("dispatcher down"))
+      .mockResolvedValue(undefined);
+    const reconciler = new DocsHostnameMapReconciler(source, { syncHostnames }, () => NOW);
+    await expect(reconciler.run(NOW)).rejects.toThrow("dispatcher down");
+    const retry = await reconciler.run(NOW + FIVE_MINUTES);
+    expect(retry).toMatchObject({ full: true, due: hostnames.length });
+    expect((await reconciler.run(NOW + 2 * FIVE_MINUTES)).full).toBe(false);
+  });
+
+  test("shares one process state across reconcilers built per tick", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const { source } = publicSource();
+    const { rpc } = fakeRpc();
+    const state = new HostnameMapFullRewrite();
+    expect((await new DocsHostnameMapReconciler(source, rpc, () => NOW, state).run(NOW)).full).toBe(true);
+    expect(
+      (await new DocsHostnameMapReconciler(source, rpc, () => NOW, state).run(NOW + FIVE_MINUTES))
+        .full,
+    ).toBe(false);
   });
 });

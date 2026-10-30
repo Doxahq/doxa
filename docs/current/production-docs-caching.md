@@ -291,7 +291,13 @@ syncs them. Every public hostname is rewritten once every 12 hours
 (`DOCS_HOSTNAME_MAP_REFRESH_SECONDS`). It reads the database and writes only
 the map; it logs `docs_hostname_map_reconcile` with the slot and the counts.
 It is the backfill for existing sites: 12 hours after the first deployment
-with the namespace bound, every public hostname has an entry. It does not run
+with the namespace bound, every public hostname has an entry. The first run
+after each API start rewrites every public hostname instead of one slot, and
+logs `full: true`; a failed full run is repeated on the next tick. The
+dispatcher reads only entries of its own `DOCS_HOSTNAME_MAP_FORMAT`, and a
+format change always ships with an API restart (the dispatcher deploys first),
+so the map converges minutes after a deploy, and again after each morning
+restart, instead of over 12 hours. It does not run
 without the `DOCS_CACHE_INVALIDATOR` binding, for example in local development.
 
 ### Reads and rollout

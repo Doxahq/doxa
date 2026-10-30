@@ -1254,16 +1254,17 @@ async function getPrerenderPlan(
   const sections = await readSections(env, context, runtimeContext);
   for (const section of sections) {
     if (section.default || section.hidden) continue;
-    const sectionPath = normalizeHref(`/${section.slug}`);
-    const routes = await readRoutes(env, context, section.slug, runtimeContext);
-    const target = routes.find((route) => !route.noLink)?.href;
-    if (!target) continue;
-    const normalizedTarget = normalizeHref(target);
-    if (normalizedTarget !== sectionPath && pagePaths.has(normalizedTarget)) {
+    const target = await getSectionRedirectTarget(
+      env,
+      context,
+      section,
+      runtimeContext,
+    );
+    if (target && pagePaths.has(target)) {
       entries.push({
         kind: "redirect",
-        pathname: sectionPath,
-        target: normalizedTarget,
+        pathname: getSectionPath(section),
+        target,
         status: 308,
       });
     }
@@ -1435,12 +1436,13 @@ async function resolvePage(
     (section) => !section.default && section.slug === slug,
   );
   if (matchedSection) {
-    const firstRoute = (
-      await readRoutes(env, context, matchedSection.slug, runtimeContext)
-    )[0];
-    if (firstRoute && firstRoute.href !== href) {
-      return { type: "redirect", href: firstRoute.href, status: 308 };
-    }
+    const target = await getSectionRedirectTarget(
+      env,
+      context,
+      matchedSection,
+      runtimeContext,
+    );
+    if (target) return { type: "redirect", href: target, status: 308 };
   }
 
   const page = await getPage(env, context, href, runtimeContext);
@@ -1898,6 +1900,35 @@ async function getHomeHref(
     (href) => pagePaths.has(href),
     routes[0]?.href ?? null,
   );
+}
+
+/**
+ * Where the URL of a section sends a visitor: its first page. A page stored
+ * at the section path wins, so a section never hides it. Live routing and the
+ * pre-render plan both use this, so they always agree.
+ */
+async function getSectionRedirectTarget(
+  env: RuntimeSourceEnv,
+  context: ProjectRuntimeContext,
+  section: RuntimeSection,
+  runtimeContext: RuntimeRequestContext,
+): Promise<string | null> {
+  const sectionPath = getSectionPath(section);
+  if (hasManifestPage(context, sectionPath)) return null;
+  const firstRoute = (
+    await readRoutes(env, context, section.slug, runtimeContext)
+  )[0];
+  if (!firstRoute) return null;
+  const target = normalizeHref(firstRoute.href);
+  return target === sectionPath ? null : target;
+}
+
+function getSectionPath(section: RuntimeSection): string {
+  return normalizeHref(`/${section.slug}`);
+}
+
+function hasManifestPage(context: ProjectRuntimeContext, href: string): boolean {
+  return context.manifest.pages.some((page) => normalizeHref(page.href) === href);
 }
 
 async function getSectionHomeHrefs(

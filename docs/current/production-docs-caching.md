@@ -762,15 +762,22 @@ pending with `binding_missing`; they are not silently marked complete.
 The initial request policy is deliberately narrow:
 
 - Only HTTPS `GET` and `HEAD` requests accepting HTML can use the cache.
-- Any cookie, authorization, range, upgrade, cache-control, or pragma header
-  bypasses the HTML cache. A browser reload can therefore bypass HTML caching.
+- Any authorization, range, upgrade, cache-control, or pragma header bypasses
+  the HTML cache. A browser reload can therefore bypass HTML caching. A cookie
+  does not: every shared cache also requires a public production site, and the
+  renderer reads cookies only in the access gate of generation previews. So an
+  analytics cookie of a parent domain, which the browser also sends to a docs
+  subdomain, keeps the cache (RES-1). Route data follows the same rule.
   Every request resolves its hostname through `DocsHostCache`, also a
   visitor-specific request. The resolution depends only on the hostname, and only public
   production mappings are stored. A reload therefore does not bypass the
   hostname mapping; freshness after a publish depends on the purge.
 - Any query string bypasses caching, including demo and framework data requests.
-- API routes, underscore-prefixed routes, dotted paths such as assets and
-  markdown, and malformed/unsafe encoded paths bypass the HTML cache. The text
+- The renderer's own server routes (`/api/search` and `/api/echo/...`, listed
+  in `RENDERER_API_ROUTES`), underscore-prefixed routes, dotted paths such as
+  assets and markdown, and malformed/unsafe encoded paths bypass the HTML
+  cache. Other `/api/...` paths are docs pages and use the cache (RES-2). A
+  test fails when a new `api.*` route file in docs-template is not listed. The text
   routes have their own entrypoint (see [Text routes](#text-routes)).
 - Unknown hosts, private resolutions, previews, and permanent generation URLs
   are not stored in the hostname cache. They cannot use the HTML cache.

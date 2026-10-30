@@ -51,15 +51,27 @@ describe("route-data request parsing", () => {
     ).toThrow(/same-origin/i);
   });
 
-  test("marks cookie or authorization requests as shared-cache ineligible", () => {
+  test("marks an authorization request as shared-cache ineligible", () => {
     const result = parseRouteDataRequest(
       new Request(
         "https://docs.example.com/_doxa/route-data/v1?path=%2Fguide",
         {
-          headers: { cookie: "session=private" },
+          headers: { authorization: "Bearer private" },
         },
       ),
     );
     expect(result.status === "ok" && result.sharedCacheEligible).toBe(false);
+  });
+
+  test("keeps a request with a cookie shared-cache eligible (RES-1)", () => {
+    const result = parseRouteDataRequest(
+      new Request(
+        "https://docs.example.com/_doxa/route-data/v1?path=%2Fguide",
+        {
+          headers: { cookie: "_ga=GA1.1.123.456" },
+        },
+      ),
+    );
+    expect(result.status === "ok" && result.sharedCacheEligible).toBe(true);
   });
 });

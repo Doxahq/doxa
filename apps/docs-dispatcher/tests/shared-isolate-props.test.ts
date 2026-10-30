@@ -235,7 +235,7 @@ describe("shared renderer isolate props (M46, F13)", () => {
     const uncachedFetch = (site: SiteId) =>
       worker.fetch(
         new Request(`https://${site}.doxa.page/guide`, {
-          headers: { accept: "text/html", cookie: "visitor=1" },
+          headers: { accept: "text/html", authorization: "Bearer visitor" },
         }),
         env as never,
         { exports, waitUntil: vi.fn() } as never,

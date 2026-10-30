@@ -76,12 +76,18 @@ const CACHE_HEADERS = [
   "cdn-cache-control",
   "cloudflare-cdn-cache-control",
 ] as const;
-const REQUEST_DEPENDENT_HEADERS = [
-  "cookie",
-  "authorization",
-  "range",
-  "upgrade",
-] as const;
+// `cookie` is not request-dependent here (RES-1). Every shared cache also
+// requires a public production site (`isPublicProduction`), and the renderer
+// reads cookies only in the access gate of generation previews. So an
+// analytics cookie of a parent domain must not cost a visitor the cache.
+const REQUEST_DEPENDENT_HEADERS = ["authorization", "range", "upgrade"] as const;
+
+/**
+ * The renderer's own server routes under `/api/`: the files
+ * `apps/docs-template/src/routes/api.*`. Every other `/api/...` path is a
+ * docs page and can be cached (RES-2).
+ */
+export const RENDERER_API_ROUTES = ["search", "echo"] as const;
 const REQUEST_CACHE_DIRECTIVE_HEADERS = ["cache-control", "pragma"] as const;
 
 export function isPublicProduction(
@@ -114,16 +120,24 @@ export function isPrerenderableDocsRequest(request: Request): boolean {
   } catch {
     return false;
   }
+  if (isRendererApiRoute(pathname)) return false;
   return !pathname
     .split("/")
     .some(
       (segment) =>
-        segment === "api" ||
         segment.startsWith("_") ||
         segment.includes(".") ||
         segment.includes("%") ||
         segment.includes("\\"),
     );
+}
+
+/** A renderer server route, with its subpaths. Routing ignores case. */
+function isRendererApiRoute(pathname: string): boolean {
+  const [, first, second] = pathname.toLowerCase().split("/");
+  return (
+    first === "api" && RENDERER_API_ROUTES.some((route) => route === second)
+  );
 }
 
 function hasAnyRequestHeader(

@@ -134,7 +134,10 @@ describe("planRouteDataPrefetch", () => {
     ["a query string", htmlRequest("/guide?demo=1")],
     ["a renderer asset", htmlRequest(`/_doxa/assets/${"a".repeat(64)}`)],
     ["raw Markdown", htmlRequest("/guide.md")],
-    ["a visitor cookie", htmlRequest("/guide", { headers: { cookie: "a=b" } })],
+    [
+      "an authorized request",
+      htmlRequest("/guide", { headers: { authorization: "Bearer private" } }),
+    ],
   ])("plans nothing for %s", (_case, request) => {
     expect(
       planRouteDataPrefetch({ request, siteId: SITE, rollout: ALL }),

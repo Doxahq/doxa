@@ -367,7 +367,6 @@ describe("cache entrypoints", () => {
   });
 
   test.each<RequestInit>([
-    { headers: { cookie: "session=private" } },
     { headers: { authorization: "Bearer private" } },
     { headers: { "cache-control": "no-cache" } },
     { method: "POST" },
@@ -399,6 +398,70 @@ describe("cache entrypoints", () => {
       expect(response.headers.get("cache-control")).toBe("private, no-store");
     },
   );
+
+  describe("a visitor with a cookie (RES-1)", () => {
+    const cookie = { headers: { cookie: "_ga=GA1.1.123.456" } };
+
+    test("reads the HTML cache of a public production site", async () => {
+      const env = createEnv();
+      const ctx = {
+        exports: {
+          DocsHostCache: vi.fn(
+            ({ props }: { props: { hostname: string } }) =>
+              new DocsHostCache({ props } as never, env as never),
+          ),
+          DocsHtmlCache: vi.fn(),
+          ScopedDocsContent: vi.fn(() => ({ request: vi.fn() })),
+        },
+      };
+      await worker.fetch(htmlRequest(cookie), env as never, ctx as never);
+      expect(ctx.exports.DocsHtmlCache).toHaveBeenCalledOnce();
+    });
+
+    test("fills the HTML cache through the trusted entrypoint", async () => {
+      const env = createEnv();
+      const entrypoint = new DocsHtmlCache(
+        {
+          props: {
+            hostname: resolution.hostname,
+            rendererBuildId: "build-1",
+            resolution,
+            lifetime: "versioned" as const,
+            deliveryRenderId: null,
+          },
+          exports: { ScopedDocsContent: vi.fn(() => ({ request: vi.fn() })) },
+        } as never,
+        env as never,
+      );
+      const response = await entrypoint.fetch(htmlRequest(cookie));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toContain("public");
+    });
+
+    test("keeps a preview on the uncached shared renderer", async () => {
+      const env = createEnv({
+        ...resolution,
+        renderTarget: "preview" as const,
+        accessPolicy: "authenticated" as const,
+      });
+      const ctx = {
+        exports: {
+          DocsHostCache: vi.fn(
+            ({ props }: { props: { hostname: string } }) =>
+              new DocsHostCache({ props } as never, env as never),
+          ),
+          DocsHtmlCache: vi.fn(),
+        },
+      };
+      const response = await worker.fetch(
+        htmlRequest(cookie),
+        env as never,
+        ctx as never,
+      );
+      expect(await response.text()).toBe("shared");
+      expect(ctx.exports.DocsHtmlCache).not.toHaveBeenCalled();
+    });
+  });
 
   test.each([
     null,

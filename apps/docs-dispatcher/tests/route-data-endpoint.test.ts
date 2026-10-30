@@ -87,7 +87,7 @@ describe("route-data endpoint with the lazy route-data cache", () => {
       fixture,
       {},
       {
-        cookie: "session=private",
+        authorization: "Bearer private",
       },
     );
 
@@ -95,6 +95,19 @@ describe("route-data endpoint with the lazy route-data cache", () => {
     expect(response.headers.get("x-doxa-route-data-cache")).toBe("BYPASS");
     expect(fixture.ctx.exports.DocsRouteDataCache).not.toHaveBeenCalled();
     expect(fixture.prepare).toHaveBeenCalledOnce();
+  });
+
+  test("serves a visitor with a cookie from the shared cache (RES-1)", async () => {
+    const fixture = await createFixture();
+    const response = await fetchRouteData(
+      fixture,
+      {},
+      { cookie: "_ga=GA1.1.123.456" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-doxa-route-data-cache")).toBe("MISS");
+    expect(fixture.routeDataCacheUrls).toHaveLength(1);
   });
 
   test("rejects a stale render hint before reading any route data", async () => {

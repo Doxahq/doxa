@@ -69,8 +69,9 @@ export function parseRouteDataRequest(
     status: "ok",
     pathname,
     ...(renderHint ? { renderHint } : {}),
-    sharedCacheEligible:
-      !request.headers.has("cookie") && !request.headers.has("authorization"),
+    // A cookie does not make route data visitor-specific: shared entries
+    // exist only for public production sites, which never read cookies (RES-1).
+    sharedCacheEligible: !request.headers.has("authorization"),
   };
 }
 

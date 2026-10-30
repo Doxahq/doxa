@@ -779,6 +779,97 @@ describe("docs runtime fetch", () => {
     ]);
   });
 
+  describe("a page at the path of its section (RES-3)", () => {
+    async function sectionPageEnv() {
+      const bundle = await createRuntimeDocsArtifacts({
+        siteId: "site-1",
+        versionId: "version-1",
+        projectSlug: "doxa-demo",
+        projectName: "Doxa Demo",
+        pages: [
+          {
+            title: "Overview",
+            route: "/overview",
+            navigationPath: "default/overview.md",
+            content: "---\ntitle: Overview\n---\n\n# Overview",
+          },
+          {
+            title: "Create a note",
+            route: "/api/notes/create",
+            navigationPath: "api/create.md",
+            content: "---\ntitle: Create a note\n---\n\n# Create a note",
+          },
+          {
+            title: "API overview",
+            route: "/api",
+            navigationPath: "api/overview.md",
+            content: "---\ntitle: API overview\n---\n\n# API overview",
+          },
+          {
+            title: "Health",
+            route: "/rest-api/health",
+            navigationPath: "rest-api/health.md",
+            content: "---\ntitle: Health\n---\n\n# Health",
+          },
+        ],
+        navigation: {
+          sections: [
+            { slug: "default", items: ["default/overview.md"] },
+            { slug: "api", items: ["api/create.md", "api/overview.md"] },
+            { slug: "rest-api", items: ["rest-api/health.md"] },
+          ],
+        },
+      });
+      return createEnv({
+        objects: Object.fromEntries(
+          bundle.files.map((file) => [
+            `sites/site-1/versions/version-1/${file.path}`,
+            file.content,
+          ]),
+        ),
+      });
+    }
+
+    test("plans the page and no section redirect for that path", async () => {
+      const response = await runtimeRequest(
+        await sectionPageEnv(),
+        "getPrerenderPlan",
+      );
+      const payload = (await response.json()) as { ok: boolean; data: unknown };
+
+      expect(payload.ok).toBe(true);
+      expect(payload.data).toEqual([
+        { kind: "page", pathname: "/" },
+        { kind: "page", pathname: "/api" },
+        { kind: "page", pathname: "/api/notes/create" },
+        { kind: "page", pathname: "/overview" },
+        {
+          kind: "redirect",
+          pathname: "/rest-api",
+          target: "/rest-api/health",
+          status: 308,
+        },
+        { kind: "page", pathname: "/rest-api/health" },
+      ]);
+    });
+
+    test("serves the page live, and still redirects a section without one", async () => {
+      const env = await sectionPageEnv();
+      const page = (await (
+        await runtimeRequest(env, "getRouteData", { pathname: "/api" })
+      ).json()) as { data: { type: string; href: string } };
+      const section = (await (
+        await runtimeRequest(env, "getRouteData", { pathname: "/rest-api" })
+      ).json()) as { data: { type: string; href: string } };
+
+      expect(page.data).toMatchObject({ type: "page", href: "/api" });
+      expect(section.data).toMatchObject({
+        type: "redirect",
+        href: "/rest-api/health",
+      });
+    });
+  });
+
   test("marks an empty site root as live-only", async () => {
     const bundle = await createRuntimeDocsArtifacts({
       siteId: "site-1",

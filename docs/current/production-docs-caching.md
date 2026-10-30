@@ -676,6 +676,10 @@ the viewer's own pool as live (`done`), still warming, or "not pre-warmed"
    `docs_warm_region` and the next visit's `x-doxa-html-cache: HIT`.
 4. `DOXA_PROD_WARM_DEPLOY_SWEEP=on`, one renderer deploy, then `all`.
 
+Production runs `all` since 30 Oct 2026: every public site is warmed in every
+region after each publish and renderer deploy. A `doxa.page` hostname that
+redirects to its custom domain is skipped.
+
 Deploy `docs-rendering` before the API that sends `warm` hints: an older
 dispatcher's strict sync schema rejects the field. If the order is wrong, the
 API sends a failed batch once more without `warm`

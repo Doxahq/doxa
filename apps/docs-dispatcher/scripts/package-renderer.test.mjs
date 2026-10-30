@@ -113,7 +113,7 @@ describe("createRendererPackage", () => {
       },
     ]);
     expect(config.triggers).toEqual({ crons: ["*/5 * * * *"] });
-    expect(config.vars.DOXA_PROD_WARM_MODE).toBe("allowlist");
+    expect(config.vars.DOXA_PROD_WARM_MODE).toBe("all");
     expect(config.vars.DOXA_PROD_WARM_DEPLOY_SWEEP).toBe("on");
   });
 

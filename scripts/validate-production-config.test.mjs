@@ -43,20 +43,20 @@ test("serves pre-rendered pages (M36) for every site", () => {
 
   // Set allowlist (with the ops site IDs) or off to narrow or revert.
   assert.equal(config.vars.DOXA_PROD_PRERENDER_MODE, "all");
-  // The site IDs are an operator value, kept in the ops repo.
+  // Ignored in `all` mode, kept so a switch back to `allowlist` needs no new value.
   assert.equal(
     config.vars.DOXA_PROD_PRERENDER_SITE_IDS,
     "${OPS_DOCS_PRERENDER_SITE_IDS}",
   );
 });
 
-test("keeps the previous-build fallback off and warms the operator's canary sites", () => {
+test("keeps the previous-build fallback off and warms every public site", () => {
   const config = JSON.parse(readFileSync(dispatcherConfigPath, "utf8"));
 
   assert.equal(config.vars.DOXA_PROD_PREVIOUS_FALLBACK_MODE, "off");
   assert.equal(config.vars.DOXA_PREVIOUS_FALLBACK_BUILD_WINDOW_SECONDS, "86400");
-  assert.equal(config.vars.DOXA_PROD_WARM_MODE, "allowlist");
-  // The site IDs are an operator value, kept in the ops repo.
+  assert.equal(config.vars.DOXA_PROD_WARM_MODE, "all");
+  // Ignored in `all` mode, kept so a switch back to `allowlist` needs no new value.
   assert.equal(config.vars.DOXA_PROD_WARM_SITE_IDS, "${OPS_DOCS_WARM_SITE_IDS}");
   // The renderer deploy writes these from the release record.
   assert.equal(config.vars.DOXA_PREVIOUS_RENDERER_BUILD_ID, "");
@@ -136,7 +136,7 @@ test("shares one renderer isolate per build for every site (M46)", () => {
 
   // Set allowlist (with the ops site IDs) or off to narrow or revert.
   assert.equal(config.vars.DOXA_PROD_SHARED_ISOLATE_MODE, "all");
-  // The site IDs are an operator value, kept in the ops repo.
+  // Ignored in `all` mode, kept so a switch back to `allowlist` needs no new value.
   assert.equal(
     config.vars.DOXA_PROD_SHARED_ISOLATE_SITE_IDS,
     "${OPS_DOCS_SHARED_ISOLATE_SITE_IDS}",

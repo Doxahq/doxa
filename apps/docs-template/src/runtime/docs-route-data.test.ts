@@ -54,6 +54,20 @@ describe("docs route data", () => {
     });
   });
 
+  test("names the root page with its slash, as the sitemap lists it", async () => {
+    const home = createPage({ href: "/", title: "Home" });
+    const source = createFakeRuntimeSource({
+      getHomeHref: async () => "/",
+      resolvePage: async () => ({ type: "page", href: "/", slug: "", page: home }),
+      getPage: async () => home,
+    });
+
+    await expect(resolveDocsRouteData(source, "/")).resolves.toMatchObject({
+      type: "page",
+      canonicalUrl: "https://docs.example.com/",
+    });
+  });
+
   test("preserves demo search payload for redirects", () => {
     expect(getDemoRedirectSearch({ demo: "" })).toEqual({
       search: { demo: true },

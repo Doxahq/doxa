@@ -11,6 +11,7 @@ import { createSitemapResponse, formatSitemap, listSitemapUrls } from "./sitemap
 interface FakeSite {
   sections: RuntimeSection[];
   routes: Record<string, RuntimeNavPage[]>;
+  homeHref?: string;
 }
 
 const ACME: FakeSite = {
@@ -49,7 +50,7 @@ function createSource(site: FakeSite): DoxaDocsRuntimeSource {
     getThemeConfig: unsupported,
     getFeatureConfig: unsupported,
     getNavigation: unsupported,
-    getHomeHref: unsupported,
+    getHomeHref: async () => site.homeHref ?? null,
     resolvePage: unsupported,
     getPage: unsupported,
     getSearchIndex: unsupported,
@@ -68,6 +69,25 @@ describe("listSitemapUrls", () => {
       "https://docs.acme.com/api/notes/create",
     ]);
     expect(source.getRawPage).not.toHaveBeenCalled();
+  });
+
+  test("leaves out / when the home setting shows another page there", async () => {
+    const urls = await listSitemapUrls(
+      createSource({ ...ACME, homeHref: "/install" }),
+      "https://docs.acme.com"
+    );
+
+    expect(urls).not.toContain("https://docs.acme.com/");
+    expect(urls).toContain("https://docs.acme.com/install");
+  });
+
+  test("keeps / when the home is the root page", async () => {
+    const urls = await listSitemapUrls(
+      createSource({ ...ACME, homeHref: "/" }),
+      "https://docs.acme.com"
+    );
+
+    expect(urls[0]).toBe("https://docs.acme.com/");
   });
 
   test("gives each hostname of a site its own URLs", async () => {

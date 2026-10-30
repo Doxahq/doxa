@@ -9,7 +9,10 @@
 import { noPublishedDocsResponse } from "@/src/lib/no-published-docs";
 import { listSectionRoutes, listVisibleSections } from "@/src/lib/site-routes";
 import type { DocsRequestContext } from "@/src/runtime/request-context";
-import type { DoxaDocsRuntimeSource } from "@/src/runtime/runtime-source";
+import {
+  normalizeRuntimeHref,
+  type DoxaDocsRuntimeSource,
+} from "@/src/runtime/runtime-source";
 import { isNoPublishedDocsError } from "@/src/runtime/runtime-source-error";
 import { createConfiguredRuntimeSource } from "@/src/runtime/runtime-source-selection";
 
@@ -21,14 +24,24 @@ const SITEMAP_HEADERS = {
   "Cache-Control": "public, max-age=3600",
 } as const;
 
-/** The absolute page URLs of a site, in navigation order. */
+/**
+ * The absolute page URLs of a site, in navigation order. Only canonical URLs:
+ * when the site's home is another page, `/` shows that page and names it as
+ * canonical, so `/` itself is left out.
+ */
 export async function listSitemapUrls(
   source: DoxaDocsRuntimeSource,
   origin: string
 ): Promise<string[]> {
-  const sections = await listVisibleSections(source);
+  const [sections, homeHref] = await Promise.all([
+    listVisibleSections(source),
+    source.getHomeHref(),
+  ]);
+  const rootIsDuplicate =
+    homeHref !== null && normalizeRuntimeHref(homeHref) !== "/";
   const routes = (await listSectionRoutes(source, sections)).flat();
   return routes
+    .filter((route) => !(rootIsDuplicate && route.href === "/"))
     .slice(0, SITEMAP_MAX_URLS)
     .map((route) => new URL(route.href, origin).toString());
 }

@@ -815,7 +815,8 @@ function stripFrontmatter(source: unknown): string {
 function getCanonicalUrl(siteUrl: string, href: string): string {
   const base = siteUrl.replace(/\/+$/, "");
   const normalizedHref = normalizeRuntimeHref(href);
-  return normalizedHref === "/" ? base || "/" : `${base}${normalizedHref}`;
+  // The root keeps its slash, as in the sitemap: `https://host/`.
+  return `${base}${normalizedHref}`;
 }
 
 function isDefaultPrefixedSlug(slug: string): boolean {

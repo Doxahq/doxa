@@ -564,12 +564,15 @@ and `scheduled()` (deploy). Messages carry IDs and ordering only
 
 ```text
 syncHostnames (API, after a publish commits)
-  writes the map; for each hostname whose live resolution changed → group by site
+  writes the map; for each hostname whose live resolution changed (a new hostname,
+    or another resolution than the stored one, whatever the stored format or age;
+    an unreadable entry counts only with the API's warm hint) → group by site
   → one publish message per site { siteId, hostnames, releaseId, publishedVersionId,
     jobId, priority: the API's warm hint }  (a failed send is logged, the sync succeeds)
 
 scheduled() every 5 min, only with DOXA_PROD_WARM_DEPLOY_SWEEP=on
-  DocsWarmControl("sweep"): new release → reset cursor; KV.list("host:", cursor)
+  DocsWarmControl("sweep"): done for this release and rollout → return (no slots call);
+  new release or new rollout → reset cursor; KV.list("host:", cursor)
   → group by metadata.siteId (no metadata → get) → at most
     min(DOXA_WARM_SWEEP_SITES_PER_TICK, floor(free slots / pools)) sites → sweep queue
 
@@ -582,9 +585,12 @@ queue() consumer (both queues), never fills itself (F44)
     (getSections, getRoutes); pending | duplicate | done_recently | stale → ack
   → pages: home, hint paths in the plan (≤ 50), navigation, rest (≤ DOXA_WARM_MAX_PAGES)
   → pools: hint regions, then DOXA_WARM_POOLS → anchor.start(job) per pool → ack
+    (a warmer that already runs the same job ID keeps its progress)
 
 regional warmer alarm
-  slot from DocsWarmControl("slots") (denied → 30 s)
+  slot from DocsWarmControl("slots") (denied → 30 s, 60 s, then every 2 min;
+    a denial writes nothing in the control object, and nothing in the warmer
+    once the wait is at 2 min)
   superseded? (KV version changed, hostname removed, release changed, rollout off)
   M36 site: DOCS_RENDERED_BUCKET.head(manifest) (F21); not ready → 60 s, at most
     20 min, then the pool fails with prerender_not_ready
@@ -592,13 +598,15 @@ regional warmer alarm
     (the visitor's exact keys, F5, F34); cancel the body after the headers (S2);
     a probe marker = not filled, retry once
   save the cursor, release the slot, re-arm
-  after the last fill: probe ≤ 20 evenly spread keys (F41); misses → re-fill once,
+  after the last fill (in a new alarm if this one used its 12 min, so a run stays
+    inside its 15-minute slot lease): probe ≤ 20 evenly spread keys (F41); misses → re-fill once,
     90 s later (a probe miss blocks stores of that key for over a minute, F38)
   report done | failed | superseded to the lock, deleteAll()
 
 site lock
   pool done for the deployed release → warm:<siteId> (a new release replaces the
-  record; writes are batched by an alarm, 1 per second per key in KV)
+  record; writes are batched by an alarm, 1 per second per key in KV; a failed
+  write retries after 10 s, doubling to at most 5 min, and is dropped after 1 h)
   every pool ended, or the lease ran out → job done; the pending message goes to
   the publish queue
 ```
@@ -608,6 +616,25 @@ Lease and failure rules:
 - Every warmer alarm sends a heartbeat to the site lock, also while it waits
   for a slot or for saved output. The heartbeat renews the 30-minute lease
   while the job is the running one, but never past 3 h after the job started.
+  A heartbeat writes only when the renewal adds 5 minutes or more, so the
+  lease never falls below 25 minutes. Each fill reservation always renews the
+  lease, because it writes the budget anyway.
+- Every retry loop ends. A warmer gives up after 5 failed alarm runs in a
+  row or 3 h after the job started, and then deletes its alarm and storage.
+  A run that holds a slot and ends without an error starts the count again.
+  The final report has its own 5 tries. A pending message that could not be
+  sent for 6 h is dropped. A warm-state write that cannot run at all (no
+  binding) clears its flag. A warmer that cannot build its bindings deletes
+  its job.
+- A hostname map read that fails during `syncHostnames` starts a warm job
+  only when the sync carries the API's warm hint. A domain change or an
+  outbox retry has no hint, so that hostname waits for the next publish or
+  renderer deploy. This rule stops a KV outage from starting a warm job for
+  every site on the 12-hour refresh.
+- The lock and warmer states leave out `warmStateRetry` and `slotWaits` while
+  they are empty. A rolled-back dispatcher (strict schemas) then still reads
+  the state. Only a lock with a failing warm-state write, or a warmer that
+  waits for a slot, loses its state on a rollback.
 - `reserveFills` answers granted N, `budget_exhausted` (retry after 5 min), or
   `job_ended`. On `job_ended`, or a heartbeat that says the job is not the
   running one, the warmer deletes its state, reports nothing, and releases

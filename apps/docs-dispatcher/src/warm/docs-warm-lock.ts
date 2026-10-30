@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import { readWarmConfig } from "./warm-config";
 import type { WarmEnv, WarmLockRpc } from "./warm-env";
-import { warmOutcomeSchema } from "./warm-job";
+import { WARM_JOB_MAX_AGE_MS, warmOutcomeSchema } from "./warm-job";
 import {
   EMPTY_WARM_LOCK_STATE,
   describeWarmStatus,
@@ -18,6 +18,7 @@ import {
   reportWarmPool,
   reserveWarmFills,
   submitWarmJob,
+  withoutWarmStateRetry,
   type FillReservation,
   type LockTransition,
   type SubmitOutcome,
@@ -36,7 +37,23 @@ import { readStored, type WarmStorage } from "./warm-storage";
 const STATE_KEY = "state";
 /** KV allows one write per second per key: pool reports are batched. */
 const FLUSH_DELAY_MS = 1_000;
+/** The first retry of a failed warm-state write; each next one doubles. */
+const WARM_STATE_RETRY_BASE_MS = 5_000;
+const WARM_STATE_RETRY_CAP_MS = 5 * 60_000;
+/**
+ * A warm-state write that keeps failing for this long is dropped, so a KV
+ * outage cannot wake every site lock for its whole duration. The record is
+ * only a hint (M26 reads it); the next pool report writes it again.
+ */
+export const WARM_STATE_RETRY_MAX_MS = 60 * 60_000;
 const RETRY_DELAY_MS = 60_000;
+/**
+ * A pending message that could not be sent for this long is dropped, so a
+ * send that keeps failing stops the 1-minute retry. It covers one full job
+ * (WARM_JOB_MAX_AGE_MS) that the message may wait behind, with margin; the
+ * next publish or release warms the site again.
+ */
+export const PENDING_MAX_AGE_MS = 2 * WARM_JOB_MAX_AGE_MS;
 /** The warm-state record outlives any build window (M26 reads it ≤ 7 days). */
 const WARM_STATE_TTL_SECONDS = 30 * 86_400;
 
@@ -180,8 +197,10 @@ export class DocsWarmLock extends DurableObject<WarmEnv> implements WarmLockRpc 
     transition: (state: WarmLockState) => LockTransition<T>,
   ): Promise<T> {
     await this.ready();
-    const next = transition(this.current());
-    await this.save(next.state);
+    const current = this.current();
+    const next = transition(current);
+    // A transition that changed nothing returns the same object: no write.
+    if (next.state !== current) await this.save(next.state);
     const { effects } = next;
     if (effects.finished) {
       logWarm("docs_warm_lock", {
@@ -199,7 +218,17 @@ export class DocsWarmLock extends DurableObject<WarmEnv> implements WarmLockRpc 
 
   private async flushWarmState(state: WarmLockState): Promise<void> {
     const store = this.env.DOCS_HOSTNAME_MAP;
-    if (!state.siteId || !state.warmState || !store) return;
+    if (!state.siteId || !state.warmState || !store) {
+      // Nothing can be written. Clearing the flag stops the 5-second retry,
+      // which would otherwise run forever.
+      await this.save(withoutWarmStateRetry({ ...this.current(), warmStateDirty: false }));
+      logWarm("docs_warm_lock", {
+        siteId: state.siteId,
+        action: "warm_state_unwritable",
+        reason: store ? "no_warm_state" : "binding_missing",
+      });
+      return;
+    }
     try {
       await store.put(docsWarmStateKey(state.siteId), JSON.stringify(state.warmState), {
         expirationTtl: WARM_STATE_TTL_SECONDS,
@@ -207,7 +236,9 @@ export class DocsWarmLock extends DurableObject<WarmEnv> implements WarmLockRpc 
       // A report that arrived during the write keeps the record dirty.
       const latest = this.current();
       if (latest.warmState && JSON.stringify(latest.warmState) === JSON.stringify(state.warmState)) {
-        await this.save({ ...latest, warmStateDirty: false });
+        await this.save(withoutWarmStateRetry({ ...latest, warmStateDirty: false }));
+      } else if (latest.warmStateRetry) {
+        await this.save(withoutWarmStateRetry(latest));
       }
       logWarm("docs_warm_lock", {
         siteId: state.siteId,
@@ -216,12 +247,23 @@ export class DocsWarmLock extends DurableObject<WarmEnv> implements WarmLockRpc 
         pools: Object.keys(state.warmState.pools),
       });
     } catch (error) {
+      // `nextLockAlarm` schedules the retry from the saved attempts.
+      const now = Date.now();
+      const latest = this.current();
+      const attempts = (latest.warmStateRetry?.attempts ?? 0) + 1;
+      const firstFailedAt = latest.warmStateRetry?.firstFailedAt ?? now;
+      const giveUp = now - firstFailedAt >= WARM_STATE_RETRY_MAX_MS;
       logWarm("docs_warm_lock", {
         siteId: state.siteId,
-        action: "warm_state_write_failed",
+        action: giveUp ? "warm_state_write_abandoned" : "warm_state_write_failed",
+        attempts,
         error: describeWarmError(error),
       });
-      await this.scheduleAlarm(Date.now() + FLUSH_DELAY_MS * 5);
+      await this.save(
+        giveUp
+          ? withoutWarmStateRetry({ ...latest, warmStateDirty: false })
+          : { ...latest, warmStateRetry: { attempts, firstFailedAt } },
+      );
     }
   }
 
@@ -231,6 +273,21 @@ export class DocsWarmLock extends DurableObject<WarmEnv> implements WarmLockRpc 
     message = state.pending,
   ): Promise<void> {
     if (!message) return;
+    const ageMs = Date.now() - message.enqueuedAt;
+    if (ageMs > PENDING_MAX_AGE_MS) {
+      const latest = this.current();
+      if (latest.pending?.jobId === message.jobId) {
+        await this.save({ ...latest, pending: null });
+      }
+      logWarm("docs_warm_lock", {
+        siteId: message.siteId,
+        jobId: message.jobId,
+        action: "start_pending",
+        state: "dropped_stale",
+        ageMs,
+      });
+      return;
+    }
     const queue = this.env.DOCS_WARM_PUBLISH_QUEUE;
     try {
       if (!queue) throw new Error("DOCS_WARM_PUBLISH_QUEUE is not bound");
@@ -280,9 +337,15 @@ export class DocsWarmLock extends DurableObject<WarmEnv> implements WarmLockRpc 
  */
 export function nextLockAlarm(state: WarmLockState, now: number): number {
   const times = [
-    state.warmStateDirty ? now + FLUSH_DELAY_MS * 5 : Number.POSITIVE_INFINITY,
+    state.warmStateDirty ? now + warmStateRetryDelay(state) : Number.POSITIVE_INFINITY,
     state.pending && !state.running ? now + RETRY_DELAY_MS : Number.POSITIVE_INFINITY,
     state.running ? state.running.leaseExpiresAt : Number.POSITIVE_INFINITY,
   ];
   return Math.min(...times);
+}
+
+/** 5 s before the first retry, then twice as long each time, at most 5 minutes. */
+export function warmStateRetryDelay(state: Pick<WarmLockState, "warmStateRetry">): number {
+  const attempts = state.warmStateRetry?.attempts ?? 0;
+  return Math.min(WARM_STATE_RETRY_BASE_MS * 2 ** attempts, WARM_STATE_RETRY_CAP_MS);
 }

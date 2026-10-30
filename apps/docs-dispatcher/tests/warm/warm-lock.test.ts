@@ -2,24 +2,33 @@ import {
   docsWarmStateKey,
   docsWarmStateSchema,
 } from "@doxahq/contracts/docs-warm-state";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("cloudflare:workers", async () => (await import("./fixtures")).cloudflareWorkersMock());
 
 import { readPoolWarmState } from "../../src/warm-state";
-import { DocsWarmLock, nextLockAlarm } from "../../src/warm/docs-warm-lock";
+import {
+  DocsWarmLock,
+  PENDING_MAX_AGE_MS,
+  WARM_STATE_RETRY_MAX_MS,
+  nextLockAlarm,
+  warmStateRetryDelay,
+} from "../../src/warm/docs-warm-lock";
 import { WARM_JOB_MAX_AGE_MS } from "../../src/warm/warm-job";
 import {
   EMPTY_WARM_LOCK_STATE,
   WARM_DONE_RECORD_MS,
   WARM_LOCK_LEASE_MS,
+  WARM_LOCK_RENEW_STEP_MS,
   describeWarmStatus,
   expireLease,
   heartbeatWarmJob,
   nextBudgetWindow,
+  parseWarmLockState,
   reportWarmPool,
   reserveWarmFills,
   submitWarmJob,
+  warmLockStateSchema,
   type WarmLockState,
 } from "../../src/warm/warm-lock-state";
 import {
@@ -216,6 +225,41 @@ describe("site lock: submit", () => {
     expect(late.effects.finished?.reason).toBe("expired");
   });
 
+  test("a heartbeat keeps at least 25 minutes of lease; a reservation always renews (R1)", () => {
+    let state = running(0);
+    // Heartbeats every 30 s for an hour: the lease never falls below 25 minutes.
+    for (let now = 30_000; now <= 60 * 60_000; now += 30_000) {
+      state = heartbeatWarmJob(state, { jobId: JOB_ID, now }).state;
+      expect((state.running?.leaseExpiresAt ?? 0) - now).toBeGreaterThanOrEqual(
+        WARM_LOCK_LEASE_MS - WARM_LOCK_RENEW_STEP_MS,
+      );
+    }
+    const reserved = reserveWarmFills(running(0), { jobId: JOB_ID, count: 1, perHour: 10, now: 60_000 });
+    expect(reserved.state.running?.leaseExpiresAt).toBe(60_000 + WARM_LOCK_LEASE_MS);
+  });
+
+  test("a heartbeat at the 3-hour cap changes nothing (R1)", () => {
+    let capped = running(0);
+    for (let now = 10 * 60_000; now <= WARM_JOB_MAX_AGE_MS - WARM_LOCK_LEASE_MS; now += 10 * 60_000) {
+      capped = heartbeatWarmJob(capped, { jobId: JOB_ID, now }).state;
+    }
+    expect(capped.running?.leaseExpiresAt).toBe(WARM_JOB_MAX_AGE_MS);
+    const later = heartbeatWarmJob(capped, { jobId: JOB_ID, now: WARM_JOB_MAX_AGE_MS - 60_000 });
+    expect(later.state).toBe(capped);
+  });
+
+  test("a heartbeat near the cap still renews to the cap, by less than 5 minutes (R1)", () => {
+    let state = running(0);
+    for (let now = 10 * 60_000; now <= 140 * 60_000; now += 10 * 60_000) {
+      state = heartbeatWarmJob(state, { jobId: JOB_ID, now }).state;
+    }
+    state = heartbeatWarmJob(state, { jobId: JOB_ID, now: 146 * 60_000 }).state;
+    expect(state.running?.leaseExpiresAt).toBe(WARM_JOB_MAX_AGE_MS - 4 * 60_000);
+    // 4 more minutes reach the cap: the lease runs to 3 h, not 4 minutes less.
+    state = heartbeatWarmJob(state, { jobId: JOB_ID, now: 150 * 60_000 }).state;
+    expect(state.running?.leaseExpiresAt).toBe(WARM_JOB_MAX_AGE_MS);
+  });
+
   test("FC-H2: a heartbeat of another job tells the warmer to stop", () => {
     const beat = heartbeatWarmJob(running(0), { jobId: OTHER_JOB_ID, now: 1 });
     expect(beat.result.current).toBe(false);
@@ -393,6 +437,14 @@ describe("site lock: budget and status", () => {
 });
 
 describe("DocsWarmLock", () => {
+  // Messages carry small fixture times; the lock compares them with Date.now().
+  beforeEach(() => {
+    vi.useFakeTimers({ now: 10_000, toFake: ["Date"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   function createLock() {
     vi.spyOn(console, "info").mockImplementation(() => undefined);
     const storage = new MemoryStorage();
@@ -471,6 +523,133 @@ describe("DocsWarmLock", () => {
     expect(sent).toEqual([]);
     await lock.alarm();
     expect(sent).toHaveLength(1);
+  });
+
+  test("drops a pending message that waited longer than the maximum age", async () => {
+    const { lock, sent, storage } = createLock();
+    await lock.submit({ message: warmMessage(), target: TARGET, pools: ["eu-west"] });
+    await lock.submit({
+      message: warmMessage({ jobId: OTHER_JOB_ID, enqueuedAt: 9_000 }),
+      target: OTHER_TARGET,
+      pools: ["eu-west"],
+    });
+    vi.setSystemTime(9_000 + PENDING_MAX_AGE_MS + 1);
+    await lock.report({ siteId: "site-1", jobId: JOB_ID, pool: "eu-west", report: "done" });
+    expect(sent).toEqual([]);
+    expect(parseWarmLockState(storage.values.get("state"))?.pending).toBeNull();
+  });
+
+  test("stops the 1-minute resend once a failing pending message is too old", async () => {
+    const { lock, env, sent, storage } = createLock();
+    await lock.submit({ message: warmMessage(), target: TARGET, pools: ["eu-west"] });
+    await lock.submit({
+      message: warmMessage({ jobId: OTHER_JOB_ID, enqueuedAt: 9_000 }),
+      target: OTHER_TARGET,
+      pools: ["eu-west"],
+    });
+    env.DOCS_WARM_PUBLISH_QUEUE.send.mockRejectedValue(new Error("queue down"));
+    await lock.report({ siteId: "site-1", jobId: JOB_ID, pool: "eu-west", report: "failed" });
+    await lock.alarm();
+    expect(env.DOCS_WARM_PUBLISH_QUEUE.send).toHaveBeenCalledTimes(2);
+
+    vi.setSystemTime(9_000 + PENDING_MAX_AGE_MS + 1);
+    const alarmsBefore = storage.alarms.length;
+    await lock.alarm();
+    expect(env.DOCS_WARM_PUBLISH_QUEUE.send).toHaveBeenCalledTimes(2);
+    expect(sent).toEqual([]);
+    expect(parseWarmLockState(storage.values.get("state"))?.pending).toBeNull();
+    // Nothing is left to retry: the alarm sets no next run.
+    expect(storage.alarms.length).toBe(alarmsBefore);
+  });
+
+  test("clears the warm-state flag instead of retrying every 5 s when it cannot write", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const storage = new MemoryStorage();
+    const lock = new DocsWarmLock(objectState(storage) as never, { DOXA_RENDERER_RELEASE_ID: RELEASE } as never);
+    await lock.submit({ message: warmMessage(), target: TARGET, pools: ["eu-west"] });
+    await lock.report({ siteId: "site-1", jobId: JOB_ID, pool: "eu-west", report: "done" });
+    expect(parseWarmLockState(storage.values.get("state"))?.warmStateDirty).toBe(true);
+    const alarmsBefore = storage.alarms.length;
+    await lock.alarm();
+    expect(parseWarmLockState(storage.values.get("state"))?.warmStateDirty).toBe(false);
+    expect(storage.alarms.length).toBe(alarmsBefore);
+  });
+
+  test("backs off a failing warm-state write and gives up after an hour (F1)", async () => {
+    const { lock, env, storage } = createLock();
+    env.DOCS_HOSTNAME_MAP.put.mockRejectedValue(new Error("KV down"));
+    await lock.submit({ message: warmMessage(), target: TARGET, pools: ["eu-west"] });
+    await lock.report({ siteId: "site-1", jobId: JOB_ID, pool: "eu-west", report: "done" });
+    const delays: number[] = [];
+    const firstAttempt = Date.now();
+    for (let run = 0; run < 100; run += 1) {
+      const state = parseWarmLockState(storage.values.get("state"));
+      if (!state?.warmStateDirty) break;
+      await lock.alarm();
+      const next = storage.alarm ?? 0;
+      delays.push(next - Date.now());
+      vi.setSystemTime(next);
+    }
+    const state = parseWarmLockState(storage.values.get("state"));
+    expect(state?.warmStateDirty).toBe(false);
+    expect(storage.values.get("state")).not.toHaveProperty("warmStateRetry");
+    // 10 s, 20 s, 40 s … then at most 5 minutes: about 17 tries in the hour,
+    // not one every 5 seconds (720).
+    expect(delays.slice(0, 4)).toEqual([10_000, 20_000, 40_000, 80_000]);
+    expect(Math.max(...delays)).toBe(5 * 60_000);
+    expect(env.DOCS_HOSTNAME_MAP.put.mock.calls.length).toBeLessThan(25);
+    // It stopped only once the first failure was an hour old.
+    expect(Date.now() - firstAttempt).toBeGreaterThanOrEqual(WARM_STATE_RETRY_MAX_MS);
+  });
+
+  test("a successful write after failures resets the retry (F1)", async () => {
+    const { lock, env, storage } = createLock();
+    env.DOCS_HOSTNAME_MAP.put.mockRejectedValueOnce(new Error("KV down"));
+    await lock.submit({ message: warmMessage(), target: TARGET, pools: ["eu-west"] });
+    await lock.report({ siteId: "site-1", jobId: JOB_ID, pool: "eu-west", report: "done" });
+    await lock.alarm();
+    expect(parseWarmLockState(storage.values.get("state"))?.warmStateRetry?.attempts).toBe(1);
+    await lock.alarm();
+    expect(parseWarmLockState(storage.values.get("state"))?.warmStateDirty).toBe(false);
+    expect(storage.values.get("state")).not.toHaveProperty("warmStateRetry");
+  });
+
+  test("the retry delay doubles from 5 s and stops at 5 minutes (F1)", () => {
+    const delay = (attempts: number) =>
+      warmStateRetryDelay(attempts ? { warmStateRetry: { attempts, firstFailedAt: 0 } } : {});
+    expect([0, 1, 2, 3, 6, 12].map(delay)).toEqual([5_000, 10_000, 20_000, 40_000, 300_000, 300_000]);
+  });
+
+  test("a heartbeat writes only when it renews the lease by 5 minutes or more (F2)", async () => {
+    const { lock, storage } = createLock();
+    await lock.submit({ message: warmMessage(), target: TARGET, pools: ["eu-west"] });
+    const put = vi.spyOn(storage, "put");
+    const submittedAt = Date.now();
+    expect(await lock.heartbeat({ siteId: "site-1", jobId: JOB_ID })).toEqual({ current: true });
+    vi.setSystemTime(submittedAt + WARM_LOCK_RENEW_STEP_MS - 1);
+    expect(await lock.heartbeat({ siteId: "site-1", jobId: JOB_ID })).toEqual({ current: true });
+    expect(put).not.toHaveBeenCalled();
+    vi.setSystemTime(submittedAt + WARM_LOCK_RENEW_STEP_MS);
+    expect(await lock.heartbeat({ siteId: "site-1", jobId: JOB_ID })).toEqual({ current: true });
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(parseWarmLockState(storage.values.get("state"))?.running?.leaseExpiresAt).toBe(
+      Date.now() + WARM_LOCK_LEASE_MS,
+    );
+  });
+
+  test("a state with no failed write stays readable by the previous deploy's schema (R2)", async () => {
+    // The deployed schema before these fields: strict, without `warmStateRetry`.
+    const previousSchema = warmLockStateSchema.omit({ warmStateRetry: true }).strict();
+    const { lock, env, storage } = createLock();
+    await lock.submit({ message: warmMessage(), target: TARGET, pools: ["eu-west"] });
+    expect(previousSchema.safeParse(storage.values.get("state")).success).toBe(true);
+    // A failed write, then a good one: the key is gone again.
+    env.DOCS_HOSTNAME_MAP.put.mockRejectedValueOnce(new Error("KV down"));
+    await lock.report({ siteId: "site-1", jobId: JOB_ID, pool: "eu-west", report: "done" });
+    await lock.alarm();
+    expect(previousSchema.safeParse(storage.values.get("state")).success).toBe(false);
+    await lock.alarm();
+    expect(previousSchema.safeParse(storage.values.get("state")).success).toBe(true);
   });
 
   test("FC-H2: heartbeat and reserveFills over RPC", async () => {

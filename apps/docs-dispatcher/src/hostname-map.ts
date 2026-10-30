@@ -1,4 +1,7 @@
-import type { DocsDomainResolution } from "@doxahq/contracts";
+import {
+  docsDomainResolutionSchema,
+  type DocsDomainResolution,
+} from "@doxahq/contracts";
 import {
   DOCS_HOSTNAME_MAP_EXPIRATION_SECONDS,
   DOCS_HOSTNAME_MAP_FORMAT,
@@ -106,8 +109,12 @@ export interface HostnameMapLiveChange {
 
 export interface HostnameMapUpdateOptions {
   /**
-   * Called after the write, once per hostname whose live resolution changed.
-   * Setting it costs one extra map read per stored update.
+   * Called after the write, once per hostname whose live resolution changed:
+   * a new hostname, or a different resolution than the stored one, whatever
+   * the stored entry's format or age. An unreadable entry counts only for a
+   * sync with a publish warm hint. A rewrite of the same resolution (the
+   * 12-hour refresh, a format change) is no change, so it starts no warm
+   * job. Setting it costs one extra map read per stored update.
    */
   onLiveChange?(change: HostnameMapLiveChange): void;
   now?: number;
@@ -127,7 +134,9 @@ export async function applyHostnameMapUpdates(
   const sync = docsHostnameMapSyncSchema.parse(input);
   // Every update is tried; one failed write never hides the others (FC-L6).
   const results = await Promise.allSettled(
-    sync.updates.map((update) => applyUpdate(store, update, options)),
+    sync.updates.map((update) =>
+      applyUpdate(store, update, options, sync.warm !== undefined),
+    ),
   );
   const errors = results.flatMap((result) =>
     result.status === "rejected" ? [result.reason] : [],
@@ -154,13 +163,14 @@ async function applyUpdate(
   store: HostnameMapStore,
   update: DocsHostnameMapUpdate,
   options: HostnameMapUpdateOptions,
+  publishHint: boolean,
 ): Promise<void> {
   const key = docsHostnameMapKey(update.hostname);
   if (!isStorableHostnameResolution(update.hostname, update.resolution)) {
     return store.delete(key);
   }
   const before = options.onLiveChange
-    ? await lookupHostnameMap(store, update.hostname, options.now ?? Date.now())
+    ? await readStoredResolution(store, update.hostname)
     : null;
   const entry: DocsHostnameMapEntry = {
     format: DOCS_HOSTNAME_MAP_FORMAT,
@@ -173,8 +183,8 @@ async function applyUpdate(
   });
   if (
     options.onLiveChange &&
-    (before?.status !== "hit" ||
-      !sameResolution(before.resolution, update.resolution))
+    before &&
+    isLiveChange(before, update.resolution, publishHint)
   ) {
     options.onLiveChange({
       hostname: update.hostname,
@@ -228,6 +238,54 @@ export function compareHostnameMap(
   return expected && sameResolution(lookup.resolution, expected)
     ? "agree"
     : "disagree";
+}
+
+/** What a stored entry holds, read only to detect a change of it. */
+type StoredResolution =
+  | { status: "found"; resolution: DocsDomainResolution }
+  | { status: "none" }
+  | { status: "error" };
+
+/**
+ * The resolution of the stored entry, whatever its format or age: an entry
+ * that the reader rejects (an older format, past its maximum age) can still
+ * hold the same resolution, which is no live change.
+ */
+async function readStoredResolution(
+  store: Pick<HostnameMapStore, "get">,
+  hostname: string,
+): Promise<StoredResolution> {
+  let text: string | null;
+  try {
+    text = await store.get(docsHostnameMapKey(hostname));
+  } catch {
+    return { status: "error" };
+  }
+  if (text === null) return { status: "none" };
+  const value = parseJson(text);
+  if (typeof value !== "object" || value === null || !("resolution" in value)) {
+    return { status: "none" };
+  }
+  const resolution = docsDomainResolutionSchema.safeParse(value.resolution);
+  return resolution.success
+    ? { status: "found", resolution: resolution.data }
+    : { status: "none" };
+}
+
+function isLiveChange(
+  before: StoredResolution,
+  resolution: DocsDomainResolution,
+  publishHint: boolean,
+): boolean {
+  switch (before.status) {
+    case "error":
+      // Unknown: only a publish, which has new content, warms on it.
+      return publishHint;
+    case "none":
+      return true;
+    case "found":
+      return !sameResolution(before.resolution, resolution);
+  }
 }
 
 function sameResolution(

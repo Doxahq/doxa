@@ -71,6 +71,59 @@ describe("syncHostnames: live change hook", () => {
     expect(store.values.get("host:changed.example.com")).toContain("version-2");
   });
 
+  test("a rewrite of the same resolution is no change, whatever the stored format or age (F3)", async () => {
+    const same = siteResolution({ hostname: "same.example.com" });
+    const old = siteResolution({ hostname: "old.example.com" });
+    const store = createStore({
+      // An older map format: the reader rejects it, the resolution is the same.
+      "host:same.example.com": JSON.stringify({ format: 1, resolvedAt: NOW - 1_000, resolution: same }),
+      // Past the maximum age, same resolution.
+      "host:old.example.com": mapEntry(old, NOW - 30 * 24 * 60 * 60_000),
+      // An older format with another version: a real change.
+      "host:moved.example.com": JSON.stringify({
+        format: 1,
+        resolvedAt: NOW - 1_000,
+        resolution: siteResolution({ hostname: "moved.example.com", publishedVersionId: "version-1" }),
+      }),
+      // Not a resolution at all.
+      "host:broken.example.com": "{not json",
+    });
+    const changes: HostnameMapLiveChange[] = [];
+    await applyHostnameMapUpdates(
+      store,
+      {
+        updates: [
+          update(same),
+          update(old),
+          update(siteResolution({ hostname: "moved.example.com" })),
+          update(siteResolution({ hostname: "broken.example.com" })),
+        ],
+      },
+      { onLiveChange: (change) => changes.push(change), now: NOW },
+    );
+    expect(changes.map((change) => change.hostname).sort()).toEqual([
+      "broken.example.com",
+      "moved.example.com",
+    ]);
+  });
+
+  test("a failed read counts as a change only for a publish (F3)", async () => {
+    const run = async (warm?: { regions: string[] }) => {
+      const store = createStore();
+      store.get.mockRejectedValue(new Error("KV read failed"));
+      const changes: HostnameMapLiveChange[] = [];
+      await applyHostnameMapUpdates(
+        store,
+        { updates: [update(siteResolution())], ...(warm ? { warm } : {}) },
+        { onLiveChange: (change) => changes.push(change), now: NOW },
+      );
+      return changes.length;
+    };
+    // The 12-hour refresh carries no hint: an unreadable entry starts no warm job.
+    expect(await run()).toBe(0);
+    expect(await run({ regions: ["eu-west"] })).toBe(1);
+  });
+
   test("reads nothing extra without the hook", async () => {
     const store = createStore();
     const sync = await applyHostnameMapUpdates(store, { updates: [update()], warm: { regions: ["eu-west"] } });

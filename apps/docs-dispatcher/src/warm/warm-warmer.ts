@@ -27,6 +27,14 @@ import { readStored } from "./warm-storage";
 export const WARM_FILL_CONCURRENCY = 6;
 export const WARM_ALARM_BUDGET_MS = 12 * 60_000;
 export const SLOT_RETRY_MS = 30_000;
+/**
+ * The longest wait between slot tries. Waiting warmers back off, so a burst
+ * of many sites does not wake every waiting warmer twice a minute, but a
+ * freed slot does not stay empty for long.
+ */
+export const SLOT_RETRY_MAX_MS = 2 * 60_000;
+/** Slot denials stop counting here: the wait is at its maximum (30 s, 60 s, 2 minutes). */
+export const MAX_SLOT_WAITS = 3;
 export const READINESS_RETRY_MS = 60_000;
 export const READINESS_MAX_WAIT_MS = 20 * 60_000;
 /** A probe miss blocks stores of that key for over a minute (F38). */
@@ -70,6 +78,12 @@ const warmerStateSchema = z
     finalOutcome: z.enum(["done", "failed", "superseded"]).nullable(),
     failures: z.number().int().nonnegative(),
     counts: countsSchema,
+    /**
+     * Slot denials in a row: the next try waits longer. Absent while there
+     * is no denial, so a rolled-back deploy (strict schema) still reads the
+     * state.
+     */
+    slotWaits: z.number().int().nonnegative().optional(),
   })
   .strict();
 
@@ -119,14 +133,24 @@ export interface WarmerDeps {
   probe(call: PublicCacheCall): Promise<boolean>;
 }
 
-/** `start()`: a newer job replaces whatever this warmer was doing. */
+/**
+ * `start()`: a newer job replaces whatever this warmer was doing. The same
+ * job again (a redelivered queue message) keeps its progress: restarting at
+ * cursor 0 would fill every key a second time.
+ */
 export async function startWarmer(
   storage: WarmStorage,
   job: WarmJob,
   now: number,
 ): Promise<void> {
+  const parsed = warmJobSchema.parse(job);
+  const existing = await readWarmerState(storage);
+  if (existing?.job.jobId === parsed.jobId) {
+    if ((await storage.getAlarm()) === null) await storage.setAlarm(now);
+    return;
+  }
   const state: WarmerState = {
-    job: warmJobSchema.parse(job),
+    job: parsed,
     phase: "fill",
     cursor: 0,
     reserved: 0,
@@ -150,7 +174,10 @@ export async function readWarmerState(
   });
 }
 
-/** One alarm run. Never throws: a failure re-arms, five in a row end the job. */
+/**
+ * One alarm run. Never throws: a failure re-arms, five in a row end the job.
+ * A run that holds a slot and ends without an error resets the count.
+ */
 export async function runWarmerAlarm(input: WarmerDeps): Promise<void> {
   let deps = input;
   const state = await readWarmerState(deps.storage);
@@ -171,10 +198,17 @@ export async function runWarmerAlarm(input: WarmerDeps): Promise<void> {
       failures,
       error: describeWarmError(error),
     });
+    // The report phase already had its tries: stop instead of a retry every minute.
+    if (state.phase === "report" && failures >= MAX_ALARM_FAILURES) {
+      return abandon(deps, state, "report_errors");
+    }
+    // The retry comes after FAILURE_RETRY_MS: a later denial backs off from the start.
+    const failed = withoutSlotWaits({ ...state, failures });
+    // The report phase starts with a count of 0, so the "failed" report gets its own tries.
     const next: WarmerState =
       failures >= MAX_ALARM_FAILURES
-        ? { ...state, failures, phase: "report", finalOutcome: "failed" }
-        : { ...state, failures };
+        ? { ...failed, failures: 0, phase: "report", finalOutcome: "failed" }
+        : failed;
     await deps.storage.put(STATE_KEY, next);
     await deps.storage.setAlarm(deps.now() + FAILURE_RETRY_MS);
   }
@@ -182,20 +216,29 @@ export async function runWarmerAlarm(input: WarmerDeps): Promise<void> {
 
 async function runWithState(deps: WarmerDeps, state: WarmerState): Promise<void> {
   const startedAt = deps.now();
+  const tooOld = startedAt - state.job.startedAt > WARM_JOB_MAX_AGE_MS;
   if (state.phase === "report" && state.finalOutcome) {
+    // The lock ended an old job long ago (30-minute lease): stop retrying.
+    if (tooOld) return abandon(deps, state, "report_too_old");
     return finish(deps, state, state.finalOutcome);
   }
-  if (startedAt - state.job.startedAt > WARM_JOB_MAX_AGE_MS) {
-    return finish(deps, state, "failed", "job_too_old");
-  }
+  if (tooOld) return finish(deps, state, "failed", "job_too_old");
   if (!(await sendHeartbeat(deps, state))) return abandon(deps, state, "heartbeat");
   // The control object logs a sample of denials (FC-L10).
   if (!(await deps.slots.acquire(deps.holder, state.job.siteId))) {
-    await deps.storage.setAlarm(startedAt + SLOT_RETRY_MS);
+    const slotWaits = Math.min((state.slotWaits ?? 0) + 1, MAX_SLOT_WAITS);
+    // At the maximum wait the count stays the same: nothing to write.
+    if (slotWaits !== state.slotWaits) {
+      await deps.storage.put(STATE_KEY, { ...state, slotWaits } satisfies WarmerState);
+    }
+    await deps.storage.setAlarm(startedAt + slotRetryDelay(slotWaits));
     return;
   }
   try {
-    await runHoldingSlot(deps, state, startedAt);
+    // The first write of this run stores the reset counts. A run that throws
+    // instead stores the counts it read, plus one failure.
+    const fresh = withoutSlotWaits(state.failures ? { ...state, failures: 0 } : state);
+    await runHoldingSlot(deps, fresh, startedAt);
   } finally {
     await deps.slots.release(deps.holder);
   }
@@ -259,6 +302,9 @@ async function runHoldingSlot(
   }
 
   if (state.phase === "fill") {
+    // A run that used its budget verifies in the next alarm, so it stays
+    // inside its 15-minute slot lease.
+    if (deps.now() - startedAt >= WARM_ALARM_BUDGET_MS) return rearm(deps, state);
     const misses = await verifySample(deps, state.job, total);
     state = {
       ...state,
@@ -355,18 +401,25 @@ async function finish(
   try {
     await deps.lock.report(state.job, outcome);
   } catch (error) {
+    // A failed report counts as a failure, so a report that always throws
+    // ends the warmer instead of waking it every minute forever. The report
+    // phase counts from 0: earlier alarm errors do not shorten its 5 tries.
+    const failures = (state.phase === "report" ? state.failures : 0) + 1;
+    logWarm("docs_warm_region", {
+      ...jobFacts(state.job, deps.holder),
+      outcome: "report_failed",
+      failures,
+      error: describeWarmError(error),
+    });
+    if (failures >= MAX_ALARM_FAILURES) return abandon(deps, state, "report");
     // Keep the result and deliver it on the next alarm.
     await deps.storage.put(STATE_KEY, {
       ...state,
       phase: "report",
       finalOutcome: outcome,
+      failures,
     } satisfies WarmerState);
     await deps.storage.setAlarm(deps.now() + FAILURE_RETRY_MS);
-    logWarm("docs_warm_region", {
-      ...jobFacts(state.job, deps.holder),
-      outcome: "report_failed",
-      error: describeWarmError(error),
-    });
     return;
   }
   logWarm("docs_warm_region", {
@@ -399,8 +452,9 @@ async function sendHeartbeat(deps: WarmerDeps, state: WarmerState): Promise<bool
 }
 
 /**
- * The site lock ended this job (lease expiry, a newer job): report nothing,
- * delete this warmer's state. A held slot is released by the caller.
+ * Ends the job without a report and deletes this warmer's state: the site
+ * lock ended the job (lease expiry, a newer job), or the report itself keeps
+ * failing. A held slot is released by the caller.
  */
 async function abandon(deps: WarmerDeps, state: WarmerState, step: string): Promise<void> {
   logWarm("docs_warm_region", {
@@ -454,7 +508,7 @@ function guardStorage(storage: WarmStorage, jobId: string): WarmStorage {
   };
 }
 
-async function clearWarmer(storage: WarmStorage): Promise<void> {
+export async function clearWarmer(storage: WarmStorage): Promise<void> {
   await storage.deleteAlarm();
   await storage.deleteAll();
 }
@@ -468,6 +522,19 @@ function jobFacts(job: WarmJob, holder: string) {
     releaseId: job.releaseId,
     warmer: holder,
   };
+}
+
+/** 30 s after the first denial, then twice as long each time, at most 2 minutes. */
+export function slotRetryDelay(slotWaits: number): number {
+  return Math.min(SLOT_RETRY_MS * 2 ** Math.max(0, slotWaits - 1), SLOT_RETRY_MAX_MS);
+}
+
+/** The state with no slot waits: the key is left out, so a rolled-back deploy still reads it. */
+function withoutSlotWaits(state: WarmerState): WarmerState {
+  if (state.slotWaits === undefined) return state;
+  const next = { ...state };
+  delete next.slotWaits;
+  return next;
 }
 
 /** Units are page-major: every hostname of the home page comes first. */

@@ -17,6 +17,7 @@ import {
 } from "./warm-slots";
 import {
   describeWarmRollout,
+  isSweepDone,
   parseSweepState,
   runSweepTick,
   sweepSiteCap,
@@ -46,7 +47,8 @@ export class DocsWarmControl extends DurableObject<WarmEnv> implements WarmContr
     const request = acquireInputSchema.parse(input);
     await this.slotsReady();
     const decision = acquireSlot(this.currentSlots(), { ...request, now: Date.now() });
-    await this.saveSlots(decision.state);
+    // A denial that dropped no ended lease changes nothing: no write.
+    if (decision.granted || decision.expired > 0) await this.saveSlots(decision.state);
     if (decision.expired > 0) {
       logWarm("docs_warm_slots", { action: "expired_takeover", expired: decision.expired });
     }
@@ -57,8 +59,9 @@ export class DocsWarmControl extends DurableObject<WarmEnv> implements WarmContr
   async releaseSlot(input: unknown): Promise<void> {
     const { holder } = z.object({ holder: holderSchema }).parse(input);
     await this.slotsReady();
-    const next = releaseSlot(this.currentSlots(), holder, Date.now());
-    await this.saveSlots(next);
+    const current = this.currentSlots();
+    const next = releaseSlot(current, holder, Date.now());
+    if (next !== current) await this.saveSlots(next);
     logWarm("docs_warm_slots", { action: "release", holder, active: Object.keys(next.leases).length });
   }
 
@@ -97,16 +100,20 @@ export class DocsWarmControl extends DurableObject<WarmEnv> implements WarmContr
     if (!config.deploySweep || config.rollout.mode === "off" || !store || !queue || !control) {
       return;
     }
+    const rollout = describeWarmRollout(config.rollout);
+    const stored = await readStored(this.storage, SWEEP_KEY, parseSweepState);
+    // A finished sweep of this release and rollout has nothing to do: no
+    // slots call on every tick.
+    if (isSweepDone(stored, { releaseId, rollout })) return;
     const slots = control.get(control.idFromName(WARM_SLOTS_NAME));
     const free = await slots.freeSlots({ max: config.maxActiveWarmers });
     const startedAt = Date.now();
-    const stored = await readStored(this.storage, SWEEP_KEY, parseSweepState);
     try {
       const result = await runSweepTick(
         stored,
         {
           releaseId,
-          rollout: describeWarmRollout(config.rollout),
+          rollout,
           cap: sweepSiteCap({
             sitesPerTick: config.sweepSitesPerTick,
             freeSlots: free,

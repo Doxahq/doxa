@@ -27,6 +27,12 @@ import { WARM_JOB_MAX_AGE_MS, type WarmOutcome } from "./warm-job";
 
 /** A job that no warmer finished in this time ends; a pending job may start. */
 export const WARM_LOCK_LEASE_MS = 30 * 60_000;
+/**
+ * A heartbeat renews the lease only when that adds at least this much: a
+ * waiting warmer's frequent heartbeats then write at most once per 5 minutes,
+ * and the lease never falls below 25 minutes.
+ */
+export const WARM_LOCK_RENEW_STEP_MS = 5 * 60_000;
 /** A finished target is not warmed again for this long. */
 export const WARM_DONE_RECORD_MS = 60 * 60_000;
 const BUDGET_WINDOW_MS = 60 * 60_000;
@@ -78,6 +84,19 @@ export const warmLockStateSchema = z
     /** The record this lock last wrote (or will write) to `warm:{siteId}`. */
     warmState: docsWarmStateSchema.nullable(),
     warmStateDirty: z.boolean(),
+    /**
+     * Failed writes of the dirty record since the last success: the retry
+     * backs off and stops after `WARM_STATE_RETRY_MAX_MS`. Absent while no
+     * write fails, so a rolled-back deploy (strict schema) still reads the
+     * state.
+     */
+    warmStateRetry: z
+      .object({
+        attempts: z.number().int().positive(),
+        firstFailedAt: z.number().int().nonnegative(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -97,6 +116,14 @@ export const EMPTY_WARM_LOCK_STATE: WarmLockState = {
 export function parseWarmLockState(value: unknown): WarmLockState | null {
   const parsed = warmLockStateSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+/** The state with no write retry: the key is left out, not set to empty. */
+export function withoutWarmStateRetry(state: WarmLockState): WarmLockState {
+  if (state.warmStateRetry === undefined) return state;
+  const next = { ...state };
+  delete next.warmStateRetry;
+  return next;
 }
 
 export type SubmitOutcome =
@@ -301,8 +328,13 @@ export function expireLease(
  * The lease end after a sign of life: 30 minutes on, never past the job's
  * maximum age, so a stuck job still ends (FC-H2).
  */
+/** No lease runs past 3 h after the job started. */
+function leaseCap(job: RunningJob): number {
+  return job.startedAt + WARM_JOB_MAX_AGE_MS;
+}
+
 function renewedLease(job: RunningJob, now: number): number {
-  return Math.min(now + WARM_LOCK_LEASE_MS, job.startedAt + WARM_JOB_MAX_AGE_MS);
+  return Math.min(now + WARM_LOCK_LEASE_MS, leaseCap(job));
 }
 
 /**
@@ -314,16 +346,34 @@ export function heartbeatWarmJob(
   current: WarmLockState,
   input: { jobId: string; now: number },
 ): LockTransition<{ current: boolean }> {
+  // A waiting warmer sends a heartbeat on every alarm. Most of them leave
+  // the state as it is, which saves the storage write.
+  return keepLease(current, input, WARM_LOCK_RENEW_STEP_MS);
+}
+
+/**
+ * Ends an expired lease, then renews the job's lease when that adds at
+ * least `minStepMs`, or when it reaches the 3-hour cap: near the cap every
+ * renewal is smaller, so the lease would otherwise end before it. A lease at
+ * the cap does not change.
+ */
+function keepLease(
+  current: WarmLockState,
+  input: { jobId: string; now: number },
+  minStepMs: number,
+): LockTransition<{ current: boolean }> {
   const expired = expireLease(current, input.now);
   const running = expired.state.running;
   if (running?.jobId !== input.jobId) {
     return { state: expired.state, result: { current: false }, effects: expired.effects };
   }
+  const leaseExpiresAt = renewedLease(running, input.now);
+  const step = leaseExpiresAt - running.leaseExpiresAt;
+  if (step <= 0 || (step < minStepMs && leaseExpiresAt < leaseCap(running))) {
+    return { state: expired.state, result: { current: true }, effects: expired.effects };
+  }
   return {
-    state: {
-      ...expired.state,
-      running: { ...running, leaseExpiresAt: renewedLease(running, input.now) },
-    },
+    state: { ...expired.state, running: { ...running, leaseExpiresAt } },
     result: { current: true },
     effects: expired.effects,
   };
@@ -339,13 +389,13 @@ export type FillReservation =
 /**
  * Takes up to `count` fills from the site's hourly budget. A warmer that
  * gets fewer than it asked for waits for the next window. A reservation
- * also renews the lease, like a heartbeat.
+ * always renews the lease: it writes the budget anyway.
  */
 export function reserveWarmFills(
   current: WarmLockState,
   input: { jobId: string; count: number; perHour: number; now: number },
 ): LockTransition<FillReservation> {
-  const beat = heartbeatWarmJob(current, input);
+  const beat = keepLease(current, input, 0);
   if (!beat.result.current) {
     return { state: beat.state, result: { status: "job_ended" }, effects: beat.effects };
   }

@@ -12,9 +12,9 @@ import {
   selectWarmCalls,
 } from "./warm-fill";
 import { WARM_SLOTS_NAME, siteLockName, warmJobSchema, type WarmJob } from "./warm-job";
-import { logWarm } from "./warm-log";
+import { describeWarmError, logWarm } from "./warm-log";
 import { findSupersedeReason } from "./warm-supersede";
-import { runWarmerAlarm, startWarmer, type WarmerDeps } from "./warm-warmer";
+import { clearWarmer, runWarmerAlarm, startWarmer, type WarmerDeps } from "./warm-warmer";
 
 /**
  * One per pool and site (`idFromName("warm:" + pool + ":" + siteId)`),
@@ -28,7 +28,17 @@ export class DocsRegionalWarmer extends DurableObject<WarmEnv> implements Region
   }
 
   async alarm(): Promise<void> {
-    await runWarmerAlarm(this.createDeps());
+    let deps: WarmerDeps;
+    try {
+      deps = this.createDeps();
+    } catch (error) {
+      // Without its bindings the warmer can never run: drop the job instead
+      // of leaving its state behind after Cloudflare's alarm retries.
+      logWarm("docs_warm_region", { outcome: "job_ended", step: "setup", error: describeWarmError(error) });
+      await clearWarmer(this.ctx.storage);
+      return;
+    }
+    await runWarmerAlarm(deps);
   }
 
   private createDeps(): WarmerDeps {

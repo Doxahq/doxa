@@ -91,6 +91,37 @@ describe("warm slots (F9)", () => {
     expect(await reloaded.freeSlots({ max: 24 })).toBe(5);
   });
 
+  test("a denial that frees no ended lease writes nothing (F2)", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const storage = new MemoryStorage();
+    const control = new DocsWarmControl(objectState(storage) as never, {} as never);
+    expect(await control.acquireSlot({ holder: "a", siteId: "site-1", max: 1, maxPerSite: 1 })).toBe(true);
+    const put = vi.spyOn(storage, "put");
+    expect(await control.acquireSlot({ holder: "b", siteId: "site-2", max: 1, maxPerSite: 1 })).toBe(false);
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  test("a release of a slot that is not held writes nothing (R4)", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const storage = new MemoryStorage();
+    const control = new DocsWarmControl(objectState(storage) as never, {} as never);
+    expect(await control.acquireSlot({ holder: "a", siteId: "site-1", max: 2, maxPerSite: 2 })).toBe(true);
+    const put = vi.spyOn(storage, "put");
+    await control.releaseSlot({ holder: "b" });
+    expect(put).not.toHaveBeenCalled();
+    await control.releaseSlot({ holder: "a" });
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(await control.freeSlots({ max: 2 })).toBe(2);
+  });
+
+  test("a release still drops an ended lease of another holder (R4)", () => {
+    const held = acquireSlot(EMPTY_SLOT_STATE, { holder: "a", siteId: "site-1", max: 2, maxPerSite: 2, now: 0 });
+    expect(releaseSlot(held.state, "b", 0)).toBe(held.state);
+    const later = releaseSlot(held.state, "b", 24 * 60 * 60_000);
+    expect(later).not.toBe(held.state);
+    expect(later.leases).toEqual({});
+  });
+
   test("the control object validates its input", async () => {
     const control = new DocsWarmControl(objectState(new MemoryStorage()) as never, {} as never);
     await expect(control.acquireSlot(controlRequest(""))).rejects.toThrow();

@@ -92,6 +92,19 @@ export function describeWarmRollout(rollout: SiteRollout): string {
     : rollout.mode;
 }
 
+/** True when the stored sweep already finished this release and rollout. */
+export function isSweepDone(
+  stored: SweepState | null,
+  input: { releaseId: string; rollout: string },
+): boolean {
+  return (
+    stored !== null &&
+    stored.done &&
+    stored.releaseId === input.releaseId &&
+    stored.rollout === input.rollout
+  );
+}
+
 export async function runSweepTick(
   stored: SweepState | null,
   input: { releaseId: string; rollout: string; cap: number },

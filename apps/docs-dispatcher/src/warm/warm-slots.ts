@@ -89,12 +89,14 @@ function denialOf(
   return ofSite >= request.maxPerSite ? "site_cap" : null;
 }
 
+/** Frees the holder's slot. Returns `state` itself when nothing changes. */
 export function releaseSlot(
   state: SlotState,
   holder: string,
   now: number,
 ): SlotState {
-  const { leases } = withoutExpired(state.leases, now);
+  const { leases, expired } = withoutExpired(state.leases, now);
+  if (!Object.hasOwn(leases, holder) && expired === 0) return state;
   const { [holder]: _released, ...rest } = leases;
   return { leases: rest };
 }

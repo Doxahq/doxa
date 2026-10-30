@@ -7,10 +7,13 @@ import type { FillOutcome } from "../../src/warm/warm-fill";
 import type { WarmJob, WarmOutcome, WarmTarget } from "../../src/warm/warm-job";
 import type { FillReservation } from "../../src/warm/warm-lock-state";
 import {
+  MAX_SLOT_WAITS,
   READINESS_MAX_WAIT_MS,
   READINESS_RETRY_MS,
   REFILL_DELAY_MS,
+  SLOT_RETRY_MAX_MS,
   SLOT_RETRY_MS,
+  slotRetryDelay,
   WARM_ALARM_BUDGET_MS,
   WARM_FILL_CONCURRENCY,
   readWarmerState,
@@ -304,6 +307,220 @@ describe("regional warmer", () => {
     expect(harness.reports).toEqual(["running", "done"]);
     expect(harness.fills).toHaveLength(4);
     expect(harness.storage.values.size).toBe(0);
+  });
+
+  test("ends the warmer when the report keeps failing, instead of a 1-minute retry forever", async () => {
+    const harness = createHarness();
+    await start(harness);
+    harness.deps.lock.report = vi.fn(async (_job: WarmJob, outcome: WarmOutcome | "running") => {
+      if (outcome === "running") return;
+      throw new Error("lock rejects the report");
+    });
+    await runWarmerAlarm(harness.deps);
+    for (let attempt = 0; attempt < 10 && harness.storage.values.size > 0; attempt += 1) {
+      harness.clock.now += 60_000;
+      await runWarmerAlarm(harness.deps);
+    }
+    expect(harness.storage.values.size).toBe(0);
+    expect(harness.storage.alarm).toBeNull();
+    // The first report and 4 retries: 5 failures in a row.
+    expect(
+      vi.mocked(harness.deps.lock.report).mock.calls.filter(([, outcome]) => outcome !== "running"),
+    ).toHaveLength(5);
+  });
+
+  test("stops retrying a report once the job is older than the maximum age", async () => {
+    const harness = createHarness();
+    await start(harness);
+    harness.deps.lock.report = vi.fn(async (_job: WarmJob, outcome: WarmOutcome | "running") => {
+      if (outcome === "done") throw new Error("lock unavailable");
+    });
+    await runWarmerAlarm(harness.deps);
+    expect((await readWarmerState(harness.storage))?.phase).toBe("report");
+    harness.clock.now += 4 * 60 * 60_000;
+    await runWarmerAlarm(harness.deps);
+    expect(harness.storage.values.size).toBe(0);
+    expect(harness.storage.alarm).toBeNull();
+    expect(
+      vi.mocked(harness.deps.lock.report).mock.calls.filter(([, outcome]) => outcome === "done"),
+    ).toHaveLength(1);
+  });
+
+  test("waits longer for each slot denial in a row, at most 2 minutes, then stops writing (F2)", async () => {
+    const harness = createHarness({ slots: false });
+    await start(harness);
+    const put = vi.spyOn(harness.storage, "put");
+    const waits: number[] = [];
+    for (let run = 0; run < 7; run += 1) {
+      const before = harness.clock.now;
+      await runWarmerAlarm(harness.deps);
+      waits.push((harness.storage.alarm ?? 0) - before);
+      harness.clock.now = harness.storage.alarm ?? harness.clock.now;
+    }
+    expect(waits).toEqual([30_000, 60_000, 120_000, 120_000, 120_000, 120_000, 120_000]);
+    // One write per denial until the wait is at its maximum, then none.
+    expect(put).toHaveBeenCalledTimes(MAX_SLOT_WAITS);
+    expect(harness.fills).toEqual([]);
+    expect(slotRetryDelay(1)).toBe(SLOT_RETRY_MS);
+    expect(slotRetryDelay(MAX_SLOT_WAITS - 1)).toBeLessThan(SLOT_RETRY_MAX_MS);
+    expect(slotRetryDelay(MAX_SLOT_WAITS)).toBe(SLOT_RETRY_MAX_MS);
+  });
+
+  test("a granted slot resets the wait and stores no count (F2, R2)", async () => {
+    let free = false;
+    const harness = createHarness({ fillMs: 5 * 60_000 });
+    harness.deps.slots.acquire = vi.fn(async () => free);
+    await start(harness);
+    await runWarmerAlarm(harness.deps);
+    await runWarmerAlarm(harness.deps);
+    expect((await readWarmerState(harness.storage))?.slotWaits).toBe(2);
+    free = true;
+    await runWarmerAlarm(harness.deps);
+    // The run used its time budget and saved its progress, without the key.
+    expect((await readWarmerState(harness.storage))?.cursor).toBeGreaterThan(0);
+    expect(harness.storage.values.get("state")).not.toHaveProperty("slotWaits");
+  });
+
+  test("counts only alarm errors in a row: a good run starts the count again (R3)", async () => {
+    const harness = createHarness({ fillMs: 5 * 60_000 });
+    await start(harness);
+    let failing = true;
+    harness.deps.isSuperseded = vi.fn(async () => {
+      if (failing) throw new Error("API down");
+      return false;
+    });
+    const runAlarms = async (count: number) => {
+      for (let run = 0; run < count; run += 1) {
+        await runWarmerAlarm(harness.deps);
+        harness.clock.now += 60_000;
+      }
+    };
+    await runAlarms(4);
+    expect((await readWarmerState(harness.storage))?.failures).toBe(4);
+    failing = false;
+    await runAlarms(1);
+    expect(await readWarmerState(harness.storage)).toMatchObject({ phase: "fill", failures: 0 });
+    failing = true;
+    await runAlarms(4);
+    // 8 errors in all, but never 5 in a row: the job goes on.
+    expect(await readWarmerState(harness.storage)).toMatchObject({ phase: "fill", failures: 4 });
+    expect(harness.reports).not.toContain("failed");
+  });
+
+  test("five alarm errors in a row end the job as failed, and the report still gets sent (R3)", async () => {
+    const harness = createHarness();
+    await start(harness);
+    let errors = 5;
+    harness.deps.isSuperseded = vi.fn(async () => {
+      if (errors === 0) return false;
+      errors -= 1;
+      throw new Error("API down");
+    });
+    for (let run = 0; run < 6; run += 1) {
+      await runWarmerAlarm(harness.deps);
+      harness.clock.now += 60_000;
+    }
+    expect(harness.reports).toEqual(["failed"]);
+    expect(harness.storage.values.size).toBe(0);
+  });
+
+  test("an error that keeps coming in the report phase ends the warmer after 5 (R3)", async () => {
+    const harness = createHarness();
+    await start(harness);
+    const report = harness.deps.lock.report;
+    let reportFailures = 1;
+    harness.deps.lock.report = vi.fn(async (job: WarmJob, outcome: WarmOutcome | "running") => {
+      if (outcome === "done" && reportFailures > 0) {
+        reportFailures -= 1;
+        throw new Error("lock unavailable");
+      }
+      return report(job, outcome);
+    });
+    // Any error outside the report call itself: here the log line after it.
+    vi.mocked(console.info).mockImplementation((line?: unknown) => {
+      if (typeof line === "string" && line.includes('"outcome":"done"')) {
+        throw new Error("log sink down");
+      }
+    });
+    let alarms = 0;
+    while (alarms < 20 && harness.storage.values.size > 0) {
+      await runWarmerAlarm(harness.deps);
+      harness.clock.now += 60_000;
+      alarms += 1;
+    }
+    // The fill run with the failed report, then 4 report runs that fail.
+    expect(alarms).toBe(5);
+    expect(harness.storage.values.size).toBe(0);
+    expect(harness.storage.alarm).toBeNull();
+  });
+
+  test("an alarm error drops the slot-wait count (R2, R3)", async () => {
+    const harness = createHarness();
+    let denials = 2;
+    harness.deps.slots.acquire = vi.fn(async () => {
+      if (denials === 0) throw new Error("control object unreachable");
+      denials -= 1;
+      return false;
+    });
+    await start(harness);
+    await runWarmerAlarm(harness.deps);
+    await runWarmerAlarm(harness.deps);
+    expect((await readWarmerState(harness.storage))?.slotWaits).toBe(2);
+    await runWarmerAlarm(harness.deps);
+    expect(harness.storage.values.get("state")).not.toHaveProperty("slotWaits");
+    expect((await readWarmerState(harness.storage))?.failures).toBe(1);
+  });
+
+  test("earlier alarm errors do not cut short the final report's retries (R3)", async () => {
+    const harness = createHarness();
+    await start(harness);
+    let errors = 4;
+    harness.deps.isSuperseded = vi.fn(async () => {
+      if (errors === 0) return false;
+      errors -= 1;
+      throw new Error("API down");
+    });
+    const report = harness.deps.lock.report;
+    let reportFailures = 1;
+    harness.deps.lock.report = vi.fn(async (job: WarmJob, outcome: WarmOutcome | "running") => {
+      if (outcome === "done" && reportFailures > 0) {
+        reportFailures -= 1;
+        throw new Error("lock unavailable");
+      }
+      return report(job, outcome);
+    });
+    for (let run = 0; run < 8 && harness.storage.values.size > 0; run += 1) {
+      await runWarmerAlarm(harness.deps);
+      harness.clock.now += 60_000;
+    }
+    expect(harness.reports).toEqual(["running", "done"]);
+    expect(harness.storage.values.size).toBe(0);
+  });
+
+  test("the same job again keeps the warmer's progress (F4)", async () => {
+    const harness = createHarness({ fillMs: 5 * 60_000 });
+    const job = await start(harness);
+    await runWarmerAlarm(harness.deps);
+    const progressed = await readWarmerState(harness.storage);
+    expect(progressed?.cursor).toBeGreaterThan(0);
+    // A redelivered message starts the same job with a new start time.
+    await startWarmer(harness.storage, { ...job, startedAt: harness.clock.now }, harness.clock.now);
+    expect((await readWarmerState(harness.storage))?.cursor).toBe(progressed?.cursor);
+    // A different job still replaces it.
+    await startWarmer(harness.storage, warmJob({ jobId: OTHER_JOB_ID, startedAt: harness.clock.now }), harness.clock.now);
+    expect((await readWarmerState(harness.storage))?.cursor).toBe(0);
+  });
+
+  test("verifies in the next alarm when the fills used the whole budget", async () => {
+    const harness = createHarness({ fillMs: 3 * 60_000 });
+    await start(harness);
+    await runWarmerAlarm(harness.deps);
+    const state = await readWarmerState(harness.storage);
+    expect(state).toMatchObject({ phase: "fill", cursor: 4 });
+    expect(harness.probes).toEqual([]);
+    await runWarmerAlarm(harness.deps);
+    expect(harness.probes.length).toBeGreaterThan(0);
+    expect(harness.reports).toContain("done");
   });
 
   test("an old job ends as failed", async () => {

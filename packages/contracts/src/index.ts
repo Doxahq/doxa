@@ -64,8 +64,10 @@ export const WRITING_FINGERPRINT_VERSION = "doxabot-writing-v1";
  * PLANNER_OUTPUT_SCHEMA_HASH with it. Bump it also when a stored analysis
  * must not be reused, as for v7: v6 analyses without a spec file had REST
  * endpoints without their facts, from the removed file-by-file extraction.
+ * And for v8: v7 analyses lost every endpoint and export that a filter on
+ * the project category judged internal. The project instructions decide now.
  */
-export const PLANNING_FINGERPRINT_VERSION = "doxabot-planning-v7";
+export const PLANNING_FINGERPRINT_VERSION = "doxabot-planning-v8";
 /**
  * The hash of the structure and structure review response schemas that
  * PLANNING_FINGERPRINT_VERSION was set for. A test in @doxahq/agent fails

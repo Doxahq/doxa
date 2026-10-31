@@ -1,4 +1,11 @@
-import type { AgentConfig, AgentProgressCallback, DocumentationStructure, ProjectAnalysis, StructureSuggestionInput } from "../types";
+import type {
+  AgentConfig,
+  AgentProgressCallback,
+  DocumentationStructure,
+  ProjectAnalysis,
+  ResolvedDocumentationGenerationBrief,
+  StructureSuggestionInput,
+} from "../types";
 import { normalizeProjectAnalysis } from "../utils/analysis-normalizer";
 import {
   discoverDocumentationCollections,
@@ -11,7 +18,7 @@ import { generateStructureWithRetry } from "./structure-runner";
 import { prompts } from "./prompts";
 import type { PromptRegistry } from "./prompts";
 import { documentationBriefFingerprint, resolveDocumentationBrief } from "./documentation-policy";
-import { filterPublicReferenceSurfaces } from "./public-surfaces";
+import { applyReferenceInstructions } from "./reference-instructions";
 import { resolvePlanningRepoMap } from "./planning-repo-map";
 import { loadRepositoryAgentNotes, renderRepositoryAgentNotesBlock } from "./repository-agent-notes";
 import { readRepositorySpecs, type RepositorySpecRead } from "../reference-specs/reader";
@@ -69,16 +76,19 @@ function sourceChangesFromCacheCheck(cacheCheck: {
  * which replaces the REST surface of the model, the source report, and the
  * documentation collections. It runs on every analysis path, cached or not.
  * Without a usable spec, the REST surface of the analysis answer stays as
- * the model wrote it: no later step rebuilds, filters or replaces it.
+ * the model wrote it: no later step rebuilds or replaces it. Only the
+ * project instructions leave out reference surfaces, endpoints or exports.
  */
 async function enrichAnalysis(
   config: AgentConfig,
   analysis: ProjectAnalysis,
   specRead: RepositorySpecRead,
+  documentationBrief: ResolvedDocumentationGenerationBrief,
 ): Promise<ProjectAnalysis> {
   const discovered = await discoverDocumentationCollections(config.cwd);
-  return filterPublicReferenceSurfaces(
+  return applyReferenceInstructions(
     mergeDocumentationCollections(normalizeProjectAnalysis(withRestReference(analysis, specRead)), discovered),
+    documentationBrief,
   );
 }
 
@@ -160,6 +170,7 @@ export async function analyzeProjectWithCacheState(
           config,
           normalizeProjectAnalysis(cacheCheck.cachedAnalysis),
           specRead,
+          documentationBrief,
         );
         return {
           analysis,
@@ -191,7 +202,7 @@ export async function analyzeProjectWithCacheState(
 
         // Save updated analysis to cache
         onProgress?.({ stage: "analyzing", message: "Saving analysis to cache...", progress: 95 });
-        const analysis = await enrichAnalysis(config, result, specRead);
+        const analysis = await enrichAnalysis(config, result, specRead, documentationBrief);
         await cacheManager.saveAnalysis(
           analysisForCache(analysis, briefFingerprint),
           cacheCheck.cachedExplorationContext
@@ -238,7 +249,7 @@ export async function analyzeProjectWithCacheState(
       repoMap,
       restReference,
       repositoryAgentNotes,
-    )), specRead);
+    )), specRead, documentationBrief);
 
     // Save to cache if available
     if (cacheManager) {

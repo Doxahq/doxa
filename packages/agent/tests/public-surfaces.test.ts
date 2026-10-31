@@ -1,5 +1,4 @@
 import { describe, expect, test, vi } from "vitest";
-import { filterPublicReferenceSurfaces } from "../src/doxa-agent/public-surfaces";
 import { applyCollectionsToStructure } from "../src/utils/documentation-collections";
 import { normalizeProjectAnalysis } from "../src";
 import type { DocumentationStructure, ProjectAnalysis } from "../src";
@@ -101,7 +100,7 @@ function analysisWithDuplicatedRestCollection(): ProjectAnalysis {
   };
 }
 
-describe("public reference surfaces", () => {
+describe("REST reference normalization", () => {
   test("normalizes source-evidenced REST request and response metadata", () => {
     const normalized = normalizeProjectAnalysis({
       ...analysisWithDuplicatedRestCollection(),
@@ -188,74 +187,6 @@ describe("public reference surfaces", () => {
     });
 
     expect(normalized.referenceSurfaces?.rest).toBeUndefined();
-  });
-
-  test("removes internal local routes from non-API products", () => {
-    const filtered = filterPublicReferenceSurfaces({
-      ...memoryBankAnalysis(),
-      hasApiRoutes: true,
-      referenceSurfaces: {
-        rest: {
-          label: "REST API",
-          slug: "rest-api",
-          sourceEvidence: [{ path: "src/mcpServer.ts", kind: "source" }],
-          groups: [
-            {
-              id: "diagnostics",
-              title: "Diagnostics",
-              sourceEvidence: [{ path: "src/mcpServer.ts", kind: "source" }],
-              endpoints: [
-                {
-                  id: "get-health",
-                  title: "Health check",
-                  method: "GET",
-                  path: "/health",
-                  description: "Check the local extension server.",
-                  sourceEvidence: [{ path: "src/mcpServer.ts", kind: "source" }],
-                },
-              ],
-            },
-          ],
-        },
-      },
-    });
-
-    expect(filtered.referenceSurfaces?.rest).toBeUndefined();
-  });
-
-  test("keeps source-backed endpoints for an API product", () => {
-    const filtered = filterPublicReferenceSurfaces({
-      ...analysisFixture,
-      projectCategory: "api",
-      projectProfile: "api",
-      hasApiRoutes: true,
-      referenceSurfaces: {
-        rest: {
-          label: "REST API",
-          slug: "rest-api",
-          sourceEvidence: [{ path: "src/routes/users.ts", kind: "source" }],
-          groups: [
-            {
-              id: "users",
-              title: "Users",
-              sourceEvidence: [{ path: "src/routes/users.ts", kind: "source" }],
-              endpoints: [
-                {
-                  id: "get-user",
-                  title: "Get user",
-                  method: "GET",
-                  path: "/v1/users/{id}",
-                  description: "Fetch a user by identifier.",
-                  sourceEvidence: [{ path: "src/routes/users.ts", kind: "source" }],
-                },
-              ],
-            },
-          ],
-        },
-      },
-    });
-
-    expect(filtered.referenceSurfaces?.rest?.groups[0]?.id).toBe("users");
   });
 });
 

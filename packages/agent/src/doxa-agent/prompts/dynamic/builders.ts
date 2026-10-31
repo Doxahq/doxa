@@ -169,7 +169,8 @@ function restSurfaceRules(context: PromptRenderContext): string {
   if (context.restReference?.specFiles?.length) {
     return "- Leave referenceSurfaces.rest out: Doxa reads the REST endpoints in code from the OpenAPI files. Still describe the API in summary, keyFeatures and documentationIntent.";
   }
-  return `- referenceSurfaces.rest must contain served public HTTP/RPC/webhook endpoints only. Use label "REST API" and slug "rest-api" by default.
+  return `- referenceSurfaces.rest must contain every HTTP/RPC/webhook endpoint that the project serves, not the calls it makes to other APIs. Use label "REST API" and slug "rest-api" by default.
+- Do not leave an endpoint out because it looks internal, such as an admin or health route. Leave an endpoint out only when the project instructions say so.
 - Prefer an OpenAPI specification as the authoritative source for REST endpoint metadata when one is present. Otherwise derive fields from route handlers and validation schemas, and include only source-evidenced facts.
 - Populate REST baseUrl, servers, parameters, bodyFields, bodyContentType, responses, and authRequirement from OpenAPI, route handlers, or validation schemas. Every field must have repository evidence; never invent a parameter, required flag, auth rule, request field, response field, or example.
 - Each REST endpoint title must be a short plain-English phrase describing the handler's actual behavior: 2 to 5 words, imperative mood, and sentence case (for example, "Get deployment status" or "Create an API key").

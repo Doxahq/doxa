@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { compilePathGlob, normalizePath } from "./path-glob";
 
 const DEFAULT_IGNORES = new Set([
   ".git",
@@ -98,16 +99,16 @@ export async function scanGlob(
   options: { limit?: number } = {},
 ): Promise<string[]> {
   const files = await listProjectFiles(cwd);
-  const matchers = expandBracePattern(normalizePath(pattern)).map(globToRegExp);
-  const matches: string[] = [];
+  const matches = compilePathGlob(pattern);
+  const found: string[] = [];
 
   for (const file of files.sort()) {
-    if (!matchers.some((matcher) => matcher.test(file))) continue;
-    matches.push(file);
-    if (options.limit && matches.length >= options.limit) break;
+    if (!matches(file)) continue;
+    found.push(file);
+    if (options.limit && found.length >= options.limit) break;
   }
 
-  return matches;
+  return found;
 }
 
 /**
@@ -137,56 +138,4 @@ async function listFiles(root: string, current: string): Promise<string[]> {
     }
   }
   return files;
-}
-
-function expandBracePattern(pattern: string): string[] {
-  const match = pattern.match(/\{([^{}]+)\}/);
-  if (!match) return [pattern];
-
-  const [token, body] = match;
-  return body
-    .split(",")
-    .flatMap((value) => expandBracePattern(pattern.replace(token, value)));
-}
-
-function globToRegExp(pattern: string): RegExp {
-  let source = "^";
-  for (let index = 0; index < pattern.length; index++) {
-    const char = pattern[index];
-    const next = pattern[index + 1];
-
-    if (char === "*" && next === "*") {
-      const after = pattern[index + 2];
-      if (after === "/") {
-        source += "(?:.*/)?";
-        index += 2;
-      } else {
-        source += ".*";
-        index += 1;
-      }
-      continue;
-    }
-
-    if (char === "*") {
-      source += "[^/]*";
-      continue;
-    }
-
-    if (char === "?") {
-      source += "[^/]";
-      continue;
-    }
-
-    source += escapeRegExp(char);
-  }
-  source += "$";
-  return new RegExp(source);
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
-}
-
-function normalizePath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/^\/+/, "");
 }

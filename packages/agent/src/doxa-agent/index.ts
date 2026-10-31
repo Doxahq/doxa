@@ -53,7 +53,7 @@ export {
   resolveDocumentationPolicy,
 } from "./documentation-policy";
 export type { PublicDocumentationPolicy } from "./documentation-policy";
-export { filterPublicReferenceSurfaces } from "./public-surfaces";
+export { applyReferenceInstructions } from "./reference-instructions";
 export { keepPublishedRoutes } from "./published-routes";
 export { PageValidationExhaustedError, runWriterAttempts } from "./writer-pipeline";
 export { DEFAULT_WRITER_MAX_STEPS } from "./constants";

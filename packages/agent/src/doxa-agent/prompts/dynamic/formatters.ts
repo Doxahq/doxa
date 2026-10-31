@@ -79,7 +79,7 @@ ${normalized.configFiles.map((config) => `- ${config.path}: ${config.description
 
   if (normalized.apiEndpoints.length > 0) {
     sections.push(
-      `API ENDPOINTS: ${normalized.apiEndpoints.length} public endpoint candidates detected. ` +
+      `API ENDPOINTS: ${normalized.apiEndpoints.length} endpoint candidates detected. ` +
       "Use the grouped REST reference surface below for page planning.",
     );
   }

@@ -245,7 +245,7 @@ export interface SdkApiReferenceSurface extends ReferenceSurfaceSection {
 }
 
 export interface ProjectReferenceSurfaces {
-  /** Public HTTP/RPC/webhook endpoints served by the project. */
+  /** HTTP/RPC/webhook endpoints served by the project. */
   rest?: RestApiReferenceSurface;
   /** Public SDK/library/framework exports consumed by developers. */
   sdk?: SdkApiReferenceSurface;

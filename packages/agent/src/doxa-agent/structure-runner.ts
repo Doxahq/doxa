@@ -11,6 +11,7 @@ import type { PromptRegistry } from "./prompts";
 import { validateDocumentationStructureForProfile } from "./prompts/dynamic";
 import { parseStructureResult } from "./json-parsing";
 import { STRUCTURE_RESPONSE_SCHEMA } from "./response-schemas";
+import { applyReferenceInstructionsToStructure } from "./reference-instructions";
 import { ensureReferenceSections, referenceSectionDefaultsFromAnswers } from "./reference-surfaces";
 import { StructurePipelineDefectError } from "./structure-review-errors";
 import { validateGlobalPageIds } from "./structure-utils";
@@ -82,12 +83,16 @@ export async function generateStructureWithRetry(
     const modelDuplicates = validateGlobalPageIds(parsed);
     // The published structure keeps each reference page's route and name across runs.
     // A new plan may drop an old collision mark from a route; a patch never does.
-    const structure = ensureReferenceSections(
-      applyCollectionsToStructure(parsed, analysis),
-      analysis,
-      referenceSectionDefaultsFromAnswers(answers),
-      input.publishedStructure,
-      { dropCollisionMarks: true },
+    // With the API reference off, no reference page stays, echoed or injected.
+    const structure = applyReferenceInstructionsToStructure(
+      ensureReferenceSections(
+        applyCollectionsToStructure(parsed, analysis),
+        analysis,
+        referenceSectionDefaultsFromAnswers(answers),
+        input.publishedStructure,
+        { dropCollisionMarks: true },
+      ),
+      input.documentationBrief,
     );
     const injectedDuplicates = validateGlobalPageIds(structure);
     if (modelDuplicates.length === 0 && injectedDuplicates.length > 0) {

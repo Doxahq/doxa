@@ -102,13 +102,13 @@ detail returns the last report of the run as `referenceSource`, and
 
 ## The model route
 
-The model route is the setup from before the spec route, unchanged. The
-analysis prompt asks for every served public endpoint with all of its
+The model route is the setup from before the spec route. The analysis
+prompt asks for every endpoint that the project serves, with all of its
 source-evidenced facts: base URL, servers, parameters, body fields, body
 content type, responses and auth. The answer is the REST surface. No step
 after the answer calls a model or changes the surface: it is normalized, the
-public-surface filter applies, and every endpoint gets a page that the
-template renders.
+project instructions apply (see below), and every endpoint gets a page that
+the template renders.
 
 Without a spec file, the model is the only source of endpoint facts. Do not
 add a step that rebuilds, merges or replaces the REST surface of the answer.
@@ -136,6 +136,37 @@ pass:
 - `packages/agent/tests/reference-specs/reader.test.ts`: gate G3 rejects a
   parsed spec with no operation, so an empty spec surface never replaces the
   model surface.
+
+## What the reference documents
+
+The project owner's Doxabot instructions decide what the REST and SDK
+reference documents. The project category does not, and neither does
+whether an endpoint looks internal. Code applies the instructions
+(`packages/agent/src/doxa-agent/reference-instructions.ts`) on both routes:
+
+- **The "API reference" page type.** It is on by default. If the owner turns
+  it off, the analysis keeps no reference surface. A new plan also keeps no
+  reference page, not even a page that the planner copies from the published
+  structure.
+- **"Do not document" paths.** An endpoint or export leaves the reference when
+  each path of its evidence is under one of these globs. A glob also covers
+  the files in a folder that it matches, so `apps/admin` covers
+  `apps/admin/stats.ts`. An item without evidence of its own takes the
+  evidence of its group or module, then of the surface.
+- **Owner rules.** Rules such as "Do not document the admin endpoints" reach
+  the analysis prompt. The prompt tells the model to leave an endpoint out
+  only when the project instructions say so.
+
+Until 31 October 2026, a filter after the analysis kept a REST endpoint only
+when the model called the project an `api` project, or when an evidence path
+named docs, examples, OpenAPI or Swagger. The SDK reference had the same
+filter, on `library` and `framework`. Claude Sonnet 5.5 called flagforge a
+`platform`, so the site got one endpoint of 23 (generation `8499e18a`). The
+filter was removed, and `PLANNING_FINGERPRINT_VERSION` became
+`doxabot-planning-v8`, so no project reuses an analysis that the filter made.
+`packages/agent/tests/reference-instructions.test.ts` is the incident
+contract: every project category keeps every endpoint and export, and only
+the instructions remove them.
 
 ## Utility containers
 

@@ -59,10 +59,13 @@ export * from "./reference-source";
 export const WRITING_FINGERPRINT_VERSION = "doxabot-writing-v1";
 /**
  * The version of the planning contract. A run whose baseline has another
- * version plans every page again. Bump it whenever the planner's output
- * format changes, and update PLANNER_OUTPUT_SCHEMA_HASH with it.
+ * version analyzes the repository again and plans every page again. Bump it
+ * whenever the planner's output format changes, and update
+ * PLANNER_OUTPUT_SCHEMA_HASH with it. Bump it also when a stored analysis
+ * must not be reused, as for v7: v6 analyses without a spec file had REST
+ * endpoints without their facts, from the removed file-by-file extraction.
  */
-export const PLANNING_FINGERPRINT_VERSION = "doxabot-planning-v6";
+export const PLANNING_FINGERPRINT_VERSION = "doxabot-planning-v7";
 /**
  * The hash of the structure and structure review response schemas that
  * PLANNING_FINGERPRINT_VERSION was set for. A test in @doxahq/agent fails

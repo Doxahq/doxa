@@ -228,23 +228,9 @@ export interface RestApiReferenceSource {
   readerVersion: string;
 }
 
-/**
- * How the model route extracted the endpoints, file by file. A later run
- * reuses the endpoints of an unchanged file when the prompt version and the
- * model are the same.
- */
-export interface RestApiReferenceExtraction {
-  promptVersion: string;
-  model: string;
-  /** Every route file that was extracted, with or without endpoints. */
-  files: string[];
-}
-
 export interface RestApiReferenceSurface extends ReferenceSurfaceSection {
   /** Set when the surface comes from spec files instead of the model. */
   source?: RestApiReferenceSource;
-  /** Set when the model route extracted the endpoints file by file. */
-  extraction?: RestApiReferenceExtraction;
   baseUrl?: string;
   servers?: string[];
   /** Auth schemes shared by the endpoints of this surface. */
@@ -703,11 +689,6 @@ export interface AgentConfig {
   pageWriterLimiter?: ConcurrencyLimiter;
   /** Runs the spec-reader job. Without it, the REST reference comes from the model. */
   specReader?: SpecReaderClient;
-  /**
-   * The model that extracts REST endpoints file by file on the model route.
-   * Without it, the endpoints come from the one analysis answer.
-   */
-  restExtractionModel?: string;
   /** Spec files named in the project settings. Discovery then reads only these. */
   restApiSpecPaths?: string[];
   /** Called before each model call retry, for example to lower the writer width. */

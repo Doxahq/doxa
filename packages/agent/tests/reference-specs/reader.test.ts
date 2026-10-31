@@ -101,6 +101,21 @@ describe("spec route reader", () => {
     expect(result.report).toMatchObject({ status: "spec_rejected", specs: [{ path: "openapi.yaml", code: "invalid_output" }] });
   });
 
+  // PRODUCTION INCIDENT REGRESSION GUARDRAIL (2026-10-30, flagforge): a spec
+  // surface replaces the model surface completely, so an empty one would
+  // remove the whole REST reference. The code must be used instead.
+  test("G3 rejects a parsed spec with no operation, so the REST reference comes from the code", async () => {
+    const root = await checkout({ "openapi.yaml": "openapi: 3.1.0\npaths: {}\n" });
+    const fake = fakeClient([
+      read({ status: "read", readerVersion: READER_VERSION, specs: [parsedSpec({ operations: [] })], fileIssues: [] }),
+    ]);
+
+    const result = await readRepositorySpecs({ checkoutRoot: root, client: fake.client });
+
+    expect(result.surface).toBeUndefined();
+    expect(result.report).toMatchObject({ status: "spec_rejected", specs: [{ path: "openapi.yaml", code: "invalid_output" }] });
+  });
+
   test("reports a partial spec with each skipped operation in our own words", async () => {
     const root = await checkout({ "openapi.yaml": "openapi: 3.1.0\npaths: {}\n" });
     const fake = fakeClient([read({

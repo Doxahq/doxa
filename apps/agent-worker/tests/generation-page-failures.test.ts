@@ -158,15 +158,13 @@ describe("writer fallback model", () => {
 });
 
 describe("REST extraction model", () => {
-  test("is the writer model unless the setting names another, which the provider check then includes", async () => {
+  test("is never sent: a leftover DOXA_REST_EXTRACTION_MODEL setting adds no model to a run", async () => {
     const { resolveGenerationModels, generationModelIds } = await import("../src/model-provider");
-    const { generationModelConfigSchema } = await import("@doxahq/contracts");
     const models = { plannerModel: "m", writerModel: "m" };
+    const env = { DOXA_WRITER_FALLBACK_MODEL: "m", DOXA_REST_EXTRACTION_MODEL: "claude-haiku-5-5" };
 
-    expect(resolveGenerationModels({ DOXA_REST_EXTRACTION_MODEL: " m " }, models)).toEqual(models);
-    const withSetting = resolveGenerationModels({ DOXA_REST_EXTRACTION_MODEL: "claude-haiku-5-5" }, models);
-    expect(withSetting).toEqual({ ...models, restExtractionModel: "claude-haiku-5-5" });
-    expect(generationModelConfigSchema.safeParse(withSetting).success).toBe(true);
-    expect(generationModelIds(withSetting)).toEqual(["m", "m", "claude-haiku-5-5"]);
+    const resolved = resolveGenerationModels(env, models);
+    expect(resolved).toEqual(models);
+    expect(generationModelIds(resolved)).toEqual(["m", "m"]);
   });
 });

@@ -69,16 +69,6 @@ export function hostedDocsQualityFailureAction(failure: FailureRetryState): Page
   return failure.retryBudgetExhausted ? "skip" : "retry";
 }
 
-/**
- * The model that extracts REST endpoints on the model route: the run's
- * extraction model, else its writer model, else the one model of a run
- * without a model config.
- */
-export function resolvedRestExtractionModel(input: ContainerGenerateRequest): string | undefined {
-  const models = input.modelConfig;
-  return models?.restExtractionModel ?? models?.writerModel ?? input.model;
-}
-
 export function resolvedPageConcurrency(input: ContainerGenerateRequest): number {
   return input.pageConcurrency ?? DEFAULT_PAGE_CONCURRENCY;
 }

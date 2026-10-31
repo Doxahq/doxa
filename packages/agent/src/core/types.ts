@@ -215,8 +215,7 @@ export type AgentUsageOperation =
   | "structure"
   | "structure_review"
   | "page_write"
-  | "mdx_repair"
-  | "rest_extraction";
+  | "mdx_repair";
 
 export interface AgentUsageContext {
   operation: AgentUsageOperation;

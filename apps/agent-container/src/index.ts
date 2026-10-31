@@ -40,7 +40,6 @@ import {
   hostedPageFailureAction,
   resolvedEditorialPageBudget,
   resolvedPageConcurrency,
-  resolvedRestExtractionModel,
 } from "./generation-profile";
 import { createContainerLogger, installOutputRedaction, outputSecrets, sanitizeText, sanitizeValue } from "./logging";
 import { resolveSpecReaderClient } from "./utility/spec-reader-client";
@@ -347,7 +346,6 @@ async function runGenerationInWorkspace(
     onDocsQualityFailure: hostedDocsQualityFailureAction,
     documentationBrief,
     specReader: resolveSpecReaderClient(input.stageExecutionId ?? crypto.randomUUID()),
-    restExtractionModel: resolvedRestExtractionModel(input),
   };
 
   await emitEvent("analysis_started", "Analyzing repository.");

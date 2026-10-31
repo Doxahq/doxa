@@ -286,26 +286,22 @@ describe("staged generation observability", () => {
     });
   });
 
-  test("records endpoint extraction of the plan stages under the writer role", () => {
+  test("records the plan stages under the planner role and the write stage under the writer role", () => {
     const usage: AgentUsageRecord = {
       callId: "44444444-4444-4444-8444-444444444444",
       model: "moonshotai/kimi-k2.6:nitro",
       iteration: 1,
       usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-      context: { operation: "rest_extraction" },
+      context: { operation: "analysis" },
       recordedAt: "2026-07-25T12:00:00.000Z",
     };
 
-    expect(toGenerationUsageRecord(stageRequest("analysis"), stageExecutionId, usage)).toMatchObject({
-      stage: "analysis",
-      operation: "rest_extraction",
-      modelRole: "writer",
-    });
+    expect(toGenerationUsageRecord(stageRequest("analysis"), stageExecutionId, usage).modelRole).toBe("planner");
     expect(toGenerationUsageRecord(
-      stageRequest("analysis"),
+      stageRequest("write"),
       stageExecutionId,
-      { ...usage, context: { operation: "analysis" } },
-    ).modelRole).toBe("planner");
+      { ...usage, context: { operation: "page_write" } },
+    ).modelRole).toBe("writer");
   });
 
   test("preserves an unknown model-call duration as null", () => {

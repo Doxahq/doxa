@@ -138,8 +138,9 @@ Each provider call is persisted with the job, stage, operation, exact model,
 page, page retry, writer attempt, model iteration, tokens, provider cost, and
 provider generation ID when available. Replayed stream or RPC delivery is
 idempotent by `callId`; a real provider retry receives a new ID and is counted.
-The model role is `writer` for the write stage and for `rest_extraction` calls
-of the plan stage, which use the writer model, and `planner` for the others.
+The model role is `writer` for the write stage and `planner` for the others.
+Usage records of older runs can have the operation `rest_extraction`, from the
+removed file-by-file REST extraction, with the `writer` role.
 
 The Worker prints cumulative summaries after each stage and once at terminal
 job completion:

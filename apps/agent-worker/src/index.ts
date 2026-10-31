@@ -30,7 +30,6 @@ export interface Env {
   DOXA_WRITER_MODEL?: string;
   /** Optional. The last retry of a failing page uses it; the planner model otherwise. */
   DOXA_WRITER_FALLBACK_MODEL?: string;
-  DOXA_REST_EXTRACTION_MODEL?: string;
   DOXA_GENERATION_PROFILE?: "fast-mvp" | "full-prod";
   DOXA_AGENT_PAGE_CONCURRENCY?: string;
   DOXA_WRITE_BATCH_PARALLELISM?: string;

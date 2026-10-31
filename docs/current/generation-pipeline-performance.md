@@ -784,7 +784,7 @@ them today.
 | Adaptive writer width per job (start 8, up to the ceiling, halve on a rate limit or overload) and write groups that exist for durability only. | agent `utils/adaptive-concurrency.ts`, agent-container `writer-width.ts` | `DOXA_AGENT_PAGE_CONCURRENCY` (job ceiling, 24), `DOXA_WRITE_GROUP_SIZE` (24) |
 | Continue a failed run from its failed step with `instance.restart({ from })`. Offered for 29 days after a transient failure. | agent-worker `workflow-step-tracker.ts`, API `generation-resume.ts` | `GENERATION_RESUME_WINDOW_DAYS` |
 | REST endpoint pages from a template, writer step cap 8, topic-matched evidence, section repair, repo map before exploration. | see the sections above and `packages/agent/src/repo-map/` | `AgentConfig.writerMaxSteps`, `AgentConfig.repoMap` |
-| Without a spec file, the plan stage extracts REST endpoints file by file (at most 400 calls, 8 at a time, 20 minutes), and reuses the endpoints of unchanged files. See [API reference sources](api-reference-sources.md). | agent `rest-extraction/` | `DOXA_REST_EXTRACTION_MODEL` (writer model by default) |
+| Without a spec file, the analysis answer is the REST surface, with every endpoint fact; no model call follows it. The file-by-file extraction was removed after the incident of 30 October 2026. See [API reference sources](api-reference-sources.md#the-model-route). | agent `doxa-agent/analysis-service.ts` | None |
 
 The structure review now reports `structure_review_decided` with the share of
 pages it changed. Releasing pages to the writers before the review ends is not

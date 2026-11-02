@@ -544,7 +544,17 @@ function isMdxJsxElement(
   return node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement";
 }
 
-const SAFE_LINK_SCHEMES: ReadonlySet<string> = new Set(["http", "https", "mailto"]);
+/**
+ * Schemes that can run code on the docs site. A blocklist, because published
+ * component props must keep working: `tel:` and `vscode:` links are safe.
+ */
+const EXECUTABLE_LINK_SCHEMES: ReadonlySet<string> = new Set([
+  "javascript",
+  "vbscript",
+  "data",
+  "blob",
+  "filesystem",
+]);
 const LINK_SCHEME = /^([A-Za-z][A-Za-z0-9+.-]*):/;
 /** `//host` and `/\host`: the browser opens another site, not a page of this one. */
 const OTHER_HOST_LINK = /^[\\/]{2}/;
@@ -559,16 +569,15 @@ function sanitizeHref(value: string): string {
 }
 
 /**
- * A component `href` prop, such as the one of `Card`: the Markdown link rules,
- * and a relative path such as `guide` stays too. The check runs on the link
- * as the browser reads it, so `java\tscript:` cannot hide its scheme.
+ * A component `href` prop, such as the one of `Card`. Only an executable scheme
+ * or a link to another host becomes `#`. The check runs on the link as the
+ * browser reads it, so `java\tscript:` cannot hide its scheme.
  */
 function sanitizeComponentHref(value: string): string {
   const href = browserNormalizedHref(value);
   if (OTHER_HOST_LINK.test(href)) return "#";
-  const scheme = LINK_SCHEME.exec(href)?.[1];
-  if (scheme === undefined) return href;
-  return SAFE_LINK_SCHEMES.has(scheme.toLowerCase()) ? href : "#";
+  const scheme = LINK_SCHEME.exec(href)?.[1]?.toLowerCase();
+  return scheme !== undefined && EXECUTABLE_LINK_SCHEMES.has(scheme) ? "#" : href;
 }
 
 /**

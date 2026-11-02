@@ -33,6 +33,8 @@ const UNSAFE_LINKS = [
   "\u0001javascript:alert(1)",
   "data:text/html,x",
   "vbscript:x",
+  "blob:https://doxa.so/1",
+  "filesystem:https://doxa.so/temporary/x.html",
   "//evil.example",
   "/\\evil.example",
 ];
@@ -52,6 +54,10 @@ describe("markdown links", () => {
   test("still replace a relative link with #, as before", () => {
     expect(markdownLinkHref("guide")).toBe("#");
   });
+
+  test.each(["tel:+123456789", "vscode://file/a"])("still replace %j with #, as before", (destination) => {
+    expect(markdownLinkHref(destination)).toBe("#");
+  });
 });
 
 describe("component href props", () => {
@@ -65,6 +71,18 @@ describe("component href props", () => {
       expect(cardHref(href)).toBe(href);
     },
   );
+
+  // ARTIFACT COMPATIBILITY: published pages can use these, and no browser runs them as code.
+  test.each([
+    "tel:+123456789",
+    "TEL:+123456789",
+    "sms:+123456789",
+    "vscode://file/a",
+    "slack://channel?id=1",
+    "localhost:3000/guide",
+  ])("keep the published href %j", (href) => {
+    expect(cardHref(href)).toBe(href);
+  });
 
   test("leave a component without an href unchanged", () => {
     expect(hrefOf(`<Card title="Guide" />`, "Card")).toEqual({ title: "Guide" });

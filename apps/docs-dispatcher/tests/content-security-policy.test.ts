@@ -4,24 +4,58 @@ import { resolveEmbedUrl } from "../../../packages/mdx-runtime/src/embed";
 import {
   EMBED_FRAME_ORIGINS,
   createCspNonce,
+  createScriptNonceRules,
   docsContentSecurityPolicy,
   parseDocsCspMode,
   withDocsContentSecurityPolicy,
+  type NonceRuleElement,
   type ScriptNonceWriter,
 } from "../src/content-security-policy";
 import { handleCspReport, parseCspReports } from "../src/csp-report";
 
-/** A stand-in for HTMLRewriter, which only the Workers runtime has. Streams like it. */
+/**
+ * A stand-in for HTMLRewriter, which only the Workers runtime has. Streams like
+ * it, and uses the production rules. It reads simple start tags only.
+ */
 const fakeNonceWriter: ScriptNonceWriter = (response, nonce) => {
+  const rules = createScriptNonceRules(nonce);
+  const rewriteTag = (tag: string, name: string, source: string): string => {
+    const attributes = new Map(
+      [...source.matchAll(/([\w-]+)="([^"]*)"/g)].map((match): [string, string] => [match[1]!, match[2]!]),
+    );
+    let removed = false;
+    const element: NonceRuleElement = {
+      getAttribute: (key) => attributes.get(key) ?? null,
+      setAttribute: (key, value) => attributes.set(key, value),
+      removeAttribute: (key) => attributes.delete(key),
+      remove: () => {
+        removed = true;
+      },
+    };
+    if (name === "html") rules.root(element);
+    else if (name === "script") rules.script(element);
+    else if (attributes.get("property") === "csp-nonce") rules.nonceMeta(element);
+    else if (attributes.has("nonce")) rules.otherWithNonce(element);
+    else return tag;
+    if (removed) return "";
+    const ordered = [...attributes].sort(([key]) => (key === "nonce" ? -1 : 0));
+    return `<${[name, ...ordered.map(([key, value]) => `${key}="${value}"`)].join(" ")}>`;
+  };
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
       const html = await response.text();
-      controller.enqueue(new TextEncoder().encode(html.replaceAll("<script", `<script nonce="${nonce}"`)));
+      const output = html.replace(/<([a-z]+)((?:\s[^>]*)?)>/g, rewriteTag);
+      controller.enqueue(new TextEncoder().encode(output));
       controller.close();
     },
   });
   return new Response(body, response);
 };
+
+function rewriteHtml(html: string, nonce = "n0nce"): Promise<string> {
+  const response = new Response(html, { headers: { "content-type": "text/html" } });
+  return withDocsContentSecurityPolicy(response, "enforce", fakeNonceWriter, nonce).text();
+}
 
 function htmlResponse(): Response {
   return new Response("<html><script>boot()</script><script src=\"/a.js\"></script></html>", {
@@ -76,6 +110,61 @@ describe("docs content security policy", () => {
     expect(withDocsContentSecurityPolicy(json, "enforce", writer)).toBe(json);
     expect(withDocsContentSecurityPolicy(html, "off", writer)).toBe(html);
     expect(writer).not.toHaveBeenCalled();
+  });
+
+  test("gives the nonce to the marked scripts and removes the mark", async () => {
+    const output = await rewriteHtml(
+      '<html data-doxa-script-mark="m4rk" lang="en"><head>' +
+        '<meta property="csp-nonce" content="m4rk">' +
+        '<link rel="modulepreload" nonce="m4rk" href="/a.js">' +
+        '</head><body><script nonce="m4rk">boot()</script><script nonce="m4rk" src="/a.js"></script></body></html>',
+    );
+
+    expect(output).toBe(
+      '<html lang="en"><head>' +
+        '<link nonce="n0nce" rel="modulepreload" href="/a.js">' +
+        '</head><body><script nonce="n0nce">boot()</script><script nonce="n0nce" src="/a.js"></script></body></html>',
+    );
+  });
+
+  test.each([
+    ["no nonce", "<script>stealData()</script>", "<script>stealData()</script>"],
+    ["a guessed nonce", '<script nonce="guess">stealData()</script>', "<script>stealData()</script>"],
+    ["a source and no nonce", '<script src="https://evil.example/x.js"></script>', '<script src="https://evil.example/x.js"></script>'],
+  ])("gives no nonce to a script from page content with %s", async (_label, injected, expected) => {
+    const output = await rewriteHtml(
+      `<html data-doxa-script-mark="m4rk"><body>${injected}<script nonce="m4rk">boot()</script></body></html>`,
+    );
+
+    expect(output).toBe(`<html><body>${expected}<script nonce="n0nce">boot()</script></body></html>`);
+  });
+
+  test("does not let a later html tag replace the mark", async () => {
+    const output = await rewriteHtml(
+      '<html data-doxa-script-mark="m4rk"><body>' +
+        '<html data-doxa-script-mark="evil"><script nonce="evil">stealData()</script>' +
+        '<script nonce="m4rk">boot()</script></body></html>',
+    );
+
+    expect(output).toBe(
+      "<html><body><html><script>stealData()</script>" + '<script nonce="n0nce">boot()</script></body></html>',
+    );
+  });
+
+  test("removes a nonce from other tags of page content", async () => {
+    const output = await rewriteHtml(
+      '<html data-doxa-script-mark="m4rk"><body><link rel="preload" nonce="guess" href="/x"></body></html>',
+    );
+
+    expect(output).toBe('<html><body><link rel="preload" href="/x"></body></html>');
+  });
+
+  test("still runs the scripts of HTML from before the marks", async () => {
+    const output = await rewriteHtml('<html lang="en"><body><script>boot()</script><script src="/a.js"></script></body></html>');
+
+    expect(output).toBe(
+      '<html lang="en"><body><script nonce="n0nce">boot()</script><script nonce="n0nce" src="/a.js"></script></body></html>',
+    );
   });
 
   test("makes a new nonce for every response", () => {

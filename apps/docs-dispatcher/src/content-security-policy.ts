@@ -1,11 +1,14 @@
+import { DOCS_SCRIPT_MARK_ATTRIBUTE } from "@doxahq/contracts/docs-script-mark";
+
 /**
  * The script and frame policy of docs HTML (SEC-023).
  *
  * Saved and cached HTML is shared by every visitor, so a nonce cannot live
- * in it. The gateway adds a fresh nonce to every `<script>` of each HTML
- * response, and sends a policy that allows only scripts with that nonce
- * (`'strict-dynamic'` lets them load the renderer's own chunks). Frames are
- * limited to the video hosts of `<Embed>`.
+ * in it. The renderer marks its own scripts with a random mark for each render
+ * (`DOCS_SCRIPT_MARK_ATTRIBUTE`). The gateway gives a fresh nonce only to the
+ * marked scripts, so a script that got into the page content does not run. The
+ * policy allows only scripts with that nonce (`'strict-dynamic'` lets them load
+ * the renderer's own chunks). Frames are limited to the video hosts of `<Embed>`.
  *
  * The mode comes from `DOXA_PROD_DOCS_CSP_MODE`:
  * - `report`: the policy is sent as Content-Security-Policy-Report-Only, and
@@ -19,7 +22,7 @@ export interface DocsCspEnv {
   DOXA_PROD_DOCS_CSP_MODE?: string;
 }
 
-/** Adds the nonce to every `<script>` of an HTML response. */
+/** Gives the nonce to the renderer's scripts of an HTML response. */
 export type ScriptNonceWriter = (response: Response, nonce: string) => Response;
 
 /** Where browsers send violation reports, on the docs host itself. */
@@ -58,15 +61,74 @@ export function createCspNonce(): string {
   return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
 }
 
+/** The part of an HTMLRewriter element that the nonce rules use. */
+export interface NonceRuleElement {
+  getAttribute(name: string): string | null;
+  setAttribute(name: string, value: string): unknown;
+  removeAttribute(name: string): unknown;
+  remove(): unknown;
+}
+
+export interface ScriptNonceRules {
+  /** For each `<html>` tag. */
+  root(element: NonceRuleElement): void;
+  /** For each `<script>` tag. */
+  script(element: NonceRuleElement): void;
+  /** For each other tag with a `nonce`: the framework also marks `<link>` and `<style>`. */
+  otherWithNonce(element: NonceRuleElement): void;
+  /** For each `<meta>` tag that the framework writes to give the browser the nonce. */
+  nonceMeta(element: NonceRuleElement): void;
+}
+
+/**
+ * The rules for one response. Only the first `<html>` tag names the mark,
+ * because it comes before all page content. A later `<html>` tag can come from
+ * page content, so it names nothing.
+ *
+ * HTML without a mark comes from before the marks: a saved page or a cached
+ * page. Its scripts must still run, so each script gets the nonce. New HTML
+ * always has the mark, and page content cannot remove it.
+ */
+export function createScriptNonceRules(nonce: string): ScriptNonceRules {
+  let rootSeen = false;
+  let mark: string | null = null;
+  const writeNonce = (element: NonceRuleElement, trusted: boolean) => {
+    if (trusted) element.setAttribute("nonce", nonce);
+    else element.removeAttribute("nonce");
+  };
+
+  return {
+    root(element) {
+      if (!rootSeen) {
+        rootSeen = true;
+        mark = element.getAttribute(DOCS_SCRIPT_MARK_ATTRIBUTE);
+      }
+      element.removeAttribute(DOCS_SCRIPT_MARK_ATTRIBUTE);
+    },
+    script(element) {
+      writeNonce(element, mark === null || element.getAttribute("nonce") === mark);
+    },
+    otherWithNonce(element) {
+      writeNonce(element, mark !== null && element.getAttribute("nonce") === mark);
+    },
+    nonceMeta(element) {
+      // The browser does not need it: `'strict-dynamic'` trusts the scripts
+      // that the renderer's own scripts add.
+      element.remove();
+    },
+  };
+}
+
 /** The production writer: the Workers HTMLRewriter, streaming. */
-export const htmlRewriterNonceWriter: ScriptNonceWriter = (response, nonce) =>
-  new HTMLRewriter()
-    .on("script", {
-      element(element) {
-        element.setAttribute("nonce", nonce);
-      },
-    })
+export const htmlRewriterNonceWriter: ScriptNonceWriter = (response, nonce) => {
+  const rules = createScriptNonceRules(nonce);
+  return new HTMLRewriter()
+    .on("html", { element: (element) => rules.root(element) })
+    .on("script", { element: (element) => rules.script(element) })
+    .on(":not(script)[nonce]", { element: (element) => rules.otherWithNonce(element) })
+    .on('meta[property="csp-nonce"]', { element: (element) => rules.nonceMeta(element) })
     .transform(response);
+};
 
 /**
  * The HTML response with script nonces and the policy for `mode`. Any other

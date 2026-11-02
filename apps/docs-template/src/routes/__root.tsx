@@ -20,9 +20,11 @@ import {
   HeadContent,
   Outlet,
   Scripts,
+  useRouter,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 
+import { scriptMarkAttributes } from "@/src/lib/script-mark";
 import { isChatAvailable } from "@/src/lib/chat-availability";
 import {
   DOCS_SCROLL_RESTORATION_ID,
@@ -111,6 +113,7 @@ function RootDocument({
   configHash?: string;
   isDemoMode?: boolean;
 }>) {
+  const scriptMark = useRouter().options.ssr?.nonce;
   const appScrollStyle = {
     minWidth: 0,
     flex: "1 1 0%",
@@ -120,6 +123,7 @@ function RootDocument({
 
   return (
     <html
+      {...scriptMarkAttributes(scriptMark)}
       lang="en"
       suppressHydrationWarning
       style={{ height: "100%", overflow: "hidden" }}
@@ -134,7 +138,7 @@ function RootDocument({
       >
         <SiteConfigProvider config={config}>
           <NavigationProgress />
-          <Providers>
+          <Providers scriptMark={scriptMark}>
             <DemoModeProvider value={isDemoMode}>
               <ChatProvider>
                 <div
@@ -159,6 +163,7 @@ function RootDocument({
                   </div>
                   {/* Before the first paint: the scroll position of a refresh, and the current TOC item. */}
                   <script
+                    nonce={scriptMark}
                     dangerouslySetInnerHTML={{ __html: HASH_SCROLL_SCRIPT }}
                   />
                   <ChatInterface isDemoMode={isDemoMode} />
@@ -169,6 +174,7 @@ function RootDocument({
         </SiteConfigProvider>
         {delivery && (
           <script
+            nonce={scriptMark}
             dangerouslySetInnerHTML={{
               __html: `window.__DOXA_DOCS_DELIVERY__=${serializeDeliveryCapability(delivery)};`,
             }}

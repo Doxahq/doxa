@@ -231,7 +231,10 @@ describe("docs dispatcher worker", () => {
     );
     const response = await cache.fetch();
     expect(await response.json()).toBeNull();
-    expect(response.headers.get("cache-control")).toContain("no-store");
+    // SEC-007: unknown hostnames get a short negative entry.
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=30, must-revalidate",
+    );
   });
 
   test("uses trusted cache props while keeping the public gateway uncacheable", async () => {

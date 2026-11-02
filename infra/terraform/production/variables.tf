@@ -72,6 +72,19 @@ variable "api_environment" {
     condition     = length(setintersection(keys(var.api_environment), ["PORT", "VALKEY_URL"])) == 0
     error_message = "api_environment must not set PORT or VALKEY_URL: this stack sets them."
   }
+
+  # SEC-035: no development switch is on. The origin also refuses to start
+  # with one on. "false" and empty values are fine.
+  validation {
+    condition = alltrue([
+      for name in ["ALLOW_INTERNAL_HTTP", "DEV_ADMIN_ENABLED", "ALLOW_INSECURE_GITHUB_WEBHOOKS"] :
+      lookup(var.api_environment, name, "false") != "true"
+      ]) && alltrue([
+      for name in ["LOCAL_DEV_USER_ID", "LOCAL_GITHUB_TOKEN"] :
+      trimspace(lookup(var.api_environment, name, "")) == ""
+    ])
+    error_message = "api_environment must not turn on a development flag (ALLOW_INTERNAL_HTTP, DEV_ADMIN_ENABLED, ALLOW_INSECURE_GITHUB_WEBHOOKS set to true, or LOCAL_DEV_USER_ID, LOCAL_GITHUB_TOKEN set)."
+  }
 }
 
 variable "api_secret_names" {
@@ -112,4 +125,10 @@ variable "monthly_budget_usd" {
   description = "Monthly AWS cost limit of the account, in USD."
   type        = number
   default     = 120
+}
+
+variable "enable_execute_command" {
+  description = "Allow `aws ecs execute-command` into the API container, for a debug session only. Turn it off again after the session."
+  type        = bool
+  default     = false
 }

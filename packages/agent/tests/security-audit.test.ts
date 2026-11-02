@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
   DEFAULT_DOXABOT_INSTRUCTIONS,
@@ -95,6 +95,49 @@ describe("security audit control checks", () => {
     expect(grep).not.toContain(secret);
     expect(read).toMatch(/Skipped|denied/i);
     expect(grep).toMatch(/Skipped|denied/i);
+  });
+
+  test.each([".ENV", "server.KEY", "ID_RSA", ".aws/credentials", ".AWS/Credentials"])(
+    "Read and Grep deny %s, in any case and by folder",
+    async (name) => {
+      const root = await repository();
+      const secret = canary();
+      await mkdir(dirname(join(root, name)), { recursive: true });
+      await writeFile(join(root, name), secret);
+      expect(await readTool(root).execute({ path: name })).not.toContain(secret);
+      expect(await grepTool(root).execute({ pattern: "DOXA_CANARY", path: ".", glob: "*" })).not.toContain(secret);
+      expect(await grepTool(root).execute({ pattern: "DOXA_CANARY", path: name })).not.toContain(secret);
+    },
+  );
+
+  test.each([
+    "a:1:/.ENV.yaml",
+    "x:22:y/ID_RSA.md",
+    ".ENV.yaml\n1:notes.yaml",
+  ])("Grep does not let the file name %j hide a protected file", async (name) => {
+    const root = await repository();
+    const secret = canary();
+    const file = join(root, name);
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, `VALUE=${secret}\n`);
+    expect(await grepTool(root).execute({ pattern: "DOXA_CANARY", path: ".", glob: "*" })).not.toContain(secret);
+  });
+
+  test("Grep still returns matches from a file with a colon in its name", async () => {
+    const root = await realpath(await repository());
+    await mkdir(join(root, "a:1:"));
+    await writeFile(join(root, "a:1:", "notes.md"), "first line\nDOXA_MATCH here\n");
+    expect(await grepTool(root).execute({ pattern: "DOXA_MATCH", path: "." })).toBe(
+      `${join(root, "a:1:", "notes.md")}:2:DOXA_MATCH here`,
+    );
+  });
+
+  test("Grep names the file when the search path is one file", async () => {
+    const root = await realpath(await repository());
+    await writeFile(join(root, "notes.md"), "DOXA_MATCH here\n");
+    expect(await grepTool(root).execute({ pattern: "DOXA_MATCH", path: "notes.md" })).toBe(
+      `${join(root, "notes.md")}:1:DOXA_MATCH here`,
+    );
   });
 
   test("denies a harmless alias to a secret file", async () => {

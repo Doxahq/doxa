@@ -31,20 +31,37 @@ export function requestInputParameters(
   );
 }
 
-export function authStorageKey(): string {
-  return `doxa-api-token:${window.location.host}`;
+/**
+ * The origin that a playground request goes to: the endpoint's base URL,
+ * resolved against the docs page.
+ */
+export function requestTargetOrigin(baseUrl: string): string {
+  try {
+    return new URL(baseUrl, window.location.href).origin;
+  } catch {
+    return window.location.origin;
+  }
 }
 
-export function loadSessionAuthToken(): string {
-  return window.sessionStorage.getItem(authStorageKey()) ?? "";
+/**
+ * A token is kept per docs host and per target API origin (SEC-010). Page
+ * content picks `baseUrl`, so a token entered for one API must never fill in
+ * on an endpoint that sends it to another host.
+ */
+export function authStorageKey(baseUrl: string): string {
+  return `doxa-api-token:${window.location.host}:${requestTargetOrigin(baseUrl)}`;
 }
 
-export function saveSessionAuthToken(value: string): void {
+export function loadSessionAuthToken(baseUrl: string): string {
+  return window.sessionStorage.getItem(authStorageKey(baseUrl)) ?? "";
+}
+
+export function saveSessionAuthToken(baseUrl: string, value: string): void {
   if (value) {
-    window.sessionStorage.setItem(authStorageKey(), value);
+    window.sessionStorage.setItem(authStorageKey(baseUrl), value);
     return;
   }
-  window.sessionStorage.removeItem(authStorageKey());
+  window.sessionStorage.removeItem(authStorageKey(baseUrl));
 }
 
 export function buildBrowserRequest(input: BrowserRequestInput): {
@@ -86,9 +103,7 @@ export function buildBrowserRequest(input: BrowserRequestInput): {
     }
   }
 
-  const url = createBrowserRequestUrl(
-    `${input.baseUrl.replace(/\/+$/, "")}/${requestPath.replace(/^\/+/, "")}`
-  );
+  const url = resolveRequestUrl(input.baseUrl, requestPath);
   for (const [name, value] of query) url.searchParams.set(name, value);
   const hasBody = Object.keys(body).length > 0;
   if (hasBody) headers.set("Content-Type", "application/json");
@@ -101,6 +116,25 @@ export function buildBrowserRequest(input: BrowserRequestInput): {
       ...(hasBody ? { body: JSON.stringify(body) } : {}),
     },
   };
+}
+
+/**
+ * The endpoint URL: the endpoint path under the owner's base URL. The path
+ * comes from page content, so it must never pick the host. With the base `/`,
+ * the path `\evil.example/x` would make `/\evil.example/x`, which a browser
+ * reads as `https://evil.example/x`. So leading slashes and backslashes are
+ * removed from the path, and a URL on any origin other than the base's origin
+ * is refused before a credential goes into it.
+ */
+function resolveRequestUrl(baseUrl: string, path: string): URL {
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = createBrowserRequestUrl(`${base}/${path.replace(/^[\\/]+/, "")}`);
+  if (url.origin !== createBrowserRequestUrl(base || "/").origin) {
+    throw new Error(
+      "The endpoint path points to another host than the API base URL, so the playground does not send it."
+    );
+  }
+  return url;
 }
 
 function createBrowserRequestUrl(value: string): URL {

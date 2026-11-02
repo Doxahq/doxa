@@ -4,6 +4,8 @@ import { createAuth } from "./server";
 export interface AuthenticatedUser {
   id: string;
   email?: string;
+  /** True only when the sign-in provider verified `email`. */
+  emailVerified: boolean;
   name?: string;
   image?: string | null;
 }
@@ -61,6 +63,7 @@ function toAuthenticatedUser(
     user?: {
       id?: string;
       email?: string;
+      emailVerified?: boolean;
       name?: string;
       image?: string | null;
     };
@@ -71,6 +74,7 @@ function toAuthenticatedUser(
   return {
     id: session.user.id,
     email: session.user.email,
+    emailVerified: session.user.emailVerified === true,
     name: session.user.name,
     image: session.user.image,
   };

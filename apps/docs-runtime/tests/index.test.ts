@@ -55,6 +55,38 @@ const value = "<escaped>";
     expect(rendered.html).toContain("&lt;escaped&gt;");
   });
 
+  test.each([
+    "java\tscript:alert(1)",
+    "\u0001javascript:alert(1)",
+    "JavaScript:alert(1)",
+    "data:text/html,x",
+    "//evil.example",
+    "/\\evil.example",
+  ])("replaces the unsafe link %j with #", (href) => {
+    const rendered = renderMarkdown(`---
+title: Links
+---
+
+[bad](${href})
+`);
+
+    expect(rendered.html).toContain('<a href="#">bad</a>');
+  });
+
+  test.each(["/guide", "./guide", "../guide", "guide", "#install", "?tab=1", "HTTPS://doxa.so", "mailto:a@doxa.so"])(
+    "keeps the safe link %j",
+    (href) => {
+      const rendered = renderMarkdown(`---
+title: Links
+---
+
+[good](${href})
+`);
+
+      expect(rendered.html).toContain(`<a href="${href}">good</a>`);
+    },
+  );
+
   test("removes component tags without weakening HTML escaping", () => {
     const rendered = renderMarkdown(`---
 title: Components
@@ -210,6 +242,39 @@ describe("docs runtime fetch", () => {
         badge: "GET",
       },
     ]);
+  });
+
+  // SECURITY REGRESSION GUARDRAIL (SEC-022): production serves no HTML from this Worker.
+  test("answers 404 for the landing page and docs pages without the HTML preview flag", async () => {
+    const env = { ...createEnv({ objects: {} }), DOCS_RUNTIME_HTML_PREVIEW: undefined };
+    for (const path of ["/", "/doxa-demo", "/doxa-demo/install"]) {
+      const response = await worker.fetch(new Request(`https://preview.doxa.so${path}`), env, {} as never);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("content-type") ?? "").not.toContain("text/html");
+    }
+  });
+
+  test("escapes navigation hrefs in the HTML preview", async () => {
+    const env = createEnv({
+      objects: {
+        "sites/site-1/versions/version-1/manifest.json": JSON.stringify({
+          siteId: "site-1",
+          versionId: "version-1",
+          projectSlug: "doxa-demo",
+          generatedAt: "2026-06-14T00:00:00.000Z",
+          pages: [
+            { title: "Overview", href: "/", sourcePath: "source/index.mdx" },
+            { title: "Evil", href: '/x"><script>alert(1)</script>', sourcePath: "source/index.mdx" },
+          ],
+        }),
+        "sites/site-1/versions/version-1/source/index.mdx": "# Overview",
+      },
+    });
+
+    const response = await worker.fetch(new Request("https://preview.doxa.so/doxa-demo"), env, {} as never);
+    const html = await response.text();
+
+    expect(html).not.toContain("<script>alert(1)</script>");
   });
 
   test("renders a published docs page through the service-bound API and R2 artifacts", async () => {
@@ -1490,6 +1555,7 @@ function createEnv(input: {
     },
     DOCS_BUCKET: createTreeBucket(input.objects).bucket,
     DOCS_CONTENT_TOKEN: "test-runtime-token",
+    DOCS_RUNTIME_HTML_PREVIEW: "on",
     ...(input.timing ? { DOXA_DOCS_RUNTIME_TIMING: input.timing } : {}),
   };
 }

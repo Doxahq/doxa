@@ -65,7 +65,8 @@ export function ApiReferenceBody({
     endpoint.responses.find((response) => response.status === activeStatus) ??
     endpoint.responses[0];
 
-  const canTryIt = features.apiPlayground && Boolean(endpoint.baseUrl);
+  // The owner's setting, never the page's own baseUrl (SEC-010).
+  const playgroundBaseUrl = features.apiPlayground ? features.apiPlaygroundBaseUrl : undefined;
   const requestSample = selectRequestSample(endpoint.request, selectedClient);
   const requestClients = endpoint.request.map((sample) => sample.client);
 
@@ -90,12 +91,12 @@ export function ApiReferenceBody({
         method={method}
         path={path}
         tryItOpen={tryItOpen}
-        {...(canTryIt
+        {...(playgroundBaseUrl
           ? { onToggleTryIt: () => setTryItOpen((open) => !open) }
           : {})}
       />
 
-      {canTryIt && endpoint.baseUrl && (
+      {playgroundBaseUrl && (
         <Collapsible open={tryItOpen} onOpenChange={setTryItOpen}>
           {/*
            * The top padding lives inside the animated box, so it collapses with
@@ -111,7 +112,7 @@ export function ApiReferenceBody({
                 <EndpointPlayground
                   method={method}
                   path={path}
-                  baseUrl={endpoint.baseUrl}
+                  baseUrl={playgroundBaseUrl}
                   parameters={endpoint.parameters}
                 />
               </CodeCard>

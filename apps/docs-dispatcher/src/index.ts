@@ -4,6 +4,13 @@ import {
   type DocsDomainResolution,
   type DocsHostResolution,
 } from "@doxahq/contracts";
+import { limitDocsRequest, type DocsRequestLimitEnv } from "./request-limit";
+import {
+  parseDocsCspMode,
+  withDocsContentSecurityPolicy,
+  type DocsCspEnv,
+} from "./content-security-policy";
+import { handleCspReport, isCspReportRequest } from "./csp-report";
 import {
   parsePublicDocsRouteDataV1,
   type PublicDocsRouteDataV1,
@@ -162,6 +169,8 @@ interface DispatcherEnv
     TextRouteCacheEnv,
     ClientAssetFallbackEnv,
     PreviousFallbackEnv,
+    DocsRequestLimitEnv,
+    DocsCspEnv,
     WarmEnv {
   DEBUG?: string;
   DOCS_RESOLVER: DocsResolverBinding;
@@ -393,8 +402,11 @@ export default {
     env: DispatcherEnv,
     ctx: ExecutionContext,
   ): Promise<Response> =>
-    runEdgeGateway(request, env, (trusted) =>
-      docsGateway.fetch(trusted, env, ctx),
+    runEdgeGateway(request, env, async (trusted) =>
+      withDocsContentSecurityPolicy(
+        await docsGateway.fetch(trusted, env, ctx),
+        parseDocsCspMode(env.DOXA_PROD_DOCS_CSP_MODE),
+      ),
     ),
   // The regional warm job (M28): both warm queues and the 5-minute sweep.
   queue: (batch: MessageBatch, env: DispatcherEnv): Promise<void> =>
@@ -418,6 +430,10 @@ const docsGateway = {
       cache: () => getWorkerExports(ctx).DocsClientAssetCache,
     });
     if (clientAsset) return clientAsset;
+
+    const limited = await limitDocsRequest(request, env);
+    if (limited) return limited;
+    if (isCspReportRequest(request)) return handleCspReport(request);
 
     const timing = createServerTiming(env.DEBUG);
     const mode = parseRendererMode(env.DOXA_PROD_DYNAMIC_RENDERER_MODE);

@@ -526,8 +526,9 @@ describe("cache entrypoints", () => {
       expect(await response.text()).toBe("shared");
       expect(ctx.exports.DocsHtmlCache).not.toHaveBeenCalled();
       expect(response.headers.get("cache-control")).toBe("private, no-store");
+      // SEC-007: the host entry of an unknown hostname is a short negative entry.
       expect((await hostEntrypoint.fetch()).headers.get("cache-control")).toBe(
-        "private, no-store",
+        value === null ? "public, max-age=30, must-revalidate" : "private, no-store",
       );
       expect((await hostEntrypoint.fetch()).headers.has("cache-tag")).toBe(
         false,

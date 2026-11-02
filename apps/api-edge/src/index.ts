@@ -3,6 +3,7 @@ import { serveBridge } from "./bridge";
 import type { EdgeEnv } from "./env";
 import { sendCronTick } from "./origin";
 import { proxyToOrigin } from "./proxy";
+import { limitPublicRequest } from "./rate-limit";
 
 export { AgentActionsApi, EmailDeliveryApi, InternalApi, OAuthTokenValidator, PrerenderTaskApi } from "./entrypoints";
 
@@ -16,15 +17,17 @@ export { AgentActionsApi, EmailDeliveryApi, InternalApi, OAuthTokenValidator, Pr
  *   - the 5-minute cron, sent to the origin as one request.
  */
 export default {
-  fetch(request: Request, env: EdgeEnv): Promise<Response> {
+  async fetch(request: Request, env: EdgeEnv): Promise<Response> {
     const { pathname } = new URL(request.url);
     if (pathname.startsWith(BRIDGE_CALL_PATH_PREFIX) || pathname.startsWith(BRIDGE_FETCH_PATH_PREFIX)) {
       return serveBridge(request, env);
     }
     // The origin's RPC and cron routes are for this Worker alone.
     if (pathname.startsWith(INTERNAL_PATH_PREFIX)) {
-      return Promise.resolve(new Response("Not found.", { status: 404 }));
+      return new Response("Not found.", { status: 404 });
     }
+    const limited = await limitPublicRequest(request, env);
+    if (limited) return limited;
     return proxyToOrigin(request, env);
   },
 

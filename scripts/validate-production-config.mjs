@@ -27,6 +27,30 @@ const REQUIRED_HYPERDRIVE_BINDINGS = [
   "HYPERDRIVE_CACHE_DISABLED",
 ];
 
+/**
+ * SEC-014: no production Worker answers on workers.dev or a preview URL.
+ * Those hosts skip the zone WAF and rate rules, and the container Worker has
+ * no caller check of its own. A key under env.production wins over the top
+ * level, the same way Wrangler applies it.
+ */
+// The checked-in configs, also when a test runs this script from a copy.
+const REPOSITORY_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+
+const PRIVATE_URL_WORKER_CONFIGS = [
+  "apps/agent-container/wrangler.json",
+  "apps/agent-worker/wrangler.json",
+  "apps/api-edge/wrangler.json",
+  "apps/api/wrangler.json",
+  "apps/api/wrangler.docs-resolver.json",
+  "apps/docs-dispatcher/wrangler.json",
+  "apps/docs-prerenderer/wrangler.json",
+  "apps/docs-runtime/wrangler.json",
+  "apps/docs-template/wrangler.renderer.shared.production.json",
+  "apps/email-worker/wrangler.json",
+  "apps/mcp/wrangler.json",
+  "apps/web/wrangler.json",
+];
+
 try {
   const requestedConfigPath = readConfigPath(process.argv.slice(2));
   const configPath = path.resolve(process.cwd(), requestedConfigPath);
@@ -53,6 +77,7 @@ try {
       web: readJson("apps/web/wrangler.json"),
     });
     validateMcpProductionConfig({ mcp: readJson("apps/mcp/wrangler.json"), api: config });
+    validateNoPublicWorkerUrls(PRIVATE_URL_WORKER_CONFIGS);
   }
 
   globalThis.console.log(
@@ -317,6 +342,21 @@ function validateDocsRenderingConfigs() {
     "PRERENDER_QUEUE",
     DEFAULT_API_CONFIG,
   );
+}
+
+function validateNoPublicWorkerUrls(configPaths) {
+  for (const configPath of configPaths) {
+    const config = readJson(path.join(REPOSITORY_ROOT, configPath));
+    for (const scope of [config, config.env?.production].filter(Boolean)) {
+      const workersDev = scope.workers_dev ?? config.workers_dev;
+      const previewUrls = scope.preview_urls ?? config.preview_urls;
+      if (workersDev !== false || previewUrls !== false) {
+        throw new Error(
+          `${configPath} must set workers_dev and preview_urls to false.`,
+        );
+      }
+    }
+  }
 }
 
 function requireServiceBinding(config, binding, configPath) {

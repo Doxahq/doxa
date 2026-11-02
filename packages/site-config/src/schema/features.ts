@@ -1,5 +1,28 @@
 import { z } from "zod";
 
+const ROOT_RELATIVE_PATH = /^\/(?!\/)/;
+
+/** An http(s) URL without credentials, or a path on the docs host itself. */
+function isPlaygroundBaseUrl(value: string): boolean {
+  if (ROOT_RELATIVE_PATH.test(value)) return true;
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password;
+}
+
+/**
+ * Where the API playground sends "Try it" requests (SEC-010): an http(s) URL
+ * or a root-relative path on the docs host. Only the site owner sets it. The
+ * `baseUrl` of an `ApiEndpoint` in page content never decides where a
+ * reader's API key goes, because page content is untrusted.
+ */
+export const apiPlaygroundBaseUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2048)
+  .refine(isPlaygroundBaseUrl, "Use an http(s) URL or a path that starts with /.");
+
 export const featuresSchema = z
   .object({
     branding: z.boolean().default(true),
@@ -24,6 +47,8 @@ export const featuresSchema = z
       .strict()
       .prefault({}),
     apiPlayground: z.boolean().default(true),
+    // No default: a site without it keeps its stored shape, and Try it stays off.
+    apiPlaygroundBaseUrl: apiPlaygroundBaseUrlSchema.optional(),
     rawMarkdown: z.boolean().default(true),
     loadFromGithub: z.boolean().default(false),
   })

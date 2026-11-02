@@ -47,7 +47,7 @@ export function createAgentActionRuntime(env: Env, options: AgentActionRuntimeOp
   const now = () => new Date();
   const settings = new ApprovalSettingsRepository(env);
   const activity = new AgentActivityRepository(env);
-  const policy = approvalPolicyFor(registry, settings);
+  const policy = approvalPolicyFor(registry, settings, settings);
   const webOrigin = options.webOrigin ?? webOriginOf(env);
   const notifier = approvalNotifierFromEnv(env, registry, options.defer);
   return {
@@ -77,7 +77,7 @@ export function createAgentActionRuntime(env: Env, options: AgentActionRuntimeOp
       registry,
       access,
       store: settings,
-      policyFor: (modes) => approvalPolicyFor(registry, modes),
+      policyFor: (modes) => approvalPolicyFor(registry, modes, settings),
       activity,
       now,
     }),

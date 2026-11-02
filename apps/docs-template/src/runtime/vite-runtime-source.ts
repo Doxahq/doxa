@@ -543,6 +543,7 @@ function cloneFeatureConfig(
     ai: { ...features.ai },
     copyPage: { ...features.copyPage },
     apiPlayground: features.apiPlayground,
+    ...(features.apiPlaygroundBaseUrl ? { apiPlaygroundBaseUrl: features.apiPlaygroundBaseUrl } : {}),
     rawMarkdown: features.rawMarkdown,
     loadFromGithub: features.loadFromGithub,
   };

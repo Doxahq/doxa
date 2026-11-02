@@ -7,6 +7,9 @@ import type { DocsDomainResolution } from "@doxahq/contracts";
  * not receive a weaker response because the saved output was missing.
  */
 export const DOCS_HTML_SECURITY_HEADERS = {
+  // SEC-023: only the directives that no published page can need. A
+  // script-src policy needs per-request nonces in the renderer first.
+  "content-security-policy": "base-uri 'self'; object-src 'none'",
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-content-type-options": "nosniff",
@@ -28,10 +31,13 @@ export function withDocsSecurityHeaders(response: Response): Response {
 }
 
 /**
- * Asks search engines not to index a preview host.
+ * Asks search engines not to index a preview host, and keeps the host out of
+ * Referer headers (SEC-033): for a generation preview the hostname is the
+ * secret, and strict-origin-when-cross-origin would send it to every
+ * external link and embed.
  *
  * A response from `fetch()` or from a service binding has immutable headers,
- * so the header goes on a copy. The copy keeps the status and the body.
+ * so the headers go on a copy. The copy keeps the status and the body.
  */
 export function withDocsPreviewSearchPolicy(
   response: Response,
@@ -46,6 +52,7 @@ export function withDocsPreviewSearchPolicy(
 
   const result = new Response(response.body, response);
   result.headers.set("x-robots-tag", "noindex, nofollow");
+  result.headers.set("referrer-policy", "no-referrer");
   return result;
 }
 

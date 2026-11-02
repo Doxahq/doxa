@@ -6,7 +6,7 @@ The `doxa-mcp` Worker serves a remote MCP server. A user connects an MCP client
 (Claude, Cursor, ChatGPT, or a custom agent) to Doxa. The agent then runs docs
 workflows for that user, inside the projects that the user picked.
 
-The design is in `docs/superpowers/specs/2026-10-04-mcp-server-design.md`.
+The design is in `docs/superpowers/specs/2026-10-04-mcp-server-design.md` in the private ops repo (`doxa-ops`).
 Consequential actions and approvals are in [agent-actions.md](agent-actions.md).
 
 ## Architecture
@@ -119,6 +119,13 @@ Rules:
   with a pending publish request fails with `publish_pending` and
   `details.requestId`: cancel it with `cancel_approval_request` first. No
   approval gate. It reuses `DocsBranchManagement` (`eraseOwnedByAgent`).
+- `write_page`, `edit_docs`, `upload_asset`, `update_site_settings` and
+  `sync_branch` (when it applies) change only a branch that the same OAuth
+  client created for the same member, by the same rule as `delete_branch`
+  (`requireOwnBranch` in `tools/branches/branch-ownership.ts`). Any other
+  branch answers `branch_not_found` with a hint to call `create_branch`, so
+  an injected agent cannot add changes to a branch that a person publishes.
+  Dry runs only read, so they work on any branch.
 - `get_branch_diff` (`docs:read`) returns the added, edited, and deleted
   pages (href, title), structure files (manifest, sections, navigation), and
   site settings, each with a unified diff against the branch base, cut after

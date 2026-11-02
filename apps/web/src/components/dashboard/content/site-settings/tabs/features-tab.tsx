@@ -1,6 +1,7 @@
 import type { EditableSiteConfig } from "@doxahq/site-config"
 
-import { SettingsSection, SwitchRow } from "~/components/dashboard/content/site-settings/fields/controls"
+import { SettingsSection, SwitchRow, TextInput } from "~/components/dashboard/content/site-settings/fields/controls"
+import { ValidatedField } from "~/components/dashboard/content/site-settings/fields/validated-field"
 import { useSiteSettingsContext } from "~/components/dashboard/content/site-settings/site-settings-context"
 import { fieldIdForPointer } from "~/lib/dashboard/site-settings-issues"
 
@@ -25,6 +26,11 @@ export function FeaturesTab() {
     setFeatures((current) => ({ ...current, ai: { ...current.ai, ...next } }))
   const setCopyPage = (next: Partial<Features["copyPage"]>) =>
     setFeatures((current) => ({ ...current, copyPage: { ...current.copyPage, ...next } }))
+  // An empty field removes the setting, which turns Try it off.
+  const setPlaygroundBaseUrl = (value: string) =>
+    setFeatures(({ apiPlaygroundBaseUrl: _previous, ...current }) =>
+      value ? { ...current, apiPlaygroundBaseUrl: value } : current,
+    )
 
   return (
     <div className="space-y-8">
@@ -87,6 +93,24 @@ export function FeaturesTab() {
       <SettingsSection title="For developers">
         <div className="divide-y divide-border">
           <SwitchRow {...flag("apiPlayground")} title="API playground" description="Lets readers send requests from API reference pages." />
+          <ValidatedField
+            pointer="/features/apiPlaygroundBaseUrl"
+            label="API base URL"
+            description="Where Try it sends requests, for example https://api.acme.com. Readers' API keys go only to this address. Without it, Try it stays off."
+            className="py-3"
+          >
+            {(control) => (
+              <TextInput
+                {...control}
+                value={features.apiPlaygroundBaseUrl ?? ""}
+                onValueChange={setPlaygroundBaseUrl}
+                placeholder="https://api.example.com"
+                disabled={!features.apiPlayground}
+                inputMode="url"
+                spellCheck={false}
+              />
+            )}
+          </ValidatedField>
           <SwitchRow {...flag("rawMarkdown")} title="Markdown routes" description="Serves each page as Markdown at its path with .md added." />
         </div>
       </SettingsSection>

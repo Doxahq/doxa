@@ -163,8 +163,16 @@ describe("docs cache policy", () => {
     expect(await response.json()).toEqual(resolution);
   });
 
+  // SEC-007: a repeated unknown hostname must not reach the resolver database each time.
+  test("caches an unknown hostname for 30 seconds, without a purge tag", () => {
+    const response = withHostCachePolicy(null);
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=30, must-revalidate",
+    );
+    expect(response.headers.has("cache-tag")).toBe(false);
+  });
+
   test.each([
-    { name: "unknown", value: null },
     {
       name: "private",
       value: { ...resolution, accessPolicy: "authenticated" as const },

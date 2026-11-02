@@ -88,6 +88,8 @@ describe("update_site_settings", () => {
     });
     expect(outcome.isError).toBe(false);
     expect(harness.calls.map((entry) => entry.method)).toEqual([
+      // The ownership check (SEC-028) lists the branches; the settings are not read.
+      "branches.list",
       "docs.applyEdits",
     ]);
     expect(writtenConfig(harness)).toMatchObject({ config: { name: "Replaced" } });

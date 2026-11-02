@@ -71,7 +71,7 @@ Unknown latency is never recorded as a fabricated zero-duration request.
 ## Baseline
 
 The deterministic seed-1729 structural baseline is recorded in
-[`../superpowers/plans/2026-07-29-generation-pipeline-performance-baseline.md`](../superpowers/plans/2026-07-29-generation-pipeline-performance-baseline.md).
+`docs/superpowers/plans/2026-07-29-generation-pipeline-performance-baseline.md` in the private ops repo (`doxa-ops`).
 The local provider is stubbed, so the table is for call counts and relative
 non-model work rather than production latency.
 

@@ -2,6 +2,7 @@ import { getSessionUser, type AuthenticatedUser } from "@doxahq/auth";
 import type { ApiContext } from "./app";
 import { getLocalDevUserId } from "./access";
 import { requestState } from "./request-state";
+import { hasSignedInCookie, signedInCookie } from "./signed-in-cookie";
 import { error, json } from "./response";
 import { ensureLocalDevUser } from "../services/local-dev-user";
 
@@ -65,8 +66,12 @@ export function requestSessionUser(
     )
     .then((user) => {
       state.timing.setViewer({
-        isAdmin: isAdminEmail(user?.email, context.env?.ADMIN_EMAILS),
+        isAdmin: isAdmin(user, context.env?.ADMIN_EMAILS),
       });
+      // Keep the dashboard's signed-in marker in step with the session.
+      if (context.env && Boolean(user) !== hasSignedInCookie(context.req.raw, context.env)) {
+        state.setCookies.push(signedInCookie(context.env, Boolean(user)));
+      }
       return user;
     });
   state.sessionUser = pending;
@@ -74,6 +79,14 @@ export function requestSessionUser(
     if (state.sessionUser === pending) state.sessionUser = undefined;
   });
   return pending;
+}
+
+/**
+ * An admin is a user whose verified email is in ADMIN_EMAILS (SEC-018). An
+ * unverified address proves nothing: anyone can type it.
+ */
+function isAdmin(user: AuthenticatedUser | null, adminEmails: string | undefined): boolean {
+  return user?.emailVerified === true && isAdminEmail(user.email, adminEmails);
 }
 
 function isAdminEmail(email: string | undefined, adminEmails: string | undefined): boolean {

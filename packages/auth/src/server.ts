@@ -156,16 +156,34 @@ function advancedOptions(
   };
 }
 
+/** The local dashboard dev server. */
+const LOCAL_WEB_ORIGINS = ["http://localhost:3001", "http://127.0.0.1:3001"];
+
+/**
+ * Origins that Better Auth and the API CSRF check trust. The local dashboard
+ * is trusted only when the API itself runs on a loopback host (SEC-019): a
+ * deployed API must not accept localhost as a callback or CSRF origin. A
+ * tunnel setup that needs it lists it in BETTER_AUTH_TRUSTED_ORIGINS.
+ */
 export function getTrustedOrigins(
   env: Pick<AuthEnv, "BETTER_AUTH_URL" | "WEB_ORIGIN" | "BETTER_AUTH_TRUSTED_ORIGINS">,
 ): string[] {
   return uniqueOrigins([
     env.BETTER_AUTH_URL,
     env.WEB_ORIGIN,
-    "http://localhost:3001",
-    "http://127.0.0.1:3001",
+    ...(isLoopbackOrigin(env.BETTER_AUTH_URL) ? LOCAL_WEB_ORIGINS : []),
     ...splitOrigins(env.BETTER_AUTH_TRUSTED_ORIGINS),
   ]);
+}
+
+function isLoopbackOrigin(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const { hostname } = new URL(value);
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+  } catch {
+    return false;
+  }
 }
 
 function splitOrigins(value: string | undefined): string[] {

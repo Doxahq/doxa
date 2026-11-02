@@ -1,7 +1,10 @@
 import { createAuth } from "@doxahq/auth";
-import { createApiRouter } from "./http/app";
+import { createApiRouter, type ApiContext } from "./http/app";
+import { withSignedInCookieSync } from "./http/signed-in-cookie";
 import { handleCurrentUser } from "./http/auth";
 import { corsPolicy, csrfProtection, securityHeaders } from "./http/middleware";
+import { requestBodyTooLarge } from "./http/body";
+import { limitRequestBody, RequestBodyTooLarge } from "./http/bounded-body";
 import { toSafeErrorLog } from "./http/error-log";
 import { withRequestScope, type ScopedFetch } from "./http/request-scope";
 import { error, json, notFound } from "./http/response";
@@ -19,6 +22,16 @@ import { createProjectRoutes } from "./routes/projects";
 import { createSignInRoutes } from "./routes/sign-in";
 import { createTeamInviteRoutes, createTeamRoutes } from "./routes/teams";
 import { oauthProviderDispatch } from "./services/oauth/provider-dispatch";
+
+/** Sign-in and session requests are small. */
+const AUTH_BODY_MAX_BYTES = 1024 * 1024;
+
+/** Better Auth, with the dashboard's signed-in marker kept in step (SEC-021). */
+async function handleAuth(context: ApiContext): Promise<Response> {
+  const auth = createAuth(context.env, context.req.raw, context.executionCtx);
+  const response = await auth.handler(limitRequestBody(context.req.raw, AUTH_BODY_MAX_BYTES));
+  return withSignedInCookieSync(context.req.raw, response, context.env);
+}
 
 /**
  * The public HTTP API: every route, with the OAuth provider, security
@@ -39,12 +52,11 @@ export function createApiApp() {
 
   app.all("/api/auth", (context) => {
     const auth = createAuth(context.env, context.req.raw, context.executionCtx);
-    return auth.handler(context.req.raw);
+    return handleAuth(context);
   });
 
   app.all("/api/auth/*", (context) => {
-    const auth = createAuth(context.env, context.req.raw, context.executionCtx);
-    return auth.handler(context.req.raw);
+    return handleAuth(context);
   });
 
   app.get("/me", (context) => handleCurrentUser(context));
@@ -65,6 +77,7 @@ export function createApiApp() {
   app.notFound(() => notFound());
 
   app.onError((err) => {
+    if (err instanceof RequestBodyTooLarge) return requestBodyTooLarge();
     console.error("Unhandled request error.", toSafeErrorLog(err));
     return error("Internal server error.", 500);
   });

@@ -9,7 +9,10 @@
 import { DOXABOT_REPOSITORY_INSTRUCTIONS_PATH } from "@doxahq/contracts";
 import { resolveProjectPath } from "./project-path";
 
-/** Files that can hold credentials. No tool returns their content. */
+/**
+ * Files that can hold credentials, by name. No tool returns their content.
+ * Names match in any case: `.ENV` and `server.KEY` hold secrets too.
+ */
 export const SENSITIVE_FILE_GLOBS = [
   ".env",
   ".env.*",
@@ -18,15 +21,22 @@ export const SENSITIVE_FILE_GLOBS = [
   "*.p12",
   "*.pfx",
   "id_rsa*",
+  "id_dsa*",
+  "id_ecdsa*",
   "id_ed25519*",
   ".npmrc",
   ".netrc",
   ".pypirc",
+  ".pgpass",
+  ".git-credentials",
   // Cloudflare Workers local secrets, and direnv files that export secrets.
   ".dev.vars",
   ".dev.vars.*",
   ".envrc",
 ] as const;
+
+/** Credential files that only their folder identifies, matched in any case. */
+export const SENSITIVE_FILE_PATHS = [".aws/credentials"] as const;
 
 /**
  * Files that reach the model only through their own screened prompt block.
@@ -43,11 +53,12 @@ const LARGE_FILE_PATTERNS: readonly RegExp[] = [
   /(^|\/)yarn\.lock$/,
 ];
 
-const SENSITIVE_FILE_PATTERNS: readonly RegExp[] = SENSITIVE_FILE_GLOBS.map(globToBasenamePattern);
+const SENSITIVE_FILE_PATTERNS: readonly RegExp[] = [
+  ...SENSITIVE_FILE_GLOBS.map(globToBasenamePattern),
+  ...SENSITIVE_FILE_PATHS.map(pathSuffixPattern),
+];
 
-const SCREENED_FILE_PATTERNS: readonly RegExp[] = SCREENED_FILE_PATHS.map(
-  (path) => new RegExp(`(^|/)${path.replace(/[.+^${}()|[\]\\]/g, "\\$&")}$`),
-);
+const SCREENED_FILE_PATTERNS: readonly RegExp[] = SCREENED_FILE_PATHS.map(pathSuffixPattern);
 
 export function isSensitiveFilePath(path: string): boolean {
   const normalized = normalizePath(path);
@@ -89,7 +100,7 @@ export function globCanSelectSensitiveFile(glob: string): boolean {
   return SENSITIVE_SAMPLE_NAMES.some((name) => pattern.test(name));
 }
 
-/** One example name for each sensitive glob, used to test model globs. */
+/** One example name for each sensitive glob and path, used to test model globs. */
 const SENSITIVE_SAMPLE_NAMES = [
   ".env",
   ".env.local",
@@ -98,24 +109,37 @@ const SENSITIVE_SAMPLE_NAMES = [
   "cert.p12",
   "cert.pfx",
   "id_rsa",
+  "id_dsa",
+  "id_ecdsa",
   "id_ed25519",
   ".npmrc",
   ".netrc",
   ".pypirc",
+  ".pgpass",
+  ".git-credentials",
   ".dev.vars",
   ".dev.vars.local",
   ".envrc",
+  "credentials",
 ] as const;
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, "/");
 }
 
-/** Converts a basename glob (`*` and `?` only) into a pattern for the last path segment. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Converts a basename glob (`*` and `?` only) into a pattern for the last path segment, in any case. */
 function globToBasenamePattern(glob: string): RegExp {
-  const source = glob
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+  const source = escapeRegExp(glob)
     .replace(/\*/g, "[^/]*")
     .replace(/\?/g, "[^/]");
-  return new RegExp(`(^|/)${source}$`);
+  return new RegExp(`(^|/)${source}$`, "i");
+}
+
+/** A pattern for a path that ends with the given segments, in any case. */
+function pathSuffixPattern(path: string): RegExp {
+  return new RegExp(`(^|/)${escapeRegExp(path)}$`, "i");
 }

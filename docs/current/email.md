@@ -7,7 +7,7 @@ results, and custom domain changes. Cloudflare Email Service sends it today.
 One provider-neutral interface hides the provider, so a swap to another
 provider (for example Amazon SES) changes one adapter and one setting.
 
-The design is in `docs/superpowers/specs/2026-10-07-email-integration-design.md`.
+The design is in `docs/superpowers/specs/2026-10-07-email-integration-design.md` in the private ops repo (`doxa-ops`).
 
 ## Architecture
 

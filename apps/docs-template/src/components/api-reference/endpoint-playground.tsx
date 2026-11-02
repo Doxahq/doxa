@@ -17,6 +17,7 @@ import {
   buildBrowserRequest,
   isAuthParameter,
   loadSessionAuthToken,
+  requestTargetOrigin,
   requestInputParameters,
   saveSessionAuthToken,
 } from "@/src/lib/api-request";
@@ -105,11 +106,15 @@ export function EndpointPlayground({
     }
   }, [method, path, baseUrl, parameters, values]);
 
+  // The host that receives the credential, shown before the reader sends it
+  // (SEC-010). It needs `window`, so it appears after hydration.
+  const targetHost = hydrated ? new URL(requestTargetOrigin(baseUrl)).host : null;
+
   useEffect(() => {
     setHydrated(true);
-    const stored = loadSessionAuthToken();
+    const stored = loadSessionAuthToken(baseUrl);
     if (stored) setToken(stored);
-  }, []);
+  }, [baseUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,7 +138,7 @@ export function EndpointPlayground({
   function updateToken(value: string) {
     setToken(value);
     if (!hydrated) return;
-    saveSessionAuthToken(value);
+    saveSessionAuthToken(baseUrl, value);
   }
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
@@ -223,6 +228,13 @@ export function EndpointPlayground({
             />
           </div>
           <span className="text-[0.65rem] text-muted-foreground">
+            {targetHost ? (
+              <>
+                Sent only to{" "}
+                <span className="font-code text-foreground">{targetHost}</span>
+                .{" "}
+              </>
+            ) : null}
             Stored for this browser session. It never reaches the docs server.
           </span>
         </label>

@@ -87,7 +87,8 @@ describe("sync_branch", () => {
       dryRun: false,
       synchronized: { revision: 3, changeCount: 1 },
     });
-    expect(methods(harness)).toEqual(["branches.synchronize"]);
+    // The ownership check (SEC-028) reads the branches first.
+    expect(methods(harness)).toEqual(["branches.list", "branches.synchronize"]);
   });
 
   it("needs expectedMainVersionId to apply", async () => {

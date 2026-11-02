@@ -1,15 +1,26 @@
 import type { MiddlewareHandler } from "hono";
 import type { ApiBindings } from "../../http/app";
 import { toSafeErrorLog } from "../../http/error-log";
+import { limitRequestBody, RequestBodyTooLarge } from "../../http/bounded-body";
 import { error } from "../../http/response";
 import { authorizationServerFor, isOAuthProviderPath } from "./authorization-server";
 import { OAuthNotConfiguredError, resolveOAuthConfig, type OAuthSettings } from "./oauth-config";
+
+/** Token, registration and revocation requests are small. */
+const OAUTH_BODY_MAX_BYTES = 1024 * 1024;
 
 /** Hands provider paths to the provider before any other middleware runs. */
 export function oauthProviderDispatch(): MiddlewareHandler<ApiBindings> {
   return async (context, next) => {
     if (!isOAuthProviderPath(context.req.path)) return next();
-    return serveOAuthProviderRequest(context.req.raw, context.env, context.executionCtx);
+    let request: Request;
+    try {
+      request = limitRequestBody(context.req.raw, OAUTH_BODY_MAX_BYTES);
+    } catch (cause) {
+      if (cause instanceof RequestBodyTooLarge) return error("Request body is too large.", 413);
+      throw cause;
+    }
+    return serveOAuthProviderRequest(request, context.env, context.executionCtx);
   };
 }
 

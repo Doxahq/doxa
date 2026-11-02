@@ -2,6 +2,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "doxa-docs-runtime",
   "main": "src/index.ts",
+  "workers_dev": false,
+  "preview_urls": false,
   "compatibility_date": "2026-06-12",
   "cache": {
     "enabled": false,
@@ -24,6 +26,7 @@
   "vars": {
     "API_BASE_URL": "http://localhost:8787",
     "ALLOW_INTERNAL_HTTP": "true",
+    "DOCS_RUNTIME_HTML_PREVIEW": "on",
     "DOCS_PUBLIC_BASE_URL": "http://localhost:8788",
     "DOXA_PROD_BLOB_CACHE_MODE": "off",
     "DOXA_PROD_BLOB_CACHE_SITE_IDS": ""

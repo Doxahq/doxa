@@ -2,7 +2,7 @@
 
 Status: in production since 2026-10-24. `doxa-api-production` is the thin
 Worker, and the API runs on ECS. The migration spec, with the decisions and
-the cost comparison, is at https://claude.ai/artifact/MeEDVHFrtCzy7hD2ig1qtc.
+the cost comparison, is kept outside this repository.
 How an operator deploys and runs it: [self-hosting.md](self-hosting.md). Doxa's
 own runbook lives in its private ops repo.
 

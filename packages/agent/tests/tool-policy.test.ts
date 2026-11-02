@@ -150,13 +150,34 @@ describe("repository search policy", () => {
   test("grep drops match lines from secret files", async () => {
     const project = await temporaryProject();
     runCommand.mockResolvedValue(grepResult(
-      `${project}/src/included.ts:1:const API_KEY = read()\n${project}/.env.local:2:API_KEY=sk-live-123`,
+      `${project}/src/included.ts\x001:const API_KEY = read()\n${project}/.env.local\x002:API_KEY=sk-live-123\n`,
     ));
 
     const output = await grepTool(project).execute({ pattern: "API_KEY" });
 
     expect(output).toContain("src/included.ts:1:");
     expect(output).not.toContain("sk-live-123");
+  });
+
+  test("grep asks for a NUL after each file name", async () => {
+    const project = await temporaryProject();
+    runCommand.mockResolvedValue(grepResult(""));
+
+    await grepTool(project).execute({ pattern: "x" });
+
+    const [command] = runCommand.mock.calls[0]!;
+    expect(command).toEqual(expect.arrayContaining(["-H", "--null"]));
+  });
+
+  test.each([
+    ["no file name", "1:API_KEY=sk-live-123\n"],
+    ["no line number", "src/a.ts\x00API_KEY=sk-live-123\n"],
+    ["a second NUL in one line", ".env\x001:x\x002:API_KEY=sk-live-123\n"],
+  ])("grep drops a match line with %s", async (_label, stdout) => {
+    const project = await temporaryProject();
+    runCommand.mockResolvedValue(grepResult(stdout));
+
+    expect(await grepTool(project).execute({ pattern: "API_KEY" })).not.toContain("sk-live-123");
   });
 
   test("grep refuses a secret file as the search path", async () => {

@@ -103,8 +103,22 @@ and checks `generation.read`.
   stores the address in `team_invites.invited_email` and lists it as
   `email`. A team can send 20 invites by email in one hour
   (`TEAM_INVITE_EMAILS_PER_HOUR`); more answer 429 `invite_email_limit`.
-  Invite links without an email have no limit. The limit is soft: two
-  requests at the same moment can both pass the count.
+  One person can send 40 invites by email in one hour over all their teams
+  (`TEAM_INVITE_EMAILS_PER_SENDER_PER_HOUR`, 429 `invite_sender_limit`), and
+  one person sends at most 3 invite emails to one address in one day over
+  all their teams (`TEAM_INVITE_EMAILS_PER_RECIPIENT_PER_DAY`, 429
+  `invite_recipient_limit`). Invite links without an email have no limit.
+  The limits are soft: two requests at the same moment can both pass the
+  count.
+- One person can own 10 teams (`MAX_OWNED_TEAMS`); creating another answers
+  409 `team_limit`.
+- A member who still owns a project of the team (`projects.user_id`) cannot
+  leave or be removed: 409 `member_owns_projects`. The project runs on the
+  owner's GitHub installation and billing, so the owner must stay in the team
+  until the project is deleted.
+- An invite sent to an email address works only for a signed-in account whose
+  verified email is that address (403 `invite_email_mismatch`, also on the
+  preview). An invite link without an email works for any account.
 - A link works once and expires after 7 days. Failures: 404
   `invite_not_found`, 410 `invite_used` / `invite_expired` / `invite_revoked`,
   409 `already_member` (the link stays unused).

@@ -87,6 +87,7 @@ const features: RuntimeFeatureConfig = {
   ai: { chat: false, chatWithPage: false, floatingInput: false },
   copyPage: { markdown: true, rawText: true },
   apiPlayground: true,
+  apiPlaygroundBaseUrl: "https://api.example.com/v1",
   rawMarkdown: true,
   loadFromGithub: false,
 };
@@ -236,8 +237,17 @@ describe("API reference layout", () => {
     expect(request).toBeGreaterThan(slot);
   });
 
-  test("hides the try-it control when no base URL is documented", () => {
-    const withoutBaseUrl = renderToString(
+  // SECURITY REGRESSION GUARDRAIL (SEC-010): only the owner's setting turns Try it on.
+  test("hides the try-it control when the owner set no API base URL, whatever the page says", () => {
+    const { apiPlaygroundBaseUrl: _ownerSetting, ...withoutOwnerSetting } = features;
+    const html = renderPage(withoutOwnerSetting);
+
+    expect(html).not.toContain("Try it");
+    expect(html).toContain("curl --request POST");
+  });
+
+  test("shows the try-it control from the owner's setting when the page names no base URL", () => {
+    const html = renderToString(
       createElement(ApiReferenceBody, {
         document: parseRuntimeMdx(page.replace(/ baseUrl="[^"]*"/, "")),
         method: "POST",
@@ -246,8 +256,7 @@ describe("API reference layout", () => {
       })
     );
 
-    expect(withoutBaseUrl).not.toContain("Try it");
-    expect(withoutBaseUrl).toContain("curl --request POST");
+    expect(html).toContain("Try it");
   });
 
   test("hides the try-it control when the site setting disables the playground", () => {

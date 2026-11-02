@@ -13,6 +13,22 @@ export const TEAM_INVITE_TTL_DAYS = 7;
 /** Invites sent by email, for each team in one hour. Invite links without an email have no limit. */
 export const TEAM_INVITE_EMAILS_PER_HOUR = 20;
 
+/**
+ * Invites one person sends by email in one hour, over all their teams
+ * (SEC-015): new teams must not multiply the team limit.
+ */
+export const TEAM_INVITE_EMAILS_PER_SENDER_PER_HOUR = 40;
+
+/**
+ * Invite emails one sender sends to one address in one day, over all their
+ * teams. Counted per sender, so a stranger cannot use up an address's budget
+ * and block that person's real team.
+ */
+export const TEAM_INVITE_EMAILS_PER_RECIPIENT_PER_DAY = 3;
+
+/** Teams one person can own. */
+export const MAX_OWNED_TEAMS = 10;
+
 export const MAX_TEAM_NAME_LENGTH = 80;
 
 const teamNameSchema = z.string().trim().min(1).max(MAX_TEAM_NAME_LENGTH);
@@ -236,6 +252,7 @@ export const TEAM_INVITE_FAILURES = [
   "invite_expired",
   "invite_revoked",
   "already_member",
+  "invite_email_mismatch",
 ] as const;
 
 export const teamInviteFailureSchema = z.enum(TEAM_INVITE_FAILURES);
@@ -263,6 +280,10 @@ export const TEAM_ERROR_CODES = [
   "team_has_projects",
   "project_in_team",
   "invite_email_limit",
+  "invite_sender_limit",
+  "invite_recipient_limit",
+  "team_limit",
+  "member_owns_projects",
 ] as const;
 
 export type TeamErrorCode = (typeof TEAM_ERROR_CODES)[number];

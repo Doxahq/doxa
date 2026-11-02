@@ -20,7 +20,7 @@ import {
   withProjectAccess,
   type DashboardProjectAccess,
 } from "../http/project-access";
-import { isResponse, parseJson } from "../http/body";
+import { isResponse, parseJson, readBodyText } from "../http/body";
 import { readClientWarmPool } from "../http/client-region";
 import { readBoundedBody, RequestBodyTooLarge } from "../http/bounded-body";
 import { toSafeErrorLog } from "../http/error-log";
@@ -136,7 +136,7 @@ export function createDocsBranchRoutes(): ApiApp {
           return notFound();
         }
 
-        if ((await context.req.text()).trim().length > 0) {
+        if ((await readBodyText(context.req.raw)).trim().length > 0) {
           return error("Invalid branch erase request.", 400);
         }
 
@@ -342,7 +342,7 @@ export function createDocsBranchRoutes(): ApiApp {
           return notFound();
         }
 
-        if ((await context.req.text()).trim().length > 0) {
+        if ((await readBodyText(context.req.raw)).trim().length > 0) {
           return error("Invalid branch preview request.", 400);
         }
 

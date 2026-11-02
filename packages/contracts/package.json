@@ -30,6 +30,8 @@
     "./docs-runtime-trace": "./src/docs-runtime-trace.ts",
     "./docs-warm-state": "./src/docs-warm-state.ts",
     "./docs-warm-region": "./src/docs-warm-region.ts",
+    "./client-ip": "./src/client-ip.ts",
+    "./html-escape": "./src/html-escape.ts",
     "./docs-warm-job": "./src/docs-warm-job.ts",
     "./storage-gc": "./src/storage-gc.ts",
     "./storage-lifecycle": "./src/storage-lifecycle.ts",

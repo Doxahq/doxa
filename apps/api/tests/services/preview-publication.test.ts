@@ -49,10 +49,12 @@ describe("documentation preview publication", () => {
 
     expect(result).toEqual({
       versionId: FIRST_VERSION_ID,
-      previewUrl: "https://doxa-demo-pr-42.doxa.page",
+      previewUrl: expect.stringMatching(
+        /^https:\/\/doxa-demo-pr-42-[a-f0-9]{16}\.doxa\.page$/,
+      ),
     });
     expect(state.channel).toMatchObject({
-      hostname: "doxa-demo-pr-42.doxa.page",
+      hostname: result.previewUrl?.replace("https://", ""),
       currentVersionId: FIRST_VERSION_ID,
     });
     expect(state.versions.at(-1)).toMatchObject({
@@ -146,7 +148,8 @@ describe("documentation preview publication", () => {
     expect(state.site.publishedVersionId).toBe(BASELINE_VERSION_ID);
   });
 
-  test("uses a deterministic suffix when the preferred hostname is taken", async () => {
+  // SECURITY REGRESSION GUARDRAIL (SEC-006).
+  test("never publishes a pull request preview on the guessable hostname", async () => {
     const state = createState({
       hostnameCollisions: new Set(["doxa-demo-pr-42.doxa.page"]),
     });
@@ -155,7 +158,7 @@ describe("documentation preview publication", () => {
     const result = await completePreview(state, createPreviewInput());
 
     expect(result.previewUrl).toMatch(
-      /^https:\/\/doxa-demo-pr-42-[a-f0-9]{8}\.doxa\.page$/,
+      /^https:\/\/doxa-demo-pr-42-[a-f0-9]{16}\.doxa\.page$/,
     );
     expect(state.channel?.hostname).toBe(
       result.previewUrl?.replace("https://", ""),

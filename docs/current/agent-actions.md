@@ -7,7 +7,7 @@ publish. Each action goes through one gateway. An approval policy gives each
 call one mode: `allow`, `require_approval`, or `deny`. A gated action waits for
 a human decision in the dashboard.
 
-The design is in `docs/superpowers/specs/2026-10-04-mcp-server-design.md`,
+The design is in `docs/superpowers/specs/2026-10-04-mcp-server-design.md` in the private ops repo (`doxa-ops`),
 section 8.
 
 ## Actions

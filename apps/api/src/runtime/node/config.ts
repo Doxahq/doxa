@@ -29,6 +29,9 @@ const apiVarsSchema = z
   .object({
     BETTER_AUTH_SECRET: requiredString,
     BETTER_AUTH_URL: z.url(),
+    // The only CORS origin with credentials. Without it the API refuses every
+    // cross-origin call, so the origin refuses to start instead (SEC-020).
+    WEB_ORIGIN: z.url(),
     GOOGLE_CLIENT_ID: requiredString,
     GOOGLE_CLIENT_SECRET: requiredString,
     GITHUB_CLIENT_ID: requiredString,
@@ -126,13 +129,44 @@ function docsBucketSourceOf(parsed: z.infer<typeof serverSchema>): DocsBucketSou
  * what the Worker would get.
  */
 export function readApiVars(source: Record<string, unknown>): ApiVars {
-  return apiVarsSchema.parse(
+  const vars = apiVarsSchema.parse(
     Object.fromEntries(
       Object.entries(source).filter(
         (entry): entry is [string, string] => typeof entry[1] === "string" && !isServerOnlyVariable(entry[0]),
       ),
     ),
   );
+  assertNoDevelopmentFlags(vars);
+  return vars;
+}
+
+/**
+ * Development switches that weaken a check. Each guard also checks the
+ * request origin today, but production must not depend on that one layer
+ * (SEC-035).
+ */
+const DEVELOPMENT_FLAGS: ReadonlyArray<readonly [string, (value: string) => boolean]> = [
+  ["LOCAL_DEV_USER_ID", (value) => value.trim().length > 0],
+  ["LOCAL_GITHUB_TOKEN", (value) => value.trim().length > 0],
+  ["ALLOW_INTERNAL_HTTP", (value) => value === "true"],
+  ["DEV_ADMIN_ENABLED", (value) => value === "true"],
+  ["ALLOW_INSECURE_GITHUB_WEBHOOKS", (value) => value === "true"],
+];
+
+/**
+ * A production origin (NODE_ENV=production, as the image and Terraform set)
+ * refuses to start with a development switch on. A local container run that
+ * needs one sets DOXA_RUNTIME_ENVIRONMENT=development.
+ */
+function assertNoDevelopmentFlags(vars: Record<string, string | undefined>): void {
+  if (vars.NODE_ENV !== "production" || vars.DOXA_RUNTIME_ENVIRONMENT === "development") return;
+  const enabled = DEVELOPMENT_FLAGS.filter(([name, isOn]) => {
+    const value = vars[name];
+    return value !== undefined && isOn(value);
+  }).map(([name]) => name);
+  if (enabled.length > 0) {
+    throw new Error(`Development flags are not allowed in production: ${enabled.join(", ")}.`);
+  }
 }
 
 const SERVER_ONLY_VARIABLES: ReadonlySet<string> = new Set(Object.keys(serverSchema.shape));

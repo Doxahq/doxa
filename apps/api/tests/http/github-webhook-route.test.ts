@@ -69,6 +69,21 @@ describe("GitHub webhook route", () => {
     expect(mocks.processDelivery).not.toHaveBeenCalled();
   });
 
+  // SECURITY REGRESSION GUARDRAIL (SEC-003): the body is bounded before the signature check.
+  test("refuses a body above the GitHub payload limit before reading it", async () => {
+    const response = await requestWebhook(
+      webhookRequest("{}", {
+        "x-github-delivery": "delivery-big",
+        "x-github-event": "pull_request",
+        "content-length": String(25 * 1024 * 1024 + 1),
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(mocks.verifyGitHubWebhook).not.toHaveBeenCalled();
+    expect(mocks.ingestWebhook).not.toHaveBeenCalled();
+  });
+
   test("verifies the signature over the raw body before orchestration", async () => {
     mocks.verifyGitHubWebhook.mockResolvedValueOnce(false);
     const rawBody = "{not-json";

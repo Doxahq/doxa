@@ -13,7 +13,7 @@ export { brandingSchema } from "./schema/branding";
 export { navbarSchema, linkSchema } from "./schema/navbar";
 export { footerSchema } from "./schema/footer";
 export { seoSchema } from "./schema/seo";
-export { featuresSchema } from "./schema/features";
+export { apiPlaygroundBaseUrlSchema, featuresSchema } from "./schema/features";
 export {
   DEFAULT_LAYOUT,
   docsLayout,

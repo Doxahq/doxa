@@ -18,6 +18,7 @@ const DOCS_CACHE_POLICY = {
   versionedTtlSeconds: 2_592_000,
   versionedStaleSeconds: 604_800,
   liveFallbackTtlSeconds: 30,
+  unknownHostTtlSeconds: 30,
 } as const;
 
 /**
@@ -72,6 +73,10 @@ export type HtmlCacheIdentity = Pick<
   Partial<Pick<HtmlCacheProps, "lifetime">>;
 
 const NO_STORE = "private, no-store";
+// An unknown hostname costs resolver queries on every request (SEC-007). A
+// short negative entry stops a repeated unknown host from reaching the
+// database; a site created on that hostname shows within 30 seconds.
+const UNKNOWN_HOST_CACHE_CONTROL = `public, max-age=${DOCS_CACHE_POLICY.unknownHostTtlSeconds}, must-revalidate`;
 const CACHE_HEADERS = [
   "cache-control",
   "cdn-cache-control",
@@ -172,7 +177,9 @@ export function withHostCachePolicy(
     headers: {
       "cache-control": isPublicProduction(resolution)
         ? cacheControlFor("hostname")
-        : NO_STORE,
+        : resolution === null
+          ? UNKNOWN_HOST_CACHE_CONTROL
+          : NO_STORE,
     },
   });
   if (resolution && isPublicProduction(resolution)) {

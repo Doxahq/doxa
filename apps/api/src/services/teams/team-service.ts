@@ -1,6 +1,9 @@
 import {
   ROLE_CAPABILITIES,
+  MAX_OWNED_TEAMS,
   TEAM_INVITE_EMAILS_PER_HOUR,
+  TEAM_INVITE_EMAILS_PER_RECIPIENT_PER_DAY,
+  TEAM_INVITE_EMAILS_PER_SENDER_PER_HOUR,
   TEAM_INVITE_TTL_DAYS,
   type AcceptedTeamInvite,
   type Capability,
@@ -75,6 +78,13 @@ export class TeamService {
 
   /** The creator becomes the first owner. */
   async create(userId: string, name: string): Promise<TeamSummary> {
+    // A soft limit (SEC-015): two requests at the same moment can both pass.
+    if ((await this.deps.store.countOwnedTeams(userId)) >= MAX_OWNED_TEAMS) {
+      throw new TeamConflictError(
+        "team_limit",
+        `You own ${MAX_OWNED_TEAMS} teams. Delete a team or leave its ownership before you create another.`,
+      );
+    }
     const team = await this.deps.store.create({ name, ownerUserId: userId, now: this.deps.now() });
     return {
       id: team.id,
@@ -138,7 +148,7 @@ export class TeamService {
     assertMayGrant(actorRole, input.role);
     const now = this.deps.now();
     const invitedEmail = input.email?.trim().toLowerCase() ?? null;
-    if (invitedEmail) await this.assertInviteEmailAllowed(teamId, now);
+    if (invitedEmail) await this.assertInviteEmailAllowed(teamId, userId, invitedEmail, now);
 
     const id = this.deps.newId();
     const token = await this.deps.tokens.tokenFor(id);
@@ -157,13 +167,36 @@ export class TeamService {
     return { invite: created };
   }
 
-  /** A soft limit: two requests at the same moment can both pass the count. */
-  private async assertInviteEmailAllowed(teamId: string, now: Date): Promise<void> {
-    const sent = await this.deps.store.countEmailedInvitesSince(teamId, new Date(now.getTime() - HOUR_MS));
-    if (sent >= TEAM_INVITE_EMAILS_PER_HOUR) {
+  /**
+   * Soft limits: two requests at the same moment can both pass a count.
+   * Per team, per sender over all teams, and per recipient (SEC-015), so
+   * that new teams cannot multiply the budget and no address gets flooded.
+   */
+  private async assertInviteEmailAllowed(teamId: string, userId: string, email: string, now: Date): Promise<void> {
+    const hourAgo = new Date(now.getTime() - HOUR_MS);
+    const [teamSent, senderSent, received] = await Promise.all([
+      this.deps.store.countEmailedInvitesSince(teamId, hourAgo),
+      this.deps.store.countEmailedInvitesBySenderSince(userId, hourAgo),
+      this.deps.store.countEmailedInvitesToSince(userId, email, new Date(now.getTime() - DAY_MS)),
+    ]);
+    if (teamSent >= TEAM_INVITE_EMAILS_PER_HOUR) {
       throw new TeamConflictError(
         "invite_email_limit",
         `This team sent ${TEAM_INVITE_EMAILS_PER_HOUR} invites by email in the last hour. Try again later, or copy an invite link.`,
+        429,
+      );
+    }
+    if (senderSent >= TEAM_INVITE_EMAILS_PER_SENDER_PER_HOUR) {
+      throw new TeamConflictError(
+        "invite_sender_limit",
+        `You sent ${TEAM_INVITE_EMAILS_PER_SENDER_PER_HOUR} invites by email in the last hour. Try again later, or copy an invite link.`,
+        429,
+      );
+    }
+    if (received >= TEAM_INVITE_EMAILS_PER_RECIPIENT_PER_DAY) {
+      throw new TeamConflictError(
+        "invite_recipient_limit",
+        "You sent several invite emails to this address today. Copy an invite link and send it yourself.",
         429,
       );
     }
@@ -199,6 +232,9 @@ export class TeamService {
     if (invite.revokedAt !== null) throw new TeamInviteError("invite_revoked");
     if (invite.usedAt !== null) throw new TeamInviteError("invite_used");
     if (invite.expiresAt <= this.deps.now()) throw new TeamInviteError("invite_expired");
+    if (invite.invitedEmail !== null && (await this.deps.store.findVerifiedEmail(userId)) !== invite.invitedEmail) {
+      throw new TeamInviteError("invite_email_mismatch");
+    }
     const role = await this.deps.store.findRole(invite.teamId, userId);
     return {
       teamName: invite.teamName,
@@ -238,7 +274,24 @@ export class TeamService {
       if (memberRole === null) throw new TeamNotFoundError();
       assertMayGrant(actorRole, memberRole);
     }
+    await this.assertOwnsNoTeamProject(teamId, memberUserId);
     assertChanged(await this.deps.store.removeMember(teamId, memberUserId));
+  }
+
+  /**
+   * SEC-016 (owner decision 2026-10-30): a project keeps its owner when it
+   * moves into a team, and the owner's GitHub installation and billing run
+   * its generations. A member who still owns a team project cannot leave or
+   * be removed: they would lose all access while the team kept using their
+   * account.
+   */
+  private async assertOwnsNoTeamProject(teamId: string, memberUserId: string): Promise<void> {
+    const owned = await this.deps.store.listProjectsOwnedBy(teamId, memberUserId);
+    if (owned.length === 0) return;
+    throw new TeamConflictError(
+      "member_owns_projects",
+      `This member still owns team projects: ${owned.map((project) => project.name).join(", ")}. Delete those projects first.`,
+    );
   }
 
   /**

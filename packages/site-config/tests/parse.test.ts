@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  apiPlaygroundBaseUrlSchema,
   parseSiteConfigStrict,
   parseSiteConfigLenient,
   resolveSiteConfig,
@@ -143,4 +144,18 @@ describe("visible text", () => {
         expect.objectContaining({ path, code: "required" }),
       );
   });
+});
+
+// SECURITY REGRESSION GUARDRAIL (SEC-010): the playground target is an owner-set http(s) URL or a local path.
+describe("features.apiPlaygroundBaseUrl", () => {
+  it.each(["https://api.acme.com/v1", "http://localhost:8787", "/api/echo"])("accepts %s", (value) => {
+    expect(apiPlaygroundBaseUrlSchema.safeParse(value).success).toBe(true);
+  });
+
+  it.each(["javascript:alert(1)", "//evil.example", "api/v1", "https://user:secret@api.acme.com", "ftp://acme.com", ""])(
+    "refuses %j",
+    (value) => {
+      expect(apiPlaygroundBaseUrlSchema.safeParse(value).success).toBe(false);
+    },
+  );
 });

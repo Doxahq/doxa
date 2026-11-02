@@ -21,7 +21,7 @@
     "@doxahq/site-config": "workspace:*",
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/server": "2.3.1",
-    "agents": "0.26.0",
+    "agents": "0.29.0",
     "drizzle-orm": "^0.45.2",
     "zod": "catalog:"
   },

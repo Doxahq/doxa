@@ -10,6 +10,7 @@ import {
   DocsResolverClient,
   type DocsResolverBinding,
 } from "@doxahq/contracts/docs-resolver";
+import { escapeHtml } from "@doxahq/contracts/html-escape";
 import {
   handleRuntimeSourceRequest,
   runHostRuntimeRequest,
@@ -30,6 +31,12 @@ interface Env extends ArtifactStorageEnv {
   ALLOW_INTERNAL_HTTP?: string;
   DOCS_CONTENT_TOKEN?: string;
   DOCS_PUBLIC_BASE_URL?: string;
+  /**
+   * "on" serves the HTML preview below (local development and debugging
+   * only). Production leaves it unset: published sites are served by the
+   * renderer, and this Worker answers only its private content contract.
+   */
+  DOCS_RUNTIME_HTML_PREVIEW?: string;
 }
 
 export class RuntimeSourceApi extends WorkerEntrypoint<Env> {
@@ -104,6 +111,11 @@ export default {
       blobCache,
     );
     if (runtimeResponse) return runtimeResponse;
+
+    // SEC-022: the HTML preview is retired from production.
+    if (env.DOCS_RUNTIME_HTML_PREVIEW !== "on") {
+      return new Response("Not found.", { status: 404 });
+    }
 
     const url = new URL(request.url);
     const route = parseRoute(url.pathname);
@@ -346,7 +358,7 @@ function renderNav(
     .map((page) => {
       const href = `/${projectSlug}${page.href === "/" ? "" : page.href}`;
       const active = page.href === currentHref ? "active" : "";
-      return `<a class="${active}" href="${href}">${escapeHtml(page.title)}</a>`;
+      return `<a class="${active}" href="${escapeHtml(href)}">${escapeHtml(page.title)}</a>`;
     })
     .join("");
 
@@ -392,7 +404,7 @@ export function renderMarkdown(source: string): {
       }
       index += 1;
       const className = language
-        ? ` class="language-${escapeAttribute(language)}"`
+        ? ` class="language-${escapeHtml(language)}"`
         : "";
       out.push(
         `<pre><code${className}>${escapeHtml(code.join("\n"))}</code></pre>`,
@@ -572,7 +584,7 @@ function renderInline(value: string): string {
         if (hrefEnd !== -1) {
           const label = value.slice(index + 1, labelEnd);
           const href = sanitizeHref(value.slice(labelEnd + 2, hrefEnd));
-          out += `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`;
+          out += `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
           index = hrefEnd + 1;
           continue;
         }
@@ -586,19 +598,31 @@ function renderInline(value: string): string {
   return out;
 }
 
+const SAFE_LINK_SCHEMES = new Set(["http", "https", "mailto"]);
+const LINK_SCHEME = /^([A-Za-z][A-Za-z0-9+.-]*):/;
+/** `//host` and `/\host`: the browser opens another site, not a path on this one. */
+const OTHER_HOST_LINK = /^[\\/]{2}/;
+
+/**
+ * Keeps http, https and mailto links and links on this site. Any other link
+ * becomes `#`. The check runs on the URL as the browser reads it, so
+ * `java\tscript:` and `\x01javascript:` cannot hide their scheme.
+ */
 function sanitizeHref(value: string): string {
-  const trimmed = value.trim();
-  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
-  if (
-    trimmed.startsWith("#") ||
-    trimmed.startsWith("/") ||
-    trimmed.startsWith("./") ||
-    trimmed.startsWith("../")
-  ) {
-    return trimmed;
-  }
-  if (!/^[A-Za-z][A-Za-z0-9+.-]*:/.test(trimmed)) return trimmed;
-  return "#";
+  const href = browserNormalizedHref(value);
+  const scheme = LINK_SCHEME.exec(href)?.[1];
+  if (scheme !== undefined) return SAFE_LINK_SCHEMES.has(scheme.toLowerCase()) ? href : "#";
+  return OTHER_HOST_LINK.test(href) ? "#" : href;
+}
+
+/**
+ * Removes what the URL parser of a browser drops before it reads the scheme:
+ * C0 controls and spaces at the start and end, and each tab and newline.
+ */
+function browserNormalizedHref(value: string): string {
+  return value
+    .replace(/^[\u0000- ]+|[\u0000- ]+$/g, "")
+    .replace(/[\t\n\r]/g, "");
 }
 
 function layout(input: { title: string; body: string }): string {
@@ -643,15 +667,3 @@ function layout(input: { title: string; body: string }): string {
 </html>`;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function escapeAttribute(value: string): string {
-  return escapeHtml(value);
-}

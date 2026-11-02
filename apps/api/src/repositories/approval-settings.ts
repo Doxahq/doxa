@@ -97,6 +97,19 @@ export class ApprovalSettingsRepository implements ApprovalSettingsStore {
     });
   }
 
+  /** A team project, or one that requires another decider (SEC-012). */
+  async isGuardedProject(projectId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({
+        teamId: schema.projects.teamId,
+        requireOtherDecider: schema.projects.requireOtherDecider,
+      })
+      .from(schema.projects)
+      .where(eq(schema.projects.id, projectId))
+      .limit(1);
+    return row !== undefined && (row.teamId !== null || row.requireOtherDecider);
+  }
+
   async projectFlags(projectId: string): Promise<ProjectApprovalFlags | null> {
     const [row] = await this.db
       .select(flagColumns)

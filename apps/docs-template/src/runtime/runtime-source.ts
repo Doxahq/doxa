@@ -38,6 +38,8 @@ export interface RuntimeFeatureConfig {
     rawText: boolean;
   };
   apiPlayground: boolean;
+  /** The owner's "Try it" target (SEC-010); unset turns Try it off. */
+  apiPlaygroundBaseUrl?: string;
   rawMarkdown: boolean;
   loadFromGithub: boolean;
 }

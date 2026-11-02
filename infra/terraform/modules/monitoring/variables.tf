@@ -55,3 +55,19 @@ variable "daily_pause" {
   })
   default = null
 }
+
+variable "valkey" {
+  description = "The Valkey serverless cache to watch, with its hard limits. Sessions and OAuth state live there, so reaching a limit stops sign-in for everyone. Null adds no cache alarms."
+  type = object({
+    cache_name          = string
+    max_data_storage_gb = number
+    max_ecpu_per_second = number
+  })
+  default = null
+}
+
+variable "valkey_alarm_percent" {
+  description = "Share of a Valkey limit, in percent, that raises an alert."
+  type        = number
+  default     = 80
+}

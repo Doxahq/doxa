@@ -103,7 +103,8 @@ describe("ConsentService.get", () => {
     });
   });
 
-  it("offers every scope when the client asks for no Doxa scope", async () => {
+  // SECURITY REGRESSION GUARDRAIL (SEC-013): an agent that asks for nothing gets read only.
+  it("offers only the read scopes when the client asks for no Doxa scope", async () => {
     await store.save(
       CONSENT_ID,
       pendingConsent({ authRequest: authRequest({ scope: ["offline_access"] }) }),
@@ -111,7 +112,9 @@ describe("ConsentService.get", () => {
 
     const result = await consentService(store).get(CONSENT_ID, OWNER);
 
-    expect(result.kind === "found" && result.details.requestedScopes).toEqual([...OAUTH_SCOPES]);
+    expect(result.kind === "found" && result.details.requestedScopes).toEqual(
+      OAUTH_SCOPES.filter((scope) => scope.endsWith(":read")),
+    );
   });
 
   it.each([
@@ -220,15 +223,20 @@ describe("ConsentService.approve", () => {
     expect(store.consents.has(CONSENT_ID)).toBe(true);
   });
 
-  it("accepts any scope when the client requested none", async () => {
+  it("accepts only read scopes when the client requested none", async () => {
     await store.save(CONSENT_ID, pendingConsent({ authRequest: authRequest({ scope: [] }) }));
 
-    const result = await consentService(store, oauth).approve(CONSENT_ID, OWNER, {
+    const write = await consentService(store, oauth).approve(CONSENT_ID, OWNER, {
       scopes: ["publish", "generation:run"],
       projectScope: { kind: "all" },
     });
+    expect(write.kind).toBe("rejected");
 
-    expect(result.kind).toBe("approved");
+    const read = await consentService(store, oauth).approve(CONSENT_ID, OWNER, {
+      scopes: ["projects:read", "docs:read"],
+      projectScope: { kind: "all" },
+    });
+    expect(read.kind).toBe("approved");
   });
 
   it("rejects a selected project the user does not own", async () => {

@@ -28,7 +28,7 @@ function setup(access: ActionAccessPolicy = fakeAccess()) {
     registry: AGENT_ACTIONS,
     access,
     store,
-    policyFor: (modes) => approvalPolicyFor(AGENT_ACTIONS, modes),
+    policyFor: (modes) => approvalPolicyFor(AGENT_ACTIONS, modes, store),
     activity: { append: async () => undefined },
     now: () => new Date("2026-10-05T12:00:00Z"),
   });

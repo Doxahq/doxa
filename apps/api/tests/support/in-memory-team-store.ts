@@ -75,6 +75,13 @@ export class InMemoryTeamStore implements TeamStore {
       .map((invite) => this.toRecord(invite));
   }
 
+  async listProjectsOwnedBy(teamId: string, userId: string): Promise<TeamProject[]> {
+    const owned = new Set(
+      [...this.access.projects].filter(([, project]) => project.owner === userId).map(([id]) => id),
+    );
+    return (await this.listProjects(teamId)).filter((project) => owned.has(project.id));
+  }
+
   async listProjects(teamId: string): Promise<TeamProject[]> {
     return this.projectIds(teamId).map((id) => ({ id, name: `Project ${id.slice(0, 4)}`, slug: `project-${id.slice(0, 4)}` }));
   }
@@ -123,6 +130,22 @@ export class InMemoryTeamStore implements TeamStore {
     ).length;
   }
 
+  async countEmailedInvitesBySenderSince(userId: string, since: Date): Promise<number> {
+    return this.invites.filter(
+      (invite) => invite.createdByUserId === userId && invite.invitedEmail !== null && invite.createdAt > since,
+    ).length;
+  }
+
+  async countEmailedInvitesToSince(userId: string, email: string, since: Date): Promise<number> {
+    return this.invites.filter(
+      (invite) => invite.createdByUserId === userId && invite.invitedEmail === email && invite.createdAt > since,
+    ).length;
+  }
+
+  async countOwnedTeams(userId: string): Promise<number> {
+    return [...this.access.members.values()].filter((members) => members.get(userId) === "owner").length;
+  }
+
   async revokeInvite(teamId: string, inviteId: string, now: Date): Promise<boolean> {
     const invite = this.invites.find((entry) => entry.id === inviteId && entry.teamId === teamId);
     if (!invite || !isPending(invite, now)) return false;
@@ -141,7 +164,15 @@ export class InMemoryTeamStore implements TeamStore {
       expiresAt: invite.expiresAt,
       usedAt: invite.usedAt,
       revokedAt: invite.revokedAt,
+      invitedEmail: invite.invitedEmail,
     };
+  }
+
+  /** Verified emails of users, lowercase. A user without one has no verified email. */
+  readonly verifiedEmails = new Map<string, string>();
+
+  async findVerifiedEmail(userId: string): Promise<string | null> {
+    return this.verifiedEmails.get(userId) ?? null;
   }
 
   async acceptInvite(tokenHash: string, userId: string, now: Date): Promise<InviteAcceptance> {
@@ -150,6 +181,9 @@ export class InMemoryTeamStore implements TeamStore {
     if (invite.revokedAt !== null) return { outcome: "invite_revoked" };
     if (invite.usedAt !== null) return { outcome: "invite_used" };
     if (invite.expiresAt <= now) return { outcome: "invite_expired" };
+    if (invite.invitedEmail !== null && this.verifiedEmails.get(userId) !== invite.invitedEmail) {
+      return { outcome: "invite_email_mismatch" };
+    }
     if (this.roleOf(invite.teamId, userId) !== null) return { outcome: "already_member" };
     this.access.join(invite.teamId, userId, invite.role);
     invite.usedAt = now;

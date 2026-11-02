@@ -72,3 +72,35 @@ run "mutes_a_daily_pause_across_midnight" {
     error_message = "A pause from 22:00 to 06:00 must mute the alarm for 8 hours and 15 minutes."
   }
 }
+
+run "adds_no_valkey_alarms_without_a_cache" {
+  command = plan
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.valkey_usage) == 0 && length(aws_cloudwatch_metric_alarm.valkey_throttled) == 0
+    error_message = "Without valkey there must be no cache alarms."
+  }
+}
+
+run "alerts_at_80_percent_of_the_valkey_limits" {
+  command = plan
+
+  variables {
+    valkey = { cache_name = "doxa-api-test", max_data_storage_gb = 1, max_ecpu_per_second = 5000 }
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.valkey_usage["storage"].threshold == 858993459.2
+    error_message = "The storage alarm must fire at 80% of 1 GB."
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.valkey_usage["ecpu"].threshold == 240000
+    error_message = "The ECPU alarm must fire at 80% of 5000 ECPU per second over one minute."
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.valkey_throttled[0].dimensions.clusterId == "doxa-api-test"
+    error_message = "The throttle alarm must watch the cache by its clusterId."
+  }
+}

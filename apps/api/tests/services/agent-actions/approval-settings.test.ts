@@ -33,7 +33,7 @@ function setup() {
   const requests = new InMemoryAgentApprovalRequestStore();
   const fakes = fakeServices();
   const access = fakeAccess({ [PROJECT]: OWNER, [OTHER_PROJECT]: OWNER });
-  const policy = approvalPolicyFor(AGENT_ACTIONS, store);
+  const policy = approvalPolicyFor(AGENT_ACTIONS, store, store);
   const activity: AgentActivityRecord[] = [];
   const now = () => NOW;
   const deps = { registry: AGENT_ACTIONS, requests, access, services: fakes.services, now };
@@ -43,7 +43,7 @@ function setup() {
     registry: AGENT_ACTIONS,
     access,
     store,
-    policyFor: (modes) => approvalPolicyFor(AGENT_ACTIONS, modes),
+    policyFor: (modes) => approvalPolicyFor(AGENT_ACTIONS, modes, store),
     activity: { append: async (record) => void activity.push(record) },
     now,
   });
@@ -65,7 +65,7 @@ async function pendingPublish(env: ReturnType<typeof setup>, projectId = PROJECT
 
 describe("policy sources", () => {
   const resolve = (env: ReturnType<typeof setup>, action: "docs.publish" | "project.delete" | "project.create", projectId: string | null) =>
-    approvalPolicyFor(AGENT_ACTIONS, env.store).resolve({
+    approvalPolicyFor(AGENT_ACTIONS, env.store, env.store).resolve({
       actor: ownerAgent(),
       projectId: projectId === null ? null : toProjectId(projectId),
       action,
@@ -75,6 +75,41 @@ describe("policy sources", () => {
     const env = setup();
     env.store.seed(userScope, "docs.publish", "allow");
     await expect(resolve(env, "docs.publish", PROJECT)).resolves.toEqual({ mode: "allow", source: "user_setting" });
+  });
+
+  // SECURITY REGRESSION GUARDRAIL (SEC-012): an editor's own allow cannot skip a team's approvals.
+  it("ignores a user allow that is looser than the default on a team project", async () => {
+    const env = setup();
+    env.store.teamProjects.add(PROJECT);
+    env.store.seed(userScope, "docs.publish", "allow");
+    await expect(resolve(env, "docs.publish", PROJECT)).resolves.toEqual({
+      mode: "require_approval",
+      source: "action_default",
+    });
+  });
+
+  it("ignores a user allow on a project that requires another decider", async () => {
+    const env = setup();
+    await env.store.setProjectFlags(PROJECT, { requireOtherDecider: true });
+    env.store.seed(userScope, "docs.publish", "allow");
+    await expect(resolve(env, "docs.publish", PROJECT)).resolves.toEqual({
+      mode: "require_approval",
+      source: "action_default",
+    });
+  });
+
+  it("keeps a stricter user setting on a team project", async () => {
+    const env = setup();
+    env.store.teamProjects.add(PROJECT);
+    env.store.seed(userScope, "docs.publish", "deny");
+    await expect(resolve(env, "docs.publish", PROJECT)).resolves.toEqual({ mode: "deny", source: "user_setting" });
+  });
+
+  it("lets a team project's own allow apply", async () => {
+    const env = setup();
+    env.store.teamProjects.add(PROJECT);
+    env.store.seed(projectScope, "docs.publish", "allow");
+    await expect(resolve(env, "docs.publish", PROJECT)).resolves.toEqual({ mode: "allow", source: "project_setting" });
   });
 
   it("lets the project setting win over the user setting", async () => {
@@ -94,7 +129,7 @@ describe("policy sources", () => {
       [
         new PlatformOverrideSource([{ action: "docs.publish", target: { kind: "user", userId: OWNER }, mode: "allow" }]),
         new ProjectSettingSource(env.store),
-        new UserSettingSource(env.store),
+        new UserSettingSource(env.store, { projects: env.store, rulesFor: AGENT_ACTIONS.rulesFor }),
       ],
       AGENT_ACTIONS.rulesFor,
     );
@@ -319,7 +354,7 @@ describe("approval settings service", () => {
       registry: AGENT_ACTIONS,
       access: memberAccess(),
       store,
-      policyFor: (modes) => approvalPolicyFor(AGENT_ACTIONS, modes),
+      policyFor: (modes) => approvalPolicyFor(AGENT_ACTIONS, modes, store),
       activity: { append: vi.fn(async () => undefined) },
       now: () => NOW,
     });

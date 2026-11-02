@@ -54,11 +54,12 @@ api_secret_names = [
 # from each deploy (--env), not from here.
 api_environment = {
   BETTER_AUTH_URL                 = "https://api.doxa.so"
-  AUTH_COOKIE_DOMAIN              = ".doxa.so"
+  # SEC-021: leave AUTH_COOKIE_DOMAIN unset so the session cookies are
+  # host-only on the API host. The dashboard reads the API's signed-in
+  # marker instead. Remove it only after the web app with that check is live.
   WEB_ORIGIN                      = "https://doxa.so"
   OAUTH_ISSUER                    = "https://api.doxa.so"
   MCP_RESOURCE_URL                = "https://mcp.doxa.so/mcp"
-  DOCS_RUNTIME_URL                = "https://preview.doxa.so"
   DOCS_BASE_DOMAIN                = "doxa.page"
   DOCS_CUSTOM_DOMAIN_CNAME_TARGET = "cname.doxa.page"
   CLOUDFLARE_ACCOUNT_ID           = "<cloudflare-account-id>"

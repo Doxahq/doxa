@@ -29,6 +29,7 @@ vi.mock("~/lib/agent-access-api", () => ({
 const assign = vi.fn<(url: string) => void>()
 const PROJECT_A = "11111111-1111-4111-8111-111111111111"
 const PROJECT_B = "22222222-2222-4222-8222-222222222222"
+const ALL_PROJECTS = /All projects/
 
 beforeEach(() => {
   getAgentConsent.mockReset()
@@ -51,8 +52,9 @@ describe("consent page", () => {
     renderPage()
 
     expect(await screen.findByText("Claude Code")).toBeTruthy()
-    expect(screen.getByText("verified")).toBeTruthy()
-    expect(screen.getByText("claude.ai")).toBeTruthy()
+    // SECURITY REGRESSION GUARDRAIL (SEC-013): the host, never the word "verified".
+    expect(screen.queryByText("verified")).toBeNull()
+    expect(screen.getAllByText("claude.ai").length).toBeGreaterThan(0)
     expect(screen.getByText("127.0.0.1:3334")).toBeTruthy()
     expect(screen.queryByText(/Doxa cannot check this agent/)).toBeNull()
   })
@@ -72,14 +74,14 @@ describe("consent page", () => {
 
     const read = await screen.findByRole("checkbox", { name: /Read your pages/ })
     const write = screen.getByRole("checkbox", { name: /Create branches and edit pages/ })
-    const publish = screen.getByRole("checkbox", { name: /Publish branches/ })
+    // SECURITY REGRESSION GUARDRAIL (SEC-013): write scopes start unchecked.
     expect(isChecked(read)).toBe(true)
-    expect(isDisabled(read)).toBe(true)
+    expect(isChecked(write)).toBe(false)
+    expect(isDisabled(read)).toBe(false)
 
     await user.click(write)
-    await user.click(publish)
     expect(isChecked(read)).toBe(true)
-    expect(isDisabled(read)).toBe(false)
+    expect(isDisabled(read)).toBe(true)
   })
 
   test("selected projects need at least one project before Allow works", async () => {
@@ -87,9 +89,12 @@ describe("consent page", () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(await screen.findByRole("radio", { name: "Selected projects" }))
-    const allow = screen.getByRole("button", { name: "Allow" })
+    // SECURITY REGRESSION GUARDRAIL (SEC-013): the page opens on selected projects.
+    const allow = await screen.findByRole("button", { name: "Allow" })
+    expect(isChecked(screen.getByRole("radio", { name: "Selected projects" }))).toBe(true)
     expect(screen.getByText("Choose at least one project.")).toBeTruthy()
+    await user.click(screen.getByRole("checkbox", { name: /Create branches and edit pages/ }))
+    await user.click(screen.getByRole("checkbox", { name: /Publish branches/ }))
     expect(isDisabled(allow)).toBe(true)
 
     await user.click(screen.getByRole("checkbox", { name: /Beta docs/ }))
@@ -104,15 +109,16 @@ describe("consent page", () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith("http://127.0.0.1:3334/callback?code=abc"))
   })
 
-  test("Allow with all projects approves every chosen scope", async () => {
+  test("Allow with all projects approves the checked scopes", async () => {
     getAgentConsent.mockResolvedValue(details())
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(await screen.findByRole("button", { name: "Allow" }))
+    await user.click(await screen.findByRole("radio", { name: ALL_PROJECTS }))
+    await user.click(screen.getByRole("button", { name: "Allow" }))
 
     await waitFor(() => expect(approveAgentConsent).toHaveBeenCalledWith("consent-1", {
-      scopes: ["docs:read", "docs:write", "publish"],
+      scopes: ["docs:read"],
       projectScope: { kind: "all" },
     }))
   })
@@ -159,7 +165,8 @@ describe("consent page", () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(await screen.findByRole("button", { name: "Allow" }))
+    await user.click(await screen.findByRole("radio", { name: ALL_PROJECTS }))
+    await user.click(screen.getByRole("button", { name: "Allow" }))
 
     expect(
       await screen.findByText("This request expired. Start the connection again from your agent."),

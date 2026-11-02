@@ -6,7 +6,7 @@
 
 This document describes how published docs versions are stored in the
 `doxa-docs-artifacts-enam` R2 bucket. For the reason behind the design, see the plan
-[Content-Addressed Docs Storage](../superpowers/plans/2026-09-30-content-addressed-docs-storage.md).
+Content-Addressed Docs Storage (`docs/superpowers/plans/2026-09-30-content-addressed-docs-storage.md` in the private ops repo).
 
 The bucket has the location hint `enam` (Eastern North America), near the API
 Worker, which runs in `aws:us-east-1` next to the database. Until 2026-10-22,
@@ -278,7 +278,7 @@ Production was migrated on 2026-09-30:
 The migration used four admin routes of the API: `inventory`, `backfill`,
 `verify`, and `prune-legacy`. The admin routes were removed on 2026-10-23,
 together with their migration service. The plan
-[Content-Addressed Docs Storage](../superpowers/plans/2026-09-30-content-addressed-docs-storage.md)
+Content-Addressed Docs Storage (`docs/superpowers/plans/2026-09-30-content-addressed-docs-storage.md` in the private ops repo)
 records how the routes worked.
 
 A local development bucket can still hold flat folders. A reader cannot see

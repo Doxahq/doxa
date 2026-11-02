@@ -176,9 +176,9 @@ variable "cpu_target_percent" {
 }
 
 variable "enable_execute_command" {
-  description = "Allow `aws ecs execute-command` into the API container."
+  description = "Allow `aws ecs execute-command` into the API container. Off by default (SEC-037): a shell reads every secret of the task. Turn it on for a debug session only."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "log_retention_days" {

@@ -2,6 +2,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "doxa-docs-renderer",
   "main": "src/index.ts",
+  "workers_dev": false,
+  "preview_urls": false,
   "cache": {
     "enabled": false,
     "cross_version_cache": true
@@ -95,6 +97,13 @@
   "worker_loaders": [
     {
       "binding": "LOADER"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "DOCS_REQUEST_LIMITER",
+      "namespace_id": "3001",
+      "simple": { "limit": 3000, "period": 60 }
     }
   ],
   "kv_namespaces": [
@@ -197,6 +206,7 @@
     "DOXA_PROD_ROUTE_DATA_PREFETCH_SITE_IDS": "",
     "DOXA_PROD_KV_HOSTNAME_MODE": "on",
     "DOXA_PROD_HTTPS_REDIRECT_MODE": "on",
+    "DOXA_PROD_DOCS_CSP_MODE": "report",
     "DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE": "all",
     "DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_SITE_IDS": "",
     "DOXA_PROD_TEXT_ROUTE_CACHE_MODE": "all",

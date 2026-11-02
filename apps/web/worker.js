@@ -1,4 +1,5 @@
 import server from "./dist/server/server.js"
+import { withSecurityHeaders } from "./config/security-headers.js"
 
 export default {
   async fetch(request, env, ctx) {
@@ -10,6 +11,6 @@ export default {
         }
       }
     }
-    return server.fetch(request)
+    return withSecurityHeaders(await server.fetch(request))
   },
 }

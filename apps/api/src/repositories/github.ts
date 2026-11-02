@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, notInArray } from "drizzle-orm";
 import { createDb, schema } from "@doxahq/db";
 import type { GenerationContext, GitHubRepositoryDto } from "@doxahq/contracts";
 import type { Env } from "../env";
@@ -57,15 +57,15 @@ export class GitHubRepository {
       .onConflictDoUpdate({
         target: schema.githubInstallations.installationId,
         set: {
-          userId: input.userId,
           accountLogin: input.accountLogin,
           accountType: input.accountType,
           updatedAt: new Date(),
         },
+        setWhere: eq(schema.githubInstallations.userId, input.userId),
       })
       .returning();
 
-    return installation;
+    return installation ?? null;
   }
 
   async recordRepository(input: {
@@ -103,6 +103,24 @@ export class GitHubRepository {
       .returning();
 
     return repository;
+  }
+
+  /**
+   * Deletes the repositories of an installation row that are not in
+   * `keepGithubRepoIds`. A project on a deleted repository loses its
+   * repository link (`ON DELETE SET NULL`); the project itself stays.
+   */
+  async removeRepositoriesExcept(installationId: string, keepGithubRepoIds: readonly string[]): Promise<number> {
+    const ofInstallation = eq(schema.githubRepositories.installationId, installationId);
+    const removed = await this.db
+      .delete(schema.githubRepositories)
+      .where(
+        keepGithubRepoIds.length === 0
+          ? ofInstallation
+          : and(ofInstallation, notInArray(schema.githubRepositories.githubRepoId, [...keepGithubRepoIds])),
+      )
+      .returning({ id: schema.githubRepositories.id });
+    return removed.length;
   }
 
   async getGenerationContext(projectId: string): Promise<GenerationContext | null> {

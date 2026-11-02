@@ -20,6 +20,7 @@ import {
   HeadContent,
   Outlet,
   Scripts,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 
 import { isChatAvailable } from "@/src/lib/chat-availability";
@@ -225,7 +226,7 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error }: { error: Error }) {
+function ErrorComponent({ error }: ErrorComponentProps) {
   return (
     <RootDocument>
       <section className="flex min-h-[99vh] flex-col items-start gap-3 px-2 py-8">
@@ -234,7 +235,7 @@ function ErrorComponent({ error }: { error: Error }) {
           <p className="text-muted-foreground">Something went wrong!</p>
           {process.env.NODE_ENV === "development" && (
             <pre className="mt-4 overflow-auto rounded bg-muted p-4 text-sm">
-              {error.message}
+              {error instanceof Error ? error.message : String(error)}
             </pre>
           )}
         </div>

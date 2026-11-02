@@ -15,12 +15,18 @@ export function ConsentClientIdentity({ client }: { client: AgentConsentClient }
           <p className="min-w-0 text-2xl leading-tight font-semibold break-words text-foreground">
             {client.name}
           </p>
-          {client.verified ? <Badge variant="success">verified</Badge> : <Badge variant="warning">unverified</Badge>}
+          {/* The host, not the word "verified": any domain can publish a
+              metadata document that names itself "Claude" (SEC-013). */}
+          {client.verified && client.metadataUrl ? (
+            <Badge variant="outline" className="font-mono">{hostOf(client.metadataUrl)}</Badge>
+          ) : (
+            <Badge variant="warning">unverified</Badge>
+          )}
         </div>
         <p className="text-sm text-muted-foreground">wants to use your Doxa account.</p>
         {client.verified && client.metadataUrl ? (
           <p className="text-xs text-muted-foreground">
-            The name comes from{" "}
+            The agent chose this name. Doxa checked only that it comes from{" "}
             <span className="font-mono break-all text-body">{hostOf(client.metadataUrl)}</span>.
           </p>
         ) : null}

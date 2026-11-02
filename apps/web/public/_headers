@@ -1,0 +1,8 @@
+# Security headers of the prerendered pages and static files (SEC-011).
+# Keep equal to config/security-headers.js; a test checks it.
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Content-Security-Policy: base-uri 'self'; object-src 'none'; frame-ancestors 'none'

@@ -44,3 +44,42 @@ describe("leaked secret detector", () => {
     expect(findSecret("nothing here")).toBeNull();
   });
 });
+
+// SECURITY REGRESSION GUARDRAIL (SEC-027): credentials without a known key shape.
+describe("credentials without a known prefix", () => {
+  // Built at runtime, so secret scanners on the public repository do not flag the source.
+  const RANDOM = ["q7Vx", "2LmP", "9sKd", "W4tZ", "e8Rn", "J3yH"].join("");
+
+  test("finds a password in a connection URL", () => {
+    const text = `DATABASE_URL=postgres://app:${RANDOM}@db.internal:5432/app`;
+    expect(findSecret(text)).toEqual({ index: text.indexOf(RANDOM), length: RANDOM.length });
+  });
+
+  test("finds a password in a connection URL without a username", () => {
+    const text = `REDIS_URL=redis://:${RANDOM}@cache.internal:6379/0`;
+    expect(findSecret(text)).toEqual({ index: text.indexOf(RANDOM), length: RANDOM.length });
+  });
+
+  test("finds a random value assigned to a secret-like name", () => {
+    const text = `CLIENT_SECRET="${RANDOM}"`;
+    expect(findSecret(text)).toEqual({ index: text.indexOf(RANDOM), length: RANDOM.length });
+  });
+
+  test.each([
+    "postgres://user:password@localhost:5432/app",
+    "postgres://postgres:postgres@localhost/app",
+    "redis://:<password>@cache:6379",
+    "redis://:password@localhost:6379",
+    "redis://:your_redis_password1@localhost:6379",
+    "redis://:${REDIS_PASSWORD}@cache:6379",
+    "http://:8080@localhost",
+    "API_KEY=YOUR_API_KEY",
+    'apiKey: "your-api-key-goes-here-1234"',
+    "token: string",
+    'secretKey: process.env.SECRET_KEY',
+    "password: ${DB_PASSWORD}",
+    "https://user:pass@example.com",
+  ])("lets the placeholder %s pass", (text) => {
+    expect(findSecret(text)).toBeNull();
+  });
+});

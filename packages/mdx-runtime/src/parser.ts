@@ -332,6 +332,7 @@ function createMdxComponentNode(
 
   const name = readComponentName(node.name);
   const props = readMdxAttributes(node.attributes);
+  if (typeof props.href === "string") props.href = sanitizeComponentHref(props.href);
   // A card picture can point at an uploaded image, like a markdown image.
   if (name === "Card" && typeof props.image === "string") {
     props.image = resolveAssetUrl(props.image, options);
@@ -543,7 +544,39 @@ function isMdxJsxElement(
   return node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement";
 }
 
+const SAFE_LINK_SCHEMES: ReadonlySet<string> = new Set(["http", "https", "mailto"]);
+const LINK_SCHEME = /^([A-Za-z][A-Za-z0-9+.-]*):/;
+/** `//host` and `/\host`: the browser opens another site, not a page of this one. */
+const OTHER_HOST_LINK = /^[\\/]{2}/;
+
+/**
+ * A Markdown link: http, https and mailto, `#anchor` and paths from the site
+ * root. Any other link becomes `#`.
+ */
 function sanitizeHref(value: string): string {
-  if (/^(https?:|mailto:|#|\/)/i.test(value)) return value;
-  return "#";
+  const href = sanitizeComponentHref(value);
+  return /^(https?:|mailto:|#|\/)/i.test(href) ? href : "#";
+}
+
+/**
+ * A component `href` prop, such as the one of `Card`: the Markdown link rules,
+ * and a relative path such as `guide` stays too. The check runs on the link
+ * as the browser reads it, so `java\tscript:` cannot hide its scheme.
+ */
+function sanitizeComponentHref(value: string): string {
+  const href = browserNormalizedHref(value);
+  if (OTHER_HOST_LINK.test(href)) return "#";
+  const scheme = LINK_SCHEME.exec(href)?.[1];
+  if (scheme === undefined) return href;
+  return SAFE_LINK_SCHEMES.has(scheme.toLowerCase()) ? href : "#";
+}
+
+/**
+ * Removes what the URL parser of a browser drops before it reads the scheme:
+ * C0 controls and spaces at the start and end, and each tab and newline.
+ */
+function browserNormalizedHref(value: string): string {
+  return value
+    .replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "")
+    .replace(/[\t\n\r]/g, "");
 }

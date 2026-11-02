@@ -52,6 +52,8 @@ export interface PreviewHostnameInput {
   changeNumber: number;
   docsBaseDomain: string | undefined;
   isAvailable(candidate: DocsNamespaceCandidate): Promise<boolean>;
+  /** Tests pass a fixed value. Otherwise 16 random hex characters. */
+  randomSuffix?: string;
 }
 
 export interface ChannelHostnameInput {
@@ -69,13 +71,18 @@ export interface EnsureBranchPreviewChannelInput {
   hostname: string;
 }
 
+/**
+ * Every preview channel, branch or pull request, follows the generation
+ * preview policy (SEC-006, owner decision 2026-10-31): with the preview gate
+ * on, a private preview needs sign-in. A pull request preview can show
+ * unmerged work of a private repository just like a branch preview.
+ */
 export function resolvePreviewChannelAccessPolicy(input: {
-  kind: PreviewChannelRecord["kind"];
   previewVisibility: "private" | "public";
   gateEnabled: boolean;
 }) {
   return resolveDocsAccessPolicy({
-    isGenerationPreview: input.kind === "branch",
+    isGenerationPreview: true,
     previewVisibility: input.previewVisibility,
     gateEnabled: input.gateEnabled,
   });
@@ -187,7 +194,6 @@ export class PreviewChannelsRepository implements PreviewChannelsStore {
         artifactPrefix: schema.docsVersions.artifactPrefix,
         manifestPath: schema.docsVersions.manifestPath,
         hostname: schema.docsPreviewChannels.hostname,
-        kind: schema.docsPreviewChannels.kind,
         previewVisibility: schema.docsSites.previewVisibility,
       })
       .from(schema.docsPreviewChannels)
@@ -221,7 +227,6 @@ export class PreviewChannelsRepository implements PreviewChannelsStore {
       artifactPrefix: row.artifactPrefix,
       manifestPath: row.manifestPath,
       accessPolicy: resolvePreviewChannelAccessPolicy({
-        kind: row.kind,
         previewVisibility: row.previewVisibility,
         gateEnabled: this.previewGateEnabled,
       }),
@@ -321,14 +326,28 @@ export async function compareAndSetPreviewVersion(
 export async function createPreviewHostnameCandidates(
   input: PreviewHostnameInput,
 ): Promise<string[]> {
+  // A random suffix, like branch previews: `<slug>-pr-<n>` alone let anyone
+  // walk the pull request numbers of a site (SEC-006). The channel keeps the
+  // hostname it got first, so a pull request keeps one URL.
   return createChannelHostnameCandidates({
     stem: `${input.projectSlug}-pr-${input.changeNumber}`,
     identity: [input.projectId, input.provider, input.changeExternalId].join(
       ":",
     ),
+    requiredSuffix: input.randomSuffix ?? createRandomHex(8),
     docsBaseDomain: input.docsBaseDomain,
     isAvailable: input.isAvailable,
   });
+}
+
+/** `byteLength` random bytes as lowercase hex. */
+export function createRandomHex(byteLength: number): string {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 export async function createChannelHostnameCandidates(

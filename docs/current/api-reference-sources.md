@@ -38,8 +38,10 @@ its page. Only the editorial budget (24 guide, concept and workflow pages for
    root when its name or its first 4 KB mark it as a spec, so that gate G1
    reports it. At most 50 roots.
 2. **Gate G1** (agent container) reads each file: a relative path inside the
-   checkout, no symbolic link on the way, no `.git` segment, `.json`, `.yaml`
-   or `.yml`, at most 25 MB, UTF-8 with no NUL byte. The BOM is removed and
+   checkout, no symbolic link on the way, no `.git` segment, not a protected
+   file (the credential names of the agent's Read tool, such as
+   `.env.production.yaml`), `.json`, `.yaml` or `.yml`, at most 25 MB, UTF-8
+   with no NUL byte. The BOM is removed and
    line endings become `\n`. One request is at most 100 MB and 200 files.
 3. **The job** (its own container) parses strict YAML 1.2 with the core schema (one
    document, no duplicate keys, no custom tags, at most 50 aliases) or JSON

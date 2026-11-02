@@ -49,9 +49,9 @@ describe("namespace-aware hostname allocation", () => {
       changeExternalId: "pull-request-5",
       changeNumber: 5,
       expected: [
-        "acme-pr-5.doxa.page",
-        "acme-pr-5-a933fcd0.doxa.page",
-        "acme-pr-5-a933fcd04f45b4a0.doxa.page",
+        "acme-pr-5-0123456789abcdef.doxa.page",
+        "acme-pr-5-a933fcd0-0123456789abcdef.doxa.page",
+        "acme-pr-5-a933fcd04f45b4a0-0123456789abcdef.doxa.page",
       ],
     },
     {
@@ -60,13 +60,13 @@ describe("namespace-aware hostname allocation", () => {
       changeExternalId: "change-9",
       changeNumber: 9,
       expected: [
-        "docs-pr-9.doxa.page",
-        "docs-pr-9-6622429b.doxa.page",
-        "docs-pr-9-6622429b0376e747.doxa.page",
+        "docs-pr-9-0123456789abcdef.doxa.page",
+        "docs-pr-9-6622429b-0123456789abcdef.doxa.page",
+        "docs-pr-9-6622429b0376e747-0123456789abcdef.doxa.page",
       ],
     },
   ])(
-    "keeps the existing pull request candidate sequence for $projectSlug",
+    "ends every pull request candidate with the random suffix for $projectSlug",
     async (input) => {
       const candidates = await createPreviewHostnameCandidates({
         projectId: input.projectId,
@@ -76,6 +76,7 @@ describe("namespace-aware hostname allocation", () => {
         changeNumber: input.changeNumber,
         docsBaseDomain: "doxa.page",
         isAvailable: async () => true,
+        randomSuffix: "0123456789abcdef",
       });
 
       expect(candidates).toEqual(input.expected);
@@ -96,9 +97,27 @@ describe("namespace-aware hostname allocation", () => {
     });
   });
 
+  // SECURITY REGRESSION GUARDRAIL (SEC-006): a PR preview name is never `<slug>-pr-<n>` alone.
+  test("never offers the guessable pull request hostname", async () => {
+    const candidates = await createPreviewHostnameCandidates({
+      projectId: "project-1",
+      projectSlug: "acme",
+      provider: "github",
+      changeExternalId: "pull-request-5",
+      changeNumber: 5,
+      docsBaseDomain: "doxa.page",
+      isAvailable: async () => true,
+    });
+
+    expect(candidates).toHaveLength(3);
+    for (const hostname of candidates) {
+      expect(hostname).toMatch(/^acme-pr-5-(?:[a-f0-9]{8,16}-)?[a-f0-9]{16}\.doxa\.page$/);
+    }
+  });
+
   test("uses the digest preview hostname when the plain label is taken", async () => {
     const isAvailable = vi.fn(
-      async ({ label }: { label: string }) => label !== "acme-pr-5",
+      async ({ label }: { label: string }) => label !== "acme-pr-5-0123456789abcdef",
     );
 
     const candidates = await createPreviewHostnameCandidates({
@@ -109,12 +128,13 @@ describe("namespace-aware hostname allocation", () => {
       changeNumber: 5,
       docsBaseDomain: "doxa.page",
       isAvailable,
+      randomSuffix: "0123456789abcdef",
     });
 
-    expect(candidates).toHaveLength(2);
-    expect(candidates[0]).toMatch(/^acme-pr-5-[a-f0-9]{8}\.doxa\.page$/);
-    expect(candidates[1]).toMatch(/^acme-pr-5-[a-f0-9]{16}\.doxa\.page$/);
-    expect(candidates).not.toContain("acme-pr-5.doxa.page");
+    expect(candidates).toEqual([
+      "acme-pr-5-a933fcd0-0123456789abcdef.doxa.page",
+      "acme-pr-5-a933fcd04f45b4a0-0123456789abcdef.doxa.page",
+    ]);
   });
 
   test("fits branch labels and keeps the random suffix at the end", async () => {

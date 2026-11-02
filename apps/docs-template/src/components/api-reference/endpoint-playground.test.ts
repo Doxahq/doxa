@@ -166,16 +166,43 @@ describe("endpoint playground authorization", () => {
       },
     };
     vi.stubGlobal("window", {
-      location: { host: "docs.example.com" },
+      location: {
+        host: "docs.example.com",
+        href: "https://docs.example.com/api/messages",
+        origin: "https://docs.example.com",
+      },
       sessionStorage,
       localStorage,
     });
 
-    saveSessionAuthToken("secret");
+    saveSessionAuthToken("https://api.example.com/v1", "secret");
 
-    expect(loadSessionAuthToken()).toBe("secret");
+    expect(loadSessionAuthToken("https://api.example.com/v1")).toBe("secret");
 
-    saveSessionAuthToken("");
-    expect(loadSessionAuthToken()).toBe("");
+    saveSessionAuthToken("https://api.example.com/v1", "");
+    expect(loadSessionAuthToken("https://api.example.com/v1")).toBe("");
+  });
+
+  // SECURITY REGRESSION GUARDRAIL (SEC-010): a token never fills in for another target host.
+  test("keeps a token for one API origin away from an endpoint on another host", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("window", {
+      location: {
+        host: "docs.example.com",
+        href: "https://docs.example.com/api/messages",
+        origin: "https://docs.example.com",
+      },
+      sessionStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => void store.set(key, value),
+        removeItem: (key: string) => void store.delete(key),
+      },
+    });
+
+    saveSessionAuthToken("https://api.example.com", "real-key");
+
+    expect(loadSessionAuthToken("https://evil.example")).toBe("");
+    expect(loadSessionAuthToken("https://api.example.com/v2")).toBe("real-key");
+    expect(loadSessionAuthToken("/api/echo")).toBe("");
   });
 });

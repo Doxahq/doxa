@@ -25,6 +25,27 @@ export function hasSessionTokenCookie(cookieHeader: string | null | undefined): 
 }
 
 /**
+ * The API's signed-in marker, `{prefix}.signed_in=1` (SEC-021). The prefix is
+ * the API's AUTH_COOKIE_PREFIX: "doxa" in production. A development web app
+ * whose API sets another prefix sets VITE_AUTH_COOKIE_PREFIX to match, so the
+ * production marker on doxa.so never counts on dev.doxa.so.
+ */
+export const SIGNED_IN_COOKIE_NAME = `${import.meta.env?.VITE_AUTH_COOKIE_PREFIX || "doxa"}.signed_in`
+
+/**
+ * True when the request carries the API's signed-in marker. The session
+ * cookies are host-only on the API host, so the dashboard server sees only
+ * this marker. Like the token check, it does not prove a valid session.
+ */
+export function hasSignedInCookie(
+  cookieHeader: string | null | undefined,
+  name: string = SIGNED_IN_COOKIE_NAME,
+): boolean {
+  if (!cookieHeader) return false
+  return cookieHeader.split(";").some((pair) => pair.trim() === `${name}=1`)
+}
+
+/**
  * Better Auth's session cache cookie, `{prefix}.session_data`. A long value is
  * split into `{name}.0`, `{name}.1`, and so on.
  */

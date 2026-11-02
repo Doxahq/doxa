@@ -17,3 +17,11 @@ ignoredBuiltDependencies:
 # in one bundle double the Zod code and its start-up work.
 catalog:
   zod: ^4.6.5
+
+# One TanStack Start and Router for the whole workspace, including the
+# optional peers of @tanstack/react-form and better-auth-cloudflare. 1.168.61
+# is the first line with the server-function XSS fix (GHSA for
+# start-server-core < 1.169.39) that still supports Vite 7.
+overrides:
+  "@tanstack/react-start": "1.168.61"
+  "@tanstack/react-router": "1.170.42"

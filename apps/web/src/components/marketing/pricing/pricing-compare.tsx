@@ -1,5 +1,5 @@
 import { Hr } from "~/components/marketing/guides"
-import { COMPARE_ROWS } from "~/lib/marketing/pricing"
+import { COMPARE_ROWS, type CompareCell } from "~/lib/marketing/pricing"
 
 export function PricingCompare() {
   return (
@@ -17,8 +17,8 @@ export function PricingCompare() {
             </h2>
           </div>
           <p>
-            All plans include the agent, the docs platform and the MCP server. Paid plans raise the limits and remove
-            the Doxa badge.
+            All plans include the docs platform and the MCP server. Paid plans add the Doxa Agent, raise the limits
+            and remove the Doxa badge.
           </p>
         </div>
       </section>
@@ -32,7 +32,9 @@ export function PricingCompare() {
               <div className="pro" role="columnheader">
                 PRO
               </div>
-              <div role="columnheader">ENTERPRISE</div>
+              <div className="ent" role="columnheader">
+                ENTERPRISE
+              </div>
             </div>
             {COMPARE_ROWS.map((row) =>
               row.kind === "group" ? (
@@ -40,19 +42,19 @@ export function PricingCompare() {
                   <div role="cell">{row.label}</div>
                   <div role="cell" />
                   <div className="pro" role="cell" />
-                  <div role="cell" />
+                  <div className="ent" role="cell" />
                 </div>
               ) : (
                 <div key={row.label} className="tr" role="row">
                   <div role="cell">{row.label}</div>
-                  <div className={row.free.cls} role="cell">
-                    {row.free.t}
+                  <div role="cell">
+                    <Cell cell={row.free} />
                   </div>
                   <div className="pro" role="cell">
-                    <span className={row.pro.cls}>{row.pro.t}</span>
+                    <Cell cell={row.pro} />
                   </div>
-                  <div className={row.enterprise.cls} role="cell">
-                    {row.enterprise.t}
+                  <div className="ent" role="cell">
+                    <Cell cell={row.enterprise} />
                   </div>
                 </div>
               ),
@@ -62,4 +64,25 @@ export function PricingCompare() {
       </section>
     </>
   )
+}
+
+/** A check renders as an SVG, so it reads as "included" at a glance. */
+function Cell({ cell }: { cell: CompareCell }) {
+  if (cell.cls === "yes") {
+    return (
+      <span className="yes" role="img" aria-label="Included">
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M4 8.5l2.5 2.5L12 5.5" />
+        </svg>
+      </span>
+    )
+  }
+  if (cell.cls === "no") {
+    return (
+      <span className="no" role="img" aria-label="Not included">
+        {cell.t}
+      </span>
+    )
+  }
+  return <span className={cell.cls}>{cell.t}</span>
 }

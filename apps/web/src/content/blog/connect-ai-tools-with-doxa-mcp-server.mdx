@@ -1,0 +1,93 @@
+---
+title: "Connect your AI tools to your docs with the Doxa MCP server"
+description: "Agents in Claude, Cursor or Codex read, edit and preview your docs on a branch. Every publish waits for your approval by default."
+date: "2026-11-02"
+author: "Doxa Team"
+draft: true
+---
+
+Ask your agent to fix a guide, and get a preview link back. The Doxa MCP server lets agents in Claude, Cursor, VS Code or Codex work on your docs. They edit on a branch, and a publish waits for a person by default.
+
+## What an agent can do
+
+The server has 34 tools. An agent can:
+
+- List projects and read the page tree of a project.
+- Read, search and write pages, and upload images.
+- Create branches, check a diff and build a preview.
+- Change site settings on a branch.
+- Publish a branch, or restore an earlier publication.
+- Add, check and remove custom domains.
+- Start, check or cancel a Doxabot generation.
+
+The server also has four tested workflows as prompts: `write_guide`, `update_from_code_change`, `review_branch` and `fix_broken_links`. With these prompts, an agent follows the same steps each time.
+
+## How an agent ships a change
+
+Every agent gets the same path:
+
+- **Find.** The agent finds the project and reads its pages. On `main`, reads show the live site.
+- **Branch.** The agent creates a branch. Write tools reject `main`.
+- **Edit.** The agent sends the revision it read with each write, so it does not overwrite newer work.
+- **Preview.** The agent checks its diff and gives you a preview URL.
+- **Publish.** The agent asks to publish and gets an approval link. A page with MDX issues blocks the publish.
+- **Approve.** You approve in the dashboard, and the change goes live.
+
+## How approval works
+
+Each action runs in one of three modes:
+
+- **Allow.** The action runs at once.
+- **Require approval.** The agent gets an approval link. The action runs only after a person approves it in the dashboard.
+- **Deny.** The agent can never run the action.
+
+These actions require approval by default:
+
+- Publish a branch, or restore a publication.
+- Add or remove a custom domain.
+- Start a docs generation.
+- Delete a project. You can never set this action to Allow.
+
+Creating a project, checking a domain and cancelling a generation are allowed by default.
+
+You choose the rule for each action, in your project settings or your account settings. A project setting wins over an account setting.
+
+No OAuth scope lets an agent decide an approval. The MCP server has no approve tool. For teams, one option stops a member from approving a request that their own agent made.
+
+An agent also sees only what you allow. On the consent screen, you pick the projects it can use, or all projects. Its token holds only the scopes you grant. If a tool needs a new scope, the client asks for that one scope only.
+
+## How to connect
+
+The server URL is `https://mcp.doxa.so/mcp`. Any client that supports remote MCP servers with OAuth sign-in can connect. You do not need an API key.
+
+In Claude Code, run one command:
+
+```bash
+claude mcp add --transport http doxa https://mcp.doxa.so/mcp
+```
+
+Then run `/mcp`, pick doxa and choose Authenticate.
+
+In Cursor, add the server to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "doxa": {
+      "url": "https://mcp.doxa.so/mcp"
+    }
+  }
+}
+```
+
+Then open Cursor Settings, go to MCP and click the login button next to doxa.
+
+In each client, the Doxa sign-in page opens in your browser. Sign in, pick your projects and click **Allow**.
+
+To test the connection, ask your agent to "List my Doxa projects". It shows the projects that you picked.
+
+To disconnect an agent, open **Settings › Connected agents** in the dashboard and revoke it. Its access stops at once.
+
+## Get the steps for your client
+
+The [MCP page](/mcp) has setup steps for Claude, VS Code, Codex, ChatGPT, Windsurf, Gemini CLI and more. The [setup docs](https://docs.doxa.so) cover troubleshooting too.

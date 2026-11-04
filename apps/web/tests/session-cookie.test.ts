@@ -13,8 +13,13 @@ describe("hasSessionTokenCookie", () => {
   })
 
   test("accepts a custom cookie prefix, such as the local development one", () => {
-    expect(hasSessionTokenCookie("doxa-dev.session_token=abc")).toBe(true)
-    expect(hasSessionTokenCookie("__Secure-doxa-dev.session_token=abc")).toBe(true)
+    expect(hasSessionTokenCookie("doxa-dev.session_token=abc", "doxa-dev")).toBe(true)
+    expect(hasSessionTokenCookie("__Secure-doxa-dev.session_token=abc", "doxa-dev")).toBe(true)
+  })
+
+  test("ignores a session token with another prefix, such as production cookies on a dev host", () => {
+    expect(hasSessionTokenCookie("__Secure-better-auth.session_token=abc", "doxa-dev")).toBe(false)
+    expect(hasSessionTokenCookie("doxa-dev.session_token=abc")).toBe(false)
   })
 
   test("is false with no cookie header or no session token", () => {
@@ -63,7 +68,7 @@ describe("readSessionCookieIdentity", () => {
   })
 
   test("reads a cookie with a custom prefix, and one split into chunks", () => {
-    expect(readSessionCookieIdentity(`doxa-dev.session_data=${sessionData()}`, NOW)?.id).toBe("u1")
+    expect(readSessionCookieIdentity(`doxa-dev.session_data=${sessionData()}`, NOW, "doxa-dev")?.id).toBe("u1")
     const value = sessionData()
     const header = `better-auth.session_data.1=${value.slice(40)}; better-auth.session_data.0=${value.slice(0, 40)}`
     expect(readSessionCookieIdentity(header, NOW)?.email).toBe("ada@example.com")
@@ -95,6 +100,10 @@ describe("readSessionCookieIdentity", () => {
   test("is null with no cache cookie", () => {
     expect(readSessionCookieIdentity(null, NOW)).toBeNull()
     expect(readSessionCookieIdentity("better-auth.session_token=abc", NOW)).toBeNull()
+  })
+
+  test("ignores a cache cookie with another prefix", () => {
+    expect(readSessionCookieIdentity(`better-auth.session_data=${sessionData()}`, NOW, "doxa-dev")).toBeNull()
   })
 })
 

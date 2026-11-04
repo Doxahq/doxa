@@ -1,0 +1,37 @@
+# Doxa
+
+> Doxa is an open-source documentation platform. Doxabot, the Doxa agent, writes docs from a GitHub repository and updates them when code changes. A person approves changes before they go live. Doxa also hosts the docs site, with search, AI chat, branches, previews, and an MCP server for AI agents.
+
+Important facts:
+
+- Doxa is made by CoderOne Labs.
+- Teams can use the Doxa cloud or self-host the platform.
+- Docs are plain MDX files. Teams can export them and leave at any time.
+- The MCP server is at `https://mcp.doxa.so/mcp`. It works with Claude Code, Cursor, VS Code, Codex, and other MCP clients.
+- By default, an agent that connects through MCP needs a person's approval to publish a branch, restore a publication, generate the docs, add or remove a custom domain, or delete a project.
+- Prices can change. The pricing page is the current source.
+
+## Product
+
+- [Doxabot](https://doxa.so/agent): The agent that writes docs from a repository and updates the affected pages after a merge.
+- [MCP server](https://doxa.so/mcp): How to connect an AI agent to Doxa, what the tools do, and which actions need approval.
+- [Pricing](https://doxa.so/pricing): Free, Pro, and Enterprise plans. Pro costs $179 per month, or $149 per month when billed yearly. Doxabot needs the Pro plan or the Enterprise plan.
+
+## Documentation
+
+- [Documentation](https://docs.doxa.so): The Doxa docs site.
+- [Docs index for agents](https://docs.doxa.so/llms.txt): A list of the docs pages with short descriptions.
+- [Full docs for agents](https://docs.doxa.so/llms-full.txt): The full text of the docs in one file.
+
+## Company
+
+- [About](https://doxa.so/about): Why Doxa exists, and what it believes about docs.
+- [Blog](https://doxa.so/blog): Product notes and guides.
+- [GitHub](https://github.com/ipenywis/doxa): The source code.
+- [Contact](mailto:hello@doxa.so): Questions, sales, and support.
+
+## Optional
+
+- [How Doxabot keeps docs in sync with pull requests](https://doxa.so/blog/keep-docs-in-sync-with-pull-requests): Docs previews on pull requests, rewrites only where the code changed, and review page by page.
+- [Privacy Policy](https://doxa.so/legal/privacy): How Doxa handles personal data.
+- [Terms of Service](https://doxa.so/legal/terms): The terms for the use of Doxa.

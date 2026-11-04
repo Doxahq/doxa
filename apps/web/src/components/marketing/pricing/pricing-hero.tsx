@@ -19,8 +19,8 @@ export function PricingHero() {
             <span className="mark">priced to start free</span>
           </h1>
           <p>
-            Start with the full agent and a live docs site on the Free plan. Upgrade when your team needs more room,
-            your own branding and higher limits.
+            Start with a live docs site on the Free plan. Upgrade when your team needs the Doxa Agent, your own
+            branding and higher limits.
           </p>
           <div className="row">
             <a className="btn btn--light" href={GET_STARTED_URL}>
@@ -32,7 +32,7 @@ export function PricingHero() {
           </div>
           <span className="hero__note">
             <i />
-            Founder's discount for early signups
+            Founder price for the first 100 customers
           </span>
         </div>
       </div>

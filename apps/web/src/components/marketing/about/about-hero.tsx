@@ -8,7 +8,7 @@ const FACTS = ["Open source", "Self-hostable", "No lock-in", "Human-approved"]
 export function AboutHero() {
   return (
     <header className="hero">
-      <Aurora />
+      <Aurora dpi={1} />
       <div className="hero__scrim" />
       <HeroTicks />
       <SiteNav current="about" />

@@ -6,7 +6,22 @@ import { MenuSectionLabel } from "~/components/dashboard/shell/menu-parts"
 import { formatIssueLine } from "~/lib/dashboard/mdx-issues"
 import type { useProjectContent } from "~/lib/dashboard/use-project-content"
 
-type ContentState = ReturnType<typeof useProjectContent>
+/**
+ * What the publish menu reads about the branch. The editor passes its content
+ * state, and the site settings build the same fields from their own state.
+ */
+export type PublishContentState = Pick<
+  ReturnType<typeof useProjectContent>,
+  | "overview"
+  | "pages"
+  | "hasChanges"
+  | "isDirty"
+  | "isSaving"
+  | "isDiscarding"
+  | "isOverviewRefreshing"
+  | "mdxIssuePages"
+  | "selectPage"
+>
 
 /** Pieces shared by the panels of the publish menu. */
 export function PanelHeader({ title, description }: { title: string; description: ReactNode }) {
@@ -18,7 +33,7 @@ export function PanelHeader({ title, description }: { title: string; description
   )
 }
 
-export function ChangedPages({ state, changeCount }: { state: ContentState; changeCount: number }) {
+export function ChangedPages({ state, changeCount }: { state: PublishContentState; changeCount: number }) {
   const editedPages = state.pages.filter((page) => page.status === "edited")
   const otherChanges = Math.max(0, changeCount - editedPages.length)
   return (
@@ -101,14 +116,14 @@ export function MdxBlockedPages({
 
 /** Closes the menu and opens a page in the editor, after the buffer saves. */
 export function openPage(
-  target: { state: ContentState; onOpenChange: (open: boolean) => void },
+  target: { state: PublishContentState; onOpenChange: (open: boolean) => void },
   href: string,
 ) {
   target.onOpenChange(false)
   void target.state.selectPage(href)
 }
 
-export function pageTitle(state: ContentState, href: string): string {
+export function pageTitle(state: PublishContentState, href: string): string {
   return state.pages.find((page) => page.href === href)?.title || href
 }
 

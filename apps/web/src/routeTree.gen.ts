@@ -9,7 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
 import { Route as MarketingRouteRouteImport } from './routes/_marketing/route'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
@@ -21,11 +24,17 @@ import { Route as DashboardSettingsRouteImport } from './routes/dashboard/settin
 import { Route as ApproveRequestIdRouteImport } from './routes/approve/$requestId'
 import { Route as MarketingPricingRouteImport } from './routes/_marketing/pricing'
 import { Route as MarketingMcpRouteImport } from './routes/_marketing/mcp'
+import { Route as MarketingAgentRouteImport } from './routes/_marketing/agent'
 import { Route as MarketingAboutRouteImport } from './routes/_marketing/about'
 import { Route as DashboardTeamsIndexRouteImport } from './routes/dashboard/teams/index'
 import { Route as DashboardProjectsIndexRouteImport } from './routes/dashboard/projects/index'
+import { Route as MarketingLegalIndexRouteImport } from './routes/_marketing/legal/index'
+import { Route as MarketingBlogIndexRouteImport } from './routes/_marketing/blog/index'
 import { Route as DashboardTeamsTeamIdRouteImport } from './routes/dashboard/teams/$teamId'
 import { Route as DashboardProjectsNewRouteImport } from './routes/dashboard/projects/new'
+import { Route as MarketingLegalTermsRouteImport } from './routes/_marketing/legal/terms'
+import { Route as MarketingLegalPrivacyRouteImport } from './routes/_marketing/legal/privacy'
+import { Route as MarketingBlogSlugRouteImport } from './routes/_marketing/blog/$slug'
 import { Route as DashboardProjectsProjectIdRouteRouteImport } from './routes/dashboard/projects/$projectId/route'
 import { Route as DashboardProjectsProjectIdIndexRouteImport } from './routes/dashboard/projects/$projectId/index'
 import { Route as DashboardProjectsProjectIdReviewRouteImport } from './routes/dashboard/projects/$projectId/review'
@@ -50,9 +59,24 @@ import { Route as DashboardProjectsProjectIdGenerationsGenerationIdRouteImport }
 import { Route as DashboardProjectsProjectIdDoxabotInstructionsRouteImport } from './routes/dashboard/projects/$projectId/doxabot/instructions'
 import { Route as DashboardProjectsProjectIdGenerationsGenerationIdChangesRouteImport } from './routes/dashboard/projects/$projectId/generations/$generationId_.changes'
 
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRouteRoute = DashboardRouteRouteImport.update({
@@ -109,6 +133,11 @@ const MarketingMcpRoute = MarketingMcpRouteImport.update({
   path: '/mcp',
   getParentRoute: () => MarketingRouteRoute,
 } as any)
+const MarketingAgentRoute = MarketingAgentRouteImport.update({
+  id: '/agent',
+  path: '/agent',
+  getParentRoute: () => MarketingRouteRoute,
+} as any)
 const MarketingAboutRoute = MarketingAboutRouteImport.update({
   id: '/about',
   path: '/about',
@@ -124,6 +153,16 @@ const DashboardProjectsIndexRoute = DashboardProjectsIndexRouteImport.update({
   path: '/projects/',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
+const MarketingLegalIndexRoute = MarketingLegalIndexRouteImport.update({
+  id: '/legal/',
+  path: '/legal/',
+  getParentRoute: () => MarketingRouteRoute,
+} as any)
+const MarketingBlogIndexRoute = MarketingBlogIndexRouteImport.update({
+  id: '/blog/',
+  path: '/blog/',
+  getParentRoute: () => MarketingRouteRoute,
+} as any)
 const DashboardTeamsTeamIdRoute = DashboardTeamsTeamIdRouteImport.update({
   id: '/teams/$teamId',
   path: '/teams/$teamId',
@@ -133,6 +172,21 @@ const DashboardProjectsNewRoute = DashboardProjectsNewRouteImport.update({
   id: '/projects/new',
   path: '/projects/new',
   getParentRoute: () => DashboardRouteRoute,
+} as any)
+const MarketingLegalTermsRoute = MarketingLegalTermsRouteImport.update({
+  id: '/legal/terms',
+  path: '/legal/terms',
+  getParentRoute: () => MarketingRouteRoute,
+} as any)
+const MarketingLegalPrivacyRoute = MarketingLegalPrivacyRouteImport.update({
+  id: '/legal/privacy',
+  path: '/legal/privacy',
+  getParentRoute: () => MarketingRouteRoute,
+} as any)
+const MarketingBlogSlugRoute = MarketingBlogSlugRouteImport.update({
+  id: '/blog/$slug',
+  path: '/blog/$slug',
+  getParentRoute: () => MarketingRouteRoute,
 } as any)
 const DashboardProjectsProjectIdRouteRoute =
   DashboardProjectsProjectIdRouteRouteImport.update({
@@ -276,8 +330,12 @@ const DashboardProjectsProjectIdGenerationsGenerationIdChangesRoute =
 export interface FileRoutesByFullPath {
   '/': typeof MarketingIndexRoute
   '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
   '/about': typeof MarketingAboutRoute
+  '/agent': typeof MarketingAgentRoute
   '/mcp': typeof MarketingMcpRoute
   '/pricing': typeof MarketingPricingRoute
   '/approve/$requestId': typeof ApproveRequestIdRoute
@@ -287,8 +345,13 @@ export interface FileRoutesByFullPath {
   '/oauth/consent': typeof OauthConsentRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/projects/$projectId': typeof DashboardProjectsProjectIdRouteRouteWithChildren
+  '/blog/$slug': typeof MarketingBlogSlugRoute
+  '/legal/privacy': typeof MarketingLegalPrivacyRoute
+  '/legal/terms': typeof MarketingLegalTermsRoute
   '/dashboard/projects/new': typeof DashboardProjectsNewRoute
   '/dashboard/teams/$teamId': typeof DashboardTeamsTeamIdRoute
+  '/blog/': typeof MarketingBlogIndexRoute
+  '/legal/': typeof MarketingLegalIndexRoute
   '/dashboard/projects/': typeof DashboardProjectsIndexRoute
   '/dashboard/teams/': typeof DashboardTeamsIndexRoute
   '/dashboard/projects/$projectId/site': typeof DashboardProjectsProjectIdSiteRouteRouteWithChildren
@@ -315,8 +378,12 @@ export interface FileRoutesByFullPath {
   '/dashboard/projects/$projectId/generations/$generationId/changes': typeof DashboardProjectsProjectIdGenerationsGenerationIdChangesRoute
 }
 export interface FileRoutesByTo {
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
   '/about': typeof MarketingAboutRoute
+  '/agent': typeof MarketingAgentRoute
   '/mcp': typeof MarketingMcpRoute
   '/pricing': typeof MarketingPricingRoute
   '/approve/$requestId': typeof ApproveRequestIdRoute
@@ -326,8 +393,13 @@ export interface FileRoutesByTo {
   '/oauth/consent': typeof OauthConsentRoute
   '/': typeof MarketingIndexRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/blog/$slug': typeof MarketingBlogSlugRoute
+  '/legal/privacy': typeof MarketingLegalPrivacyRoute
+  '/legal/terms': typeof MarketingLegalTermsRoute
   '/dashboard/projects/new': typeof DashboardProjectsNewRoute
   '/dashboard/teams/$teamId': typeof DashboardTeamsTeamIdRoute
+  '/blog': typeof MarketingBlogIndexRoute
+  '/legal': typeof MarketingLegalIndexRoute
   '/dashboard/projects': typeof DashboardProjectsIndexRoute
   '/dashboard/teams': typeof DashboardTeamsIndexRoute
   '/dashboard/projects/$projectId/content': typeof DashboardProjectsProjectIdContentRoute
@@ -356,8 +428,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_marketing': typeof MarketingRouteRouteWithChildren
   '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
   '/_marketing/about': typeof MarketingAboutRoute
+  '/_marketing/agent': typeof MarketingAgentRoute
   '/_marketing/mcp': typeof MarketingMcpRoute
   '/_marketing/pricing': typeof MarketingPricingRoute
   '/approve/$requestId': typeof ApproveRequestIdRoute
@@ -368,8 +444,13 @@ export interface FileRoutesById {
   '/_marketing/': typeof MarketingIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/projects/$projectId': typeof DashboardProjectsProjectIdRouteRouteWithChildren
+  '/_marketing/blog/$slug': typeof MarketingBlogSlugRoute
+  '/_marketing/legal/privacy': typeof MarketingLegalPrivacyRoute
+  '/_marketing/legal/terms': typeof MarketingLegalTermsRoute
   '/dashboard/projects/new': typeof DashboardProjectsNewRoute
   '/dashboard/teams/$teamId': typeof DashboardTeamsTeamIdRoute
+  '/_marketing/blog/': typeof MarketingBlogIndexRoute
+  '/_marketing/legal/': typeof MarketingLegalIndexRoute
   '/dashboard/projects/': typeof DashboardProjectsIndexRoute
   '/dashboard/teams/': typeof DashboardTeamsIndexRoute
   '/dashboard/projects/$projectId/site': typeof DashboardProjectsProjectIdSiteRouteRouteWithChildren
@@ -400,8 +481,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard'
+    | '/forgot-password'
     | '/login'
+    | '/reset-password'
+    | '/signup'
     | '/about'
+    | '/agent'
     | '/mcp'
     | '/pricing'
     | '/approve/$requestId'
@@ -411,8 +496,13 @@ export interface FileRouteTypes {
     | '/oauth/consent'
     | '/dashboard/'
     | '/dashboard/projects/$projectId'
+    | '/blog/$slug'
+    | '/legal/privacy'
+    | '/legal/terms'
     | '/dashboard/projects/new'
     | '/dashboard/teams/$teamId'
+    | '/blog/'
+    | '/legal/'
     | '/dashboard/projects/'
     | '/dashboard/teams/'
     | '/dashboard/projects/$projectId/site'
@@ -439,8 +529,12 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$projectId/generations/$generationId/changes'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/forgot-password'
     | '/login'
+    | '/reset-password'
+    | '/signup'
     | '/about'
+    | '/agent'
     | '/mcp'
     | '/pricing'
     | '/approve/$requestId'
@@ -450,8 +544,13 @@ export interface FileRouteTypes {
     | '/oauth/consent'
     | '/'
     | '/dashboard'
+    | '/blog/$slug'
+    | '/legal/privacy'
+    | '/legal/terms'
     | '/dashboard/projects/new'
     | '/dashboard/teams/$teamId'
+    | '/blog'
+    | '/legal'
     | '/dashboard/projects'
     | '/dashboard/teams'
     | '/dashboard/projects/$projectId/content'
@@ -479,8 +578,12 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_marketing'
     | '/dashboard'
+    | '/forgot-password'
     | '/login'
+    | '/reset-password'
+    | '/signup'
     | '/_marketing/about'
+    | '/_marketing/agent'
     | '/_marketing/mcp'
     | '/_marketing/pricing'
     | '/approve/$requestId'
@@ -491,8 +594,13 @@ export interface FileRouteTypes {
     | '/_marketing/'
     | '/dashboard/'
     | '/dashboard/projects/$projectId'
+    | '/_marketing/blog/$slug'
+    | '/_marketing/legal/privacy'
+    | '/_marketing/legal/terms'
     | '/dashboard/projects/new'
     | '/dashboard/teams/$teamId'
+    | '/_marketing/blog/'
+    | '/_marketing/legal/'
     | '/dashboard/projects/'
     | '/dashboard/teams/'
     | '/dashboard/projects/$projectId/site'
@@ -522,7 +630,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   MarketingRouteRoute: typeof MarketingRouteRouteWithChildren
   DashboardRouteRoute: typeof DashboardRouteRouteWithChildren
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
+  SignupRoute: typeof SignupRoute
   ApproveRequestIdRoute: typeof ApproveRequestIdRoute
   EmailUnsubscribeRoute: typeof EmailUnsubscribeRoute
   InviteTokenRoute: typeof InviteTokenRoute
@@ -531,11 +642,32 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -615,6 +747,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MarketingMcpRouteImport
       parentRoute: typeof MarketingRouteRoute
     }
+    '/_marketing/agent': {
+      id: '/_marketing/agent'
+      path: '/agent'
+      fullPath: '/agent'
+      preLoaderRoute: typeof MarketingAgentRouteImport
+      parentRoute: typeof MarketingRouteRoute
+    }
     '/_marketing/about': {
       id: '/_marketing/about'
       path: '/about'
@@ -636,6 +775,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjectsIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
+    '/_marketing/legal/': {
+      id: '/_marketing/legal/'
+      path: '/legal'
+      fullPath: '/legal/'
+      preLoaderRoute: typeof MarketingLegalIndexRouteImport
+      parentRoute: typeof MarketingRouteRoute
+    }
+    '/_marketing/blog/': {
+      id: '/_marketing/blog/'
+      path: '/blog'
+      fullPath: '/blog/'
+      preLoaderRoute: typeof MarketingBlogIndexRouteImport
+      parentRoute: typeof MarketingRouteRoute
+    }
     '/dashboard/teams/$teamId': {
       id: '/dashboard/teams/$teamId'
       path: '/teams/$teamId'
@@ -649,6 +802,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/projects/new'
       preLoaderRoute: typeof DashboardProjectsNewRouteImport
       parentRoute: typeof DashboardRouteRoute
+    }
+    '/_marketing/legal/terms': {
+      id: '/_marketing/legal/terms'
+      path: '/legal/terms'
+      fullPath: '/legal/terms'
+      preLoaderRoute: typeof MarketingLegalTermsRouteImport
+      parentRoute: typeof MarketingRouteRoute
+    }
+    '/_marketing/legal/privacy': {
+      id: '/_marketing/legal/privacy'
+      path: '/legal/privacy'
+      fullPath: '/legal/privacy'
+      preLoaderRoute: typeof MarketingLegalPrivacyRouteImport
+      parentRoute: typeof MarketingRouteRoute
+    }
+    '/_marketing/blog/$slug': {
+      id: '/_marketing/blog/$slug'
+      path: '/blog/$slug'
+      fullPath: '/blog/$slug'
+      preLoaderRoute: typeof MarketingBlogSlugRouteImport
+      parentRoute: typeof MarketingRouteRoute
     }
     '/dashboard/projects/$projectId': {
       id: '/dashboard/projects/$projectId'
@@ -816,16 +990,28 @@ declare module '@tanstack/react-router' {
 
 interface MarketingRouteRouteChildren {
   MarketingAboutRoute: typeof MarketingAboutRoute
+  MarketingAgentRoute: typeof MarketingAgentRoute
   MarketingMcpRoute: typeof MarketingMcpRoute
   MarketingPricingRoute: typeof MarketingPricingRoute
   MarketingIndexRoute: typeof MarketingIndexRoute
+  MarketingBlogSlugRoute: typeof MarketingBlogSlugRoute
+  MarketingLegalPrivacyRoute: typeof MarketingLegalPrivacyRoute
+  MarketingLegalTermsRoute: typeof MarketingLegalTermsRoute
+  MarketingBlogIndexRoute: typeof MarketingBlogIndexRoute
+  MarketingLegalIndexRoute: typeof MarketingLegalIndexRoute
 }
 
 const MarketingRouteRouteChildren: MarketingRouteRouteChildren = {
   MarketingAboutRoute: MarketingAboutRoute,
+  MarketingAgentRoute: MarketingAgentRoute,
   MarketingMcpRoute: MarketingMcpRoute,
   MarketingPricingRoute: MarketingPricingRoute,
   MarketingIndexRoute: MarketingIndexRoute,
+  MarketingBlogSlugRoute: MarketingBlogSlugRoute,
+  MarketingLegalPrivacyRoute: MarketingLegalPrivacyRoute,
+  MarketingLegalTermsRoute: MarketingLegalTermsRoute,
+  MarketingBlogIndexRoute: MarketingBlogIndexRoute,
+  MarketingLegalIndexRoute: MarketingLegalIndexRoute,
 }
 
 const MarketingRouteRouteWithChildren = MarketingRouteRoute._addFileChildren(
@@ -949,7 +1135,10 @@ const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   MarketingRouteRoute: MarketingRouteRouteWithChildren,
   DashboardRouteRoute: DashboardRouteRouteWithChildren,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
+  SignupRoute: SignupRoute,
   ApproveRequestIdRoute: ApproveRequestIdRoute,
   EmailUnsubscribeRoute: EmailUnsubscribeRoute,
   InviteTokenRoute: InviteTokenRoute,

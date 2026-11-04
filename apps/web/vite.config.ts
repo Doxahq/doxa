@@ -37,12 +37,15 @@ export default defineConfig(({ command, mode }) => {
           // Pages behind a session render per request. The OAuth consent page
           // and the email unsubscribe page must also send their own headers
           // (frame-ancestors 'none'), and the unsubscribe page reads its query.
-          // The login page checks the session on the server for each visit.
+          // The login and sign-up pages check the session on the server for each
+          // visit, and the reset password page reads the token in its query.
           filter: ({ path }) =>
             !path.startsWith("/dashboard")
             && !path.startsWith("/oauth")
             && !path.startsWith("/email/")
-            && path !== "/login",
+            && path !== "/login"
+            && path !== "/signup"
+            && path !== "/reset-password",
         },
       }),
       viteReact(),

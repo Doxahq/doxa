@@ -28,8 +28,8 @@ const side = () => (Math.random() < 0.5 ? "0% 50%" : "100% 50%")
 /**
  * A full-width strip of grid lines. When the band scrolls into view, each line
  * draws in from its left or right end at a random moment. While the band is on
- * screen, a few lines at a time draw out and back in. The lines fold away once
- * the band leaves the screen, so they draw in again next time.
+ * screen, a few lines at a time draw out and back in. The lines draw in only
+ * once per page load: they stay when the band leaves the screen.
  */
 export function Band({ spec, top = true, style }: BandProps) {
   const ref = useRef<HTMLDivElement>(null)
@@ -91,21 +91,20 @@ export function Band({ spec, top = true, style }: BandProps) {
       queueErase(SPREAD_MS + DRAW_MS + random(ERASE_GAP_MS.min, ERASE_GAP_MS.max))
     }
 
-    const hide = () => {
-      window.clearTimeout(timer)
-      for (const a of gone.values()) a.cancel()
-      gone.clear()
-      for (const a of shown) a.cancel()
-      shown = []
-    }
+    // Stops the erase loop. Lines that are drawn out finish their way back in.
+    const pause = () => window.clearTimeout(timer)
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.intersectionRatio >= 0.3) {
           if (shown.length === 0) show()
+          else {
+            pause()
+            queueErase(random(ERASE_GAP_MS.min, ERASE_GAP_MS.max))
+          }
         } else if (!entry.isIntersecting) {
-          // Fully off screen: fold the lines so they draw in again next time.
-          hide()
+          // Off screen the lines stay drawn in; only the erase loop rests.
+          pause()
         }
       },
       { threshold: [0, 0.3] },
@@ -113,7 +112,9 @@ export function Band({ spec, top = true, style }: BandProps) {
     observer.observe(band)
     return () => {
       observer.disconnect()
-      hide()
+      pause()
+      for (const a of gone.values()) a.cancel()
+      for (const a of shown) a.cancel()
     }
   }, [])
 

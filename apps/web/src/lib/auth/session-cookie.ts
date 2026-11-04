@@ -1,11 +1,20 @@
 /**
- * Better Auth names its session cookie `{prefix}.session_token`. The prefix is
- * `better-auth` unless the API sets `AUTH_COOKIE_PREFIX` (for example
- * `doxa-dev` in local development), and on https the name starts with
- * `__Secure-`. The web app does not know the API's prefix, so it accepts any
- * prefix.
+ * Better Auth names its session cookie `{prefix}.session_token`, and on https
+ * the name starts with `__Secure-`. The prefix is `better-auth` unless the API
+ * sets `AUTH_COOKIE_PREFIX` (for example `doxa-dev` in local development). Set
+ * `VITE_AUTH_COOKIE_PREFIX` to the same value.
+ *
+ * Only cookies with this prefix count: a dev host such as `dev.doxa.so` also
+ * receives the production `.doxa.so` cookies, and those must not make a person
+ * who signed out of dev look signed in. `worker.js` has no `import.meta.env`,
+ * so it uses the production prefix.
  */
-const SESSION_TOKEN_COOKIE = /^(?:__Secure-|__Host-)?[^\s=;]+\.session_token$/
+export const AUTH_COOKIE_PREFIX: string = import.meta.env?.VITE_AUTH_COOKIE_PREFIX || "better-auth"
+
+/** The name of the cookie `{prefix}.{suffix}`, with or without `__Secure-` / `__Host-`. */
+function authCookieName(prefix: string, suffix: string): string {
+  return `^(?:__Secure-|__Host-)?${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.${suffix}`
+}
 
 /**
  * True when the request carries a Better Auth session token cookie with a
@@ -13,22 +22,21 @@ const SESSION_TOKEN_COOKIE = /^(?:__Secure-|__Host-)?[^\s=;]+\.session_token$/
  * request, and the dashboard sends a signed-out person to the login page when
  * the API does not know the session.
  */
-export function hasSessionTokenCookie(cookieHeader: string | null | undefined): boolean {
+export function hasSessionTokenCookie(
+  cookieHeader: string | null | undefined,
+  prefix: string = AUTH_COOKIE_PREFIX,
+): boolean {
   if (!cookieHeader) return false
+  const sessionToken = new RegExp(`${authCookieName(prefix, "session_token")}$`)
   return cookieHeader.split(";").some((pair) => {
     const separator = pair.indexOf("=")
     if (separator < 0) return false
     const name = pair.slice(0, separator).trim()
     const value = pair.slice(separator + 1).trim()
-    return value.length > 0 && SESSION_TOKEN_COOKIE.test(name)
+    return value.length > 0 && sessionToken.test(name)
   })
 }
 
-/**
- * Better Auth's session cache cookie, `{prefix}.session_data`. A long value is
- * split into `{name}.0`, `{name}.1`, and so on.
- */
-const SESSION_DATA_COOKIE = /^((?:__Secure-|__Host-)?[^\s=;]+\.session_data)(?:\.(\d+))?$/
 
 /** The person that the session cache cookie names. */
 export interface SessionCookieIdentity {
@@ -51,23 +59,28 @@ export interface SessionCookieIdentity {
 export function readSessionCookieIdentity(
   cookieHeader: string | null | undefined,
   now: number = Date.now(),
+  prefix: string = AUTH_COOKIE_PREFIX,
 ): SessionCookieIdentity | null {
-  for (const value of sessionDataCookieValues(cookieHeader)) {
+  for (const value of sessionDataCookieValues(cookieHeader, prefix)) {
     const identity = identityFromSessionData(value, now)
     if (identity) return identity
   }
   return null
 }
 
-/** Each session cache cookie value in the header, with its chunks joined. */
-function sessionDataCookieValues(cookieHeader: string | null | undefined): string[] {
+/**
+ * Each session cache cookie (`{prefix}.session_data`) value in the header. A
+ * long value is split into `{name}.0`, `{name}.1`, and so on: they are joined.
+ */
+function sessionDataCookieValues(cookieHeader: string | null | undefined, prefix: string): string[] {
   if (!cookieHeader) return []
+  const sessionData = new RegExp(`(${authCookieName(prefix, "session_data")})(?:\\.(\\d+))?$`)
   const whole = new Map<string, string>()
   const chunks = new Map<string, { index: number; value: string }[]>()
   for (const pair of cookieHeader.split(";")) {
     const separator = pair.indexOf("=")
     if (separator < 0) continue
-    const match = SESSION_DATA_COOKIE.exec(pair.slice(0, separator).trim())
+    const match = sessionData.exec(pair.slice(0, separator).trim())
     const value = pair.slice(separator + 1).trim()
     if (!match || !value) continue
     const [, name, index] = match

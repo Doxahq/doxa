@@ -1,36 +1,4 @@
-// Static content of the MCP page: starter prompts, approval defaults and the
-// tool catalog.
-
-export interface StarterPrompt {
-  name: string
-  text: string
-  desc: string
-}
-
-export const STARTER_PROMPTS: StarterPrompt[] = [
-  {
-    name: "write_guide",
-    text: "Write a quickstart guide for our API and send me the preview.",
-    desc: "Plans and writes a new guide page on a branch, then builds a preview.",
-  },
-  {
-    name: "update_from_code_change",
-    text: "Update the docs for the changes in my last pull request.",
-    desc: "Finds the pages a code change affects and updates them on a branch.",
-  },
-  {
-    name: "review_branch",
-    text: "Review my docs branch before I publish it.",
-    desc: "Checks links, MDX and style in the branch diff before a publish.",
-  },
-  {
-    name: "fix_broken_links",
-    text: "Find and fix the broken links in our docs.",
-    desc: "Finds links to missing pages and fixes them on a branch.",
-  },
-]
-
-export const TEST_PROMPT = "List my Doxa projects"
+// Static content of the MCP page: approval defaults and the tool catalog.
 
 export type ApprovalMode = "req" | "allow"
 

@@ -14,7 +14,7 @@ export function PricingCta() {
             Back to product ›
           </Link>
         </div>
-        <span className="label">Free · Pro · Enterprise · Founder's discount for early signups</span>
+        <span className="label">Free · Pro · Enterprise · Founder price for the first 100 customers</span>
       </div>
     </section>
   )

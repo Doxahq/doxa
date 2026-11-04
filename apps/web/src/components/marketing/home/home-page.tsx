@@ -9,11 +9,11 @@ import { HomeCta } from "~/components/marketing/home/home-cta"
 import { HomeHero } from "~/components/marketing/home/home-hero"
 import { HomeImagine } from "~/components/marketing/home/home-imagine"
 import { HomeOpen } from "~/components/marketing/home/home-open"
+import { HomeProductCards } from "~/components/marketing/home/home-product-cards"
 import { HomeProducts } from "~/components/marketing/home/home-products"
 import { HomeShowcase } from "~/components/marketing/home/home-showcase"
 import { HomeStatement } from "~/components/marketing/home/home-statement"
 import { HomeSync } from "~/components/marketing/home/home-sync"
-import { HomeTrio } from "~/components/marketing/home/home-trio"
 
 export function HomePage() {
   return (
@@ -26,7 +26,7 @@ export function HomePage() {
       <Hr label="02 / AGENT" />
       <HomeAgentFeature />
       <Hr />
-      <HomeTrio />
+      <HomeProductCards />
       <Hr label="03 / WHY" />
       <HomeStatement />
       <Hr />

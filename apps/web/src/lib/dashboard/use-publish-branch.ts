@@ -11,7 +11,7 @@ import type { ValidationIssue } from "@doxahq/contracts/validation"
 import { ApiRequestError, isApiValidationError } from "~/lib/api-errors"
 import { useRefreshBranchStatus } from "~/lib/dashboard/use-branch-status"
 import { getErrorMessage } from "~/lib/errors"
-import { dashboardQueryKeys } from "~/lib/queries/dashboard"
+import { dashboardQueryKeys, projectContentQueryOptions } from "~/lib/queries/dashboard"
 import { docsBranchQueryKeys } from "~/lib/queries/docs-branches"
 import { publishDocsBranchWithProgress } from "~/lib/docs-branches-api"
 
@@ -44,8 +44,16 @@ export function usePublishBranch(options: {
       setStep("live")
       setIssues([])
       setRequestError(null)
+      await queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.contentRoot(projectId) })
+      // The branch list reload moves the dashboard from an erased branch to
+      // main. Main must be current first, because the site settings read their
+      // values once when a branch opens.
+      if (result.branchErased) {
+        await queryClient
+          .fetchQuery({ ...projectContentQueryOptions(projectId, "main"), staleTime: 0 })
+          .catch(() => undefined)
+      }
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.contentRoot(projectId) }),
         queryClient.invalidateQueries({ queryKey: docsBranchQueryKeys.project(projectId) }),
         queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.project(projectId) }),
       ])

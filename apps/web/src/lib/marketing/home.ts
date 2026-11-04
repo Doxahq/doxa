@@ -24,30 +24,42 @@ export const MCP_CLIENTS = [
   { name: "Codex", delay: "4s" },
 ]
 
-export const CLI_COMMANDS = [
-  { command: "doxa generate", note: "new docs" },
-  { command: "doxa update", note: "only what changed" },
-  { command: "doxa website", note: "build the site" },
-  { command: "doxa config", note: "models & keys" },
-]
-
 export type DiagramNode = { title: string; detail: string; agent?: boolean; style: CSSProperties }
+
+/** One straight part of an arrow in the agent diagram; `dir` is the way the signal runs. */
+type AgentDiagramLeg = { dir: "down" | "up" | "right"; style: CSSProperties }
 
 /** The Doxa Agent diagram: repo → agent → preview → live docs. */
 export const AGENT_DIAGRAM = {
   gems: [
     { left: "4%", top: "72%", background: "#3d7bff" },
-    { left: "52%", top: "6%", background: "#c4a1ff", animationDelay: "-1.5s" },
-    { left: "92%", top: "56%", background: "#9cc2ff", animationDelay: "-2.6s" },
+    { left: "52%", top: "6%", background: "#c4a1ff", animationDelay: "-3s" },
+    { left: "92%", top: "56%", background: "#9cc2ff", animationDelay: "-6s" },
   ] satisfies CSSProperties[],
-  lines: [
-    { dir: "v", style: { left: "17%", top: "25%", height: "25%" }, delay: undefined },
-    { dir: "h", style: { left: "17%", top: "50%", width: "16%" }, delay: "-1.3s" },
-    { dir: "v", style: { left: "50%", top: "16%", height: "24%" }, delay: "-0.6s" },
-    { dir: "h", style: { left: "50%", top: "16%", width: "16%" }, delay: "-1.9s" },
-    { dir: "h", style: { left: "67%", top: "56%", width: "16%" }, delay: "-0.9s" },
-    { dir: "v", style: { left: "83%", top: "56%", height: "22%" }, delay: "-2.2s" },
-  ] satisfies { dir: "v" | "h"; style: CSSProperties; delay?: string }[],
+  // One signal runs the arrows in story order. `start` is when it reaches each arrow, in seconds.
+  arrows: [
+    {
+      start: 0,
+      legs: [
+        { dir: "down", style: { left: "17%", top: "25%", height: "25%" } },
+        { dir: "right", style: { left: "17%", top: "50%", width: "16%" } },
+      ],
+    },
+    {
+      start: 5,
+      legs: [
+        { dir: "up", style: { left: "50%", top: "16%", height: "24%" } },
+        { dir: "right", style: { left: "50%", top: "16%", width: "16%" } },
+      ],
+    },
+    {
+      start: 10,
+      legs: [
+        { dir: "right", style: { left: "67%", top: "56%", width: "16%" } },
+        { dir: "down", style: { left: "83%", top: "56%", height: "22%" } },
+      ],
+    },
+  ] satisfies { start: number; legs: [AgentDiagramLeg, AgentDiagramLeg] }[],
   nodes: [
     { title: "YOUR REPO", detail: "main · src/api", style: { left: "0", top: "4%", width: "34%" } },
     { title: "DOXA AGENT", detail: "reading diff…", agent: true, style: { left: "33%", top: "40%", width: "34%" } },
@@ -62,11 +74,6 @@ export const AGENT_DIAGRAM = {
     { label: "WAITS FOR YOU", left: "56%", top: "92%" },
   ],
 }
-
-export const SAMPLE_CODE = `const charge = await acme.charges.create({
-  amount: 4200,
-  currency: "usd",
-})`
 
 /** The diff in the "Code changes. Docs follow." pane. */
 export const SAMPLE_DIFF = [

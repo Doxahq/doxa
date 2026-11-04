@@ -152,7 +152,7 @@ function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`
 }
 
-function hostOf(url: string | null | undefined): string | null {
+export function hostOf(url: string | null | undefined): string | null {
   if (!url) return null
   try {
     return new URL(url).host

@@ -1,0 +1,74 @@
+---
+title: "Introducing Doxabot"
+description: "Connect a GitHub repository and get a docs site with guides and an API reference. After that, you approve every update."
+date: "2026-10-20"
+author: "Doxa Team"
+draft: true
+---
+
+Doxabot is an AI agent that documents your code. Connect a GitHub repository, and you get a docs site with guides and an API reference. When your code changes, Doxabot prepares an update. You decide what goes live.
+
+Doxabot is in beta. Today it works with private GitHub repositories.
+
+## Connect your repository
+
+Install the Doxa GitHub App on the repositories you choose. GitHub shows you the permissions during installation:
+
+- **Contents: read.** The app reads your code.
+- **Pull requests: read.** The app sees pull request changes.
+- **Metadata: read.** The app identifies the repository.
+- **Checks: write.** The app writes one check run with the preview link.
+
+That check run is the only write access. The app never pushes a commit. Doxabot writes its changes to branches inside Doxa.
+
+We do not use your code or your docs to train AI models.
+
+## Get your first docs site
+
+Doxabot maps the codebase, plans the sections and writes the pages. It runs on Anthropic's Claude models. Claude Sonnet plans the site, and Claude Haiku writes the pages.
+
+You get:
+
+- **Guides.** A quickstart, guides and concept pages, planned from how your project works.
+- **An API reference.** One page for each endpoint, built from your OpenAPI 3 or Swagger 2 file.
+- **An SDK reference.** A section for the functions and types that your SDK exports.
+- **Navigation.** Sections, groups and page order, ready to browse on day one.
+- **An API playground.** Doxabot turns it on when your API can use it.
+
+No spec file? Doxabot finds the endpoints in your route handlers. It reads frameworks such as Express, Hono, NestJS, Spring, FastAPI, Django, Gin, ASP.NET and Laravel.
+
+The first generation publishes to your new, empty docs site. You can use your Doxa site or your own domain. Search, AI chat and `llms.txt` are built in. All pages are plain MDX that you can edit.
+
+## Teach it how your team writes
+
+Open a project in the dashboard and choose **Doxabot** in the sidebar. Every setting that controls it is on that page.
+
+Set your instructions once, and Doxabot follows them on every run:
+
+- The audience, the tone and your terms.
+- The page types, and up to 10 rules.
+- Up to six languages for the code samples.
+- The folders that Doxabot must never document.
+
+Every change is kept as a version. You can also keep your instructions in `.doxa/instructions.md`. Doxabot reads this file from your default branch.
+
+Doxabot also reads your agent files as context, such as `AGENTS.md`, `CLAUDE.md` and `.cursorrules`.
+
+## Review every update
+
+After the first site, no update goes live without you. This is the flow:
+
+- **You open a pull request.** Doxabot rewrites the pages that your change touches. A GitHub check links to a live preview of the docs.
+- **You merge.** A docs update starts on the schedule you pick: after every merge, after a quiet period, or only when you start it.
+- **Doxabot finishes.** The result waits in a review. Each page lists the source files it was written from.
+- **You decide.** Accept or reject each page, then publish. If you reject a page, the published version stays.
+
+Your live site does not change until you publish.
+
+## Start with one repository
+
+Connect one repository and read what Doxabot writes. Then open a small pull request and look at the preview.
+
+- See how it works on the [Doxabot page](/agent).
+- Look at the [demo docs](https://docs.doxa.so).
+- Compare the plans on the [pricing page](/pricing).

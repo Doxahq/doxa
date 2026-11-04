@@ -61,6 +61,7 @@ describe("GET /sign-in/:provider", () => {
     expect(await request.json()).toEqual({
       provider: "google",
       callbackURL: "https://doxa.so/invite/tok?a=1",
+      errorCallbackURL: "https://doxa.so/login?redirect=%2Finvite%2Ftok%3Fa%3D1",
     });
   });
 

@@ -6,6 +6,7 @@ import {
   domainStatusChangedTemplate,
   generationFinishedTemplate,
 } from "./notifications";
+import { resetPasswordTemplate, verifyEmailTemplate } from "./account";
 import { teamInviteTemplate } from "./team-invite";
 
 export {
@@ -20,6 +21,7 @@ export {
   domainStatusChangedTemplate,
   generationFinishedTemplate,
 } from "./notifications";
+export { resetPasswordTemplate, verifyEmailTemplate } from "./account";
 export { teamInviteTemplate } from "./team-invite";
 
 /** One template for each email kind. The compiler fails when a kind has no template. */
@@ -29,6 +31,8 @@ export const EMAIL_TEMPLATES = {
   "approval-decided": approvalDecidedTemplate,
   "generation-finished": generationFinishedTemplate,
   "domain-status-changed": domainStatusChangedTemplate,
+  "verify-email": verifyEmailTemplate,
+  "reset-password": resetPasswordTemplate,
 } as const satisfies Record<EmailKindName, EmailTemplate>;
 
 /** Finds the template for a kind name read from storage, such as an outbox row. */

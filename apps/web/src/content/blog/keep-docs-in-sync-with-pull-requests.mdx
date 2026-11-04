@@ -1,0 +1,70 @@
+---
+title: "How Doxabot keeps docs in sync with pull requests"
+description: "A docs preview on each pull request, rewrites only where the code changed, a merge schedule you pick, and a review page by page."
+date: "2026-10-27"
+author: "Doxa Team"
+cover: "/marketing/blog/keep-docs-in-sync-engraving.jpg"
+---
+
+With Doxabot, you see the docs change in the pull request that changes the code. After the merge, the update waits for you. You choose each page that goes live.
+
+Doxabot is in beta and works with private GitHub repositories today. Here is what happens at each step.
+
+## Get a preview on each pull request
+
+Open a pull request to your default branch. Doxabot rewrites the affected pages and builds a preview of the docs for that branch. A GitHub check named `Doxa documentation preview` links to it.
+
+- **New commits refresh the preview.** A newer push replaces the earlier preview.
+- **Draft pull requests wait.** The preview starts when the pull request is ready for review.
+- **The check reports the work.** It shows the number of changed sources, rewritten pages and reused pages.
+- **You control it.** Turn previews on or off on the Doxabot page of your project.
+
+The preview changes nothing on your live site. Its generation page offers **View changes**, a read-only list of the changed pages with their diffs. Nobody accepts or rejects pages at this step.
+
+## Rewrite only the pages a change touches
+
+A preview writes only the pages that the code change affects. Doxabot reuses the other pages, so unaffected pages stay as they are published.
+
+Some changes reach further:
+
+- **Routes, schemas or a spec file.** Doxabot keeps the published structure and rebuilds the REST and SDK reference sections.
+- **A new package, or a removed one.** Doxabot plans the structure again, anchored to the published structure.
+- **A changed docs configuration.** Doxabot also plans the structure again.
+
+Doxabot also starts from your live site. If a person renamed, moved or deleted a page, a run does not undo that change.
+
+## Pick the merge schedule
+
+When a pull request merges into your default branch, a docs update can start. You pick when:
+
+- **After a quiet period.** This is the default. One run starts when no pull request merged for 30 minutes. You can choose 15, 30 or 60 minutes, or 6 hours.
+- **After every merge.** A run starts after each merge.
+- **Only when you start it.** The merge appears on the project overview, and you start the update.
+
+Every run goes to a review, so no schedule changes your live site by itself. Direct pushes to the default branch do not start a run.
+
+## Review page by page
+
+The review lists each page that the run added, modified or removed. Each page shows the source files it was written from. Every page starts as accepted, so you can publish a run that you trust as it is.
+
+If you reject a change, this happens:
+
+- **Modified page.** The published body and title stay.
+- **Added page.** The page is not added.
+- **Removed page.** The published page stays in its section and group.
+
+A site has one open review at a time. If a newer run finishes first, it moves the open review to itself. A decision carries over when the page has the same kind of change, and your edits stay.
+
+Your live site changes only when you publish the review. You can also discard the review.
+
+## Keep the pages you own
+
+Editing a page does not lock it. To protect a page, open **Page settings** and choose **Lock from generations**. Generations then keep the page as you published it.
+
+If the code behind a locked page changes, the review flags that page. You can then unlock it.
+
+When a review replaces hand-written content, Doxa also keeps a backup branch with the previous version.
+
+## See it on your code
+
+Connect a repository and open a small pull request. Read more on the [Doxabot page](/agent), or see the [pricing page](/pricing).

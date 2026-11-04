@@ -5,6 +5,7 @@ import {
   domainStatusChangedEmail,
   generationFinishedEmail,
 } from "./notifications";
+import { resetPasswordEmail, verifyEmailEmail } from "./account";
 import { teamInviteEmail } from "./team-invite";
 
 export {
@@ -29,6 +30,12 @@ export {
   type DomainStatusChangedEmailProps,
   type GenerationFinishedEmailProps,
 } from "./notifications";
+export {
+  resetPasswordEmail,
+  verifyEmailEmail,
+  type ResetPasswordEmailProps,
+  type VerifyEmailEmailProps,
+} from "./account";
 export { TEAM_INVITE_ROLES, teamInviteEmail, type TeamInviteEmailProps, type TeamInviteRole } from "./team-invite";
 
 /** Every kind of email that Doxa sends. Add a new kind here and its template in `templates/`. */
@@ -38,6 +45,8 @@ export const EMAIL_KINDS = [
   approvalDecidedEmail,
   generationFinishedEmail,
   domainStatusChangedEmail,
+  verifyEmailEmail,
+  resetPasswordEmail,
 ] as const satisfies readonly EmailKind[];
 
 export type EmailKindName = (typeof EMAIL_KINDS)[number]["name"];

@@ -107,6 +107,8 @@ describe("sending streams", () => {
       ["approval-decided", "notifications"],
       ["generation-finished", "notifications"],
       ["domain-status-changed", "notifications"],
+      ["verify-email", "transactional"],
+      ["reset-password", "transactional"],
     ]);
   });
 });

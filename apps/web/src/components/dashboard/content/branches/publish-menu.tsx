@@ -25,9 +25,9 @@ import {
   PanelHeader,
   pageTitle,
   plural,
+  type PublishContentState,
 } from "~/components/dashboard/content/branches/publish-menu-parts"
 import type { useBranchPreview } from "~/lib/dashboard/use-branch-preview"
-import type { useProjectContent } from "~/lib/dashboard/use-project-content"
 import {
   PUBLISH_STEPS,
   usePublishBranch,
@@ -37,7 +37,6 @@ import {
 import { requesterLabel } from "~/lib/dashboard/approval-request-model"
 import { cn } from "~/lib/utils"
 
-type ContentState = ReturnType<typeof useProjectContent>
 type BranchPreview = ReturnType<typeof useBranchPreview>
 type PublishState = ReturnType<typeof usePublishBranch>
 
@@ -49,7 +48,7 @@ export type PublishMenuView = "review" | "preview" | "approval"
 
 export interface PublishMenuProps {
   projectId: string
-  state: ContentState
+  state: PublishContentState
   branch: BranchRef
   namedBranch: NamedDocsBranch | null
   branchName: string

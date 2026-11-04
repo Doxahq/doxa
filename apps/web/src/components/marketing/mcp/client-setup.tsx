@@ -1,20 +1,18 @@
-import { ConnectStep } from "~/components/marketing/mcp/connect-step"
-import { CopyIcon, InfoIcon } from "~/components/marketing/mcp/copy-icon"
+import { CopyIcon } from "~/components/marketing/mcp/copy-icon"
 import { SnippetLines } from "~/components/mcp/snippet-lines"
-import type { McpClient } from "~/lib/mcp/clients"
+import { ANY_CLIENT, type McpClient } from "~/lib/mcp/clients"
 import type { CopyState } from "~/lib/mcp/copied"
 
-/** Step 02: the setup snippet of the active client. */
-export function StepAdd({ active, copyState }: { active: McpClient; copyState: CopyState }) {
+/** The setup of the chosen client: one short instruction and its snippet. */
+export function ClientSetup({ active, copyState }: { active: McpClient; copyState: CopyState }) {
   const { copied, copy } = copyState
   return (
-    <ConnectStep n="02" kicker="Add Doxa" title={`Add Doxa to ${active.label}`} lead={active.add}>
+    <div className="cxset__panel">
+      <h3>Add Doxa to {active.id === ANY_CLIENT.id ? "your client" : active.label}</h3>
+      <p>{active.add}</p>
       <div className="cxsnip">
         <div className="cxsnip__bar">
-          <span className="cxsnip__file">
-            <i />
-            {active.file}
-          </span>
+          <span className="cxsnip__file">{active.file}</span>
           <button
             className="btn btn--light btn--sm"
             type="button"
@@ -28,11 +26,8 @@ export function StepAdd({ active, copyState }: { active: McpClient; copyState: C
         <pre>
           <SnippetLines lines={active.snippet.lines} />
         </pre>
-        <div className="cxsnip__foot">
-          <InfoIcon />
-          <span>{active.where}</span>
-        </div>
       </div>
-    </ConnectStep>
+      <small>{active.where}</small>
+    </div>
   )
 }

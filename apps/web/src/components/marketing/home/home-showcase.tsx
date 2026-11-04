@@ -1,7 +1,15 @@
-import { SAMPLE_CODE } from "~/lib/marketing/home"
+import { useEffect, useRef } from "react"
 import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 
-/** "A docs site your team does not maintain." with a sample docs window. */
+const DOCS_DEMO_URL = `${DOCS_URL}/overview/?demo=true`
+
+// The docs site shows its sidebar from 1024px. The iframe renders at least this
+// wide and scales down to fit the window, so visitors see the desktop layout.
+const DESKTOP_WIDTH = 1100
+const DESKTOP_MIN_BOX = 760
+const MAX_SCALE = 0.9
+
+/** "A docs site your team does not maintain." with a live demo docs site. */
 export function HomeShowcase() {
   return (
     <section className="col" aria-label="The platform">
@@ -40,57 +48,28 @@ export function HomeShowcase() {
   )
 }
 
+/** Picks the iframe scale for a window width: desktop layout on wide boxes, mobile layout on narrow ones. */
+function scaleFor(width: number) {
+  if (width < DESKTOP_MIN_BOX) return MAX_SCALE
+  return Math.min(MAX_SCALE, width / DESKTOP_WIDTH)
+}
+
 function DocsWindow() {
+  const windowRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = windowRef.current
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => {
+      el.style.setProperty("--dwin-scale", String(scaleFor(entry.contentRect.width)))
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   return (
-    <div className="dwin">
-      <div className="dwin__bar">
-        <div className="dwin__tabs">
-          <strong>acme</strong>
-          <span className="on">Documentation</span>
-          <span>API Reference</span>
-          <span>Changelog</span>
-        </div>
-        <div className="search">
-          Search or ask AI… <kbd>⌘K</kbd>
-        </div>
-      </div>
-      <div className="dwin__body">
-        <aside className="sidebar">
-          <span className="group">Get started</span>
-          <a className="on" href="#">
-            Overview
-          </a>
-          <a href="#">Quickstart</a>
-          <a href="#">Authentication</a>
-          <span className="group">Payments</span>
-          <a href="#">Charges</a>
-          <a href="#">Refunds</a>
-          <a href="#">Webhooks</a>
-        </aside>
-        <article className="doc">
-          <div className="doc__meta">
-            Get started{" "}
-            <span className="badge">
-              <span className="dot" />
-              UPDATED BY AGENT · PR #142
-            </span>
-          </div>
-          <h3>Overview</h3>
-          <p>
-            The Acme Payments API lets you create charges, issue refunds and listen for events. Every request uses a
-            secret key from your dashboard.
-          </p>
-          <div className="code">{SAMPLE_CODE}</div>
-          <div className="doc__cards">
-            <a href="#">
-              <span>Guide</span>Accept your first payment
-            </a>
-            <a href="#">
-              <span>Reference</span>Refunds API
-            </a>
-          </div>
-        </article>
-      </div>
+    <div className="dwin" ref={windowRef}>
+      <iframe src={DOCS_DEMO_URL} title="Doxa documentation demo" loading="eager" />
     </div>
   )
 }

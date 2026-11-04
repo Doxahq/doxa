@@ -18,6 +18,7 @@ import { createJobRoutes } from "./routes/jobs";
 import { createProjectRoutes } from "./routes/projects";
 import { createSignInRoutes } from "./routes/sign-in";
 import { createTeamInviteRoutes, createTeamRoutes } from "./routes/teams";
+import { OutboxAuthMailer } from "./services/auth/outbox-auth-mailer";
 import { oauthProviderDispatch } from "./services/oauth/provider-dispatch";
 
 /**
@@ -37,13 +38,19 @@ export function createApiApp() {
 
   app.get("/health", () => json({ ok: true, service: "doxa-api" }));
 
+  // Only these routes get the mailer: they serve email and password sign-up,
+  // verification and password reset.
   app.all("/api/auth", (context) => {
-    const auth = createAuth(context.env, context.req.raw, context.executionCtx);
+    const auth = createAuth(context.env, context.req.raw, context.executionCtx, {
+      mailer: OutboxAuthMailer.fromEnv(context.env),
+    });
     return auth.handler(context.req.raw);
   });
 
   app.all("/api/auth/*", (context) => {
-    const auth = createAuth(context.env, context.req.raw, context.executionCtx);
+    const auth = createAuth(context.env, context.req.raw, context.executionCtx, {
+      mailer: OutboxAuthMailer.fromEnv(context.env),
+    });
     return auth.handler(context.req.raw);
   });
 

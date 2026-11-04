@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router"
 
+import { getMarketingViewer } from "~/server/marketing-viewer"
 import marketingCss from "~/styles/marketing/index.css?url"
 
 const FONTS_URL =
@@ -12,6 +13,12 @@ export const Route = createFileRoute("/_marketing")({
       { rel: "stylesheet", href: marketingCss },
     ],
   }),
+  // The server render reads the cookie once. Moving between marketing pages
+  // keeps the result; leaving the marketing pages drops it, so a sign-out in
+  // the dashboard shows on the next visit.
+  loader: () => getMarketingViewer(),
+  staleTime: Number.POSITIVE_INFINITY,
+  gcTime: 0,
   component: MarketingLayout,
 })
 

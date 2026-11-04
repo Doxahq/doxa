@@ -23,6 +23,22 @@
 
 /* ---------- Nav ---------- */
 .pg .nav { position: relative; z-index: 7; display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 64px; }
+
+/* The Resources dropdown of the top bar, after baseten.co: the open trigger fills, and each dashed column is one category. The panel's top padding keeps the hover alive between the trigger and the columns. */
+.pg .navmenu { position: relative; }
+.pg .navmenu__trigger { display: inline-flex; align-items: center; gap: 4px; margin: -6px -10px; padding: 6px 10px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease; }
+.pg .navmenu__trigger svg { color: #8a8a8f; transition: transform 0.15s ease, color 0.15s ease; }
+.pg .navmenu__trigger.on { color: #ffffff; }
+.pg .navmenu__panel { position: absolute; top: 100%; left: -10px; z-index: 20; padding-top: 16px; opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s; }
+.pg .navmenu:hover .navmenu__panel, .pg .navmenu:has(:focus-visible) .navmenu__panel { opacity: 1; visibility: visible; transform: none; }
+.pg .navmenu:hover .navmenu__trigger, .pg .navmenu:has(:focus-visible) .navmenu__trigger { background: var(--accent); color: #ffffff; }
+.pg .navmenu:hover .navmenu__trigger svg, .pg .navmenu:has(:focus-visible) .navmenu__trigger svg { color: #ffffff; transform: rotate(180deg); }
+.pg .navmenu__columns { display: grid; grid-template-columns: repeat(2, 200px); border: 1px dashed rgba(255, 255, 255, 0.18); background: #0a0a0a; box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.75); }
+.pg .navmenu__column + .navmenu__column { border-left: 1px dashed rgba(255, 255, 255, 0.18); }
+.pg .navmenu__title { display: block; padding: 12px 16px; border-bottom: 1px dashed rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.05); font: 400 12px/18px var(--mono); color: #a1a1a1; }
+.pg .navmenu__column ul { margin: 0; padding: 6px 0; list-style: none; }
+.pg .navmenu__column a { display: block; padding: 10px 16px; color: #ededed; white-space: nowrap; transition: background-color 0.15s ease, color 0.15s ease; }
+.pg .navmenu__column a:hover, .pg .navmenu__column a:focus-visible, .pg .navmenu__column a.on { background: rgba(255, 255, 255, 0.07); color: #ffffff; }
 .pg .brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: 0.22em; }
 
 /* ---------- Box bands ---------- */
@@ -50,6 +66,7 @@
 .pg .foot__col .label { margin-bottom: 6px; }
 .pg .foot__col a { font-size: 14px; color: #c7c7c7; width: fit-content; }
 .pg .foot__base { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 22px 32px 26px; }
+.pg .foot__credit a:hover { color: var(--text); }
 .pg .status { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border: 1px solid rgba(127, 214, 160, 0.5); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: #7fd6a0; }
 .pg .status i { width: 6px; height: 6px; background: #7fd6a0; animation: mk-blink 1.6s steps(1) infinite; }
 .pg .foot__mark { position: relative; height: clamp(120px, 16vw, 250px); overflow: hidden; }
@@ -62,7 +79,9 @@
   .pg .foot__base { flex-direction: column; align-items: flex-start; padding: 20px 16px; }
 }
 
-@keyframes mk-ab-sync { 0%, 8% { background: #0b1020; box-shadow: none; } 18%, 82% { background: var(--accent); box-shadow: 0 0 12px rgba(61, 123, 255, 0.7); } 100% { background: #0b1020; box-shadow: none; } }
+@property --ab-head { syntax: "<number>"; inherits: true; initial-value: 8; }
+@property --ab-on { syntax: "<number>"; inherits: true; initial-value: 1; }
+@keyframes mk-ab-head { 0%, 5% { --ab-head: 1; } 10%, 15% { --ab-head: 2; } 20%, 25% { --ab-head: 3; } 30%, 35% { --ab-head: 4; } 40%, 45% { --ab-head: 5; } 50%, 55% { --ab-head: 6; } 60%, 65% { --ab-head: 7; } 70%, 90% { --ab-head: 8; --ab-on: 1; } 95%, 100% { --ab-head: 8; --ab-on: 0; } }
 @keyframes mk-back { 0% { left: calc(100% - 5px); opacity: 0; } 10%, 88% { opacity: 1; } 100% { left: 0; opacity: 0; } }
 @keyframes mk-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 @keyframes mk-bob { 0%, 100% { transform: rotate(45deg) translateY(0); } 50% { transform: rotate(45deg) translateY(-6px); } }

@@ -39,8 +39,16 @@ export function createSignInRoutes(authHandler: AuthRequestHandler = defaultAuth
 
     const redirectPath = safeRedirectPath(context.req.query("redirect"));
     const callbackURL = new URL(redirectPath, webOrigin).href;
+    // A provider error (for example an email that belongs to an unverified
+    // password account) returns to the login page, which shows it.
+    const errorPage = new URL("/login", webOrigin);
+    errorPage.searchParams.set("redirect", redirectPath);
+    const errorCallbackURL = errorPage.href;
 
-    const response = await authHandler(context, socialSignInRequest(request, webOrigin, { provider, callbackURL }))
+    const response = await authHandler(
+      context,
+      socialSignInRequest(request, webOrigin, { provider, callbackURL, errorCallbackURL }),
+    )
       .catch(() => null);
     const providerUrl = response?.ok ? await readProviderUrl(response) : null;
 
@@ -89,7 +97,7 @@ function safeRedirectPath(value: string | undefined): string {
 function socialSignInRequest(
   request: Request,
   webOrigin: string,
-  body: { provider: string; callbackURL: string },
+  body: { provider: string; callbackURL: string; errorCallbackURL: string },
 ): Request {
   const headers = new Headers(request.headers);
   headers.set("content-type", "application/json");

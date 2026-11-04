@@ -13,7 +13,7 @@
  *
  * On-disk layout (default-section content):
  *   - Canonical: `src/contents/docs/default/<page>/index.mdx` (the layout
- *     written by the Doxa CLI's docs generator).
+ *     written by the Doxa agent's docs generator).
  *   - Legacy fallback: `src/contents/docs/<page>/index.mdx` (older sites
  *     and hand-authored content). Both layouts resolve to the same URL —
  *     the content adapters (vite / github) and the content-build script

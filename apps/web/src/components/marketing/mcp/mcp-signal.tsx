@@ -1,23 +1,40 @@
 import type { CSSProperties } from "react"
 
+import { MCP_ART } from "~/lib/marketing/mcp-art"
+
 const SESSIONS = [
   { client: "Claude Code", tool: "create_branch", arg: "agent-auth-v2" },
   { client: "Cursor", tool: "write_page", arg: "/guides/auth" },
   { client: "Codex", tool: "publish_branch", arg: "→ approval_required", wait: true },
 ]
 
-// Where the signal leaves the dish, as a share of the image.
-const FEED = { "--feed-x": "57.9%", "--feed-y": "35.5%" } as CSSProperties
+// Where the signal leaves the dish, as a share of the image. The blurred
+// placeholder fills the box from the first paint, so the animation never runs
+// over an empty box.
+const ART_STYLE = {
+  "--feed-x": "57.9%",
+  "--feed-y": "35.5%",
+  "--art-placeholder": `url("${MCP_ART.placeholder}")`,
+} as CSSProperties
 
 /** The antenna art with live agent sessions over it. */
 export function McpSignal() {
   return (
     <section className="col" aria-label="How agents reach Doxa">
-      <div className="art" style={FEED}>
-        <img
-          src="/marketing/mcp-dish.webp"
-          alt="A giant deep-space antenna dish, lit ice-white, tilts toward a starry blue night sky. Its base breaks into pixels."
-        />
+      <div className="art" style={ART_STYLE}>
+        <picture>
+          <source type="image/avif" srcSet={MCP_ART.avif} sizes={MCP_ART.sizes} />
+          <img
+            src={MCP_ART.fallback}
+            srcSet={MCP_ART.webp}
+            sizes={MCP_ART.sizes}
+            width={MCP_ART.width}
+            height={MCP_ART.height}
+            fetchPriority="high"
+            decoding="async"
+            alt="A giant deep-space antenna dish, lit ice-white, tilts toward a starry blue night sky. Its base breaks into pixels."
+          />
+        </picture>
         <div className="art__fx" aria-hidden="true">
           <span className="ring" />
           <span className="ring" />

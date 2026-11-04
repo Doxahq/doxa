@@ -34,7 +34,7 @@ This renderer is evergreen: one deployed build serves every published customer s
 
 ## IMPORTANT: Keep the Component Playbook in Sync
 
-The file `agent/component-playbook.md` is the authoritative reference that the Doxa CLI agent reads at runtime to understand what MDX components are available, how to use them, and when to apply them for documentation generation.
+The file `agent/component-playbook.md` is the authoritative reference that the Doxa agent reads at runtime to understand what MDX components are available, how to use them, and when to apply them for documentation generation.
 
 **YOU MUST update `agent/component-playbook.md` whenever you:**
 

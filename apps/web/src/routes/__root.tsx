@@ -18,11 +18,15 @@ export interface RouterContext {
 }
 
 export const Route = createRootRouteWithContext<RouterContext>()({
-  head: () => ({
+  head: ({ matches }) => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Doxa — Documentation that Updates Itself" },
+      {
+        title: matches.some((match) => match.globalNotFound || match.status === "notFound")
+          ? "Page not found — Doxa"
+          : "Doxa — Documentation that Updates Itself",
+      },
       {
         name: "description",
         content:

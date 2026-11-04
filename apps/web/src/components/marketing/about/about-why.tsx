@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react"
+
 type Track = { key: string; value: string; className?: string; stale?: boolean }
 
 const TRACKS: Track[] = [
@@ -37,7 +39,11 @@ export function AboutWhy() {
               <span className="ab-track__line">
                 {/* The stale docs line has one commit, then seven missed ones. */}
                 {Array.from({ length: 8 }, (_, i) => (
-                  <i key={i} className={track.stale && i > 0 ? "x" : undefined} />
+                  <i
+                    key={i}
+                    className={track.stale && i > 0 ? "x" : undefined}
+                    style={{ "--i": i + 1 } as CSSProperties}
+                  />
                 ))}
               </span>
               <span className="ab-track__v">{track.value}</span>

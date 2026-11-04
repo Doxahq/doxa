@@ -1,4 +1,5 @@
 import { Hr } from "~/components/marketing/guides"
+import { CONTACT_EMAIL, CONTACT_URL } from "~/lib/marketing/links"
 
 /** Section 05: questions about the MCP server. */
 export function McpFaq() {
@@ -13,7 +14,11 @@ export function McpFaq() {
             </span>
             <h2 className="display">Questions</h2>
             <p>
-              Something not covered here? Write to <span className="ph">[YOUR CONTACT EMAIL]</span>.
+              Something not covered here? Write to{" "}
+              <a className="faq__mail" href={CONTACT_URL}>
+                {CONTACT_EMAIL}
+              </a>
+              .
             </p>
           </div>
           <div className="faq__list">

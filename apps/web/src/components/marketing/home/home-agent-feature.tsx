@@ -44,15 +44,24 @@ function AgentDiagram() {
       {AGENT_DIAGRAM.gems.map((style) => (
         <span className="gem" key={style.left} style={style} />
       ))}
-      {AGENT_DIAGRAM.lines.map((line) => (
-        <div className={`ln ln--${line.dir}`} key={`${line.style.left}-${line.style.top}-${line.dir}`} style={line.style}>
-          <span className="pulse" style={line.delay ? { animationDelay: line.delay } : undefined} />
-        </div>
-      ))}
+      {AGENT_DIAGRAM.arrows.flatMap((arrow) =>
+        arrow.legs.map((leg, i) => (
+          <div
+            className={`ln ln--${leg.dir === "right" ? "h" : "v"}`}
+            key={`${leg.style.left}-${leg.style.top}-${leg.dir}`}
+            style={leg.style}
+          >
+            <span
+              className={`pulse pulse--${leg.dir} pulse--${i === 0 ? "in" : "out"}`}
+              style={{ animationDelay: legDelay(arrow.start, i) }}
+            />
+          </div>
+        )),
+      )}
       {AGENT_DIAGRAM.nodes.map((node) => (
         <div className={node.agent ? "node node--agent" : "node"} key={node.title} style={node.style}>
           <strong>
-            {node.agent ? <span className="dot blink" /> : null}
+            {node.agent ? <span className="dot breathe" /> : null}
             {node.title}
           </strong>
           <span>{node.detail}</span>
@@ -65,4 +74,14 @@ function AgentDiagram() {
       ))}
     </div>
   )
+}
+
+// Match the signal keyframes in home.css: a 15s cycle with 2s legs.
+const SIGNAL_CYCLE_S = 15
+const LEG_S = 2
+
+/** Animation delay that puts leg `index` of an arrow at its start time. Never positive, so no leg waits frozen in place. */
+function legDelay(arrowStart: number, index: number) {
+  const start = arrowStart + index * LEG_S
+  return start === 0 ? "0s" : `${start - SIGNAL_CYCLE_S}s`
 }

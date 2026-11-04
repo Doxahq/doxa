@@ -11,6 +11,7 @@ import {
   syncGitHubAccountIdentity,
   type GitHubAuthAccount,
 } from "./github-identity";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "./password-policy";
 
 export interface AuthEnv extends DbEnv {
   AUTH_KV?: KVNamespace;
@@ -30,7 +31,37 @@ type CfRequest = Request & { cf?: IncomingRequestCfProperties };
 
 const SESSION_COOKIE_CACHE_MAX_AGE_SECONDS = 5 * 60;
 
-export function createAuth(env: AuthEnv, request?: Request, ctx?: ExecutionContext) {
+export const EMAIL_VERIFICATION_EXPIRES_IN_SECONDS = 24 * 60 * 60;
+export const RESET_PASSWORD_EXPIRES_IN_SECONDS = 60 * 60;
+
+/** A link email for one recipient. `url` is the Better Auth link with its token. */
+export interface AuthEmail {
+  readonly userId: string;
+  readonly email: string;
+  readonly url: string;
+}
+
+/**
+ * Sends the account emails of email and password sign-in. The API passes one
+ * that queues them in the email outbox. Without it, nobody can sign up with a
+ * password, because the account could never be verified.
+ */
+export interface AuthMailer {
+  sendVerificationEmail(email: AuthEmail): Promise<void>;
+  sendResetPasswordEmail(email: AuthEmail): Promise<void>;
+}
+
+export interface CreateAuthOptions {
+  readonly mailer?: AuthMailer;
+}
+
+export function createAuth(
+  env: AuthEnv,
+  request?: Request,
+  ctx?: ExecutionContext,
+  options: CreateAuthOptions = {},
+) {
+  const { mailer } = options;
   const db = createDb(env);
   const cf = (request as CfRequest | undefined)?.cf ?? {};
   const githubIdentityStore = createGitHubIdentityStore(db);
@@ -64,6 +95,22 @@ export function createAuth(env: AuthEnv, request?: Request, ctx?: ExecutionConte
               window: 60,
               max: 30,
             },
+            "/sign-in/email": {
+              window: 60,
+              max: 10,
+            },
+            "/sign-up/email": {
+              window: 60,
+              max: 5,
+            },
+            "/request-password-reset": {
+              window: 60,
+              max: 5,
+            },
+            "/send-verification-email": {
+              window: 60,
+              max: 5,
+            },
           },
         },
       },
@@ -72,7 +119,30 @@ export function createAuth(env: AuthEnv, request?: Request, ctx?: ExecutionConte
       provider: "pg",
     }),
     emailAndPassword: {
-      enabled: false,
+      enabled: Boolean(mailer),
+      requireEmailVerification: true,
+      minPasswordLength: MIN_PASSWORD_LENGTH,
+      maxPasswordLength: MAX_PASSWORD_LENGTH,
+      resetPasswordTokenExpiresIn: RESET_PASSWORD_EXPIRES_IN_SECONDS,
+      revokeSessionsOnPasswordReset: true,
+      ...(mailer
+        ? {
+            sendResetPassword: ({ user, url }) =>
+              mailer.sendResetPasswordEmail({ userId: user.id, email: user.email, url }),
+          }
+        : {}),
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      sendOnSignIn: true,
+      autoSignInAfterVerification: true,
+      expiresIn: EMAIL_VERIFICATION_EXPIRES_IN_SECONDS,
+      ...(mailer
+        ? {
+            sendVerificationEmail: ({ user, url }) =>
+              mailer.sendVerificationEmail({ userId: user.id, email: user.email, url }),
+          }
+        : {}),
     },
     session: {
       deferSessionRefresh: true,

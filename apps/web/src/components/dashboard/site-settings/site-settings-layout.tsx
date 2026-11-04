@@ -23,6 +23,7 @@ import {
   type SiteSettingsSection,
 } from "~/components/dashboard/shell/site-settings-sidebar-view"
 import { MoreMenu, MoreMenuLabel, SiteMenuItems, TopBar } from "~/components/dashboard/shell/top-bar"
+import { SiteSettingsPublishMenu } from "~/components/dashboard/site-settings/site-settings-publish-menu"
 import { SiteSettingsSaveStatus } from "~/components/dashboard/site-settings/site-settings-save-status"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
@@ -155,7 +156,8 @@ function SiteSettingsWorkspace({
 }) {
   const navigate = useNavigate()
   const state = useSiteSettings({ projectId, branch, overview, initialServerIssues: NO_SERVER_ISSUES })
-  const readOnly = !useProjectCapabilities(projectId).can("site.write")
+  const capabilities = useProjectCapabilities(projectId)
+  const readOnly = !capabilities.can("site.write")
   const [pendingFocus, setPendingFocus] = useState<string | null>(null)
   const [reveal, setReveal] = useState<JsonRevealRequest | null>(null)
   const [isConfirmingReset, setIsConfirmingReset] = useState(false)
@@ -244,18 +246,23 @@ function SiteSettingsWorkspace({
           crumbs={crumbs}
           status={<SiteSettingsSaveStatus status={state.status} className="truncate text-[13px] max-[820px]:hidden" />}
           actions={
-            readOnly ? null : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsConfirmingReset(true)}
-                disabled={!state.hasWorkingConfig}
-                title={state.hasWorkingConfig ? undefined : "The settings match the published version."}
-              >
-                Reset to published
-              </Button>
-            )
+            <>
+              {readOnly ? null : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsConfirmingReset(true)}
+                  disabled={!state.hasWorkingConfig}
+                  title={state.hasWorkingConfig ? undefined : "The settings match the published version."}
+                >
+                  Reset to published
+                </Button>
+              )}
+              {capabilities.can("docs.publish") ? (
+                <SiteSettingsPublishMenu projectId={projectId} overview={overview} state={state} />
+              ) : null}
+            </>
           }
           menu={
             <MoreMenu>

@@ -3,6 +3,8 @@ import type { ReactNode } from "react"
 import { DoxaMark } from "~/components/marketing/doxa-mark"
 import { Hr } from "~/components/marketing/guides"
 import {
+  CODERONE_URL,
+  CONTACT_EMAIL,
   CONTACT_URL,
   DISCORD_URL,
   DOCS_URL,
@@ -20,10 +22,9 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
   {
     title: "Product",
     links: [
-      { label: "Doxa Agent", to: "/" },
+      { label: "Doxabot", to: "/agent" },
       { label: "Docs Platform", to: "/" },
       { label: "MCP Server", to: "/mcp" },
-      { label: "Doxa CLI", to: "/" },
       { label: "Pricing", to: "/pricing" },
     ],
   },
@@ -47,6 +48,7 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
     title: "Company",
     links: [
       { label: "About", to: "/about" },
+      { label: "Blog", to: "/blog" },
       { label: "Contact", href: CONTACT_URL },
     ],
   },
@@ -115,7 +117,10 @@ export function SiteFooter() {
             <i />
             ALL SYSTEMS NORMAL
           </a>
-          <span className="label">© 2026 Doxa · Made in CoderOne Labs · [YOUR CONTACT EMAIL]</span>
+          <span className="label foot__credit">
+            © 2026 Doxa · Made in <a href={CODERONE_URL}>CoderOne Labs</a> ·{" "}
+            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+          </span>
         </div>
       </div>
       <Hr />

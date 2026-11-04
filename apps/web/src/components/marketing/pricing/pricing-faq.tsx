@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { CONTACT_EMAIL, CONTACT_URL } from "~/lib/marketing/links"
 import { FAQ } from "~/lib/marketing/pricing"
 import { RichText } from "./rich-text"
 
@@ -25,7 +26,11 @@ export function PricingFaq() {
           </span>
           <h2 className="display">Questions</h2>
           <p>
-            Something not covered here? Write to <span className="ph">[YOUR CONTACT EMAIL]</span>.
+            Something not covered here? Write to{" "}
+            <a className="faq__mail" href={CONTACT_URL}>
+              {CONTACT_EMAIL}
+            </a>
+            .
           </p>
         </div>
         <div className="faq__list">

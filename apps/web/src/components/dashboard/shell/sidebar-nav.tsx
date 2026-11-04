@@ -22,13 +22,13 @@ export function SidebarSectionLabel({
 }
 
 export const SIDEBAR_NAV_ITEM_CLASS =
-  "flex w-full items-center gap-2.5 border-l-2 px-2.5 py-[7px] text-left text-[13.5px] whitespace-nowrap transition-colors [&>svg]:size-4 [&>svg]:shrink-0"
+  "flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[13.5px] whitespace-nowrap transition-colors [&>svg]:size-4 [&>svg]:shrink-0"
 
-/** Active: accent bar, wash and accent text. Inactive: a transparent bar, so the text does not move. */
+/** Active: a quiet grey fill, a step above the hover fill. No accent color. */
 export function sidebarNavItemState(active: boolean): string {
   return active
-    ? "border-primary bg-primary-wash text-primary-text"
-    : "border-transparent text-body hover:bg-overlay hover:text-foreground"
+    ? "bg-secondary text-foreground"
+    : "text-body hover:bg-overlay hover:text-foreground"
 }
 
 interface SidebarNavAnchorProps extends AnchorHTMLAttributes<HTMLAnchorElement> {

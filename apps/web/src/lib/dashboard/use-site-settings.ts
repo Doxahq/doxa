@@ -27,7 +27,7 @@ import {
 } from "~/lib/dashboard/site-settings-validation"
 import { useDraftBuffer, type DraftBufferSource } from "~/lib/dashboard/use-draft-buffer"
 import { applyProjectContentEdits } from "~/lib/platform-api"
-import { dashboardQueryKeys } from "~/lib/queries/dashboard"
+import { dashboardQueryKeys, projectContentQueryOptions } from "~/lib/queries/dashboard"
 import { docsBranchQueryKeys } from "~/lib/queries/docs-branches"
 
 export type SiteSettingsSaveStatus =
@@ -215,6 +215,19 @@ export function useSiteSettings({
     [buffer, invalidateBranchQueries],
   )
 
+  /** Loads the settings again after an action changed the branch, like a synchronization. */
+  const reloadFromBranch = useCallback(async (): Promise<void> => {
+    try {
+      const next = await queryClient.fetchQuery({
+        ...projectContentQueryOptions(projectId, branch),
+        staleTime: 0,
+      })
+      replaceConfig(toEditableSiteConfig(next.siteConfig.working ?? next.siteConfig.published), "reload")
+    } catch (error) {
+      setRequestError(getErrorMessage(error, "The settings could not be reloaded."))
+    }
+  }, [branch, projectId, queryClient, replaceConfig])
+
   const resetToPublished = useCallback(async (): Promise<boolean> => {
     buffer.cancelAutosave()
     try {
@@ -281,6 +294,9 @@ export function useSiteSettings({
     requestClose,
     resetToPublished,
     restoreDefaults,
+    reloadFromBranch,
+    isDirty: buffer.isDirty,
+    isSaving,
     hasWorkingConfig: overview.siteConfig.working !== null,
     status,
     entitlements: overview.entitlements,

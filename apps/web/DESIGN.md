@@ -167,9 +167,8 @@ components:
     typography: "body-sm"
     rounded: "DEFAULT"
   sidebar-item-active:
-    backgroundColor: "primary-wash"
-    textColor: "primary-text"
-    border: "2px solid var(--primary) (left only)"
+    backgroundColor: "secondary"
+    textColor: "foreground"
     typography: "body-sm"
   command-box:
     backgroundColor: "sidebar"
@@ -275,9 +274,9 @@ passes 4.5:1 on `card`.
 
 - **Primary — blue** (`primary`, also `ring`): the only chromatic brand accent.
   Use it for indicator bars, underlines, the caret, and the focus outline.
-  `primary-text` is the lighter blue for text: links, the active tab, the active
-  nav item. `primary-wash` is the faint fill behind an active item. Never use
-  blue as a large fill.
+  `primary-text` is the lighter blue for text: links and the active tab.
+  `primary-wash` is the faint fill behind a selected item. Never use blue as a
+  large fill.
 - **The site's accent never colors the dashboard.** The site canvas (Write and
   the Split preview) replaces `primary` with the docs site's own accent, so the
   page shows its published colors. Editor chrome inside the canvas (the caret,
@@ -288,9 +287,8 @@ passes 4.5:1 on `card`.
   `warning` (amber) = pending/attention; `destructive` (red) = errors/danger.
 - **Sidebar palette:** the sidebar sits one step off the canvas (`sidebar` 0.05)
   with its own `sidebar-foreground` (0.7), `sidebar-accent` hover (0.14), and
-  `sidebar-border`. An active item has a 2px `primary` left border, a
-  `primary-wash` fill, and `primary-text`. Inactive items keep a transparent
-  2px left border, so the text does not shift.
+  `sidebar-border`. An active nav item has a `secondary` grey fill and
+  `foreground` text, with no blue and no left border.
 - **Scrollbars:** use `scrollbar-subtle` on dark scroll surfaces. Its transparent
   track and square 6px thumb use `scrollbar-thumb`, then lift to
   `scrollbar-thumb-hover` on hover.
@@ -431,6 +429,34 @@ convert Tailwind-v3 `[--var]` classes to the v4 `(--var)` form.
   `Hr`, `Ticks`, `Band` (`lib/marketing/bands.ts` seeds), and `Aurora`.
 - Keyframes in the marketing CSS start with `mk-`, so they never replace a
   Tailwind animation such as `ping` or `pulse`.
+- The default 404 (`components/navigation/not-found-page.tsx`, set as
+  `defaultNotFoundComponent` in `router.tsx`) can show outside the marketing
+  layout. It draws the same look with the global tokens, not the marketing CSS.
+- The About page section "How we solve docs for the age of AI" draws two robotic
+  hands that solve a cube behind its copy (`lib/marketing/solve-art/`). It uses
+  plain WebGL2 with no library, and its code comes with the About page. It plays by
+  itself for every visitor, including visitors with reduced motion (a product
+  decision), loops, runs only on screen, and has a Pause button. Its colors are the
+  theme's (ice, accent, deep, lavender, text), with the Doxa logo on the cube. The motion comes from a speedcuber's solve: both hands grip from the sides,
+  wrists rock for R and L, single fingers flick U and D, and one hand opens wide to
+  take a new grip when the cube rolls. A solve starts scrambled. When it ends, one
+  hand shakes the cube and the cube is scrambled again, with no scramble moves.
+  `apps/web/tests/solve-art.test.ts` holds these rules.
+- On windows of 1400px or wider, the home hero shows two robotic hands in the empty
+  space beside its content (`components/marketing/home/hero-frisbee.tsx`, art in
+  `lib/marketing/frisbee-art/`). They throw a disc behind the content, and it adds no
+  layout. It plays by itself for every visitor, loops, and has a Pause button. When
+  the visitor scrolls past it or leaves the page, a disc in flight first reaches a
+  hand, and the art waits until the visitor sees it again. After a press on Pause, it
+  stays paused until a press on Play. The disc has the look of the Doxa logo. Some catches become a trick, at random: a finger
+  spin, a back roll, a magnetic orbit or the Force, which stops the disc in the
+  air with a raised palm (`lib/marketing/frisbee-art/tricks.ts`). A click on a hand
+  knocks it (`lib/marketing/frisbee-art/kick.ts`). A hand with the disc drops it on the
+  bottom line of the hero. The hand then jabs an angry palm-up "why?!" at the visitor,
+  and it picks the disc up again. The canvas takes no pointer events, so the page keeps
+  all of its clicks (`lib/marketing/frisbee-art/poke.ts`). The values to play with are in `lib/marketing/frisbee-art/settings.ts`. The hands are the same hands as on the About
+  page: `standardFingers` and `drawHand` in `lib/marketing/solve-art/rig.ts`. Use them
+  for any other robotic hand on the site.
 - Links and placeholder destinations live in `lib/marketing/links.ts`. Copy in
   square brackets (`[RELEASE DATE]`, `[PRICE]`) is a placeholder for a real
   fact; do not replace it with an invented value.

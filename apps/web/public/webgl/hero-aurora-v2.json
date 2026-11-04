@@ -1,0 +1,246 @@
+{
+  "layers": [
+    {
+      "breakpoints": [],
+      "visible": true,
+      "aspectRatio": 1,
+      "userDownsample": 1,
+      "layerType": "effect",
+      "type": "gradient",
+      "usesPingPong": false,
+      "texture": false,
+      "animating": false,
+      "mouseMomentum": 0,
+      "mouseSpring": 0,
+      "isMask": 0,
+      "description": "",
+      "compiledFragmentShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision highp float;in vec2 vTextureCoord;uniform vec2 uMousePos;const float PI = 3.14159265359;vec2 rotate(vec2 coord, float angle) {\nfloat s = sin(angle);\nfloat c = cos(angle);\nreturn vec2(\ncoord.x * c - coord.y * s,\ncoord.x * s + coord.y * c\n);\n}out vec4 fragColor;vec3 getBgColor(vec2 uv) {return vec3(0, 0, 0);\n}void main() {vec2 uv = vTextureCoord;\nvec2 pos = vec2(0.5, 0.5) + mix(vec2(0), (uMousePos-0.5), 0.0000);\nuv -= pos;\nuv /= max(0.5000*2., 1e-5);\nuv = rotate(uv, (0.0000 - 0.5) * 2. * PI);\nvec4 color = vec4(getBgColor(uv), 1.0) * 1.0000;\nfragColor = color;\n}"
+      ],
+      "compiledVertexShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision mediump float;in vec3 aVertexPosition;\nin vec2 aTextureCoord;uniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;out vec2 vTextureCoord;\nout vec3 vVertexPosition;void main() {\ngl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\nvTextureCoord = aTextureCoord;\n}"
+      ],
+      "speed": 0.25,
+      "trackMouse": 0,
+      "trackAxes": "xy",
+      "data": {
+        "downSample": 0.5,
+        "depth": false,
+        "uniforms": {},
+        "isBackground": true
+      },
+      "id": "26296495-afa1-4279-8313-69e5e904e205",
+      "publicId": "gradient"
+    },
+    {
+      "breakpoints": [],
+      "visible": true,
+      "aspectRatio": 1,
+      "userDownsample": 1,
+      "layerType": "effect",
+      "type": "aurora",
+      "usesPingPong": false,
+      "texture": false,
+      "animating": false,
+      "mouseMomentum": 0.88,
+      "mouseSpring": 0,
+      "isMask": 0,
+      "description": "",
+      "compiledFragmentShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision highp float;\nprecision highp int;in vec2 vTextureCoord;\nuniform sampler2D uTexture;\nuniform float uTime;\nuniform vec2 uMousePos;\nuniform vec2 uResolution;\nvec3 blend (int blendMode, vec3 src, vec3 dst) {\nreturn src + dst;\n}\nvec4 applyLayerMixAlpha(vec4 color, vec4 bg, float amount) {\nreturn mix(bg, color, amount);\n}\nuvec2 pcg2d(uvec2 v) {\nv = v * 1664525u + 1013904223u;\nv.x += v.y * v.y * 1664525u + 1013904223u;\nv.y += v.x * v.x * 1664525u + 1013904223u;\nv ^= v >> 16;\nv.x += v.y * v.y * 1664525u + 1013904223u;\nv.y += v.x * v.x * 1664525u + 1013904223u;\nreturn v;\n}float randFibo(vec2 p) {\nuvec2 v = floatBitsToUint(p);\nv = pcg2d(v);\nuint r = v.x ^ v.y;\nreturn float(r) / float(0xffffffffu);\n}\nfloat deband() {\nreturn (randFibo(gl_FragCoord.xy) - 0.5) / 255.0;\n}out vec4 fragColor;ivec2 customTexSize;\nfloat customTexAspect;const float PI = 3.14159265359;\nconst float TAU = 6.28318530718;\nconst int MAX_AURORA_ITERATIONS = 36;\nconst float DYNAMIC_BLUR_EXP_SCALE = 2.0 * 1.4426950408889634;vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {\nreturn a + b*cos( TAU*(c*t+d) );\n}vec3 Tonemap_Reinhard(vec3 x) {\nx *= 4.;\nreturn x / (1.0 + x);\n}float sdLine(vec2 p, float r) {\nfloat halfLen = r * 2.;\nvec2 a = vec2(-halfLen, 0.0);\nvec2 b = vec2(halfLen, 0.0);\nvec2 pa = p - a;\nvec2 ba = b - a;\nfloat h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);\nreturn length(pa - ba * h);\n}float getSdf(vec2 st, float md) {\nreturn sdLine(st, 0.1900);\n}vec2 turbulence(vec2 pos, float offset, float baseFrequency, float amplitudeStart, float phaseTime, vec2 mouseOffset) {\nmat2 rotationStep = mat2(0.6, -0.8, 0.8, 0.6);\nfloat frequency = baseFrequency;\nfloat amplitude = amplitudeStart;\nfloat frequencyMultiplier = 1.4;\nfor(float i = 0.; i < 4.; i++) {\nvec2 wave = sin(frequency * ((pos - mouseOffset) * rotationStep) + i * phaseTime + offset);\npos += amplitude * rotationStep[0] * wave / frequency;\nrotationStep *= mat2(0.6, -0.8, 0.8, 0.6);\namplitude *= mix(1., max(wave.y, wave.x), 0.2600);\nfrequency *= frequencyMultiplier;\n}return pos;\n}void main() {\nvec2 uv = vTextureCoord;\nvec4 bg = texture(uTexture, uv);\nvec3 auroraLines = vec3(0.);\nvec3 bloom = vec3(0.);\nfloat auroraMask = 0.;\nfloat bloomMask = 0.;\nfloat time = uTime * 0.5 + 0.2000;\nvec2 aspect = vec2(uResolution.x/uResolution.y, 1);\nvec2 mouseOffset = mix(vec2(0), uMousePos - 0.5, 0.0000);\nvec2 pos = (uv * aspect - vec2(0.583568783664439, 0.20355158219349434) * aspect);\nfloat mouseDistance = length(uv * aspect - uMousePos * aspect);\nfloat mouseAmplitude = mix(1., smoothstep(1., 5., 1./mouseDistance), 0.0000);\nfloat rotation = 0.3807 * -2.0 * PI;\nmat2 rotMatrix = mat2(cos(rotation), -sin(rotation), sin(rotation), cos(rotation));\npos = rotMatrix * pos;\nfloat blurMultiplier = 0.05;int activeIterations = clamp(int(floor(float(9))), 1, MAX_AURORA_ITERATIONS);\nfloat activeIterationsF = float(activeIterations);\nfloat turbulenceBaseFrequency = mix(2., 15., 0.1800);\nfloat turbulenceAmplitude = 0.3800 * mouseAmplitude;\nfloat turbulencePhaseTime = time * 0.1 + 0.2000;\nfloat colorScaleFactor = mix(0.1, 1.9, 0.4600);\nvec2 prevPos = turbulence(pos, 0. - 1./activeIterationsF, turbulenceBaseFrequency, turbulenceAmplitude, turbulencePhaseTime, mouseOffset);\nfloat spacing = mix(1., TAU, 0.0000);\nfloat smoothing = 0.0000;\nfor(int i = 0; i < MAX_AURORA_ITERATIONS; i++) {\nfloat iterationIndex = float(i + 1);if(iterationIndex > activeIterationsF) {\nbreak;\n}float iterationProgress = iterationIndex/activeIterationsF;\nvec2 warpedPos = turbulence(pos, iterationProgress * spacing, turbulenceBaseFrequency, turbulenceAmplitude, turbulencePhaseTime, mouseOffset);\nfloat shapeDistance = abs(getSdf(warpedPos, mouseAmplitude));\nfloat positionDelta = distance(warpedPos, prevPos);\nprevPos = warpedPos;float dynamicBlur = exp2(positionDelta * DYNAMIC_BLUR_EXP_SCALE) - 1.0;\nfloat blurWidth = 1.0000 * blurMultiplier + max(dynamicBlur * smoothing, 0.001);\nfloat lineMask = smoothstep(0., blurWidth, shapeDistance);\nfloat lineStrength = 1. - lineMask;\nvec3 color = palette(iterationProgress * colorScaleFactor + 1.0000, vec3(0.5), vec3(0.5), vec3(1), vec3(0.4666666666666667, 0.4666666666666667, 0.4666666666666667));\nfloat inverseDistance = 1./max(shapeDistance + dynamicBlur, 0.001);\nfloat bloomStrength = clamp(inverseDistance, 0., 250.);\nauroraLines -= lineStrength * color;\nauroraMask += lineStrength;\nbloom += bloomStrength * color;\nbloomMask += bloomStrength;\n}auroraLines *= 1./activeIterationsF * 2.0;\nauroraMask *= 1./activeIterationsF * 2.0;\nbloom = bloom / (bloom + 2e4);\nbloomMask = bloomMask / (bloomMask + 2e4);vec3 color = (-auroraLines + bloom * 3. * 0.6100);\nfloat accumulation = (auroraMask + bloomMask * 3. * 0.6100) * 1.2;\ncolor *= 1.2;\ncolor += deband();\ncolor = Tonemap_Reinhard(color);\nvec3 blended;\nfloat effectAlpha = clamp(Tonemap_Reinhard(vec3(accumulation)).r, 0.0, 1.0);\nfloat alpha = max(bg.a, effectAlpha);\nblended = blend(1, bg.rgb, color);\nvec4 auroraColor = applyLayerMixAlpha(vec4(blended, alpha), bg, 1.0000);\nfragColor = auroraColor;}"
+      ],
+      "compiledVertexShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision mediump float;in vec3 aVertexPosition;\nin vec2 aTextureCoord;uniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform mat4 uTextureMatrix;out vec2 vTextureCoord;\nout vec3 vVertexPosition;void main() {\ngl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\nvTextureCoord = (uTextureMatrix * vec4(aTextureCoord, 0.0, 1.0)).xy;\n}"
+      ],
+      "speed": 0.25,
+      "trackMouse": 0,
+      "trackAxes": "xy",
+      "data": {
+        "depth": false,
+        "uniforms": {},
+        "isBackground": false
+      },
+      "id": "e3e7811b-81af-4931-a82f-541af3fd5766",
+      "publicId": "aurora"
+    },
+    {
+      "breakpoints": [],
+      "visible": true,
+      "aspectRatio": 1,
+      "userDownsample": 1,
+      "layerType": "effect",
+      "type": "aurora",
+      "usesPingPong": false,
+      "texture": false,
+      "animating": false,
+      "mouseMomentum": 0.88,
+      "mouseSpring": 0,
+      "isMask": 0,
+      "description": "",
+      "compiledFragmentShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision highp float;\nprecision highp int;in vec2 vTextureCoord;\nuniform sampler2D uTexture;\nuniform float uTime;\nuniform vec2 uMousePos;\nuniform vec2 uResolution;\nvec3 blend (int blendMode, vec3 src, vec3 dst) {\nreturn src + dst;\n}\nvec4 applyLayerMixAlpha(vec4 color, vec4 bg, float amount) {\nreturn mix(bg, color, amount);\n}\nuvec2 pcg2d(uvec2 v) {\nv = v * 1664525u + 1013904223u;\nv.x += v.y * v.y * 1664525u + 1013904223u;\nv.y += v.x * v.x * 1664525u + 1013904223u;\nv ^= v >> 16;\nv.x += v.y * v.y * 1664525u + 1013904223u;\nv.y += v.x * v.x * 1664525u + 1013904223u;\nreturn v;\n}float randFibo(vec2 p) {\nuvec2 v = floatBitsToUint(p);\nv = pcg2d(v);\nuint r = v.x ^ v.y;\nreturn float(r) / float(0xffffffffu);\n}\nfloat deband() {\nreturn (randFibo(gl_FragCoord.xy) - 0.5) / 255.0;\n}out vec4 fragColor;ivec2 customTexSize;\nfloat customTexAspect;const float PI = 3.14159265359;\nconst float TAU = 6.28318530718;\nconst int MAX_AURORA_ITERATIONS = 36;\nconst float DYNAMIC_BLUR_EXP_SCALE = 2.0 * 1.4426950408889634;vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {\nreturn a + b*cos( TAU*(c*t+d) );\n}vec3 Tonemap_Reinhard(vec3 x) {\nx *= 4.;\nreturn x / (1.0 + x);\n}float sdLine(vec2 p, float r) {\nfloat halfLen = r * 2.;\nvec2 a = vec2(-halfLen, 0.0);\nvec2 b = vec2(halfLen, 0.0);\nvec2 pa = p - a;\nvec2 ba = b - a;\nfloat h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);\nreturn length(pa - ba * h);\n}float getSdf(vec2 st, float md) {\nreturn sdLine(st, 0.3000);\n}vec2 turbulence(vec2 pos, float offset, float baseFrequency, float amplitudeStart, float phaseTime, vec2 mouseOffset) {\nmat2 rotationStep = mat2(0.6, -0.8, 0.8, 0.6);\nfloat frequency = baseFrequency;\nfloat amplitude = amplitudeStart;\nfloat frequencyMultiplier = 1.4;\nfor(float i = 0.; i < 4.; i++) {\nvec2 wave = sin(frequency * ((pos - mouseOffset) * rotationStep) + i * phaseTime + offset);\npos += amplitude * rotationStep[0] * wave / frequency;\nrotationStep *= mat2(0.6, -0.8, 0.8, 0.6);\namplitude *= mix(1., max(wave.y, wave.x), 0.0000);\nfrequency *= frequencyMultiplier;\n}return pos;\n}void main() {\nvec2 uv = vTextureCoord;\nvec4 bg = texture(uTexture, uv);\nvec3 auroraLines = vec3(0.);\nvec3 bloom = vec3(0.);\nfloat auroraMask = 0.;\nfloat bloomMask = 0.;\nfloat time = uTime * 0.5 + 0.0000;\nvec2 aspect = vec2(uResolution.x/uResolution.y, 1);\nvec2 mouseOffset = mix(vec2(0), uMousePos - 0.5, 0.0000);\nvec2 pos = (uv * aspect - vec2(0.5488416295301541, 0.5582924012238524) * aspect);\nfloat mouseDistance = length(uv * aspect - uMousePos * aspect);\nfloat mouseAmplitude = mix(1., smoothstep(1., 5., 1./mouseDistance), 0.0000);\nfloat rotation = 0.3537 * -2.0 * PI;\nmat2 rotMatrix = mat2(cos(rotation), -sin(rotation), sin(rotation), cos(rotation));\npos = rotMatrix * pos;\nfloat blurMultiplier = 0.05;int activeIterations = clamp(int(floor(float(3))), 1, MAX_AURORA_ITERATIONS);\nfloat activeIterationsF = float(activeIterations);\nfloat turbulenceBaseFrequency = mix(2., 15., 0.1800);\nfloat turbulenceAmplitude = 0.3800 * mouseAmplitude;\nfloat turbulencePhaseTime = time * 0.1 + 0.0000;\nfloat colorScaleFactor = mix(0.1, 1.9, 0.4600);\nvec2 prevPos = turbulence(pos, 0. - 1./activeIterationsF, turbulenceBaseFrequency, turbulenceAmplitude, turbulencePhaseTime, mouseOffset);\nfloat spacing = mix(1., TAU, 0.3900);\nfloat smoothing = 0.0000;\nfor(int i = 0; i < MAX_AURORA_ITERATIONS; i++) {\nfloat iterationIndex = float(i + 1);if(iterationIndex > activeIterationsF) {\nbreak;\n}float iterationProgress = iterationIndex/activeIterationsF;\nvec2 warpedPos = turbulence(pos, iterationProgress * spacing, turbulenceBaseFrequency, turbulenceAmplitude, turbulencePhaseTime, mouseOffset);\nfloat shapeDistance = abs(getSdf(warpedPos, mouseAmplitude));\nfloat positionDelta = distance(warpedPos, prevPos);\nprevPos = warpedPos;float dynamicBlur = exp2(positionDelta * DYNAMIC_BLUR_EXP_SCALE) - 1.0;\nfloat blurWidth = 1.0000 * blurMultiplier + max(dynamicBlur * smoothing, 0.001);\nfloat lineMask = smoothstep(0., blurWidth, shapeDistance);\nfloat lineStrength = 1. - lineMask;\nvec3 color = palette(iterationProgress * colorScaleFactor + 1.0000, vec3(0.5), vec3(0.5), vec3(1), vec3(0.4666666666666667, 0.4666666666666667, 0.4666666666666667));\nfloat inverseDistance = 1./max(shapeDistance + dynamicBlur, 0.001);\nfloat bloomStrength = clamp(inverseDistance, 0., 250.);\nauroraLines -= lineStrength * color;\nauroraMask += lineStrength;\nbloom += bloomStrength * color;\nbloomMask += bloomStrength;\n}auroraLines *= 1./activeIterationsF * 2.0;\nauroraMask *= 1./activeIterationsF * 2.0;\nbloom = bloom / (bloom + 2e4);\nbloomMask = bloomMask / (bloomMask + 2e4);vec3 color = (-auroraLines + bloom * 3. * 0.6100);\nfloat accumulation = (auroraMask + bloomMask * 3. * 0.6100) * 1.2;\ncolor *= 1.2;\ncolor += deband();\ncolor = Tonemap_Reinhard(color);\nvec3 blended;\nfloat effectAlpha = clamp(Tonemap_Reinhard(vec3(accumulation)).r, 0.0, 1.0);\nfloat alpha = max(bg.a, effectAlpha);\nblended = blend(1, bg.rgb, color);\nvec4 auroraColor = applyLayerMixAlpha(vec4(blended, alpha), bg, 1.0000);\nfragColor = auroraColor;}"
+      ],
+      "compiledVertexShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision mediump float;in vec3 aVertexPosition;\nin vec2 aTextureCoord;uniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform mat4 uTextureMatrix;out vec2 vTextureCoord;\nout vec3 vVertexPosition;void main() {\ngl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\nvTextureCoord = (uTextureMatrix * vec4(aTextureCoord, 0.0, 1.0)).xy;\n}"
+      ],
+      "speed": 0.25,
+      "trackMouse": 0,
+      "trackAxes": "xy",
+      "data": {
+        "depth": false,
+        "uniforms": {},
+        "isBackground": false
+      },
+      "id": "cd488583-13ef-4faa-a4ba-cfeac51a7d7d",
+      "publicId": "aurora1"
+    },
+    {
+      "breakpoints": [],
+      "visible": true,
+      "aspectRatio": 1,
+      "userDownsample": 1,
+      "layerType": "effect",
+      "type": "noiseField",
+      "usesPingPong": false,
+      "texture": false,
+      "animating": true,
+      "mouseMomentum": 0,
+      "mouseSpring": 0,
+      "isMask": 0,
+      "description": "",
+      "compiledFragmentShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision mediump float;in vec3 vVertexPosition;\nin vec2 vTextureCoord;\nuniform sampler2D uTexture;out vec4 fragColor;void main() {\nvec2 uv = vTextureCoord;\nuv = vec2(\n1. - uv.x,\n1. - uv.y\n);\nvec4 color = texture(uTexture, uv);\nfragColor = color;}"
+      ],
+      "compiledVertexShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision mediump float;in vec3 aVertexPosition;\nin vec2 aTextureCoord;\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nout vec3 vVertexPosition;\nout vec2 vTextureCoord;uniform float uTime;\nuniform vec2 uResolution;vec3 hash33(vec3 p3) {\np3 = fract(p3 * vec3(0.1031, 0.11369, 0.13787));\np3 += dot(p3, p3.yxz + 19.19);\nreturn -1.0 + 2.0 * fract(vec3(\n(p3.x + p3.y) * p3.z,\n(p3.x + p3.z) * p3.y,\n(p3.y + p3.z) * p3.x\n));\n}float perlin_noise(vec3 p) {\nvec3 pi = floor(p);\nvec3 pf = p - pi;vec3 w = pf * pf * (3.0 - 2.0 * pf);float n000 = dot(pf - vec3(0.0, 0.0, 0.0), hash33(pi + vec3(0.0, 0.0, 0.0)));\nfloat n100 = dot(pf - vec3(1.0, 0.0, 0.0), hash33(pi + vec3(1.0, 0.0, 0.0)));\nfloat n010 = dot(pf - vec3(0.0, 1.0, 0.0), hash33(pi + vec3(0.0, 1.0, 0.0)));\nfloat n110 = dot(pf - vec3(1.0, 1.0, 0.0), hash33(pi + vec3(1.0, 1.0, 0.0)));\nfloat n001 = dot(pf - vec3(0.0, 0.0, 1.0), hash33(pi + vec3(0.0, 0.0, 1.0)));\nfloat n101 = dot(pf - vec3(1.0, 0.0, 1.0), hash33(pi + vec3(1.0, 0.0, 1.0)));\nfloat n011 = dot(pf - vec3(0.0, 1.0, 1.0), hash33(pi + vec3(0.0, 1.0, 1.0)));\nfloat n111 = dot(pf - vec3(1.0, 1.0, 1.0), hash33(pi + vec3(1.0, 1.0, 1.0)));float nx00 = mix(n000, n100, w.x);\nfloat nx01 = mix(n001, n101, w.x);\nfloat nx10 = mix(n010, n110, w.x);\nfloat nx11 = mix(n011, n111, w.x);float nxy0 = mix(nx00, nx10, w.y);\nfloat nxy1 = mix(nx01, nx11, w.y);float nxyz = mix(nxy0, nxy1, w.z);return nxyz;\n}const float PI = 3.14159265359;mat4 rotation(float angle) {\nreturn mat4(\nvec4( cos(angle), -sin(angle), 0.0, 0.0 ),\nvec4( sin(angle), cos(angle), 0.0, 0.0 ),\nvec4( 0.0, 0.0, 1.0, 0.0 ),\nvec4( 0.0, 0.0, 0.0, 1.0 ) );\n}\nvoid main() {\nvec3 vertexPosition = aVertexPosition;\nvec3 waveCoord = aVertexPosition;\nfloat aspect = uResolution.x / max(uResolution.y, 1.0);\nvec2 aspectVec = vec2(aspect, 1.0);\nfloat time = 0.0000 * 10. + uTime * 0.05;\nvec2 origin = (vec2(0.4603347922747937, 0.5083820816324964) - 0.5) * 2.0;\nvec2 centered = (waveCoord.xy - origin) * aspectVec;\nfloat cosA = cos(0.9099 * 2. * PI);\nfloat sinA = sin(0.9099 * 2. * PI);\nvec2 rotated = vec2(\ncentered.x * cosA - centered.y * sinA,\ncentered.x * sinA + centered.y * cosA\n);\nvec2 transformed = rotated + origin * aspectVec;\nfloat waveWidth = mix(0.4, 0.05, 0.8000);float value = perlin_noise(vec3(((transformed * 0.5000 * 10.) + (vec2(0.4603347922747937, 0.5083820816324964) - 0.5) * aspectVec * 20. * 0.5000) * vec2(waveWidth, 1.), time)) * 0.5000;waveCoord.z = 0.;\nwaveCoord.y += mix(value, smoothstep(-1., 0., value) - 1., 0.5000);\nwaveCoord.x += value * 0.02;\nif(vertexPosition.x == 1.) {\nwaveCoord.x = 1.;\n}\nif(vertexPosition.x == -1.) {\nwaveCoord.x = -1.;\n}\nif(vertexPosition.y == 1.) {\nwaveCoord.y = 1.;\n}\nif(vertexPosition.y == -1.) {\nwaveCoord.y = -1.;\n}gl_Position = uPMatrix * uMVMatrix * rotation(radians(180.0)) * vec4(waveCoord, 1.);vTextureCoord = aTextureCoord - vec2(0., mix(value, smoothstep(-1., 0., value) - 1., 0.5000));\nvVertexPosition = vertexPosition;\n}"
+      ],
+      "speed": 0.13,
+      "data": {
+        "depth": false,
+        "uniforms": {},
+        "isBackground": false,
+        "heightSegments": 300,
+        "widthSegments": 300
+      },
+      "id": "75d639e5-4baf-49e8-b4e5-da38fc9725d0",
+      "publicId": "waves"
+    },
+    {
+      "breakpoints": [],
+      "visible": true,
+      "aspectRatio": 1,
+      "userDownsample": 1,
+      "layerType": "effect",
+      "type": "ninetiesVideo",
+      "usesPingPong": false,
+      "texture": false,
+      "animating": false,
+      "mouseMomentum": 0,
+      "mouseSpring": 0,
+      "isMask": 0,
+      "description": "",
+      "compiledFragmentShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision highp float;\nprecision highp int;in vec3 vVertexPosition;\nin vec2 vTextureCoord;uniform sampler2D uTexture;\nuniform float uTime;uniform vec2 uResolution;\nuniform vec2 uArtboardResolution;uvec2 pcg2d(uvec2 v) {\nv = v * 1664525u + 1013904223u;\nv.x += v.y * v.y * 1664525u + 1013904223u;\nv.y += v.x * v.x * 1664525u + 1013904223u;\nv ^= v >> 16;\nv.x += v.y * v.y * 1664525u + 1013904223u;\nv.y += v.x * v.x * 1664525u + 1013904223u;\nreturn v;\n}float randFibo(vec2 p) {\nuvec2 v = floatBitsToUint(p);\nv = pcg2d(v);\nuint r = v.x ^ v.y;\nreturn float(r) / float(0xffffffffu);\n}vec4 applyLayerMix(vec4 color, vec4 bg, float amount) {\ncolor.rgb = mix(bg.rgb, color.rgb, amount);\ncolor.a = max(bg.a, amount);\nreturn color;\n}out vec4 fragColor;\nconst float PI = 3.14159265359;vec3 getAbberatedColor(vec3 color, vec3 left, vec3 center, vec3 right) {\nreturn vec3(left.r, mix(color.g, center.g, 1.0), right.b);\n}vec3 getBlurredChroma(vec3 color, vec2 uv) {\nvec4 left = vec4(0);\nvec4 right = vec4(0);\nvec4 center = vec4(0);float totalWeight = 0.0;\nvec2 aberrated = vec2(1.0, 0.0) * 0.5600 * 0.006;\nfor (float i = 0.0; i <= 6.0; i += 1.0) {\nfloat weight = mix(exp(-0.5 * (i * i) / 9.0), i / 9.0, 0.5);\ntotalWeight += weight;\nvec2 offset = aberrated * i;\nleft += texture(uTexture, uv - offset) * weight;\nright += texture(uTexture, uv + offset) * weight;\n}\nleft /= totalWeight;\nright /= totalWeight;\ncenter = texture(uTexture, uv);\ncolor.rgb = getAbberatedColor(color.rgb, left.rgb, center.rgb, right.rgb);return color;\n}void main() {\nvec2 uv = vTextureCoord;\nvec2 artboardRes = max(min(uResolution, uArtboardResolution), vec2(1.0));\nvec2 artboardPx = uv * artboardRes;\nfloat aspectRatio = uResolution.x/uResolution.y;\nfloat delta = fract((floor(uTime)/20.));\nfloat noise = randFibo(uv + vec2(1, 2) + delta);\nvec4 color = texture(uTexture, uv);\nvec4 bg = color;float jitter = 0.0;\nif(int(artboardPx.y) % 2 == 0) {\njitter = (randFibo(artboardPx + uTime * 0.01) - 0.5) * 0.005;\n}uv.x += jitter * 0.5200 * 2.0;\ncolor.rgb = getBlurredChroma(color.rgb, uv);\ncolor.rgb = pow(color.rgb, vec3(1.2));\ncolor.rgb = mix(color.rgb, smoothstep(0.05, 0.95, color.rgb), 0.5600);float scan = mod(artboardPx.y, 2.0);\ncolor.rgb *= (1.0 - 0.0800 * scan * 0.5 + 0.0800 * 0.5);\ncolor = applyLayerMix(color, bg, 1.0000);\nvec3 grain = vec3(\nnoise,\nrandFibo(uv + vec2(2, 3) + delta),\nrandFibo(uv + vec2(3, 4) + delta)\n);\ncolor.rgb += (grain - 0.5) * mix(0.1, 0.5, 0.0000);color = applyLayerMix(color, bg, 1.0000);\nfragColor = color;}",
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision highp float;\nprecision highp int;in vec3 vVertexPosition;\nin vec2 vTextureCoord;uniform sampler2D uTexture;\nuniform sampler2D uBgTexture;\nuniform float uTime;uniform vec2 uResolution;\nuniform vec2 uArtboardResolution;uvec2 pcg2d(uvec2 v) {\nv = v * 1664525u + 1013904223u;\nv.x += v.y * v.y * 1664525u + 1013904223u;\nv.y += v.x * v.x * 1664525u + 1013904223u;\nv ^= v >> 16;\nv.x += v.y * v.y * 1664525u + 1013904223u;\nv.y += v.x * v.x * 1664525u + 1013904223u;\nreturn v;\n}float randFibo(vec2 p) {\nuvec2 v = floatBitsToUint(p);\nv = pcg2d(v);\nuint r = v.x ^ v.y;\nreturn float(r) / float(0xffffffffu);\n}vec4 applyLayerMix(vec4 color, vec4 bg, float amount) {\ncolor.rgb = mix(bg.rgb, color.rgb, amount);\ncolor.a = max(bg.a, amount);\nreturn color;\n}out vec4 fragColor;\nconst float PI = 3.14159265359;void main() {\nvec2 uv = vTextureCoord;\nvec2 artboardRes = max(min(uResolution, uArtboardResolution), vec2(1.0));\nvec2 artboardPx = uv * artboardRes;\nfloat aspectRatio = uResolution.x/uResolution.y;\nfloat delta = fract((floor(uTime)/20.));\nfloat noise = randFibo(uv + vec2(1, 2) + delta);\nvec4 color = texture(uTexture, uv);\nvec4 bg = color;float jitter = 0.0;\nif(int(artboardPx.y) % 2 == 0) {\njitter = (randFibo(artboardPx + uTime * 0.01) - 0.5) * 0.005;\n}bg = texture(uBgTexture, uv);\nvec3 grain = vec3(\nnoise,\nrandFibo(uv + vec2(2, 3) + delta),\nrandFibo(uv + vec2(3, 4) + delta)\n);\ncolor.rgb += (grain - 0.5) * mix(0.1, 0.5, 0.0000);color = applyLayerMix(color, bg, 1.0000);\nfragColor = color;}"
+      ],
+      "compiledVertexShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision mediump float;in vec3 aVertexPosition;\nin vec2 aTextureCoord;uniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform mat4 uTextureMatrix;out vec2 vTextureCoord;\nout vec3 vVertexPosition;void main() {\ngl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\nvTextureCoord = (uTextureMatrix * vec4(aTextureCoord, 0.0, 1.0)).xy;\n}"
+      ],
+      "speed": 0.5,
+      "data": {
+        "downSample": 0.25,
+        "depth": false,
+        "uniforms": {},
+        "isBackground": false,
+        "passes": [
+          {
+            "prop": "pass",
+            "value": 1,
+            "includeBg": true,
+            "passDescription": "Mix the VHS pass back over the background with grain."
+          }
+        ]
+      },
+      "id": "a3119fda-ef39-4a57-83d1-cbcfe4cfc7a5",
+      "publicId": "nineties_vhs"
+    },
+    {
+      "breakpoints": [],
+      "visible": true,
+      "aspectRatio": 1,
+      "userDownsample": 1,
+      "layerType": "effect",
+      "type": "diffuse",
+      "usesPingPong": false,
+      "texture": false,
+      "animating": false,
+      "mouseMomentum": 0,
+      "mouseSpring": 0,
+      "isMask": 0,
+      "description": "",
+      "compiledFragmentShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision highp float;\nprecision highp int;in vec2 vTextureCoord;uniform sampler2D uTexture;uniform float uTime;uniform vec2 uMousePos;\nuniform vec2 uResolution;\nuniform vec2 uArtboardResolution;float ease (int easingFunc, float t) {\nreturn sqrt((2.0 - t) * t);\n}uvec2 pcg2d(uvec2 v) {\nv = v * 1664525u + 1013904223u;\nv.x += v.y * v.y * 1664525u + 1013904223u;\nv.y += v.x * v.x * 1664525u + 1013904223u;\nv ^= v >> 16;\nv.x += v.y * v.y * 1664525u + 1013904223u;\nv.y += v.x * v.x * 1664525u + 1013904223u;\nreturn v;\n}float randFibo(vec2 p) {\nuvec2 v = floatBitsToUint(p);\nv = pcg2d(v);\nuint r = v.x ^ v.y;\nreturn float(r) / float(0xffffffffu);\n}const float MAX_ITERATIONS = 24.;\nconst float PI = 3.14159265359;out vec4 fragColor;void main() {\nvec2 uv = vTextureCoord;\nvec2 pos = vec2(0.4961202715809893, 0.5031037827352085) + mix(vec2(0), (uMousePos-0.5), 0.0000);\nfloat aspectRatio = uResolution.x/uResolution.y;\nfloat delta = fract(floor(uTime)/20.);\nfloat angle, rotation, amp;\nfloat inner = distance(uv * vec2(aspectRatio, 1), pos * vec2(aspectRatio, 1));\nfloat outer = max(0., 1.-distance(uv * vec2(aspectRatio, 1), pos * vec2(aspectRatio, 1)));\nfloat amount = 0.2500 * 2.;vec2 mPos = vec2(0.4961202715809893, 0.5031037827352085) + mix(vec2(0), (uMousePos-0.5), 0.0000);\npos = mPos;\nfloat dist = ease(14, max(0.,1.-distance(uv * vec2(aspectRatio, 1), mPos * vec2(aspectRatio, 1)) * 4. * (1. - 1.0000)));amount *= dist;\nfloat threshold = mix(0.0, max(1. - 0.5000, 2./MAX_ITERATIONS), step(0.001, amount));\nvec4 result = vec4(0);\nconst float invMaxIterations = 1.0 / float(MAX_ITERATIONS);vec2 dir = vec2(0.5000 / aspectRatio, 1.-0.5000) * amount * 0.4;\nvec2 artboardRes = max(min(uResolution, uArtboardResolution), vec2(1.0));\nvec2 noiseUV = floor(uv * artboardRes) / artboardRes;float iterations = 0.0;\nfor(float i = 1.; i <= MAX_ITERATIONS; i++) {\nfloat th = i * invMaxIterations;\nif(th > threshold) break;float random1 = randFibo(noiseUV + th + delta);\nfloat random2 = randFibo(noiseUV + th * 2. + delta);\nfloat random3 = randFibo(noiseUV + th * 3. + delta);\nvec2 ranPoint = vec2(random1 * 2. - 1., random2 * 2. - 1.) * mix(1., random3, 0.8);\nresult += texture(uTexture, uv + ranPoint * dir);\niterations += 1.0;\n}vec4 color = result / max(1.0, iterations);if(iterations == 0.0) {\ncolor = texture(uTexture, uv);\n}\nfragColor = color;}"
+      ],
+      "compiledVertexShaders": [
+        "#version 300 es\n// Copyright (c) Unicorn Studio.\n// Unauthorized copying, redistribution, or use in competing products is prohibited.\nprecision mediump float;in vec3 aVertexPosition;\nin vec2 aTextureCoord;uniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform mat4 uTextureMatrix;out vec2 vTextureCoord;\nout vec3 vVertexPosition;void main() {\ngl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\nvTextureCoord = (uTextureMatrix * vec4(aTextureCoord, 0.0, 1.0)).xy;\n}"
+      ],
+      "speed": 0.1,
+      "trackMouse": 0,
+      "trackAxes": "xy",
+      "data": {
+        "depth": false,
+        "uniforms": {},
+        "isBackground": false
+      },
+      "id": "6af64668-cd02-4e05-8602-5c3491929f6b",
+      "publicId": "diffuse"
+    },
+    {
+      "id": "__us_rp0",
+      "publicId": "render-pass",
+      "type": "custom",
+      "layerType": "effect",
+      "hideFromPipeline": true,
+      "visible": true,
+      "animating": false,
+      "aspectRatio": 1,
+      "isMask": 0,
+      "usesPingPong": false,
+      "breakpoints": [],
+      "compiledFragmentShaders": [
+        "#version 300 es\nprecision mediump float;\n/* The Unicorn Studio free-plan watermark is required. Removing, obscuring, or tampering with it is prohibited and could result in account termination. */\nin vec2 vTextureCoord;uniform sampler2D uTexture,uT1;uniform vec2 uResolution;out vec4 o;float m(float a,float b,float c){return max(min(a,b),min(max(a,b),c));}mat2 r(float a){float s=sin(a),c=cos(a);return mat2(c,-s,s,c);}void main(){vec4 c=texture(uTexture,vTextureCoord);vec2 p=r(-.58)*(gl_FragCoord.xy-uResolution*.5),t=vec2(396.,180.),q=mod(p+t*.5,t)-t*.5;ivec2 z=textureSize(uT1,0);float a=float(z.x)/max(float(z.y),1.);vec2 u=q/vec2(142.,142./a)+.5,v=clamp(u,0.,1.);float i=step(0.,u.x)*step(0.,u.y)*step(u.x,1.)*step(u.y,1.);vec4 s=texture(uT1,v);float d=m(s.r,s.g,s.b),e=max(fwidth(d)*.75,.012),x=smoothstep(.5-e,.5+e,d)*i,h=max(smoothstep(.36,.5,d)-x,0.)*i,l=dot(c.rgb,vec3(.299,.587,.114));vec3 w=mix(vec3(.78,.84,.9),vec3(.08,.09,.11),smoothstep(.45,.72,l));o=vec4(mix(c.rgb,w,x*.16+h*.035),c.a);}"
+      ],
+      "compiledVertexShaders": [
+        "#version 300 es\nprecision mediump float;in vec3 aVertexPosition;in vec2 aTextureCoord;uniform mat4 uMVMatrix;uniform mat4 uPMatrix;uniform mat4 uTextureMatrix;out vec2 vTextureCoord;void main(){gl_Position=uPMatrix*uMVMatrix*vec4(aVertexPosition,1.);vTextureCoord=(uTextureMatrix*vec4(aTextureCoord,0.,1.)).xy;}"
+      ],
+      "data": {
+        "depth": false,
+        "uniforms": {},
+        "isBackground": false,
+        "texture": {
+          "src": "https://assets.unicorn.studio/media/us_fwb.png",
+          "sampler": "uT1"
+        }
+      }
+    }
+  ],
+  "options": {
+    "name": "Space for Mind (Remix)",
+    "fps": 60,
+    "dpi": 1.5,
+    "scale": 1,
+    "includeLogo": false,
+    "isProduction": false,
+    "flatten": false,
+    "freePlan": true,
+    "width": 1440,
+    "height": 900
+  },
+  "version": "2.4.3",
+  "id": "0FXeLm4kGgtmL7Ng625i",
+  "designName": "Aurora v2",
+  "designId": "ufKVHoXkIecEkyvotXS5",
+  "canvasId": "e60c185e-fd64-4c75-86a6-e392392bda8b",
+  "projectName": "Aurora V2",
+  "sceneName": "Scene"
+}

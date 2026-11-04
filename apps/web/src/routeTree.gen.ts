@@ -9,50 +9,49 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
 import { Route as MarketingRouteRouteImport } from './routes/_marketing/route'
-import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
+import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as MarketingIndexRouteImport } from './routes/_marketing/index'
-import { Route as OauthConsentRouteImport } from './routes/oauth/consent'
-import { Route as InviteTokenRouteImport } from './routes/invite/$token'
-import { Route as EmailUnsubscribeRouteImport } from './routes/email/unsubscribe'
-import { Route as DashboardSettingsRouteImport } from './routes/dashboard/settings'
-import { Route as ApproveRequestIdRouteImport } from './routes/approve/$requestId'
-import { Route as MarketingPricingRouteImport } from './routes/_marketing/pricing'
-import { Route as MarketingMcpRouteImport } from './routes/_marketing/mcp'
 import { Route as MarketingAboutRouteImport } from './routes/_marketing/about'
-import { Route as DashboardTeamsIndexRouteImport } from './routes/dashboard/teams/index'
+import { Route as MarketingMcpRouteImport } from './routes/_marketing/mcp'
+import { Route as MarketingPricingRouteImport } from './routes/_marketing/pricing'
+import { Route as ApproveRequestIdRouteImport } from './routes/approve/$requestId'
+import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
+import { Route as DashboardSettingsRouteImport } from './routes/dashboard/settings'
+import { Route as EmailUnsubscribeRouteImport } from './routes/email/unsubscribe'
+import { Route as InviteTokenRouteImport } from './routes/invite/$token'
+import { Route as OauthConsentRouteImport } from './routes/oauth/consent'
 import { Route as DashboardProjectsIndexRouteImport } from './routes/dashboard/projects/index'
-import { Route as DashboardTeamsTeamIdRouteImport } from './routes/dashboard/teams/$teamId'
-import { Route as DashboardProjectsNewRouteImport } from './routes/dashboard/projects/new'
 import { Route as DashboardProjectsProjectIdRouteRouteImport } from './routes/dashboard/projects/$projectId/route'
+import { Route as DashboardProjectsNewRouteImport } from './routes/dashboard/projects/new'
+import { Route as DashboardTeamsIndexRouteImport } from './routes/dashboard/teams/index'
+import { Route as DashboardTeamsTeamIdRouteImport } from './routes/dashboard/teams/$teamId'
 import { Route as DashboardProjectsProjectIdIndexRouteImport } from './routes/dashboard/projects/$projectId/index'
-import { Route as DashboardProjectsProjectIdReviewRouteImport } from './routes/dashboard/projects/$projectId/review'
-import { Route as DashboardProjectsProjectIdProjectRouteImport } from './routes/dashboard/projects/$projectId/project'
-import { Route as DashboardProjectsProjectIdDomainsRouteImport } from './routes/dashboard/projects/$projectId/domains'
 import { Route as DashboardProjectsProjectIdContentRouteImport } from './routes/dashboard/projects/$projectId/content'
+import { Route as DashboardProjectsProjectIdDomainsRouteImport } from './routes/dashboard/projects/$projectId/domains'
+import { Route as DashboardProjectsProjectIdProjectRouteImport } from './routes/dashboard/projects/$projectId/project'
+import { Route as DashboardProjectsProjectIdReviewRouteImport } from './routes/dashboard/projects/$projectId/review'
 import { Route as DashboardProjectsProjectIdSiteRouteRouteImport } from './routes/dashboard/projects/$projectId/site/route'
-import { Route as DashboardProjectsProjectIdSiteIndexRouteImport } from './routes/dashboard/projects/$projectId/site/index'
-import { Route as DashboardProjectsProjectIdSettingsIndexRouteImport } from './routes/dashboard/projects/$projectId/settings/index'
-import { Route as DashboardProjectsProjectIdRequestsIndexRouteImport } from './routes/dashboard/projects/$projectId/requests/index'
-import { Route as DashboardProjectsProjectIdGenerationsIndexRouteImport } from './routes/dashboard/projects/$projectId/generations/index'
 import { Route as DashboardProjectsProjectIdDoxabotIndexRouteImport } from './routes/dashboard/projects/$projectId/doxabot/index'
-import { Route as DashboardProjectsProjectIdSiteSeoRouteImport } from './routes/dashboard/projects/$projectId/site/seo'
-import { Route as DashboardProjectsProjectIdSiteNavigationRouteImport } from './routes/dashboard/projects/$projectId/site/navigation'
-import { Route as DashboardProjectsProjectIdSiteFeaturesRouteImport } from './routes/dashboard/projects/$projectId/site/features'
-import { Route as DashboardProjectsProjectIdSiteDomainsRouteImport } from './routes/dashboard/projects/$projectId/site/domains'
-import { Route as DashboardProjectsProjectIdSiteAppearanceRouteImport } from './routes/dashboard/projects/$projectId/site/appearance'
-import { Route as DashboardProjectsProjectIdSiteAdvancedRouteImport } from './routes/dashboard/projects/$projectId/site/advanced'
-import { Route as DashboardProjectsProjectIdSettingsApprovalsRouteImport } from './routes/dashboard/projects/$projectId/settings/approvals'
-import { Route as DashboardProjectsProjectIdRequestsRequestIdRouteImport } from './routes/dashboard/projects/$projectId/requests/$requestId'
-import { Route as DashboardProjectsProjectIdGenerationsGenerationIdRouteImport } from './routes/dashboard/projects/$projectId/generations/$generationId'
 import { Route as DashboardProjectsProjectIdDoxabotInstructionsRouteImport } from './routes/dashboard/projects/$projectId/doxabot/instructions'
+import { Route as DashboardProjectsProjectIdGenerationsIndexRouteImport } from './routes/dashboard/projects/$projectId/generations/index'
+import { Route as DashboardProjectsProjectIdGenerationsGenerationIdRouteImport } from './routes/dashboard/projects/$projectId/generations/$generationId'
+import { Route as DashboardProjectsProjectIdRequestsIndexRouteImport } from './routes/dashboard/projects/$projectId/requests/index'
+import { Route as DashboardProjectsProjectIdRequestsRequestIdRouteImport } from './routes/dashboard/projects/$projectId/requests/$requestId'
+import { Route as DashboardProjectsProjectIdSettingsIndexRouteImport } from './routes/dashboard/projects/$projectId/settings/index'
+import { Route as DashboardProjectsProjectIdSettingsApprovalsRouteImport } from './routes/dashboard/projects/$projectId/settings/approvals'
+import { Route as DashboardProjectsProjectIdSiteIndexRouteImport } from './routes/dashboard/projects/$projectId/site/index'
+import { Route as DashboardProjectsProjectIdSiteAdvancedRouteImport } from './routes/dashboard/projects/$projectId/site/advanced'
+import { Route as DashboardProjectsProjectIdSiteAppearanceRouteImport } from './routes/dashboard/projects/$projectId/site/appearance'
+import { Route as DashboardProjectsProjectIdSiteDomainsRouteImport } from './routes/dashboard/projects/$projectId/site/domains'
+import { Route as DashboardProjectsProjectIdSiteFeaturesRouteImport } from './routes/dashboard/projects/$projectId/site/features'
+import { Route as DashboardProjectsProjectIdSiteNavigationRouteImport } from './routes/dashboard/projects/$projectId/site/navigation'
+import { Route as DashboardProjectsProjectIdSiteSeoRouteImport } from './routes/dashboard/projects/$projectId/site/seo'
 import { Route as DashboardProjectsProjectIdGenerationsGenerationIdChangesRouteImport } from './routes/dashboard/projects/$projectId/generations/$generationId_.changes'
 
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const MarketingRouteRoute = MarketingRouteRouteImport.update({
+  id: '/_marketing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRouteRoute = DashboardRouteRouteImport.update({
@@ -60,53 +59,14 @@ const DashboardRouteRoute = DashboardRouteRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MarketingRouteRoute = MarketingRouteRouteImport.update({
-  id: '/_marketing',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardIndexRoute = DashboardIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => DashboardRouteRoute,
 } as any)
 const MarketingIndexRoute = MarketingIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => MarketingRouteRoute,
-} as any)
-const OauthConsentRoute = OauthConsentRouteImport.update({
-  id: '/oauth/consent',
-  path: '/oauth/consent',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const InviteTokenRoute = InviteTokenRouteImport.update({
-  id: '/invite/$token',
-  path: '/invite/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EmailUnsubscribeRoute = EmailUnsubscribeRouteImport.update({
-  id: '/email/unsubscribe',
-  path: '/email/unsubscribe',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => DashboardRouteRoute,
-} as any)
-const ApproveRequestIdRoute = ApproveRequestIdRouteImport.update({
-  id: '/approve/$requestId',
-  path: '/approve/$requestId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MarketingPricingRoute = MarketingPricingRouteImport.update({
-  id: '/pricing',
-  path: '/pricing',
-  getParentRoute: () => MarketingRouteRoute,
-} as any)
-const MarketingMcpRoute = MarketingMcpRouteImport.update({
-  id: '/mcp',
-  path: '/mcp',
   getParentRoute: () => MarketingRouteRoute,
 } as any)
 const MarketingAboutRoute = MarketingAboutRouteImport.update({
@@ -114,24 +74,49 @@ const MarketingAboutRoute = MarketingAboutRouteImport.update({
   path: '/about',
   getParentRoute: () => MarketingRouteRoute,
 } as any)
-const DashboardTeamsIndexRoute = DashboardTeamsIndexRouteImport.update({
-  id: '/teams/',
-  path: '/teams/',
+const MarketingMcpRoute = MarketingMcpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => MarketingRouteRoute,
+} as any)
+const MarketingPricingRoute = MarketingPricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => MarketingRouteRoute,
+} as any)
+const ApproveRequestIdRoute = ApproveRequestIdRouteImport.update({
+  id: '/approve/$requestId',
+  path: '/approve/$requestId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardIndexRoute = DashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const EmailUnsubscribeRoute = EmailUnsubscribeRouteImport.update({
+  id: '/email/unsubscribe',
+  path: '/email/unsubscribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InviteTokenRoute = InviteTokenRouteImport.update({
+  id: '/invite/$token',
+  path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OauthConsentRoute = OauthConsentRouteImport.update({
+  id: '/oauth/consent',
+  path: '/oauth/consent',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardProjectsIndexRoute = DashboardProjectsIndexRouteImport.update({
   id: '/projects/',
   path: '/projects/',
-  getParentRoute: () => DashboardRouteRoute,
-} as any)
-const DashboardTeamsTeamIdRoute = DashboardTeamsTeamIdRouteImport.update({
-  id: '/teams/$teamId',
-  path: '/teams/$teamId',
-  getParentRoute: () => DashboardRouteRoute,
-} as any)
-const DashboardProjectsNewRoute = DashboardProjectsNewRouteImport.update({
-  id: '/projects/new',
-  path: '/projects/new',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
 const DashboardProjectsProjectIdRouteRoute =
@@ -140,28 +125,25 @@ const DashboardProjectsProjectIdRouteRoute =
     path: '/projects/$projectId',
     getParentRoute: () => DashboardRouteRoute,
   } as any)
+const DashboardProjectsNewRoute = DashboardProjectsNewRouteImport.update({
+  id: '/projects/new',
+  path: '/projects/new',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardTeamsIndexRoute = DashboardTeamsIndexRouteImport.update({
+  id: '/teams/',
+  path: '/teams/',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardTeamsTeamIdRoute = DashboardTeamsTeamIdRouteImport.update({
+  id: '/teams/$teamId',
+  path: '/teams/$teamId',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
 const DashboardProjectsProjectIdIndexRoute =
   DashboardProjectsProjectIdIndexRouteImport.update({
     id: '/',
     path: '/',
-    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdReviewRoute =
-  DashboardProjectsProjectIdReviewRouteImport.update({
-    id: '/review',
-    path: '/review',
-    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdProjectRoute =
-  DashboardProjectsProjectIdProjectRouteImport.update({
-    id: '/project',
-    path: '/project',
-    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdDomainsRoute =
-  DashboardProjectsProjectIdDomainsRouteImport.update({
-    id: '/domains',
-    path: '/domains',
     getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
   } as any)
 const DashboardProjectsProjectIdContentRoute =
@@ -170,34 +152,28 @@ const DashboardProjectsProjectIdContentRoute =
     path: '/content',
     getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
   } as any)
+const DashboardProjectsProjectIdDomainsRoute =
+  DashboardProjectsProjectIdDomainsRouteImport.update({
+    id: '/domains',
+    path: '/domains',
+    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdProjectRoute =
+  DashboardProjectsProjectIdProjectRouteImport.update({
+    id: '/project',
+    path: '/project',
+    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdReviewRoute =
+  DashboardProjectsProjectIdReviewRouteImport.update({
+    id: '/review',
+    path: '/review',
+    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
+  } as any)
 const DashboardProjectsProjectIdSiteRouteRoute =
   DashboardProjectsProjectIdSiteRouteRouteImport.update({
     id: '/site',
     path: '/site',
-    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdSiteIndexRoute =
-  DashboardProjectsProjectIdSiteIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdSettingsIndexRoute =
-  DashboardProjectsProjectIdSettingsIndexRouteImport.update({
-    id: '/settings/',
-    path: '/settings/',
-    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdRequestsIndexRoute =
-  DashboardProjectsProjectIdRequestsIndexRouteImport.update({
-    id: '/requests/',
-    path: '/requests/',
-    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdGenerationsIndexRoute =
-  DashboardProjectsProjectIdGenerationsIndexRouteImport.update({
-    id: '/generations/',
-    path: '/generations/',
     getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
   } as any)
 const DashboardProjectsProjectIdDoxabotIndexRoute =
@@ -206,52 +182,16 @@ const DashboardProjectsProjectIdDoxabotIndexRoute =
     path: '/doxabot/',
     getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
   } as any)
-const DashboardProjectsProjectIdSiteSeoRoute =
-  DashboardProjectsProjectIdSiteSeoRouteImport.update({
-    id: '/seo',
-    path: '/seo',
-    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdSiteNavigationRoute =
-  DashboardProjectsProjectIdSiteNavigationRouteImport.update({
-    id: '/navigation',
-    path: '/navigation',
-    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdSiteFeaturesRoute =
-  DashboardProjectsProjectIdSiteFeaturesRouteImport.update({
-    id: '/features',
-    path: '/features',
-    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdSiteDomainsRoute =
-  DashboardProjectsProjectIdSiteDomainsRouteImport.update({
-    id: '/domains',
-    path: '/domains',
-    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdSiteAppearanceRoute =
-  DashboardProjectsProjectIdSiteAppearanceRouteImport.update({
-    id: '/appearance',
-    path: '/appearance',
-    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdSiteAdvancedRoute =
-  DashboardProjectsProjectIdSiteAdvancedRouteImport.update({
-    id: '/advanced',
-    path: '/advanced',
-    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
-  } as any)
-const DashboardProjectsProjectIdSettingsApprovalsRoute =
-  DashboardProjectsProjectIdSettingsApprovalsRouteImport.update({
-    id: '/settings/approvals',
-    path: '/settings/approvals',
+const DashboardProjectsProjectIdDoxabotInstructionsRoute =
+  DashboardProjectsProjectIdDoxabotInstructionsRouteImport.update({
+    id: '/doxabot/instructions',
+    path: '/doxabot/instructions',
     getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
   } as any)
-const DashboardProjectsProjectIdRequestsRequestIdRoute =
-  DashboardProjectsProjectIdRequestsRequestIdRouteImport.update({
-    id: '/requests/$requestId',
-    path: '/requests/$requestId',
+const DashboardProjectsProjectIdGenerationsIndexRoute =
+  DashboardProjectsProjectIdGenerationsIndexRouteImport.update({
+    id: '/generations/',
+    path: '/generations/',
     getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
   } as any)
 const DashboardProjectsProjectIdGenerationsGenerationIdRoute =
@@ -260,11 +200,71 @@ const DashboardProjectsProjectIdGenerationsGenerationIdRoute =
     path: '/generations/$generationId',
     getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
   } as any)
-const DashboardProjectsProjectIdDoxabotInstructionsRoute =
-  DashboardProjectsProjectIdDoxabotInstructionsRouteImport.update({
-    id: '/doxabot/instructions',
-    path: '/doxabot/instructions',
+const DashboardProjectsProjectIdRequestsIndexRoute =
+  DashboardProjectsProjectIdRequestsIndexRouteImport.update({
+    id: '/requests/',
+    path: '/requests/',
     getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdRequestsRequestIdRoute =
+  DashboardProjectsProjectIdRequestsRequestIdRouteImport.update({
+    id: '/requests/$requestId',
+    path: '/requests/$requestId',
+    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdSettingsIndexRoute =
+  DashboardProjectsProjectIdSettingsIndexRouteImport.update({
+    id: '/settings/',
+    path: '/settings/',
+    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdSettingsApprovalsRoute =
+  DashboardProjectsProjectIdSettingsApprovalsRouteImport.update({
+    id: '/settings/approvals',
+    path: '/settings/approvals',
+    getParentRoute: () => DashboardProjectsProjectIdRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdSiteIndexRoute =
+  DashboardProjectsProjectIdSiteIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdSiteAdvancedRoute =
+  DashboardProjectsProjectIdSiteAdvancedRouteImport.update({
+    id: '/advanced',
+    path: '/advanced',
+    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdSiteAppearanceRoute =
+  DashboardProjectsProjectIdSiteAppearanceRouteImport.update({
+    id: '/appearance',
+    path: '/appearance',
+    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdSiteDomainsRoute =
+  DashboardProjectsProjectIdSiteDomainsRouteImport.update({
+    id: '/domains',
+    path: '/domains',
+    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdSiteFeaturesRoute =
+  DashboardProjectsProjectIdSiteFeaturesRouteImport.update({
+    id: '/features',
+    path: '/features',
+    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdSiteNavigationRoute =
+  DashboardProjectsProjectIdSiteNavigationRouteImport.update({
+    id: '/navigation',
+    path: '/navigation',
+    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
+  } as any)
+const DashboardProjectsProjectIdSiteSeoRoute =
+  DashboardProjectsProjectIdSiteSeoRouteImport.update({
+    id: '/seo',
+    path: '/seo',
+    getParentRoute: () => DashboardProjectsProjectIdSiteRouteRoute,
   } as any)
 const DashboardProjectsProjectIdGenerationsGenerationIdChangesRoute =
   DashboardProjectsProjectIdGenerationsGenerationIdChangesRouteImport.update({
@@ -531,11 +531,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/_marketing': {
+      id: '/_marketing'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof MarketingRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -545,74 +545,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_marketing': {
-      id: '/_marketing'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof MarketingRouteRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/dashboard/': {
-      id: '/dashboard/'
-      path: '/'
-      fullPath: '/dashboard/'
-      preLoaderRoute: typeof DashboardIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
     }
     '/_marketing/': {
       id: '/_marketing/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof MarketingIndexRouteImport
-      parentRoute: typeof MarketingRouteRoute
-    }
-    '/oauth/consent': {
-      id: '/oauth/consent'
-      path: '/oauth/consent'
-      fullPath: '/oauth/consent'
-      preLoaderRoute: typeof OauthConsentRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/invite/$token': {
-      id: '/invite/$token'
-      path: '/invite/$token'
-      fullPath: '/invite/$token'
-      preLoaderRoute: typeof InviteTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/email/unsubscribe': {
-      id: '/email/unsubscribe'
-      path: '/email/unsubscribe'
-      fullPath: '/email/unsubscribe'
-      preLoaderRoute: typeof EmailUnsubscribeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dashboard/settings': {
-      id: '/dashboard/settings'
-      path: '/settings'
-      fullPath: '/dashboard/settings'
-      preLoaderRoute: typeof DashboardSettingsRouteImport
-      parentRoute: typeof DashboardRouteRoute
-    }
-    '/approve/$requestId': {
-      id: '/approve/$requestId'
-      path: '/approve/$requestId'
-      fullPath: '/approve/$requestId'
-      preLoaderRoute: typeof ApproveRequestIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_marketing/pricing': {
-      id: '/_marketing/pricing'
-      path: '/pricing'
-      fullPath: '/pricing'
-      preLoaderRoute: typeof MarketingPricingRouteImport
-      parentRoute: typeof MarketingRouteRoute
-    }
-    '/_marketing/mcp': {
-      id: '/_marketing/mcp'
-      path: '/mcp'
-      fullPath: '/mcp'
-      preLoaderRoute: typeof MarketingMcpRouteImport
       parentRoute: typeof MarketingRouteRoute
     }
     '/_marketing/about': {
@@ -622,32 +566,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MarketingAboutRouteImport
       parentRoute: typeof MarketingRouteRoute
     }
-    '/dashboard/teams/': {
-      id: '/dashboard/teams/'
-      path: '/teams'
-      fullPath: '/dashboard/teams/'
-      preLoaderRoute: typeof DashboardTeamsIndexRouteImport
+    '/_marketing/mcp': {
+      id: '/_marketing/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof MarketingMcpRouteImport
+      parentRoute: typeof MarketingRouteRoute
+    }
+    '/_marketing/pricing': {
+      id: '/_marketing/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof MarketingPricingRouteImport
+      parentRoute: typeof MarketingRouteRoute
+    }
+    '/approve/$requestId': {
+      id: '/approve/$requestId'
+      path: '/approve/$requestId'
+      fullPath: '/approve/$requestId'
+      preLoaderRoute: typeof ApproveRequestIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard/': {
+      id: '/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof DashboardIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/settings': {
+      id: '/dashboard/settings'
+      path: '/settings'
+      fullPath: '/dashboard/settings'
+      preLoaderRoute: typeof DashboardSettingsRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/email/unsubscribe': {
+      id: '/email/unsubscribe'
+      path: '/email/unsubscribe'
+      fullPath: '/email/unsubscribe'
+      preLoaderRoute: typeof EmailUnsubscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invite/$token': {
+      id: '/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
+      preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oauth/consent': {
+      id: '/oauth/consent'
+      path: '/oauth/consent'
+      fullPath: '/oauth/consent'
+      preLoaderRoute: typeof OauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/dashboard/projects/': {
       id: '/dashboard/projects/'
       path: '/projects'
       fullPath: '/dashboard/projects/'
       preLoaderRoute: typeof DashboardProjectsIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
-    }
-    '/dashboard/teams/$teamId': {
-      id: '/dashboard/teams/$teamId'
-      path: '/teams/$teamId'
-      fullPath: '/dashboard/teams/$teamId'
-      preLoaderRoute: typeof DashboardTeamsTeamIdRouteImport
-      parentRoute: typeof DashboardRouteRoute
-    }
-    '/dashboard/projects/new': {
-      id: '/dashboard/projects/new'
-      path: '/projects/new'
-      fullPath: '/dashboard/projects/new'
-      preLoaderRoute: typeof DashboardProjectsNewRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/projects/$projectId': {
@@ -657,32 +636,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjectsProjectIdRouteRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
+    '/dashboard/projects/new': {
+      id: '/dashboard/projects/new'
+      path: '/projects/new'
+      fullPath: '/dashboard/projects/new'
+      preLoaderRoute: typeof DashboardProjectsNewRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/teams/': {
+      id: '/dashboard/teams/'
+      path: '/teams'
+      fullPath: '/dashboard/teams/'
+      preLoaderRoute: typeof DashboardTeamsIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/teams/$teamId': {
+      id: '/dashboard/teams/$teamId'
+      path: '/teams/$teamId'
+      fullPath: '/dashboard/teams/$teamId'
+      preLoaderRoute: typeof DashboardTeamsTeamIdRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
     '/dashboard/projects/$projectId/': {
       id: '/dashboard/projects/$projectId/'
       path: '/'
       fullPath: '/dashboard/projects/$projectId/'
       preLoaderRoute: typeof DashboardProjectsProjectIdIndexRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
-    }
-    '/dashboard/projects/$projectId/review': {
-      id: '/dashboard/projects/$projectId/review'
-      path: '/review'
-      fullPath: '/dashboard/projects/$projectId/review'
-      preLoaderRoute: typeof DashboardProjectsProjectIdReviewRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
-    }
-    '/dashboard/projects/$projectId/project': {
-      id: '/dashboard/projects/$projectId/project'
-      path: '/project'
-      fullPath: '/dashboard/projects/$projectId/project'
-      preLoaderRoute: typeof DashboardProjectsProjectIdProjectRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
-    }
-    '/dashboard/projects/$projectId/domains': {
-      id: '/dashboard/projects/$projectId/domains'
-      path: '/domains'
-      fullPath: '/dashboard/projects/$projectId/domains'
-      preLoaderRoute: typeof DashboardProjectsProjectIdDomainsRouteImport
       parentRoute: typeof DashboardProjectsProjectIdRouteRoute
     }
     '/dashboard/projects/$projectId/content': {
@@ -692,39 +671,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjectsProjectIdContentRouteImport
       parentRoute: typeof DashboardProjectsProjectIdRouteRoute
     }
+    '/dashboard/projects/$projectId/domains': {
+      id: '/dashboard/projects/$projectId/domains'
+      path: '/domains'
+      fullPath: '/dashboard/projects/$projectId/domains'
+      preLoaderRoute: typeof DashboardProjectsProjectIdDomainsRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
+    }
+    '/dashboard/projects/$projectId/project': {
+      id: '/dashboard/projects/$projectId/project'
+      path: '/project'
+      fullPath: '/dashboard/projects/$projectId/project'
+      preLoaderRoute: typeof DashboardProjectsProjectIdProjectRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
+    }
+    '/dashboard/projects/$projectId/review': {
+      id: '/dashboard/projects/$projectId/review'
+      path: '/review'
+      fullPath: '/dashboard/projects/$projectId/review'
+      preLoaderRoute: typeof DashboardProjectsProjectIdReviewRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
+    }
     '/dashboard/projects/$projectId/site': {
       id: '/dashboard/projects/$projectId/site'
       path: '/site'
       fullPath: '/dashboard/projects/$projectId/site'
       preLoaderRoute: typeof DashboardProjectsProjectIdSiteRouteRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
-    }
-    '/dashboard/projects/$projectId/site/': {
-      id: '/dashboard/projects/$projectId/site/'
-      path: '/'
-      fullPath: '/dashboard/projects/$projectId/site/'
-      preLoaderRoute: typeof DashboardProjectsProjectIdSiteIndexRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
-    }
-    '/dashboard/projects/$projectId/settings/': {
-      id: '/dashboard/projects/$projectId/settings/'
-      path: '/settings'
-      fullPath: '/dashboard/projects/$projectId/settings/'
-      preLoaderRoute: typeof DashboardProjectsProjectIdSettingsIndexRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
-    }
-    '/dashboard/projects/$projectId/requests/': {
-      id: '/dashboard/projects/$projectId/requests/'
-      path: '/requests'
-      fullPath: '/dashboard/projects/$projectId/requests/'
-      preLoaderRoute: typeof DashboardProjectsProjectIdRequestsIndexRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
-    }
-    '/dashboard/projects/$projectId/generations/': {
-      id: '/dashboard/projects/$projectId/generations/'
-      path: '/generations'
-      fullPath: '/dashboard/projects/$projectId/generations/'
-      preLoaderRoute: typeof DashboardProjectsProjectIdGenerationsIndexRouteImport
       parentRoute: typeof DashboardProjectsProjectIdRouteRoute
     }
     '/dashboard/projects/$projectId/doxabot/': {
@@ -734,60 +706,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjectsProjectIdDoxabotIndexRouteImport
       parentRoute: typeof DashboardProjectsProjectIdRouteRoute
     }
-    '/dashboard/projects/$projectId/site/seo': {
-      id: '/dashboard/projects/$projectId/site/seo'
-      path: '/seo'
-      fullPath: '/dashboard/projects/$projectId/site/seo'
-      preLoaderRoute: typeof DashboardProjectsProjectIdSiteSeoRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
-    }
-    '/dashboard/projects/$projectId/site/navigation': {
-      id: '/dashboard/projects/$projectId/site/navigation'
-      path: '/navigation'
-      fullPath: '/dashboard/projects/$projectId/site/navigation'
-      preLoaderRoute: typeof DashboardProjectsProjectIdSiteNavigationRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
-    }
-    '/dashboard/projects/$projectId/site/features': {
-      id: '/dashboard/projects/$projectId/site/features'
-      path: '/features'
-      fullPath: '/dashboard/projects/$projectId/site/features'
-      preLoaderRoute: typeof DashboardProjectsProjectIdSiteFeaturesRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
-    }
-    '/dashboard/projects/$projectId/site/domains': {
-      id: '/dashboard/projects/$projectId/site/domains'
-      path: '/domains'
-      fullPath: '/dashboard/projects/$projectId/site/domains'
-      preLoaderRoute: typeof DashboardProjectsProjectIdSiteDomainsRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
-    }
-    '/dashboard/projects/$projectId/site/appearance': {
-      id: '/dashboard/projects/$projectId/site/appearance'
-      path: '/appearance'
-      fullPath: '/dashboard/projects/$projectId/site/appearance'
-      preLoaderRoute: typeof DashboardProjectsProjectIdSiteAppearanceRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
-    }
-    '/dashboard/projects/$projectId/site/advanced': {
-      id: '/dashboard/projects/$projectId/site/advanced'
-      path: '/advanced'
-      fullPath: '/dashboard/projects/$projectId/site/advanced'
-      preLoaderRoute: typeof DashboardProjectsProjectIdSiteAdvancedRouteImport
-      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
-    }
-    '/dashboard/projects/$projectId/settings/approvals': {
-      id: '/dashboard/projects/$projectId/settings/approvals'
-      path: '/settings/approvals'
-      fullPath: '/dashboard/projects/$projectId/settings/approvals'
-      preLoaderRoute: typeof DashboardProjectsProjectIdSettingsApprovalsRouteImport
+    '/dashboard/projects/$projectId/doxabot/instructions': {
+      id: '/dashboard/projects/$projectId/doxabot/instructions'
+      path: '/doxabot/instructions'
+      fullPath: '/dashboard/projects/$projectId/doxabot/instructions'
+      preLoaderRoute: typeof DashboardProjectsProjectIdDoxabotInstructionsRouteImport
       parentRoute: typeof DashboardProjectsProjectIdRouteRoute
     }
-    '/dashboard/projects/$projectId/requests/$requestId': {
-      id: '/dashboard/projects/$projectId/requests/$requestId'
-      path: '/requests/$requestId'
-      fullPath: '/dashboard/projects/$projectId/requests/$requestId'
-      preLoaderRoute: typeof DashboardProjectsProjectIdRequestsRequestIdRouteImport
+    '/dashboard/projects/$projectId/generations/': {
+      id: '/dashboard/projects/$projectId/generations/'
+      path: '/generations'
+      fullPath: '/dashboard/projects/$projectId/generations/'
+      preLoaderRoute: typeof DashboardProjectsProjectIdGenerationsIndexRouteImport
       parentRoute: typeof DashboardProjectsProjectIdRouteRoute
     }
     '/dashboard/projects/$projectId/generations/$generationId': {
@@ -797,12 +727,82 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjectsProjectIdGenerationsGenerationIdRouteImport
       parentRoute: typeof DashboardProjectsProjectIdRouteRoute
     }
-    '/dashboard/projects/$projectId/doxabot/instructions': {
-      id: '/dashboard/projects/$projectId/doxabot/instructions'
-      path: '/doxabot/instructions'
-      fullPath: '/dashboard/projects/$projectId/doxabot/instructions'
-      preLoaderRoute: typeof DashboardProjectsProjectIdDoxabotInstructionsRouteImport
+    '/dashboard/projects/$projectId/requests/': {
+      id: '/dashboard/projects/$projectId/requests/'
+      path: '/requests'
+      fullPath: '/dashboard/projects/$projectId/requests/'
+      preLoaderRoute: typeof DashboardProjectsProjectIdRequestsIndexRouteImport
       parentRoute: typeof DashboardProjectsProjectIdRouteRoute
+    }
+    '/dashboard/projects/$projectId/requests/$requestId': {
+      id: '/dashboard/projects/$projectId/requests/$requestId'
+      path: '/requests/$requestId'
+      fullPath: '/dashboard/projects/$projectId/requests/$requestId'
+      preLoaderRoute: typeof DashboardProjectsProjectIdRequestsRequestIdRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
+    }
+    '/dashboard/projects/$projectId/settings/': {
+      id: '/dashboard/projects/$projectId/settings/'
+      path: '/settings'
+      fullPath: '/dashboard/projects/$projectId/settings/'
+      preLoaderRoute: typeof DashboardProjectsProjectIdSettingsIndexRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
+    }
+    '/dashboard/projects/$projectId/settings/approvals': {
+      id: '/dashboard/projects/$projectId/settings/approvals'
+      path: '/settings/approvals'
+      fullPath: '/dashboard/projects/$projectId/settings/approvals'
+      preLoaderRoute: typeof DashboardProjectsProjectIdSettingsApprovalsRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdRouteRoute
+    }
+    '/dashboard/projects/$projectId/site/': {
+      id: '/dashboard/projects/$projectId/site/'
+      path: '/'
+      fullPath: '/dashboard/projects/$projectId/site/'
+      preLoaderRoute: typeof DashboardProjectsProjectIdSiteIndexRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
+    }
+    '/dashboard/projects/$projectId/site/advanced': {
+      id: '/dashboard/projects/$projectId/site/advanced'
+      path: '/advanced'
+      fullPath: '/dashboard/projects/$projectId/site/advanced'
+      preLoaderRoute: typeof DashboardProjectsProjectIdSiteAdvancedRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
+    }
+    '/dashboard/projects/$projectId/site/appearance': {
+      id: '/dashboard/projects/$projectId/site/appearance'
+      path: '/appearance'
+      fullPath: '/dashboard/projects/$projectId/site/appearance'
+      preLoaderRoute: typeof DashboardProjectsProjectIdSiteAppearanceRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
+    }
+    '/dashboard/projects/$projectId/site/domains': {
+      id: '/dashboard/projects/$projectId/site/domains'
+      path: '/domains'
+      fullPath: '/dashboard/projects/$projectId/site/domains'
+      preLoaderRoute: typeof DashboardProjectsProjectIdSiteDomainsRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
+    }
+    '/dashboard/projects/$projectId/site/features': {
+      id: '/dashboard/projects/$projectId/site/features'
+      path: '/features'
+      fullPath: '/dashboard/projects/$projectId/site/features'
+      preLoaderRoute: typeof DashboardProjectsProjectIdSiteFeaturesRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
+    }
+    '/dashboard/projects/$projectId/site/navigation': {
+      id: '/dashboard/projects/$projectId/site/navigation'
+      path: '/navigation'
+      fullPath: '/dashboard/projects/$projectId/site/navigation'
+      preLoaderRoute: typeof DashboardProjectsProjectIdSiteNavigationRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
+    }
+    '/dashboard/projects/$projectId/site/seo': {
+      id: '/dashboard/projects/$projectId/site/seo'
+      path: '/seo'
+      fullPath: '/dashboard/projects/$projectId/site/seo'
+      preLoaderRoute: typeof DashboardProjectsProjectIdSiteSeoRouteImport
+      parentRoute: typeof DashboardProjectsProjectIdSiteRouteRoute
     }
     '/dashboard/projects/$projectId/generations/$generationId_/changes': {
       id: '/dashboard/projects/$projectId/generations/$generationId_/changes'

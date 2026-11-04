@@ -36,6 +36,8 @@ const STEPS = [
   { name: "packages", title: "Build workspace packages", command: ["pnpm", "--filter", "./packages/**", "build"] },
   { name: "docs-resolver", title: "Deploy the private docs resolver", command: ["pnpm", "deploy:docs-resolver"] },
   { name: "docs-runtime", title: "Deploy the docs runtime", command: ["pnpm", "deploy:docs-runtime"] },
+  // The dispatcher binds to it, and a binding needs an existing Worker.
+  { name: "try-proxy", title: "Deploy the playground proxy", command: ["pnpm", "deploy:try-proxy"] },
   {
     name: "docs-rendering",
     title: "Deploy the docs renderer, dispatcher, prerenderer and API",

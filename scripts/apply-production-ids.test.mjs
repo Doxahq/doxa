@@ -1,11 +1,24 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { assertIdsFilled, fillPlaceholders, parseValues, placeholdersIn } from "./lib/production-ids.mjs";
+import { assertConfigFilled, assertIdsFilled, fillPlaceholders, parseValues, placeholdersIn } from "./lib/production-ids.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
+
+test("refuses to deploy one config that still holds a placeholder", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "doxa-ids-"));
+  try {
+    writeFileSync(path.join(root, "wrangler.json"), '{"DOXA_TRY_BLOCKED_HOSTS":"${OPS_TRY_BLOCKED_HOSTS}"}');
+    assert.throws(() => assertConfigFilled(root, "wrangler.json"), /OPS_TRY_BLOCKED_HOSTS/);
+    writeFileSync(path.join(root, "wrangler.json"), '{"DOXA_TRY_BLOCKED_HOSTS":"api.example.com"}');
+    assert.doesNotThrow(() => assertConfigFilled(root, "wrangler.json"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("finds each placeholder once", () => {
   assert.deepEqual(placeholdersIn('{"a":"${CF_X}","b":"${CF_Y}","c":"${CF_X}","d":"${NOT_CF}"}'), ["CF_X", "CF_Y"]);

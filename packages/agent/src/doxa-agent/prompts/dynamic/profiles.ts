@@ -48,7 +48,7 @@ export const projectProfiles: Record<ProjectProfileId, ProjectProfile> = {
       "apiEndpoints must describe served endpoints, not outbound integrations.",
       "Populate referenceSurfaces.rest with every served endpoint. Do not put SDK exports in REST API.",
       "Put every auth scheme the API accepts in referenceSurfaces.rest.authSchemes. Set endpoint authRequirement to the scheme that endpoint uses. Do not describe auth setup inside endpoint descriptions.",
-      "Set referenceSurfaces.rest.baseUrl only from a real server URL found in source, OpenAPI servers, or documented configuration. Never invent one. If the API needs a host the reader must supply, or if it does not send CORS headers, set referenceSurfaces.rest.playground to { \"enabled\": false, \"reason\": \"...\" }.",
+      "Set referenceSurfaces.rest.baseUrl only from a real server URL found in source, OpenAPI servers, or documented configuration. Never invent one. If the API needs a host the reader must supply, set referenceSurfaces.rest.playground to { \"enabled\": false, \"reason\": \"...\" }.",
       "For each REST endpoint, prefer OpenAPI metadata when available; otherwise use route handlers and validation schemas, and never invent unsupported parameters or fields.",
       "Give every REST endpoint a unique-within-group, 2-to-5-word, imperative, sentence-case title that describes actual behavior. Never include an HTTP method, URL path, path parameter, slash, brace, or colon in the title.",
     ],

@@ -56,6 +56,18 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       allowedHosts: getDevAllowedHosts(),
+      // Production sends these through the dispatcher, which `pnpm dev` does not
+      // run. If the gateway is not running, the panel uses browser mode.
+      proxy: {
+        "/__doxa/try": {
+          target: "http://127.0.0.1:8792",
+          configure: (proxy) => {
+            proxy.on("proxyReq", (request, incoming) => {
+              request.setHeader("x-doxa-dev-host", incoming.headers.host ?? "");
+            });
+          },
+        },
+      },
     },
     build: buildConfig,
     define: isPlatformRendererBuild

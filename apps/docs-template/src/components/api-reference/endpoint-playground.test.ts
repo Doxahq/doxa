@@ -86,6 +86,22 @@ describe("endpoint playground authorization", () => {
     expect(html).toContain("https://api.example.com/messages");
   });
 
+  test("draws the response after the code sample, because its height changes", () => {
+    const html = renderToString(
+      createElement(EndpointPlayground, {
+        method: "GET",
+        path: "/messages",
+        baseUrl: "https://api.example.com",
+        parameters: [],
+      })
+    );
+
+    const sample = html.indexOf(">Code sample<");
+    const response = html.indexOf(">Response<");
+    expect(sample).toBeGreaterThan(-1);
+    expect(response).toBeGreaterThan(sample);
+  });
+
   test("anchors copy icons inside their button", () => {
     const html = renderToString(createElement(Copy, { content: "sample" }));
 
@@ -117,11 +133,11 @@ describe("endpoint playground authorization", () => {
     );
 
     expect(html.indexOf(">Authorization<")).toBeLessThan(
-      html.indexOf(">Parameters<")
+      html.indexOf(">Query<")
     );
   });
 
-  test("shows a fixed Bearer prefix for bearer tokens", () => {
+  test("shows a fixed Bearer prefix for bearer tokens, with the key masked", () => {
     const html = renderToString(
       createElement(EndpointPlayground, {
         method: "GET",
@@ -139,12 +155,150 @@ describe("endpoint playground authorization", () => {
     );
 
     expect(html).toContain('data-auth-prefix="Bearer"');
-    expect(html).toContain('type="text"');
-    expect(html).not.toContain("masked-field");
+    expect(html).toContain('type="password"');
+    expect(html).toContain('autoComplete="new-password"');
     const prefixClasses = html.match(
       /data-auth-prefix="Bearer" class="([^"]*)"/
     )?.[1];
     expect(prefixClasses?.split(" ")).not.toContain("border-r");
+  });
+
+  // The old text is false when the proxy sends the request.
+  test("never says that the key stays away from the server", () => {
+    const html = renderToString(
+      createElement(EndpointPlayground, {
+        method: "GET",
+        path: "/messages",
+        baseUrl: "https://api.example.com",
+        parameters: [
+          {
+            name: "Authorization",
+            type: "bearer",
+            location: "header",
+            required: true,
+          },
+        ],
+      })
+    );
+
+    expect(html).not.toContain("never reaches");
+    expect(html).toContain("Use a test key. Kept in this tab only.");
+  });
+
+  test("makes no request on render", () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    renderToString(
+      createElement(EndpointPlayground, {
+        method: "DELETE",
+        path: "/messages/1",
+        baseUrl: "https://api.example.com",
+        parameters: [],
+      })
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test("warns before a request that can change data, and not before a read", () => {
+    const render = (method: string) =>
+      renderToString(
+        createElement(EndpointPlayground, {
+          method,
+          path: "/messages",
+          baseUrl: "https://api.example.com",
+          parameters: [],
+        })
+      );
+
+    expect(render("POST")).toContain("This request can change real data.");
+    expect(render("GET")).not.toContain("This request can change real data.");
+  });
+
+  test("draws typed inputs from the page's props", () => {
+    const html = renderToString(
+      createElement(EndpointPlayground, {
+        method: "GET",
+        path: "/messages",
+        baseUrl: "https://api.example.com",
+        parameters: [
+          {
+            name: "order",
+            type: "string",
+            location: "query",
+            required: true,
+            enumValues: ["asc", "desc"],
+          },
+          { name: "limit", type: "integer", location: "query", required: true },
+          { name: "pinned", type: "boolean", location: "query", required: true },
+          {
+            name: "tag",
+            type: "string",
+            location: "query",
+            required: true,
+            example: "docs",
+          },
+        ],
+      })
+    );
+
+    expect(html).toContain('<option value="asc">asc</option>');
+    expect(html).toContain('type="number"');
+    expect(html).toContain('<option value="true">true</option>');
+    expect(html).toContain('value="docs"');
+  });
+
+  test("keeps old pages working with plain text inputs", () => {
+    const html = renderToString(
+      createElement(EndpointPlayground, {
+        method: "GET",
+        path: "/messages",
+        baseUrl: "https://api.example.com",
+        parameters: [
+          { name: "q", type: "string", location: "query", required: true },
+        ],
+      })
+    );
+
+    expect(html).toContain('name="q"');
+    expect(html).toContain('type="text"');
+    expect(html).not.toContain('<option value="">');
+  });
+
+  test("hides optional fields behind a chip that names them", () => {
+    const html = renderToString(
+      createElement(EndpointPlayground, {
+        method: "GET",
+        path: "/messages",
+        baseUrl: "https://api.example.com",
+        parameters: [
+          { name: "id", type: "string", location: "query", required: true },
+          { name: "limit", type: "integer", location: "query", required: false },
+          { name: "order", type: "string", location: "query", required: false },
+        ],
+      })
+    );
+
+    expect(html).toContain('name="id"');
+    expect(html).not.toContain('name="limit"');
+    expect(html.replaceAll("<!-- -->", "")).toContain("2 optional");
+    expect(html).toContain("limit, order");
+  });
+
+  test("shows the documented example as an example", () => {
+    const html = renderToString(
+      createElement(EndpointPlayground, {
+        method: "GET",
+        path: "/messages",
+        baseUrl: "https://api.example.com",
+        parameters: [],
+        exampleResponse: { status: "200", text: '{"id":"example-1"}' },
+      })
+    );
+
+    expect(html.replaceAll("<!-- -->", "")).toContain("Example of a 200 response.");
+    expect(html).toContain("example-1");
   });
 
   test("stores the authorization token for the browser session", () => {

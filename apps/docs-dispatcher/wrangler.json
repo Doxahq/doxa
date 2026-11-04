@@ -92,6 +92,11 @@
       "binding": "PRERENDER_TASKS",
       "service": "doxa-api-production",
       "entrypoint": "PrerenderTaskApi"
+    },
+    {
+      "binding": "TRY_PROXY",
+      "service": "doxa-try-proxy",
+      "entrypoint": "TryProxyApi"
     }
   ],
   "worker_loaders": [
@@ -206,7 +211,7 @@
     "DOXA_PROD_ROUTE_DATA_PREFETCH_SITE_IDS": "",
     "DOXA_PROD_KV_HOSTNAME_MODE": "on",
     "DOXA_PROD_HTTPS_REDIRECT_MODE": "on",
-    "DOXA_PROD_DOCS_CSP_MODE": "report",
+    "DOXA_PROD_DOCS_CSP_MODE": "enforce",
     "DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE": "all",
     "DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_SITE_IDS": "",
     "DOXA_PROD_TEXT_ROUTE_CACHE_MODE": "all",

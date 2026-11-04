@@ -21,6 +21,7 @@
     "deploy:email-worker": "pnpm --filter @doxahq/email-worker exec wrangler deploy --env production",
     "deploy:mcp": "pnpm --filter @doxahq/mcp exec wrangler deploy --env production",
     "deploy:docs-runtime": "pnpm --filter @doxahq/docs-runtime exec wrangler deploy --env production",
+    "deploy:try-proxy": "node scripts/deploy-try-proxy.mjs",
     "deploy:docs-template": "pnpm --filter @doxahq/docs-template deploy:renderer",
     "deploy:docs-prerenderer": "pnpm --filter @doxahq/docs-prerenderer exec wrangler deploy --config dist/wrangler.production.json",
     "deploy:web": "VITE_API_BASE_URL=https://api.doxa.so VITE_DOCS_BASE_DOMAIN=doxa.page VITE_DOCS_RENDERER_BASE_URL= VITE_DOCS_RUNTIME_URL= pnpm --filter @doxahq/web run deploy",

@@ -18,6 +18,9 @@ export {
 export type { ApiParameterDefinition, ApiParameterLocation };
 
 interface ApiParamProps extends ApiParameterDefinition {
+  /** Read from the node tree for the playground. The row does not draw it. */
+  enum?: string;
+  default?: string;
   children?: ReactNode;
 }
 

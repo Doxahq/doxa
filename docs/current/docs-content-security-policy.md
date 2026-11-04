@@ -42,8 +42,8 @@ mark from new HTML, so new HTML never gets this treatment.
 
 | Value | Effect |
 | --- | --- |
-| `report` (current) | The policy goes in `Content-Security-Policy-Report-Only`. Nothing is blocked. |
-| `enforce` | The policy goes in `Content-Security-Policy` and is enforced. |
+| `enforce` (current) | The policy goes in `Content-Security-Policy` and is enforced. |
+| `report` | The policy goes in `Content-Security-Policy-Report-Only`. Nothing is blocked. |
 | `off` (or any other value) | No nonces and no policy. The mark stays in the HTML. This is safe, because the mark of finished HTML gives no access. |
 
 ## Reports
@@ -53,10 +53,20 @@ dispatcher logs one `docs_csp_report` line for each violation, with the host,
 the page path, the directive and the blocked origin. It keeps no query
 strings and no full URLs. The endpoint is under the per-IP request limit.
 
-## Moving to enforce
+Expect one `script-src` report with the blocked value `eval` on each page load.
+It comes from the feature probe of Zod (`new Function("")` in a `try`). Zod
+catches the block and uses its normal parser, so nothing breaks.
 
-1. Deploy with `report`.
-2. Read the `docs_csp_report` lines in the dispatcher logs for a week.
-3. If a report shows a script or frame that published pages need, change the
-   policy first.
-4. Set `enforce` and deploy the dispatcher.
+## The move to enforce
+
+The API playground moved this mode to `enforce`, because readers paste API keys
+on docs pages. On 2026-11-04, three published sites loaded in headless Chrome
+with the live policy enforced in the browser. These passed: the home page,
+search, client navigation and one reference page. The Zod probe was the only
+violation. This check did not cover `<Embed>` pages, chat or the new playground
+panel.
+
+If a report shows a script or a frame that published pages need, change the
+policy. If that takes time, set `report` and deploy the dispatcher. The test in
+`apps/docs-dispatcher/tests/content-security-policy.test.ts` names the mode, so
+it must change too.

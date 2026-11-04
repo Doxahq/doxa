@@ -19,6 +19,7 @@ import {
   DocsResolverClient,
   type DocsResolverBinding,
 } from "@doxahq/contracts/docs-resolver";
+import type { DocsTryProxyRpc } from "@doxahq/contracts/docs-try";
 import type { DocsHostnameMapSync } from "@doxahq/contracts/docs-hostname-map";
 import type { DocsWarmStatus } from "@doxahq/contracts/docs-warm-job";
 import { WorkerEntrypoint } from "cloudflare:workers";
@@ -113,6 +114,7 @@ import {
   withDocsSecurityHeaders,
 } from "./security-headers";
 import { handleSiteAssetRequest } from "./site-assets";
+import { handleDocsTryRequest, isDocsTryRequest } from "./try-route";
 import {
   DocsTextCacheEntrypoint,
   fetchDocsTextFromCache,
@@ -185,6 +187,8 @@ interface DispatcherEnv
   /** Workers KV hostname map. Optional: without it every lookup misses. */
   DOCS_HOSTNAME_MAP?: KVNamespace;
   DOXA_PROD_KV_HOSTNAME_MODE?: string;
+  /** Sends "Try it" requests. Without it, the reader's browser sends them. */
+  TRY_PROXY?: DocsTryProxyRpc;
 }
 
 /** Workers Cache caches fetch entrypoints, not custom RPC methods. */
@@ -490,6 +494,18 @@ const docsGateway = {
       timing,
       resolveHost,
     };
+
+    if (isDocsTryRequest(request)) {
+      const answer = await handleDocsTryRequest(request, {
+        resolveHost,
+        runtime: env.DOCS_RUNTIME,
+        proxy: env.TRY_PROXY,
+      });
+      return withDocsPreviewSearchPolicy(
+        withDocsSecurityHeaders(withoutResponseCaching(answer)),
+        resolvedHost,
+      );
+    }
 
     // Route data is internal JSON for the pages of the same host, which a
     // redirecting host never serves: it keeps its own lookup rules.

@@ -40,6 +40,8 @@ export interface RuntimeFeatureConfig {
   apiPlayground: boolean;
   /** The owner's "Try it" target (SEC-010); unset turns Try it off. */
   apiPlaygroundBaseUrl?: string;
+  /** Who sends "Try it" requests. Unset means the proxy, when it can. */
+  apiPlaygroundTransport?: "proxy" | "browser";
   rawMarkdown: boolean;
   loadFromGithub: boolean;
 }

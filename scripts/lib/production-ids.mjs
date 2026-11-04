@@ -38,6 +38,17 @@ export function assertIdsFilled(root) {
   }
 }
 
+/**
+ * Throws when one config still holds a placeholder. Wrangler accepts a
+ * placeholder in a variable as plain text, so it does not stop the deploy.
+ */
+export function assertConfigFilled(root, file) {
+  const names = placeholdersIn(readFileSync(path.join(root, file), "utf8"));
+  if (names.length > 0) {
+    throw new Error(`${file} still holds placeholders: ${names.join(", ")}. Deploy it from the ops repo: scripts/deploy.sh main --step try-proxy.`);
+  }
+}
+
 /** The placeholder names in a text, in order of first use. */
 export function placeholdersIn(text) {
   return [...new Set([...text.matchAll(PLACEHOLDER)].map((match) => match[1]))];

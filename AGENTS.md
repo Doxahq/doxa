@@ -10,6 +10,7 @@
   - `apps/agent-worker`: queue consumer for generation jobs.
   - `apps/email-worker` (Worker `doxa-email`): queue consumer that renders and sends email. See `docs/current/email.md`.
   - `packages/email`: provider-neutral email layer (transports, react-email templates, catalog). Only `doxa-email` imports `@doxahq/email/mailer`, which loads React.
+  - `apps/try-proxy` (Worker `doxa-try-proxy`): sends the API playground's "Try it" requests. It has no public route, secrets or private bindings. See `docs/current/api-playground-proxy.md`. Never make these calls from the API on ECS: its metadata address returns the credentials of the task role.
   - `apps/agent-container`: Cloudflare container wrapper for repo checkout and filesystem-based agent execution.
   - `packages/agent`: shared documentation-generation agent.
   - `packages/db`: Drizzle schema, migrations, and Hyperdrive/pg client.

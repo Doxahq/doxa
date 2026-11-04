@@ -199,7 +199,9 @@ These components render REST request and response metadata. The generator writes
 
 On a page whose frontmatter carries `apiMethod` and `apiPath`, the renderer draws the method and path bar, the request and response cards, the parameter groups, and their headings. Write only the introduction and usage notes as prose. Do not add headings for Authorizations, Parameters, Body, or Response.
 
-The "Try it" playground sends requests only to the API base URL that the site owner sets in the site settings. The `baseUrl` of an `ApiEndpoint` appears in the request samples and never decides where a reader's request goes.
+The "Try it" playground sends requests only to the API base URL that the site owner sets in the site settings. The `baseUrl` of an `ApiEndpoint` appears in the request samples and never decides where a reader's request goes. A Doxa server sends each request by default, so the API needs no CORS setup. Do not tell readers that a request comes from their browser, and do not ask them to set up CORS.
+
+The optional `ApiParam` props `enum` (comma-separated allowed values), `example` and `default` give the playground typed inputs and hints. The row on the page does not draw them.
 
 ## Markdown Features
 

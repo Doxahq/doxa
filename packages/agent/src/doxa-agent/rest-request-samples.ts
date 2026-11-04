@@ -154,6 +154,9 @@ function buildNodeFetchSample(model: RestRequestModel): string {
 
 function buildNodeXhrSample(model: RestRequestModel): string {
   const lines = [
+    // Node has no XMLHttpRequest of its own.
+    'const XMLHttpRequest = require("xhr2");',
+    "",
     "const xhr = new XMLHttpRequest();",
     `xhr.open(${quoteJavaScript(model.method)}, ${quoteJavaScript(model.url)});`,
     ...model.headers.map(

@@ -228,13 +228,11 @@ describe("API reference layout", () => {
     expect(parameters).toBeGreaterThan(response);
   });
 
-  test("reserves the try-it slot between the endpoint bar and the samples", () => {
-    const bar = html.indexOf('aria-label="POST method"');
-    const slot = html.indexOf("endpoint-try-it");
-    const request = html.indexOf("curl --request POST");
-
-    expect(slot).toBeGreaterThan(bar);
-    expect(request).toBeGreaterThan(slot);
+  test("keeps the playground closed until a reader opens it", () => {
+    expect(html).toContain("Try it");
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).not.toContain('role="dialog"');
+    expect(html).not.toContain("Send");
   });
 
   // SECURITY REGRESSION GUARDRAIL (SEC-010): only the owner's setting turns Try it on.
@@ -257,6 +255,40 @@ describe("API reference layout", () => {
     );
 
     expect(html).toContain("Try it");
+  });
+
+  describe("the API address on the page", () => {
+    const pageWithUrl = page.replace(
+      "curl --request POST",
+      "curl --url 'http://localhost:4000/v1/projects/{projectId}/flags'"
+    );
+    const render = (pageFeatures: RuntimeFeatureConfig) =>
+      renderToString(
+        createElement(ApiReferenceBody, {
+          document: parseRuntimeMdx(pageWithUrl),
+          method: "POST",
+          path: "/v1/projects/{projectId}/flags",
+          features: pageFeatures,
+        })
+      );
+
+    test("shows the owner's address in the bar and in the sample", () => {
+      const html = render({
+        ...features,
+        apiPlaygroundBaseUrl: "https://owner.example.com",
+      });
+
+      expect(html).toContain("https://owner.example.com</span>");
+      expect(html).toContain("https://owner.example.com/v1/projects/{projectId}/flags");
+      expect(html).not.toContain("localhost:4000");
+    });
+
+    test("keeps the generated sample and shows no address when the playground is off", () => {
+      const html = render({ ...features, apiPlayground: false });
+
+      expect(html).toContain("localhost:4000");
+      expect(html).not.toContain("https://owner.example.com");
+    });
   });
 
   test("hides the try-it control when the site setting disables the playground", () => {

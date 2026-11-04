@@ -182,6 +182,17 @@ describe("docs content security policy", () => {
   });
 });
 
+// SECURITY REGRESSION GUARDRAIL: readers paste API keys on docs pages.
+test("production enforces the policy", async () => {
+  const { readFileSync } = await import("node:fs");
+  const config = JSON.parse(
+    readFileSync(new URL("../wrangler.json", import.meta.url), "utf8"),
+  ) as { env?: Record<string, { vars?: Record<string, string> }>; vars?: Record<string, string> };
+  const vars = config.env?.production?.vars ?? config.vars;
+
+  expect(vars?.DOXA_PROD_DOCS_CSP_MODE).toBe("enforce");
+});
+
 describe("CSP violation reports", () => {
   test("reads the legacy report-uri form and a Reporting API batch, without query strings", () => {
     expect(

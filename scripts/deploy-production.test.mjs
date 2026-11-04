@@ -39,6 +39,13 @@ test("the API deploys before every Worker that binds to it", () => {
   }
 });
 
+test("the playground proxy deploys before the dispatcher that binds to it", () => {
+  const steps = scriptSteps();
+
+  assert.ok(steps.indexOf("try-proxy") >= 0);
+  assert.ok(steps.indexOf("try-proxy") < steps.indexOf("docs-rendering"));
+});
+
 test("rejects an unknown step", () => {
   const result = spawnSync(process.execPath, [script, "--step", "nope"], { encoding: "utf8" });
 

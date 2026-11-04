@@ -60,6 +60,7 @@ Starts the Doxa local development stack with prefixed logs:
   - generation queue consumer with a local Cloudflare Workflow
   - docs runtime Worker on http://localhost:8788
   - shared docs renderer on http://<project>.localhost:3002
+  - API playground gateway on http://127.0.0.1:8792, for "Try it" on the renderer
   - agent container on http://localhost:8789
   - MCP server Worker on http://localhost:8791/mcp
   - web app on http://localhost:3001
@@ -150,6 +151,8 @@ check_dev_ports() {
 
   if [ "$WITH_RENDERER" -eq 1 ]; then
     require_port_available "docs renderer" 3002
+    require_port_available "API playground gateway" 8792
+    require_port_available "API playground gateway inspector" 9235
   fi
 
   if [ "$WITH_MCP" -eq 1 ]; then
@@ -811,6 +814,7 @@ if [ "$WITH_DOCS" -eq 1 ]; then
 fi
 
 if [ "$WITH_RENDERER" -eq 1 ]; then
+  start_service "try" "$MAGENTA" 'pnpm --filter @doxahq/try-proxy dev:gateway --env-file "$DOCS_RUNTIME_ENV_FILE" --var DOXA_DOCS_CONTENT_WORKER_URL:http://localhost:8788'
   start_service "renderer" "$GREEN" 'DOXA_DOCS_LOCAL_PLATFORM_DEV=1 DOXA_DOCS_CONTENT_WORKER_URL=http://localhost:8788 DOXA_DEPLOY_TARGET=cloudflare DOXA_API_BASE_URL="$DOXA_API_BASE_URL" DOXA_DASHBOARD_BASE_URL="$DOXA_DASHBOARD_BASE_URL" DOXA_DOCS_BASE_DOMAIN="$DOXA_DOCS_BASE_DOMAIN" pnpm --dir "$DOCS_RENDERER_DIR" exec vite dev --host 0.0.0.0 --port 3002' "$DOCS_CONTENT_TOKEN"
   wait_for_http_service "docs renderer" "http://localhost:3002/health.json" 120 "localhost:3002"
 fi

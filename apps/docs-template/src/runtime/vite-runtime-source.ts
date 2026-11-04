@@ -544,6 +544,7 @@ function cloneFeatureConfig(
     copyPage: { ...features.copyPage },
     apiPlayground: features.apiPlayground,
     ...(features.apiPlaygroundBaseUrl ? { apiPlaygroundBaseUrl: features.apiPlaygroundBaseUrl } : {}),
+    ...(features.apiPlaygroundTransport ? { apiPlaygroundTransport: features.apiPlaygroundTransport } : {}),
     rawMarkdown: features.rawMarkdown,
     loadFromGithub: features.loadFromGithub,
   };

@@ -1,0 +1,23 @@
+{
+  "name": "@doxahq/try-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --inspector-port 9235",
+    "dev:gateway": "wrangler dev dev/gateway.ts --ip 127.0.0.1 --port 8792 --inspector-port 9235 --persist-to ../../.wrangler/state --var DOXA_TRY_BLOCKED_HOSTS:blocked.invalid",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@doxahq/contracts": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260701.1",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9",
+    "wrangler": "4.107.0"
+  }
+}

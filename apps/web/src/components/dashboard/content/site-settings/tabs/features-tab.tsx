@@ -32,6 +32,12 @@ export function FeaturesTab() {
       value ? { ...current, apiPlaygroundBaseUrl: value } : current,
     )
 
+  // No setting means the proxy, so only the browser choice is stored.
+  const setPlaygroundThroughDoxa = (throughDoxa: boolean) =>
+    setFeatures(({ apiPlaygroundTransport: _previous, ...current }) =>
+      throughDoxa ? current : { ...current, apiPlaygroundTransport: "browser" },
+    )
+
   return (
     <div className="space-y-8">
       <SettingsSection title="Page layout">
@@ -111,6 +117,14 @@ export function FeaturesTab() {
               />
             )}
           </ValidatedField>
+          <SwitchRow
+            id={fieldIdForPointer("/features/apiPlaygroundTransport")}
+            checked={features.apiPlaygroundTransport !== "browser"}
+            onCheckedChange={setPlaygroundThroughDoxa}
+            disabled={!features.apiPlayground}
+            title="Send requests through Doxa"
+            description="Your API needs no CORS setup. Readers' keys pass through Doxa and are not stored. Turn this off to send requests from the reader's browser."
+          />
           <SwitchRow {...flag("rawMarkdown")} title="Markdown routes" description="Serves each page as Markdown at its path with .md added." />
         </div>
       </SettingsSection>

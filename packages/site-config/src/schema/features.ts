@@ -23,6 +23,13 @@ export const apiPlaygroundBaseUrlSchema = z
   .max(2048)
   .refine(isPlaygroundBaseUrl, "Use an http(s) URL or a path that starts with /.");
 
+/**
+ * Who sends "Try it" requests. Unset means the proxy: `doxa-try-proxy` sends
+ * them, so the API needs no CORS setup. `browser` means the reader's browser
+ * sends them, so a reader's key never passes through Doxa.
+ */
+export const apiPlaygroundTransportSchema = z.enum(["proxy", "browser"]);
+
 export const featuresSchema = z
   .object({
     branding: z.boolean().default(true),
@@ -49,6 +56,8 @@ export const featuresSchema = z
     apiPlayground: z.boolean().default(true),
     // No default: a site without it keeps its stored shape, and Try it stays off.
     apiPlaygroundBaseUrl: apiPlaygroundBaseUrlSchema.optional(),
+    // No default, for the same reason.
+    apiPlaygroundTransport: apiPlaygroundTransportSchema.optional(),
     rawMarkdown: z.boolean().default(true),
     loadFromGithub: z.boolean().default(false),
   })

@@ -178,3 +178,45 @@ describe("endpointPathSegments", () => {
     expect(endpointPathSegments("/")).toEqual([]);
   });
 });
+
+describe("optional ApiParam props", () => {
+  const node = (props: Record<string, unknown>) => ({
+    frontmatter: {},
+    nodes: [{ type: "element", name: "ApiParam", props, children: [] }],
+  });
+
+  test("reads enum, example and default for the playground", () => {
+    const { parameters } = splitEndpointDocument(
+      node({
+        name: "order",
+        type: "string",
+        location: "query",
+        enum: "asc, desc",
+        example: "asc",
+        default: "desc",
+      }) as never
+    );
+    expect(parameters[0]).toEqual({
+      name: "order",
+      type: "string",
+      location: "query",
+      required: false,
+      enumValues: ["asc", "desc"],
+      example: "asc",
+      defaultValue: "desc",
+    });
+  });
+
+  // ARTIFACT COMPATIBILITY: a published page never has these props.
+  test("leaves a page without them with the old shape", () => {
+    const { parameters } = splitEndpointDocument(
+      node({ name: "q", type: "string", location: "query", required: true }) as never
+    );
+    expect(parameters[0]).toEqual({
+      name: "q",
+      type: "string",
+      location: "query",
+      required: true,
+    });
+  });
+});

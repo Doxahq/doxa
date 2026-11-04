@@ -40,7 +40,12 @@ export function csrfProtection(): MiddlewareHandler<ApiBindings> {
   };
 }
 
+/**
+ * Only the dashboard origin may call with credentials. Without WEB_ORIGIN no
+ * origin is allowed (SEC-020): the check must fail closed, never open.
+ */
 export function isAllowedCorsOrigin(origin: string, allowedOrigin: string | undefined): boolean {
-  if (!origin) return false;
-  return !allowedOrigin || origin === allowedOrigin;
+  const allowed = allowedOrigin?.trim().replace(/\/+$/, "");
+  if (!origin || !allowed) return false;
+  return origin === allowed;
 }

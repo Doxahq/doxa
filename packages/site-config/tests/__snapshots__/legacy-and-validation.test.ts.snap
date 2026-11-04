@@ -96,6 +96,18 @@ exports[`issue model and schema output > emits stable JSON Schemas 1`] = `
           "default": true,
           "type": "boolean",
         },
+        "apiPlaygroundBaseUrl": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "type": "string",
+        },
+        "apiPlaygroundTransport": {
+          "enum": [
+            "proxy",
+            "browser",
+          ],
+          "type": "string",
+        },
         "branding": {
           "default": true,
           "type": "boolean",

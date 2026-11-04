@@ -99,6 +99,7 @@ export function createBindingRuntimeSource(
       : { hostname: config.hostname };
 
   return {
+    cacheScope: bindingCacheScope(config),
     getAsset: (hash) =>
       config.binding.asset
         ? config.binding.asset({ ...scope, hash })
@@ -144,6 +145,14 @@ export function createBindingRuntimeSource(
     getCompiledSearchIndex: () =>
       request<string | null>("getCompiledSearchIndex"),
   };
+}
+
+function bindingCacheScope(config: BindingRuntimeSourceConfig): string {
+  if ("resolution" in config) {
+    const { siteId, publishedVersionId } = config.resolution;
+    return `site:${siteId}:${publishedVersionId}`;
+  }
+  return `host:${config.hostname.toLowerCase()}`;
 }
 
 function createBindingRuntimeClient(config: BindingRuntimeSourceConfig) {

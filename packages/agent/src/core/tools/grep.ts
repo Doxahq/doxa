@@ -8,9 +8,9 @@ import { runCommand } from "../../utils/runtime";
 import {
   SENSITIVE_FILE_GLOBS,
   globCanSelectSensitiveFile,
-  isSensitiveFilePath,
+  isProtectedFilePath,
+  resolveReadableProjectPath,
 } from "./file-access-rules";
-import { resolveProjectPath } from "./project-path";
 
 const GREP_TIMEOUT_MS = 10_000;
 const MAX_MATCH_LINES = 80;
@@ -46,8 +46,8 @@ export function grepTool(cwd: string) {
     }),
     execute: async ({ pattern, path, glob: fileGlob }) => {
       try {
-        const searchPath = await resolveProjectPath(cwd, path ?? ".");
-        if (isSensitiveFilePath(searchPath)) {
+        const searchPath = await resolveReadableProjectPath(cwd, path ?? ".");
+        if (searchPath === null) {
           return `Skipped sensitive file: ${path}. Search source files instead.`;
         }
 
@@ -65,7 +65,7 @@ export function grepTool(cwd: string) {
           return `Error: grep failed: ${result.stderr}`;
         }
 
-        const lines = withoutSensitiveMatches(stdout.trim().split("\n").filter(Boolean));
+        const lines = readableMatchLines(stdout);
         if (lines.length === 0) {
           return `No matches found for pattern "${pattern}"`;
         }
@@ -86,7 +86,9 @@ export function grepTool(cwd: string) {
 /**
  * Builds the grep argument list. The excludes come after the includes, because
  * grep lets the last matching rule win. `--` ends the options, so a pattern
- * that starts with "-" stays a pattern.
+ * that starts with "-" stays a pattern. `-H` and `--null` write a NUL after
+ * each file name, the one byte that a file name cannot hold, so the output
+ * gives the real name of each file.
  */
 function buildGrepCommand(pattern: string, searchPath: string, fileGlob: string | undefined): string[] {
   const includeGlobs = fileGlob && !globCanSelectSensitiveFile(fileGlob)
@@ -96,6 +98,8 @@ function buildGrepCommand(pattern: string, searchPath: string, fileGlob: string 
   return [
     "grep",
     "-rn",
+    "-H",
+    "--null",
     "-I",
     ...EXCLUDED_DIRECTORIES.map((directory) => `--exclude-dir=${directory}`),
     ...includeGlobs.map((glob) => `--include=${glob}`),
@@ -107,16 +111,38 @@ function buildGrepCommand(pattern: string, searchPath: string, fileGlob: string 
   ];
 }
 
-/** Drops match lines from sensitive files, in case a grep build ignores an exclude. */
-function withoutSensitiveMatches(lines: string[]): string[] {
-  return lines.filter((line) => {
-    const filePath = matchLineFilePath(line);
-    return filePath === null || !isSensitiveFilePath(filePath);
-  });
+/**
+ * The match lines as `path:line:text`, without the lines of protected files:
+ * screened files and credential paths such as `.aws/credentials` have no
+ * basename exclude, grep matches an exclude in exact case only, and a grep
+ * build can ignore an exclude.
+ */
+function readableMatchLines(stdout: string): string[] {
+  return parseMatches(stdout)
+    .filter((match) => !isProtectedFilePath(match.filePath))
+    .map((match) => `${match.filePath}:${match.lineAndText}`);
 }
 
-/** Reads the file path from a `path:line:text` match line. */
-function matchLineFilePath(line: string): string | null {
-  const match = /^(.*?):\d+:/.exec(line);
-  return match?.[1] ?? null;
+interface GrepMatch {
+  filePath: string;
+  /** `line:text`, the part of the match after the file name. */
+  lineAndText: string;
+}
+
+/**
+ * Reads `path NUL line:text LF` records. A file name can hold `:` and a line
+ * feed, so only the NUL ends a name, and only a line feed ends the text. A
+ * record that has another shape has no name to check, so it is dropped.
+ */
+function parseMatches(stdout: string): GrepMatch[] {
+  const [firstPath = "", ...fields] = stdout.split("\0");
+  const matches: GrepMatch[] = [];
+  let filePath = firstPath;
+  for (const field of fields) {
+    const lineEnd = field.indexOf("\n");
+    const lineAndText = lineEnd === -1 ? field : field.slice(0, lineEnd);
+    if (filePath && /^\d+:/.test(lineAndText)) matches.push({ filePath, lineAndText });
+    filePath = lineEnd === -1 ? "" : field.slice(lineEnd + 1);
+  }
+  return matches;
 }

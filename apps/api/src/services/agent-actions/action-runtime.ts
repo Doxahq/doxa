@@ -1,3 +1,4 @@
+import type { WarmPool } from "@doxahq/contracts/docs-warm-state";
 import type { Env } from "../../env";
 import { AgentActivityRepository } from "../../repositories/agent-activity";
 import { AgentApprovalRequestsRepository } from "../../repositories/agent-approval-requests";
@@ -27,6 +28,11 @@ export interface AgentActionRuntimeOptions {
   readonly defer: Defer;
   /** The dashboard origin for approval links; falls back to `WEB_ORIGIN`. */
   readonly webOrigin?: string;
+  /**
+   * The cache pool of the person whose request runs the actions (M45). Only
+   * the dashboard approve route sets it; agent calls over RPC have none.
+   */
+  readonly warmRegion?: WarmPool | null;
 }
 
 /** The composition root of the action layer: the only place it meets the env. */
@@ -34,11 +40,14 @@ export function createAgentActionRuntime(env: Env, options: AgentActionRuntimeOp
   const registry = AGENT_ACTIONS;
   const requests = new AgentApprovalRequestsRepository(env);
   const access = MembershipProjectAccessPolicy.fromEnv(env);
-  const services = actionServicesFromEnv(env, { defer: options.defer });
+  const services = actionServicesFromEnv(env, {
+    defer: options.defer,
+    warmRegion: options.warmRegion ?? null,
+  });
   const now = () => new Date();
   const settings = new ApprovalSettingsRepository(env);
   const activity = new AgentActivityRepository(env);
-  const policy = approvalPolicyFor(registry, settings);
+  const policy = approvalPolicyFor(registry, settings, settings);
   const webOrigin = options.webOrigin ?? webOriginOf(env);
   const notifier = approvalNotifierFromEnv(env, registry, options.defer);
   return {
@@ -68,7 +77,7 @@ export function createAgentActionRuntime(env: Env, options: AgentActionRuntimeOp
       registry,
       access,
       store: settings,
-      policyFor: (modes) => approvalPolicyFor(registry, modes),
+      policyFor: (modes) => approvalPolicyFor(registry, modes, settings),
       activity,
       now,
     }),

@@ -7,6 +7,7 @@ import {
   runHostRuntimeRequest,
   runResolvedRuntimeRequest,
 } from "../src/runtime-source";
+import { testExecutionContext } from "./support/execution-context";
 import { createTreeBucket, treeBucketOf } from "./support/tree-bucket";
 
 vi.mock("cloudflare:workers", () => ({
@@ -53,6 +54,38 @@ const value = "<escaped>";
     expect(rendered.html).toContain('class="language-ts"');
     expect(rendered.html).toContain("&lt;escaped&gt;");
   });
+
+  test.each([
+    "java\tscript:alert(1)",
+    "\u0001javascript:alert(1)",
+    "JavaScript:alert(1)",
+    "data:text/html,x",
+    "//evil.example",
+    "/\\evil.example",
+  ])("replaces the unsafe link %j with #", (href) => {
+    const rendered = renderMarkdown(`---
+title: Links
+---
+
+[bad](${href})
+`);
+
+    expect(rendered.html).toContain('<a href="#">bad</a>');
+  });
+
+  test.each(["/guide", "./guide", "../guide", "guide", "#install", "?tab=1", "HTTPS://doxa.so", "mailto:a@doxa.so"])(
+    "keeps the safe link %j",
+    (href) => {
+      const rendered = renderMarkdown(`---
+title: Links
+---
+
+[good](${href})
+`);
+
+      expect(rendered.html).toContain(`<a href="${href}">good</a>`);
+    },
+  );
 
   test("removes component tags without weakening HTML escaping", () => {
     const rendered = renderMarkdown(`---
@@ -211,6 +244,39 @@ describe("docs runtime fetch", () => {
     ]);
   });
 
+  // SECURITY REGRESSION GUARDRAIL (SEC-022): production serves no HTML from this Worker.
+  test("answers 404 for the landing page and docs pages without the HTML preview flag", async () => {
+    const env = { ...createEnv({ objects: {} }), DOCS_RUNTIME_HTML_PREVIEW: undefined };
+    for (const path of ["/", "/doxa-demo", "/doxa-demo/install"]) {
+      const response = await worker.fetch(new Request(`https://preview.doxa.so${path}`), env, {} as never);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("content-type") ?? "").not.toContain("text/html");
+    }
+  });
+
+  test("escapes navigation hrefs in the HTML preview", async () => {
+    const env = createEnv({
+      objects: {
+        "sites/site-1/versions/version-1/manifest.json": JSON.stringify({
+          siteId: "site-1",
+          versionId: "version-1",
+          projectSlug: "doxa-demo",
+          generatedAt: "2026-06-14T00:00:00.000Z",
+          pages: [
+            { title: "Overview", href: "/", sourcePath: "source/index.mdx" },
+            { title: "Evil", href: '/x"><script>alert(1)</script>', sourcePath: "source/index.mdx" },
+          ],
+        }),
+        "sites/site-1/versions/version-1/source/index.mdx": "# Overview",
+      },
+    });
+
+    const response = await worker.fetch(new Request("https://preview.doxa.so/doxa-demo"), env, {} as never);
+    const html = await response.text();
+
+    expect(html).not.toContain("<script>alert(1)</script>");
+  });
+
   test("renders a published docs page through the service-bound API and R2 artifacts", async () => {
     const env = createEnv({
       objects: {
@@ -241,6 +307,7 @@ describe("docs runtime fetch", () => {
     const response = await worker.fetch(
       new Request("http://docs.test/doxa-demo"),
       env,
+      testExecutionContext(),
     );
     const html = await response.text();
 
@@ -273,6 +340,7 @@ describe("docs runtime fetch", () => {
     const response = await worker.fetch(
       new Request("http://docs.test/doxa-demo"),
       env,
+      testExecutionContext(),
     );
     const html = await response.text();
 
@@ -296,6 +364,7 @@ describe("docs runtime fetch", () => {
     const response = await worker.fetch(
       new Request("http://docs.test/doxa-demo"),
       env,
+      testExecutionContext(),
     );
     const html = await response.text();
 
@@ -439,6 +508,62 @@ describe("docs runtime fetch", () => {
       data: { title: "Overview", body: "# Pinned production docs" },
     });
     expect(resolveDocsHost).not.toHaveBeenCalled();
+  });
+
+  test("uses the resolved hostname as the site URL of canonical links", async () => {
+    const env = {
+      ...createEnv({
+        objects: {
+          "sites/site-1/versions/version-1/manifest.json": JSON.stringify({
+            siteId: "site-1",
+            versionId: "version-1",
+            projectSlug: "doxa-demo",
+            generatedAt: "2026-09-09T00:00:00.000Z",
+            pages: [
+              { title: "Overview", href: "/", sourcePath: "source/index.mdx" },
+            ],
+          }),
+          "sites/site-1/versions/version-1/source/index.mdx": "# Overview",
+        },
+      }),
+      DOCS_PUBLIC_BASE_URL: "https://preview.doxa.so",
+    };
+    const resolution = {
+      siteId: "site-1",
+      projectId: "project-1",
+      projectSlug: "doxa-demo",
+      publishedVersionId: "version-1",
+      artifactPrefix: "sites/site-1/versions/version-1",
+      manifestPath: "sites/site-1/versions/version-1/manifest.json",
+      accessPolicy: "public" as const,
+    };
+    const siteUrl = (siteUrlValue?: string) =>
+      runResolvedRuntimeRequest(env, {
+        resolution: {
+          ...resolution,
+          ...(siteUrlValue ? { siteUrl: siteUrlValue } : {}),
+        },
+        operation: "getSiteConfig",
+      });
+
+    expect(await siteUrl("https://docs.acme.com")).toMatchObject({
+      ok: true,
+      data: { url: "https://docs.acme.com" },
+    });
+    expect(await siteUrl("https://acme.doxa.page")).toMatchObject({
+      ok: true,
+      data: { url: "https://acme.doxa.page" },
+    });
+    // A call without a resolved hostname keeps the environment value.
+    expect(await siteUrl()).toMatchObject({
+      ok: true,
+      data: { url: "https://preview.doxa.so" },
+    });
+    // A site URL with a path is not an origin: the request is refused.
+    expect(await siteUrl("https://docs.acme.com/evil")).toMatchObject({
+      ok: false,
+      error: { code: "invalid_request" },
+    });
   });
 
   test("serves a promoted version that reuses an immutable artifact", async () => {
@@ -775,6 +900,97 @@ describe("docs runtime fetch", () => {
     ]);
   });
 
+  describe("a page at the path of its section (RES-3)", () => {
+    async function sectionPageEnv() {
+      const bundle = await createRuntimeDocsArtifacts({
+        siteId: "site-1",
+        versionId: "version-1",
+        projectSlug: "doxa-demo",
+        projectName: "Doxa Demo",
+        pages: [
+          {
+            title: "Overview",
+            route: "/overview",
+            navigationPath: "default/overview.md",
+            content: "---\ntitle: Overview\n---\n\n# Overview",
+          },
+          {
+            title: "Create a note",
+            route: "/api/notes/create",
+            navigationPath: "api/create.md",
+            content: "---\ntitle: Create a note\n---\n\n# Create a note",
+          },
+          {
+            title: "API overview",
+            route: "/api",
+            navigationPath: "api/overview.md",
+            content: "---\ntitle: API overview\n---\n\n# API overview",
+          },
+          {
+            title: "Health",
+            route: "/rest-api/health",
+            navigationPath: "rest-api/health.md",
+            content: "---\ntitle: Health\n---\n\n# Health",
+          },
+        ],
+        navigation: {
+          sections: [
+            { slug: "default", items: ["default/overview.md"] },
+            { slug: "api", items: ["api/create.md", "api/overview.md"] },
+            { slug: "rest-api", items: ["rest-api/health.md"] },
+          ],
+        },
+      });
+      return createEnv({
+        objects: Object.fromEntries(
+          bundle.files.map((file) => [
+            `sites/site-1/versions/version-1/${file.path}`,
+            file.content,
+          ]),
+        ),
+      });
+    }
+
+    test("plans the page and no section redirect for that path", async () => {
+      const response = await runtimeRequest(
+        await sectionPageEnv(),
+        "getPrerenderPlan",
+      );
+      const payload = (await response.json()) as { ok: boolean; data: unknown };
+
+      expect(payload.ok).toBe(true);
+      expect(payload.data).toEqual([
+        { kind: "page", pathname: "/" },
+        { kind: "page", pathname: "/api" },
+        { kind: "page", pathname: "/api/notes/create" },
+        { kind: "page", pathname: "/overview" },
+        {
+          kind: "redirect",
+          pathname: "/rest-api",
+          target: "/rest-api/health",
+          status: 308,
+        },
+        { kind: "page", pathname: "/rest-api/health" },
+      ]);
+    });
+
+    test("serves the page live, and still redirects a section without one", async () => {
+      const env = await sectionPageEnv();
+      const page = (await (
+        await runtimeRequest(env, "getRouteData", { pathname: "/api" })
+      ).json()) as { data: { type: string; href: string } };
+      const section = (await (
+        await runtimeRequest(env, "getRouteData", { pathname: "/rest-api" })
+      ).json()) as { data: { type: string; href: string } };
+
+      expect(page.data).toMatchObject({ type: "page", href: "/api" });
+      expect(section.data).toMatchObject({
+        type: "redirect",
+        href: "/rest-api/health",
+      });
+    });
+  });
+
   test("marks an empty site root as live-only", async () => {
     const bundle = await createRuntimeDocsArtifacts({
       siteId: "site-1",
@@ -1063,6 +1279,7 @@ describe("docs runtime fetch", () => {
         body: JSON.stringify({ operation: "getHomeHref" }),
       }),
       env,
+      testExecutionContext(),
     );
     const payload = (await response.json()) as {
       ok: false;
@@ -1338,6 +1555,7 @@ function createEnv(input: {
     },
     DOCS_BUCKET: createTreeBucket(input.objects).bucket,
     DOCS_CONTENT_TOKEN: "test-runtime-token",
+    DOCS_RUNTIME_HTML_PREVIEW: "on",
     ...(input.timing ? { DOXA_DOCS_RUNTIME_TIMING: input.timing } : {}),
   };
 }
@@ -1364,6 +1582,7 @@ function runtimeRequest(
       body: JSON.stringify({ operation, payload }),
     }),
     env,
+    testExecutionContext(),
   );
 }
 const PUBLIC_ACCESS_POLICY: DocsAccessPolicy = "public";

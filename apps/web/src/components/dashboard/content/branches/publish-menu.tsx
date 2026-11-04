@@ -18,6 +18,7 @@ import { Button } from "~/components/ui/button"
 import { Checkbox } from "~/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover"
 import { ApprovalPanel } from "~/components/dashboard/content/branches/approval-panel"
+import { PublishWarmStatus } from "~/components/dashboard/content/branches/publish-warm-status"
 import {
   ChangedPages,
   MdxBlockedPages,
@@ -303,6 +304,7 @@ function PublishProgressPanel(props: PublishMenuProps & {
       <div className="px-5 py-4">
         <ProgressSteps label="Publish progress" steps={steps} />
         {publish.phase === "failed" ? <PublishErrors publish={publish} /> : null}
+        {publish.phase === "live" ? <PublishWarmStatus projectId={props.projectId} docsUrl={props.docsUrl} /> : null}
       </div>
       <PanelFooter>
         {publish.phase === "publishing" ? (

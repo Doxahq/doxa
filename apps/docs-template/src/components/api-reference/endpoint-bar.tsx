@@ -1,4 +1,5 @@
-import { LuPlay, LuX } from "react-icons/lu";
+import type { Ref } from "react";
+import { LuPlay } from "react-icons/lu";
 
 import { endpointPathSegments } from "@/src/lib/endpoint-document";
 import { cn } from "@/src/lib/utils";
@@ -11,10 +12,13 @@ import { ApiMethodBadge } from "@/src/components/markdown/api-method-badge";
 export function EndpointPath({
   method,
   path,
+  baseUrl,
   className,
 }: {
   method: string;
   path: string;
+  /** The owner's API address. It comes before the path when the site has one. */
+  baseUrl?: string | null;
   className?: string;
 }) {
   const segments = endpointPathSegments(path);
@@ -23,6 +27,7 @@ export function EndpointPath({
     <div className={cn("flex min-w-0 items-center gap-2.5", className)}>
       <ApiMethodBadge method={method} />
       <code className="font-code flex min-w-0 scrollbar-none items-center overflow-x-auto text-[0.8125rem] whitespace-nowrap">
+        {baseUrl && <span className="text-muted-foreground">{baseUrl}</span>}
         {segments.length === 0 && (
           <span className="text-muted-foreground">/</span>
         )}
@@ -49,30 +54,35 @@ export function EndpointPath({
 export function EndpointBar({
   method,
   path,
-  tryItOpen,
-  onToggleTryIt,
+  baseUrl,
+  onOpenTryIt,
+  onTryItIntent,
+  tryItRef,
 }: {
   method: string;
   path: string;
-  tryItOpen?: boolean;
-  onToggleTryIt?: () => void;
+  baseUrl?: string | null;
+  onOpenTryIt?: () => void;
+  /** The reader is about to press the control, so its code can load now. */
+  onTryItIntent?: () => void;
+  /** The modal gives focus back to this control when it closes. */
+  tryItRef?: Ref<HTMLButtonElement>;
 }) {
   return (
     <div className="not-prose flex items-center gap-3 rounded-lg border bg-card/50 py-1.5 pr-1.5 pl-3">
-      <EndpointPath method={method} path={path} className="flex-1" />
-      {onToggleTryIt && (
+      <EndpointPath method={method} path={path} baseUrl={baseUrl} className="flex-1" />
+      {onOpenTryIt && (
         <button
+          ref={tryItRef}
           type="button"
-          onClick={onToggleTryIt}
-          aria-expanded={tryItOpen ?? false}
+          onClick={onOpenTryIt}
+          onPointerEnter={onTryItIntent}
+          onFocus={onTryItIntent}
+          aria-haspopup="dialog"
           className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
-          {tryItOpen ? "Close" : "Try it"}
-          {tryItOpen ? (
-            <LuX className="size-3" aria-hidden="true" />
-          ) : (
-            <LuPlay className="size-3" aria-hidden="true" />
-          )}
+          Try it
+          <LuPlay className="size-3" aria-hidden="true" />
         </button>
       )}
     </div>

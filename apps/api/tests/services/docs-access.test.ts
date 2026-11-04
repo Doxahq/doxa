@@ -63,23 +63,15 @@ describe("isDocsPreviewGateEnabled", () => {
 });
 
 describe("preview channel access", () => {
-  test("keeps source change channels on their current public policy", () => {
-    expect(
-      resolvePreviewChannelAccessPolicy({
-        kind: "source_change",
-        previewVisibility: "private",
-        gateEnabled: true,
-      }),
-    ).toBe("public");
+  // SECURITY REGRESSION GUARDRAIL (SEC-006): pull request previews are gated like branch previews.
+  test("needs sign-in for a private preview channel while the gate is on", () => {
+    expect(resolvePreviewChannelAccessPolicy({ previewVisibility: "private", gateEnabled: true })).toBe(
+      "authenticated",
+    );
   });
 
-  test("uses the generation preview policy for branch channels", () => {
-    expect(
-      resolvePreviewChannelAccessPolicy({
-        kind: "branch",
-        previewVisibility: "private",
-        gateEnabled: true,
-      }),
-    ).toBe("authenticated");
+  test("keeps preview channels public while the gate is off, or when the owner made them public", () => {
+    expect(resolvePreviewChannelAccessPolicy({ previewVisibility: "private", gateEnabled: false })).toBe("public");
+    expect(resolvePreviewChannelAccessPolicy({ previewVisibility: "public", gateEnabled: true })).toBe("public");
   });
 });

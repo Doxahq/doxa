@@ -1,5 +1,5 @@
 import type { DashboardSession, DashboardSessionUser } from "~/lib/auth/dashboard-session"
-import { hasSessionTokenCookie, readSessionCookieIdentity } from "~/lib/auth/session-cookie"
+import { looksSignedIn, readSessionCookieIdentity } from "~/lib/auth/session-cookie"
 
 /**
  * What the dashboard shell needs before it renders. Null means the request has
@@ -23,7 +23,8 @@ export function resolveDashboardEntry(
   now: number = Date.now(),
 ): DashboardEntry | null {
   if (devSession) return { devSession, identityHint: null }
-  if (!hasSessionTokenCookie(cookieHeader)) return null
+  // The marker, or a session cookie from before host-only cookies (SEC-021).
+  if (!looksSignedIn(cookieHeader)) return null
   const identity = readSessionCookieIdentity(cookieHeader, now)
   return {
     devSession: null,

@@ -91,6 +91,7 @@ describe("REST request samples", () => {
     expect(sample("node-fetch", withQuotedHeader)).toContain(
       `'X-Quote': 'both \\'single\\' and "double"'`,
     );
+    expect(sample("node-xhr", withQuotedHeader)).toContain(`require("xhr2")`);
     expect(sample("node-xhr", withQuotedHeader)).toContain(
       `xhr.setRequestHeader('X-Quote', 'both \\'single\\' and "double"');`,
     );

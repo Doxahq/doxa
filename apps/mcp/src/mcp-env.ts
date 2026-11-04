@@ -18,6 +18,12 @@ export interface McpEnv {
   MCP_READ_LIMITER: RateLimit;
   MCP_WRITE_LIMITER: RateLimit;
   MCP_EXPENSIVE_LIMITER: RateLimit;
+  /**
+   * Per client IP, before the bearer token is checked (SEC-008): a flood of
+   * random tokens must not reach token validation without a limit. The limit
+   * is high (6000 a minute): hosted MCP clients share a few egress IPs.
+   */
+  MCP_IP_LIMITER?: RateLimit;
   MCP_RESOURCE_URL: string;
   OAUTH_ISSUER: string;
   WEB_ORIGIN?: string;

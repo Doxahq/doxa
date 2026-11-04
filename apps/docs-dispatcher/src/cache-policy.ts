@@ -1,15 +1,24 @@
-import type {
-  DocsCacheInvalidation,
-  DocsDomainResolution,
+import {
+  DOCS_HOSTNAME_CACHE_TTL_SECONDS,
+  type DocsCacheInvalidation,
+  type DocsDomainResolution,
 } from "@doxahq/contracts";
 
 // The hostname TTL is a freshness trade-off, not an invalidation guarantee.
+// Versioned output never changes under its key: only a new key (site version,
+// renderer build, render ID) or a purge ends an entry. The 30-day lifetime is
+// not for freshness. It bounds how long an entry that was stored wrong, for
+// example a bad render, can live without a new key. A page that keeps getting
+// traffic refreshes in the background through stale-while-revalidate.
+// Cloudflare can still evict entries that see no traffic.
 // Keep these together so the early cache policy has one place to change.
 const DOCS_CACHE_POLICY = {
-  hostnameTtlSeconds: 3_600,
-  versionedTtlSeconds: 86_400,
+  hostnameTtlSeconds: DOCS_HOSTNAME_CACHE_TTL_SECONDS,
+  hostnameStaleIfErrorSeconds: 604_800,
+  versionedTtlSeconds: 2_592_000,
   versionedStaleSeconds: 604_800,
   liveFallbackTtlSeconds: 30,
+  unknownHostTtlSeconds: 30,
 } as const;
 
 /**
@@ -35,6 +44,19 @@ export function isContentCacheLifetime(
   return CONTENT_CACHE_LIFETIMES.some((lifetime) => lifetime === value);
 }
 
+/**
+ * The dispatcher sets `cross_version_cache`, so a new deploy reads entries
+ * that an older deploy stored. Increase this value when the cached hostname
+ * resolution JSON changes shape. The new deploy then uses new keys.
+ */
+// 2: resolutions carry `canonicalHostname`.
+export const DOCS_HOST_CACHE_FORMAT = 2;
+
+export interface HostCacheProps {
+  hostname: string;
+  format: number;
+}
+
 export interface HtmlCacheProps {
   hostname: string;
   rendererBuildId: string;
@@ -51,17 +73,27 @@ export type HtmlCacheIdentity = Pick<
   Partial<Pick<HtmlCacheProps, "lifetime">>;
 
 const NO_STORE = "private, no-store";
+// An unknown hostname costs resolver queries on every request (SEC-007). A
+// short negative entry stops a repeated unknown host from reaching the
+// database; a site created on that hostname shows within 30 seconds.
+const UNKNOWN_HOST_CACHE_CONTROL = `public, max-age=${DOCS_CACHE_POLICY.unknownHostTtlSeconds}, must-revalidate`;
 const CACHE_HEADERS = [
   "cache-control",
   "cdn-cache-control",
   "cloudflare-cdn-cache-control",
 ] as const;
-const REQUEST_DEPENDENT_HEADERS = [
-  "cookie",
-  "authorization",
-  "range",
-  "upgrade",
-] as const;
+// `cookie` is not request-dependent here (RES-1). Every shared cache also
+// requires a public production site (`isPublicProduction`), and the renderer
+// reads cookies only in the access gate of generation previews. So an
+// analytics cookie of a parent domain must not cost a visitor the cache.
+const REQUEST_DEPENDENT_HEADERS = ["authorization", "range", "upgrade"] as const;
+
+/**
+ * The renderer's own server routes under `/api/`: the files
+ * `apps/docs-template/src/routes/api.*`. Every other `/api/...` path is a
+ * docs page and can be cached (RES-2).
+ */
+export const RENDERER_API_ROUTES = ["search", "echo"] as const;
 const REQUEST_CACHE_DIRECTIVE_HEADERS = ["cache-control", "pragma"] as const;
 
 export function isPublicProduction(
@@ -94,16 +126,24 @@ export function isPrerenderableDocsRequest(request: Request): boolean {
   } catch {
     return false;
   }
+  if (isRendererApiRoute(pathname)) return false;
   return !pathname
     .split("/")
     .some(
       (segment) =>
-        segment === "api" ||
         segment.startsWith("_") ||
         segment.includes(".") ||
         segment.includes("%") ||
         segment.includes("\\"),
     );
+}
+
+/** A renderer server route, with its subpaths. Routing ignores case. */
+export function isRendererApiRoute(pathname: string): boolean {
+  const [, first, second] = pathname.toLowerCase().split("/");
+  return (
+    first === "api" && RENDERER_API_ROUTES.some((route) => route === second)
+  );
 }
 
 function hasAnyRequestHeader(
@@ -137,7 +177,9 @@ export function withHostCachePolicy(
     headers: {
       "cache-control": isPublicProduction(resolution)
         ? cacheControlFor("hostname")
-        : NO_STORE,
+        : resolution === null
+          ? UNKNOWN_HOST_CACHE_CONTROL
+          : NO_STORE,
     },
   });
   if (resolution && isPublicProduction(resolution)) {
@@ -209,7 +251,14 @@ export function withoutResponseCaching(response: Response): Response {
 export function cacheControlFor(lifetime: DocsCacheLifetime): string {
   switch (lifetime) {
     case "hostname":
-      return strictCacheControl(DOCS_CACHE_POLICY.hostnameTtlSeconds);
+      // A publish purges the mapping, so it needs no must-revalidate. Without
+      // that directive, Workers Cache can serve the last mapping when the
+      // resolver fails, and a cached site stays up during an API outage.
+      return [
+        "public",
+        `max-age=${DOCS_CACHE_POLICY.hostnameTtlSeconds}`,
+        `stale-if-error=${DOCS_CACHE_POLICY.hostnameStaleIfErrorSeconds}`,
+      ].join(", ");
     case "liveFallback":
       return strictCacheControl(DOCS_CACHE_POLICY.liveFallbackTtlSeconds);
     case "versioned":

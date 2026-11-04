@@ -5,11 +5,12 @@
 - Main entrypoints:
   - `apps/web`: Doxa homepage and dashboard.
   - `apps/api`: Cloudflare Worker API with Better Auth, GitHub integration, projects, jobs, docs domains, and publish endpoints.
-  - `apps/docs-runtime`: private docs content/runtime-source Worker. It serves `/runtime-source` for the shared docs renderer and keeps only a legacy HTML preview route for local/debug smoke tests.
+  - `apps/docs-runtime`: private docs content/runtime-source Worker. It serves `/runtime-source` for the shared docs renderer. Its legacy HTML preview route answers only when `DOCS_RUNTIME_HTML_PREVIEW=on` (local/debug smoke tests); production answers 404.
   - `apps/mcp` (Worker `doxa-mcp`): the remote MCP server for agents. It imports `apps/api` services through the `@doxahq/api` exports map. See `docs/current/mcp-server.md`.
   - `apps/agent-worker`: queue consumer for generation jobs.
   - `apps/email-worker` (Worker `doxa-email`): queue consumer that renders and sends email. See `docs/current/email.md`.
   - `packages/email`: provider-neutral email layer (transports, react-email templates, catalog). Only `doxa-email` imports `@doxahq/email/mailer`, which loads React.
+  - `apps/try-proxy` (Worker `doxa-try-proxy`): sends the API playground's "Try it" requests. It has no public route, secrets or private bindings. See `docs/current/api-playground-proxy.md`. Never make these calls from the API on ECS: its metadata address returns the credentials of the task role.
   - `apps/agent-container`: Cloudflare container wrapper for repo checkout and filesystem-based agent execution.
   - `packages/agent`: shared documentation-generation agent.
   - `packages/db`: Drizzle schema, migrations, and Hyperdrive/pg client.
@@ -20,7 +21,7 @@
   - Production setup lives in the private ops repo `ipenywis/doxa-ops`, not here: Terraform variables and backend, the Cloudflare ID values, the Deploy Production and Deploy API Origin workflows, and the runbook. This repo is planned to go public, so never commit an account-issued ID (KV, Hyperdrive, zone, VPC Service, account) or an AWS account ID. Wrangler configs hold `${CF_*}` placeholders instead (and `${OPS_*}` for operator values such as admin emails) (`scripts/apply-production-ids.mjs`, see `docs/current/self-hosting.md`). A new placeholder needs its value in `doxa-ops/wrangler/production-ids.json` before the next deploy.
 - Important boundaries:
   - `apps/docs-runtime` is not the public docs renderer. The user-facing renderer is `apps/docs-template`, usually deployed as `doxa-docs-renderer`.
-  - Local generated docs use `<slug>.localhost:3002`. Production generated docs use `<slug>.doxa.page`, routed to the renderer. `preview.doxa.so` is the private content/runtime Worker.
+  - Local generated docs use `<slug>.localhost:3002`. Production generated docs use `<slug>.doxa.page`, routed to the renderer. `preview.doxa.so` was the public hostname of the private content/runtime Worker; production does not use it (the renderer and dispatcher use service bindings), and it is being retired.
   - `docs.doxa.so` is for the official Doxa docs/demo site and should not be repurposed for generated project previews.
   - Generation previews are public while `DOCS_PREVIEW_GATE_ENABLED` is not exactly `true`. To restore private previews, add a signed short-lived token exchange between `doxa.so` and `doxa.page`, use a host-only redemption cookie, enable the gate, and add a preview access card back to the Doxabot page.
   - Runtime content isolation must be enforced by resolving host/project through platform mappings, then reading only the resolved published R2 artifact prefix.

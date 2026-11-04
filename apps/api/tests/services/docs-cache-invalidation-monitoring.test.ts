@@ -1,4 +1,25 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+
+const built = vi.hoisted(() => ({ workers: [] as unknown[][] }));
+vi.mock("@doxahq/db", async (original) => ({
+  ...(await original<typeof import("@doxahq/db")>()),
+  createDb: () => ({}),
+}));
+vi.mock("../../src/services/docs-cache-invalidation", async (original) => {
+  const actual =
+    await original<typeof import("../../src/services/docs-cache-invalidation")>();
+  return {
+    ...actual,
+    DocsCacheInvalidationWorker: class {
+      constructor(...args: unknown[]) {
+        built.workers.push(args);
+      }
+      process = async () => ({ completed: 0, failed: 0 });
+    },
+  };
+});
+
+import { DocsHostnameSourceRepository } from "../../src/repositories/docs-hostname-source";
 import { DocsCacheInvalidationMaintenance } from "../../src/services/docs-cache-invalidation-monitoring";
 
 const healthyQueue = {
@@ -62,4 +83,15 @@ describe("docs cache invalidation monitoring", () => {
       expect(JSON.parse(String(warn.mock.calls[0]?.[0]))).toEqual(event);
     },
   );
+
+  test("rewrites the hostname map for every task it retries, as the first delivery does", () => {
+    const binding = { invalidate: vi.fn(), syncHostnames: vi.fn() };
+    DocsCacheInvalidationMaintenance.fromEnv({
+      DOCS_CACHE_INVALIDATOR: binding,
+    } as never);
+
+    const [args] = built.workers.slice(-1);
+    expect(args?.[1]).toBe(binding);
+    expect(args?.[2]).toBeInstanceOf(DocsHostnameSourceRepository);
+  });
 });

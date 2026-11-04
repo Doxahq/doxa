@@ -96,10 +96,14 @@ describe("ProjectDeletionRepository.deleteForUser", () => {
     expect(deleted).toEqual({
       projectId: "project-1",
       siteId,
-      storageEntryIds: ["entry-4", "entry-5"],
+      storageEntryIds: ["entry-7", "entry-8"],
     });
     const invalidations = inserts
-      .filter(({ table }) => table === schema.docsCacheInvalidations)
+      .filter(
+          ({ table, values }) =>
+            table === schema.docsCacheInvalidations &&
+            !("nextAttemptAt" in values),
+        )
       .map(({ values }) => values.hostname ?? null);
     expect(invalidations).toEqual([null, "docs.acme.com", "acme.doxa.page"]);
     const entries = inserts

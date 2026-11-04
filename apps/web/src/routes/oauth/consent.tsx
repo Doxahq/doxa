@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router"
 
 import { ConsentPage } from "~/components/oauth/consent-page"
-import { getDashboardSession } from "~/server/dashboard-session"
+import { hasDashboardSignIn } from "~/server/dashboard-session"
 
 interface ConsentSearch {
   /** The pending consent ID from the API's `/oauth/authorize` redirect. */
@@ -20,8 +20,7 @@ export const Route = createFileRoute("/oauth/consent")({
   }),
   headers: () => CONSENT_PAGE_HEADERS,
   loader: async ({ location }) => {
-    const session = await getDashboardSession()
-    if (!session) {
+    if (!(await hasDashboardSignIn())) {
       throw redirect({ to: "/login", search: { redirect: location.href } })
     }
   },

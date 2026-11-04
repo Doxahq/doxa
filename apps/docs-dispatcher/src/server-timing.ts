@@ -1,3 +1,6 @@
+import type { HostLookupFacts } from "./host-lookup";
+import type { FallbackFacts } from "./previous-build-fallback";
+
 export interface ServerTimingEntry {
   name: string;
   durationMs: number;
@@ -121,12 +124,41 @@ export function logRequestTiming(
     hostCacheStatus: string;
     htmlCacheStatus: string;
     routeDataCacheStatus?: string;
+    /** Absent when the request never resolved its hostname. */
+    hostLookup?: HostLookupFacts | undefined;
+    /** The previous-build fallback, when its window applied (M26). */
+    fallback?: FallbackFacts | null;
   },
 ): void {
-  if (!timing.enabled) return;
   const requestWithCloudflare = request as Request & {
     cf?: { colo?: string };
   };
+  if (!timing.enabled) {
+    // One short line per request, so production shows the hit rate per site
+    // and per data center without DEBUG.
+    console.info(
+      JSON.stringify({
+        event: "docs_request_cache",
+        hostname: new URL(request.url).hostname,
+        path: new URL(request.url).pathname,
+        status: response.status,
+        cache: {
+          host: cache.hostCacheStatus,
+          html: cache.htmlCacheStatus,
+          ...(cache.routeDataCacheStatus
+            ? { routeData: cache.routeDataCacheStatus }
+            : {}),
+        },
+        ...hostLookupLogFields(cache.hostLookup),
+      ...(cache.fallback ? { fallback: cache.fallback } : {}),
+        ...(cache.fallback ? { fallback: cache.fallback } : {}),
+        ...(requestWithCloudflare.cf?.colo
+          ? { colo: requestWithCloudflare.cf.colo }
+          : {}),
+      }),
+    );
+    return;
+  }
   console.info(
     JSON.stringify({
       event: "docs_request_timing",
@@ -150,6 +182,7 @@ export function logRequestTiming(
             },
           }
         : {}),
+      ...hostLookupLogFields(cache.hostLookup),
       ...(requestWithCloudflare.cf?.colo
         ? { colo: requestWithCloudflare.cf.colo }
         : {}),
@@ -157,6 +190,17 @@ export function logRequestTiming(
       timings: readDoxaTimings(response.headers.get("server-timing")),
     }),
   );
+}
+
+/** `hostSource`: kv, cache or resolver; `hostnameMap`: the map read and, in shadow mode, its agreement. */
+function hostLookupLogFields(
+  facts: HostLookupFacts | undefined,
+): Record<string, unknown> {
+  if (!facts) return {};
+  return {
+    hostSource: facts.source,
+    ...(facts.hostnameMap ? { hostnameMap: facts.hostnameMap } : {}),
+  };
 }
 
 function formatEntry(entry: ServerTimingEntry): string {

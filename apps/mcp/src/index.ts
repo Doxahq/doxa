@@ -1,4 +1,5 @@
 import { OAuthResourceServer } from "@cloudflare/workers-oauth-provider";
+import { clientIpRateLimitKey } from "@doxahq/contracts/client-ip";
 import {
   handleAuthenticatedMcpRequest,
   type McpRuntime,
@@ -34,8 +35,22 @@ function resourceServerFor(env: McpEnv): OAuthResourceServer<McpEnv, unknown> {
   return server;
 }
 
+/** A 429 response when the client IP is over its limit, else null. */
+async function limitByIp(request: Request, env: McpEnv): Promise<Response | null> {
+  const clientIp = request.headers.get("cf-connecting-ip");
+  if (!env.MCP_IP_LIMITER || !clientIp) return null;
+  const { success } = await env.MCP_IP_LIMITER.limit({ key: clientIpRateLimitKey(clientIp) });
+  if (success) return null;
+  return Response.json(
+    { error: "rate_limited", error_description: "Too many requests. Try again in a minute." },
+    { status: 429, headers: { "cache-control": "no-store", "retry-after": "60" } },
+  );
+}
+
 export default {
-  fetch(request, env, ctx) {
+  async fetch(request, env, ctx) {
+    const limited = await limitByIp(request, env);
+    if (limited) return limited;
     const devContext = devAuthContext(request, env, (promise) =>
       ctx.waitUntil(promise),
     );

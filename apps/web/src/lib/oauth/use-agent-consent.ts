@@ -32,7 +32,8 @@ export function useAgentConsent(consentId: string) {
       const result = request.kind === "approve"
         ? await approveAgentConsent(consentId, request.input)
         : await denyAgentConsent(consentId)
-      if (!isNavigableRedirect(result.redirectTo)) throw new UnsafeConsentRedirectError()
+      const redirectHost = consent.data?.client.redirectHost ?? ""
+      if (!isNavigableRedirect(result.redirectTo, redirectHost)) throw new UnsafeConsentRedirectError()
       return result
     },
     onSuccess: ({ redirectTo }) => {

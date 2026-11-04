@@ -21,6 +21,42 @@ The app subscribes only to these repository events:
 Doxabot currently rejects public repositories in platform policy even if the
 GitHub App can observe them.
 
+## URLs in the app settings
+
+| Setting | Value |
+| --- | --- |
+| Setup URL | `{API origin}/github/install/callback` |
+| Callback URLs | `{API origin}/api/auth/callback/github` (sign-in) and `{API origin}/github/install/authorize` (install) |
+| Request user authorization (OAuth) during installation | Off. When it is on, GitHub does not use the setup URL. |
+| Redirect on update | Optional. When it is on, a change to the repository selection refreshes the repository list. |
+
+The API origin is `BETTER_AUTH_URL`, for example `https://api.doxa.so`. Add
+the URLs for every API origin that uses the app, such as a development tunnel.
+
+## Connecting an installation
+
+GitHub sends the person to the setup URL with an `installation_id`. Anyone can
+type that ID, so the setup URL does not record it. The flow is:
+
+1. `/github/install/callback` accepts only a numeric `installation_id`. It
+   signs an OAuth `state` that holds the Doxa user ID, the installation ID, an
+   expiry of 10 minutes, and a nonce. The nonce also goes in a host-only
+   `doxa_github_install` cookie.
+2. The route sends the person to the GitHub authorization page of the app.
+   A person who signed in with GitHub already authorized the app, so GitHub
+   sends them back at once.
+3. `/github/install/authorize` checks the state signature, the user, the
+   expiry, and the cookie nonce. Then it clears the cookie.
+4. The route exchanges the `code` for a user access token. It records the
+   installation only if `GET /user/installations` returns it for that token.
+   The account login and type come from GitHub, not from the query string.
+5. The route records only the repositories that
+   `GET /user/installations/{id}/repositories` returns for that token.
+
+An installation that another Doxa user already owns keeps its owner. The route
+answers 409 and changes nothing. `local*` installation IDs work only when
+`LOCAL_GITHUB_TOKEN` is set, which production does not do.
+
 ## Installation-token scope
 
 The Checks adapter requests an installation token for the single stored GitHub

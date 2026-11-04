@@ -57,16 +57,17 @@ describe("request samples with hostile spec values", () => {
 
   test.each(["node-fetch", "node-xhr"] as const)("T41 keeps %s values as string data", (client) => {
     const calls: unknown[][] = [];
+    class FakeXhr {
+      open(...args: unknown[]) { calls.push(["open", ...args]); }
+      setRequestHeader(...args: unknown[]) { calls.push(["header", ...args]); }
+      send(...args: unknown[]) { calls.push(["send", ...args]); }
+    }
     const sandbox: Record<string, unknown> = {
       console: { log: () => undefined },
+      require: () => FakeXhr,
       fetch: async (...args: unknown[]) => {
         calls.push(args);
         return { json: async () => ({}) };
-      },
-      XMLHttpRequest: class {
-        open(...args: unknown[]) { calls.push(["open", ...args]); }
-        setRequestHeader(...args: unknown[]) { calls.push(["header", ...args]); }
-        send(...args: unknown[]) { calls.push(["send", ...args]); }
       },
     };
 

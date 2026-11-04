@@ -17,6 +17,7 @@ import {
   type DocsPreviewVersionResource,
   type DocsSiteBlobsResource,
 } from "@doxahq/contracts/storage-gc";
+import { HOSTNAME_READER_GRACE_SECONDS } from "@doxahq/contracts";
 import { createDb, type DbEnv } from "@doxahq/db";
 
 import { enqueueStorageCollection } from "./storage-gc";
@@ -37,18 +38,18 @@ const ORPHAN_PREFIX_GRACE_SECONDS = 24 * 60 * 60;
  */
 const BRANCH_ASSET_FOLDER_GRACE_SECONDS = 60 * 60;
 /**
- * The dispatcher can hold a resolved hostname for one hour, so a reader can
+ * The dispatcher can hold a resolved hostname for a day, so a reader can
  * still ask for the files of a deleted site during that time.
  */
-const DELETED_SITE_GRACE_SECONDS = 60 * 60;
+const DELETED_SITE_GRACE_SECONDS = HOSTNAME_READER_GRACE_SECONDS;
 
 /**
- * A retired version waits one hour: the dispatcher can hold a resolved
- * hostname, and a render can still read the version, for that long. The
- * retention policy usually keeps the version much longer, and the collector
- * applies it when it inspects the entry.
+ * A retired version waits as long as a dispatcher can hold a resolved
+ * hostname that points to it, plus renders in flight. The retention policy
+ * usually keeps the version much longer, and the collector applies it when
+ * it inspects the entry.
  */
-const RETIRED_VERSION_GRACE_SECONDS = 60 * 60;
+const RETIRED_VERSION_GRACE_SECONDS = HOSTNAME_READER_GRACE_SECONDS;
 
 type StorageGcWriter = Parameters<typeof enqueueStorageCollection>[0];
 

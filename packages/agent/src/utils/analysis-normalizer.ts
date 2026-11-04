@@ -5,7 +5,6 @@ import type {
   ProjectReferenceSurfaces,
   ReferenceSourceReport,
   RestApiReferenceEndpoint,
-  RestApiReferenceExtraction,
   RestApiReferenceAuth,
   RestApiReferenceField,
   RestApiReferenceGroup,
@@ -379,14 +378,6 @@ function normalizeRestSource(value: unknown): RestApiReferenceSource | undefined
   };
 }
 
-function normalizeRestExtraction(value: unknown): RestApiReferenceExtraction | undefined {
-  const record = asRecord(value);
-  const promptVersion = stringValue(record?.promptVersion);
-  const model = stringValue(record?.model);
-  if (!record || !promptVersion || !model) return undefined;
-  return { promptVersion, model, files: stringArray(record.files) };
-}
-
 /** The report of the spec route; its contract schema drops unknown keys and rejects bad values. */
 function normalizeReferenceSourceReport(value: unknown): ReferenceSourceReport | undefined {
   const result = referenceSourceReportSchema.safeParse(value);
@@ -530,11 +521,9 @@ function normalizeReferenceSurfaces(value: unknown): ProjectReferenceSurfaces | 
   if (restRecord) {
     const groups = normalizeArray(restRecord.groups, normalizeRestGroup);
     const source = normalizeRestSource(restRecord.source);
-    const extraction = normalizeRestExtraction(restRecord.extraction);
     if (groups.length > 0) {
       surfaces.rest = {
         ...(source ? { source } : {}),
-        ...(extraction ? { extraction } : {}),
         label: stringValue(restRecord.label),
         slug: stringValue(restRecord.slug),
         description: stringValue(restRecord.description),

@@ -1,5 +1,7 @@
 import {
+  MAX_OWNED_TEAMS,
   TEAM_INVITE_EMAILS_PER_HOUR,
+  TEAM_INVITE_EMAILS_PER_SENDER_PER_HOUR,
   TEAM_ROLES,
   roleHasCapability,
   teamInviteFailureSchema,
@@ -118,6 +120,10 @@ const TEAM_ERROR_MESSAGES: Record<string, string> = {
   team_has_projects: "Move or delete the team's projects before you delete the team.",
   project_in_team: "This project is already in a team.",
   invite_email_limit: `This team sent ${TEAM_INVITE_EMAILS_PER_HOUR} invites by email in the last hour. Try again later, or create an invite link and share it yourself.`,
+  invite_sender_limit: `You sent ${TEAM_INVITE_EMAILS_PER_SENDER_PER_HOUR} invites by email in the last hour. Try again later, or create an invite link and share it yourself.`,
+  invite_recipient_limit: "You sent several invite emails to this address today. Create an invite link and send it yourself.",
+  member_owns_projects: "This member still owns projects in this team. Delete those projects before the member leaves the team.",
+  team_limit: `You own ${MAX_OWNED_TEAMS} teams. Delete a team or hand over its ownership before you create another.`,
   forbidden: "Your role does not allow this action.",
 }
 
@@ -150,6 +156,11 @@ const INVITE_FAILURE_VIEW: Record<TeamInviteFailure, { title: string; descriptio
   already_member: {
     title: "Already a member",
     description: "You are already a member of this team.",
+  },
+  invite_email_mismatch: {
+    title: "Invite for another address",
+    description:
+      "This invite was sent to another email address. Sign in with that address, or ask the team admin for an invite link.",
   },
 }
 

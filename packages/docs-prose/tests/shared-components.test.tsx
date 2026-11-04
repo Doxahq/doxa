@@ -62,7 +62,11 @@ describe("diagram", () => {
     const Mermaid = createMermaid(mermaid);
     const html = renderToStaticMarkup(<Mermaid chart={"graph TD\nA-->B"} />);
     expect(mermaid.initialize).toHaveBeenCalledTimes(1);
-    expect(mermaid.initialize).toHaveBeenCalledWith({ startOnLoad: false, theme: "neutral" });
+    expect(mermaid.initialize).toHaveBeenCalledWith({
+      startOnLoad: false,
+      theme: "neutral",
+      securityLevel: "strict",
+    });
     expect(html).toContain('data-state="loading"');
     expect(html).toContain("doxa-mermaid not-prose");
   });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { ContainerGenerateRequest } from "@doxahq/contracts";
+import { containerGenerateRequestSchema, type ContainerGenerateRequest } from "@doxahq/contracts";
 import {
   StructureInfeasibleConstraintsError,
   type DocumentationStructure,
@@ -15,7 +15,6 @@ import {
   hostedPageFailureAction,
   resolvedEditorialPageBudget,
   resolvedPageConcurrency,
-  resolvedRestExtractionModel,
   resolvedWriterExploration,
 } from "../src/generation-profile";
 
@@ -75,13 +74,10 @@ describe("generation profile helpers", () => {
     expect(resolvedEditorialPageBudget(input)).toBe(24);
   });
 
-  test("extracts REST endpoints with the extraction model, else the writer model, else the run model", () => {
-    const modelConfig = { plannerModel: "planner", writerModel: "writer" };
+  test("accepts the deprecated REST extraction model of an older worker", () => {
+    const modelConfig = { plannerModel: "planner", writerModel: "writer", restExtractionModel: "extractor" };
 
-    expect(resolvedRestExtractionModel(validRequest({ modelConfig: { ...modelConfig, restExtractionModel: "extractor" } })))
-      .toBe("extractor");
-    expect(resolvedRestExtractionModel(validRequest({ modelConfig }))).toBe("writer");
-    expect(resolvedRestExtractionModel(validRequest({}))).toBe("x-ai/grok-4.5");
+    expect(containerGenerateRequestSchema.safeParse(validRequest({ modelConfig })).success).toBe(true);
   });
 
   test("takes the editorial budget from the profile and ignores the deprecated maxPages field", async () => {

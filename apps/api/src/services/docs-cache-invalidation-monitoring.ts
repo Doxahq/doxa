@@ -5,6 +5,7 @@ import {
   type DocsCacheInvalidationHealth,
   type DocsCacheInvalidationHealthStore,
 } from "../repositories/docs-cache-invalidations";
+import { DocsHostnameSourceRepository } from "../repositories/docs-hostname-source";
 import {
   DocsCacheInvalidationWorker,
   type DocsCacheInvalidationProcessResult,
@@ -30,7 +31,13 @@ export class DocsCacheInvalidationMaintenance {
   static fromEnv(env: Env): DocsCacheInvalidationMaintenance {
     const repository = new DocsCacheInvalidationsRepository(createDb(env));
     return new DocsCacheInvalidationMaintenance(
-      new DocsCacheInvalidationWorker(repository, env.DOCS_CACHE_INVALIDATOR),
+      // With the hostname source, a retried task also rewrites the hostname
+      // map, as the first delivery does; without it, only the purge ran.
+      new DocsCacheInvalidationWorker(
+        repository,
+        env.DOCS_CACHE_INVALIDATOR,
+        new DocsHostnameSourceRepository(env),
+      ),
       repository,
     );
   }

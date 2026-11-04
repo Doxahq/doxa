@@ -65,7 +65,11 @@ export const generationModelConfigSchema = z.object({
   writerModel: z.string().trim().min(1),
   /** Writes the last retry of a failing page. Same provider as the writer. */
   writerFallbackModel: z.string().trim().min(1).optional(),
-  /** Extracts REST endpoints file by file on the model route. Same provider; the writer model when not set. */
+  /**
+   * @deprecated File-by-file REST extraction was removed, and the container
+   * ignores this field. It stays for one release, so an older worker can
+   * still call a newer container.
+   */
   restExtractionModel: z.string().trim().min(1).optional(),
 }).strict();
 
@@ -82,6 +86,7 @@ export const generationOperationSchema = z.enum([
   "structure_review",
   "page_write",
   "mdx_repair",
+  /** No run makes these calls now; usage records of older runs (file-by-file REST extraction) have them. */
   "rest_extraction",
 ]);
 

@@ -1,4 +1,11 @@
-import type { AgentConfig, AgentProgressCallback, DocumentationStructure, ProjectAnalysis, StructureSuggestionInput } from "../types";
+import type {
+  AgentConfig,
+  AgentProgressCallback,
+  DocumentationStructure,
+  ProjectAnalysis,
+  ResolvedDocumentationGenerationBrief,
+  StructureSuggestionInput,
+} from "../types";
 import { normalizeProjectAnalysis } from "../utils/analysis-normalizer";
 import {
   discoverDocumentationCollections,
@@ -11,12 +18,11 @@ import { generateStructureWithRetry } from "./structure-runner";
 import { prompts } from "./prompts";
 import type { PromptRegistry } from "./prompts";
 import { documentationBriefFingerprint, resolveDocumentationBrief } from "./documentation-policy";
-import { filterPublicReferenceSurfaces } from "./public-surfaces";
+import { applyReferenceInstructions } from "./reference-instructions";
 import { resolvePlanningRepoMap } from "./planning-repo-map";
 import { loadRepositoryAgentNotes, renderRepositoryAgentNotesBlock } from "./repository-agent-notes";
 import { readRepositorySpecs, type RepositorySpecRead } from "../reference-specs/reader";
 import { withRestSurface } from "../utils/analysis-rest-surface";
-import { extractRestReference } from "../rest-extraction";
 import type { RestReferencePromptMode } from "./prompts/dynamic";
 
 export interface ProjectAnalysisWithCacheState {
@@ -69,15 +75,20 @@ function sourceChangesFromCacheCheck(cacheCheck: {
  * Adds what code finds to an analysis: the REST surface of the spec files,
  * which replaces the REST surface of the model, the source report, and the
  * documentation collections. It runs on every analysis path, cached or not.
+ * Without a usable spec, the REST surface of the analysis answer stays as
+ * the model wrote it: no later step rebuilds or replaces it. Only the
+ * project instructions leave out reference surfaces, endpoints or exports.
  */
 async function enrichAnalysis(
   config: AgentConfig,
   analysis: ProjectAnalysis,
   specRead: RepositorySpecRead,
+  documentationBrief: ResolvedDocumentationGenerationBrief,
 ): Promise<ProjectAnalysis> {
   const discovered = await discoverDocumentationCollections(config.cwd);
-  return filterPublicReferenceSurfaces(
+  return applyReferenceInstructions(
     mergeDocumentationCollections(normalizeProjectAnalysis(withRestReference(analysis, specRead)), discovered),
+    documentationBrief,
   );
 }
 
@@ -87,24 +98,14 @@ function withRestReference(analysis: ProjectAnalysis, specRead: RepositorySpecRe
   return { ...withSurface, referenceSourceReport: specRead.report };
 }
 
-/** How the prompts treat the REST reference: spec files, file-by-file extraction, or the answer. */
-function restReferencePromptMode(config: AgentConfig, specRead: RepositorySpecRead): RestReferencePromptMode {
-  const specFiles = specRead.surface?.source?.files;
-  if (specFiles?.length) return { specFiles };
-  return config.restExtractionModel ? { endpointExtraction: true } : {};
-}
-
 /**
- * The model route extracts the endpoints file by file when it is on. The
- * spec route needs no extraction: its surface replaces the model surface.
+ * How the prompts treat the REST reference. With spec files, code reads the
+ * endpoints and the model leaves them out. Without them, the model route
+ * runs: the analysis answer gives every endpoint with all its facts.
  */
-function withExtractedEndpoints(
-  config: AgentConfig,
-  analysis: ProjectAnalysis,
-  specRead: RepositorySpecRead,
-  options: Parameters<typeof extractRestReference>[2] = {},
-): Promise<ProjectAnalysis> {
-  return specRead.surface ? Promise.resolve(analysis) : extractRestReference(config, analysis, options);
+function restReferencePromptMode(specRead: RepositorySpecRead): RestReferencePromptMode {
+  const specFiles = specRead.surface?.source?.files;
+  return specFiles?.length ? { specFiles } : {};
 }
 
 /**
@@ -169,6 +170,7 @@ export async function analyzeProjectWithCacheState(
           config,
           normalizeProjectAnalysis(cacheCheck.cachedAnalysis),
           specRead,
+          documentationBrief,
         );
         return {
           analysis,
@@ -197,15 +199,10 @@ export async function analyzeProjectWithCacheState(
           onProgress,
           promptRegistry,
         );
-        const withEndpoints = await withExtractedEndpoints(config, result, specRead, {
-          previous: normalizeProjectAnalysis(cacheCheck.cachedAnalysis),
-          changedPaths: new Set([...allChanges, ...deletions]),
-          onProgress,
-        });
 
         // Save updated analysis to cache
         onProgress?.({ stage: "analyzing", message: "Saving analysis to cache...", progress: 95 });
-        const analysis = await enrichAnalysis(config, withEndpoints, specRead);
+        const analysis = await enrichAnalysis(config, result, specRead, documentationBrief);
         await cacheManager.saveAnalysis(
           analysisForCache(analysis, briefFingerprint),
           cacheCheck.cachedExplorationContext
@@ -223,7 +220,7 @@ export async function analyzeProjectWithCacheState(
     onProgress?.({ stage: "analyzing", message: "Exploring codebase...", progress: 10 });
 
     const repoMap = await resolvePlanningRepoMap(config, onProgress);
-    const restReference = restReferencePromptMode(config, specRead);
+    const restReference = restReferencePromptMode(specRead);
     const repositoryAgentNotes = await readRepositoryAgentNotes(config.cwd, onProgress);
     const explorationContext = await exploreProject(
       provider,
@@ -237,7 +234,7 @@ export async function analyzeProjectWithCacheState(
 
     onProgress?.({ stage: "analyzing", message: "Generating project analysis...", progress: 70 });
 
-    const modelAnalysis = normalizeProjectAnalysis(await generateAnalysisWithRetry(
+    const result = await enrichAnalysis(config, normalizeProjectAnalysis(await generateAnalysisWithRetry(
       provider,
       explorationContext,
       onProgress,
@@ -252,12 +249,7 @@ export async function analyzeProjectWithCacheState(
       repoMap,
       restReference,
       repositoryAgentNotes,
-    ));
-    const result = await enrichAnalysis(
-      config,
-      await withExtractedEndpoints(config, modelAnalysis, specRead, { onProgress }),
-      specRead,
-    );
+    )), specRead, documentationBrief);
 
     // Save to cache if available
     if (cacheManager) {

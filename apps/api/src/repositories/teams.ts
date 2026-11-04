@@ -91,6 +91,14 @@ export class TeamsRepository implements TeamStore {
       .orderBy(asc(teamInvites.createdAt));
   }
 
+  listProjectsOwnedBy(teamId: string, userId: string): Promise<TeamProject[]> {
+    return this.db
+      .select({ id: projects.id, name: projects.name, slug: projects.slug })
+      .from(projects)
+      .where(and(eq(projects.teamId, teamId), eq(projects.userId, userId)))
+      .orderBy(asc(projects.name));
+  }
+
   listProjects(teamId: string): Promise<TeamProject[]> {
     return this.db
       .select({ id: projects.id, name: projects.name, slug: projects.slug })
@@ -178,6 +186,42 @@ export class TeamsRepository implements TeamStore {
     return row?.count ?? 0;
   }
 
+  async countEmailedInvitesBySenderSince(userId: string, since: Date): Promise<number> {
+    const [row] = await this.db
+      .select({ count: count() })
+      .from(teamInvites)
+      .where(
+        and(
+          eq(teamInvites.createdByUserId, userId),
+          isNotNull(teamInvites.invitedEmail),
+          gt(teamInvites.createdAt, since),
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  async countEmailedInvitesToSince(userId: string, email: string, since: Date): Promise<number> {
+    const [row] = await this.db
+      .select({ count: count() })
+      .from(teamInvites)
+      .where(
+        and(
+          eq(teamInvites.createdByUserId, userId),
+          eq(teamInvites.invitedEmail, email),
+          gt(teamInvites.createdAt, since),
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  async countOwnedTeams(userId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ count: count() })
+      .from(teamMembers)
+      .where(and(eq(teamMembers.userId, userId), eq(teamMembers.role, "owner")));
+    return row?.count ?? 0;
+  }
+
   async revokeInvite(teamId: string, inviteId: string, now: Date): Promise<boolean> {
     const revoked = await this.db
       .update(teamInvites)
@@ -196,12 +240,17 @@ export class TeamsRepository implements TeamStore {
         expiresAt: teamInvites.expiresAt,
         usedAt: teamInvites.usedAt,
         revokedAt: teamInvites.revokedAt,
+        invitedEmail: teamInvites.invitedEmail,
       })
       .from(teamInvites)
       .innerJoin(teams, eq(teams.id, teamInvites.teamId))
       .where(eq(teamInvites.tokenHash, tokenHash))
       .limit(1);
     return row ?? null;
+  }
+
+  findVerifiedEmail(userId: string): Promise<string | null> {
+    return verifiedEmailOf(this.db, userId);
   }
 
   acceptInvite(tokenHash: string, userId: string, now: Date): Promise<InviteAcceptance> {
@@ -215,6 +264,7 @@ export class TeamsRepository implements TeamStore {
           expiresAt: teamInvites.expiresAt,
           usedAt: teamInvites.usedAt,
           revokedAt: teamInvites.revokedAt,
+          invitedEmail: teamInvites.invitedEmail,
         })
         .from(teamInvites)
         .where(eq(teamInvites.tokenHash, tokenHash))
@@ -224,6 +274,10 @@ export class TeamsRepository implements TeamStore {
       if (invite.revokedAt !== null) return { outcome: "invite_revoked" };
       if (invite.usedAt !== null) return { outcome: "invite_used" };
       if (invite.expiresAt <= now) return { outcome: "invite_expired" };
+      // SEC-017: an invite sent to an address works only for that address.
+      if (invite.invitedEmail !== null && (await verifiedEmailOf(tx, userId)) !== invite.invitedEmail) {
+        return { outcome: "invite_email_mismatch" };
+      }
       // A concurrent accept of another link of this team may add the user
       // first; the conflict then reads as "already a member", not an error.
       const added = await tx
@@ -317,4 +371,14 @@ async function guardLastOwner(
 
 function pendingInvite(now: Date) {
   return and(isNull(teamInvites.usedAt), isNull(teamInvites.revokedAt), gt(teamInvites.expiresAt, now));
+}
+
+/** The user's email in lowercase, or null when the provider did not verify it. */
+async function verifiedEmailOf(db: DoxaDb | Tx, userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ email: schema.user.email, emailVerified: schema.user.emailVerified })
+    .from(schema.user)
+    .where(eq(schema.user.id, userId))
+    .limit(1);
+  return row?.emailVerified ? row.email.trim().toLowerCase() : null;
 }

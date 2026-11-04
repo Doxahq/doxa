@@ -9,6 +9,8 @@ import {
   manifestPathForPrefix,
   parseDocsManifestText,
   type DocsManifest,
+  type VersionObjectFetcher,
+  type VersionTreeReader,
 } from "@doxahq/docs-engine";
 import { z } from "zod";
 import {
@@ -25,8 +27,25 @@ import {
   DocsResolverClient,
   type DocsResolverBinding,
 } from "@doxahq/contracts/docs-resolver";
-import { artifactReader } from "./artifact-storage";
+import {
+  readDocsRuntimeTrace,
+  type DocsRuntimeCallTiming,
+  type DocsRuntimeIsolateFacts,
+  type DocsRuntimeTrace,
+} from "@doxahq/contracts/docs-runtime-trace";
+import {
+  artifactReader,
+  type ArtifactReadSource,
+  type ArtifactStorageEnv,
+} from "./artifact-storage";
 import { readPageAssetVersions } from "./page-assets";
+import {
+  markVersionSeen,
+  recordIsolateRequest,
+  toCallTiming,
+  traceLogFields,
+  type RuntimeCallMeasurements,
+} from "./runtime-trace";
 
 const docsResolutionResponseSchema = z
   .object({
@@ -34,12 +53,11 @@ const docsResolutionResponseSchema = z
   })
   .strict();
 
-export interface RuntimeSourceEnv {
+export interface RuntimeSourceEnv extends ArtifactStorageEnv {
   DOCS_RESOLVER?: DocsResolverBinding;
   API?: InternalApiRpc;
   ALLOW_INTERNAL_HTTP?: string;
   API_BASE_URL?: string;
-  DOCS_BUCKET: R2Bucket;
   DOCS_CONTENT_TOKEN?: string;
   DOCS_PUBLIC_BASE_URL?: string;
   DOXA_DOCS_RUNTIME_TIMING?: string;
@@ -71,6 +89,11 @@ export interface RuntimeRequest {
 
 export interface ResolvedRuntimeRequest extends RuntimeRequest {
   resolution: DocsHostResolution;
+  /**
+   * Set by the dispatcher (M39). It crosses an RPC boundary, so it is parsed
+   * before use; an invalid trace counts as none.
+   */
+  trace?: unknown;
 }
 
 export interface HostRuntimeRequest extends RuntimeRequest {
@@ -212,6 +235,10 @@ interface RuntimeFeatureConfig {
     rawText: boolean;
   };
   apiPlayground: boolean;
+  /** The owner's "Try it" target (SEC-010); unset turns Try it off. */
+  apiPlaygroundBaseUrl?: string;
+  /** Who sends "Try it" requests. Unset means the proxy, when it can. */
+  apiPlaygroundTransport?: "proxy" | "browser";
   rawMarkdown: boolean;
   loadFromGithub: boolean;
 }
@@ -230,6 +257,8 @@ export interface ProjectRuntimeContext {
   artifactPrefix: string;
   manifestPath: string;
   manifest: DocsManifest;
+  /** The public origin of the requesting hostname, set by the dispatcher. */
+  siteUrl?: string;
 }
 
 /**
@@ -279,7 +308,10 @@ type RuntimeFailure = {
   };
 };
 
-export type RuntimeResponseBody = RuntimeSuccess | RuntimeFailure;
+/** `timing` is present only when the call carried a valid trace. */
+export type RuntimeResponseBody = (RuntimeSuccess | RuntimeFailure) & {
+  timing?: DocsRuntimeCallTiming;
+};
 type DocsRuntimeResolution = NonNullable<
   Awaited<
     ReturnType<NonNullable<RuntimeSourceEnv["API"]>["resolveDocsProject"]>
@@ -300,6 +332,31 @@ const RUNTIME_CACHE_MAX_ENTRIES = 500;
 export interface RuntimeRequestContext {
   timing: RuntimeTiming;
   cache: RuntimeRequestCache;
+  reads: RuntimeReadStats;
+  /** The artifact reader of this request. It counts its storage reads. */
+  artifacts: VersionTreeReader;
+}
+
+/** Artifact reads that passed the memory caches during one request. */
+interface RuntimeReadStats {
+  count: number;
+  totalMs: number;
+  longestMs: number;
+  /** Storage reads by where they were served. */
+  sources: Record<ArtifactReadSource, number>;
+  /** When the first storage read of the request ended. */
+  firstReadEndedAt?: number;
+}
+
+export function recordArtifactRead(
+  runtimeContext: RuntimeRequestContext,
+  durationMs: number,
+): void {
+  const { reads } = runtimeContext;
+  reads.count += 1;
+  reads.firstReadEndedAt ??= now();
+  reads.totalMs += durationMs;
+  reads.longestMs = Math.max(reads.longestMs, durationMs);
 }
 
 interface RuntimeRequestCache {
@@ -347,11 +404,29 @@ type RuntimeTimingData = Record<
   boolean | number | string | null | undefined
 >;
 
+/**
+ * `blobCache` is `ctx.exports.DocsBlobCache` of the current request. Without
+ * it, the reader reads R2.
+ */
 function createRuntimeRequestContext(
   env: RuntimeSourceEnv,
+  blobCache: VersionObjectFetcher | null,
 ): RuntimeRequestContext {
+  const reads: RuntimeReadStats = {
+    count: 0,
+    totalMs: 0,
+    longestMs: 0,
+    sources: { edgeCache: 0, blobCache: 0, r2: 0 },
+  };
   return {
     timing: createRuntimeTiming(env),
+    reads,
+    artifacts: artifactReader(env, {
+      blobCache,
+      onRead: (source) => {
+        reads.sources[source] += 1;
+      },
+    }),
     cache: {
       resolutions: new Map(),
       manifests: new Map(),
@@ -375,11 +450,12 @@ export function resetRuntimeSourceCachesForTests(): void {
 export async function handleRuntimeSourceRequest(
   request: Request,
   env: RuntimeSourceEnv,
+  blobCache: VersionObjectFetcher | null = null,
 ): Promise<Response | null> {
   const url = new URL(request.url);
   if (url.pathname.replace(/\/+$/, "") !== DEFAULT_RUNTIME_PATH) return null;
   const requestStartedAt = now();
-  const runtimeContext = createRuntimeRequestContext(env);
+  const runtimeContext = createRuntimeRequestContext(env, blobCache);
   const { timing } = runtimeContext;
 
   if (request.method !== "POST") {
@@ -491,9 +567,23 @@ export async function handleRuntimeSourceRequest(
 export async function runResolvedRuntimeRequest(
   env: RuntimeSourceEnv,
   input: ResolvedRuntimeRequest,
+  blobCache: VersionObjectFetcher | null = null,
 ): Promise<RuntimeResponseBody> {
+  const startedAt = now();
+  const isolate = recordIsolateRequest(startedAt);
+  const trace = readDocsRuntimeTrace(input.trace);
+  const operation = isRuntimeOperation(input.operation)
+    ? input.operation
+    : null;
   const resolution = docsHostResolutionSchema.safeParse(input.resolution);
-  if (!resolution.success || !isRuntimeOperation(input.operation)) {
+  if (!resolution.success || !operation) {
+    logRuntimeFailure({
+      errorCode: "invalid_request",
+      operation,
+      resolution: resolution.success ? resolution.data : null,
+      trace,
+      isolate,
+    });
     return {
       ok: false,
       error: {
@@ -504,26 +594,61 @@ export async function runResolvedRuntimeRequest(
     };
   }
 
-  const runtimeContext = createRuntimeRequestContext(env);
+  const versionColdInIsolate = markVersionSeen(
+    resolution.data.publishedVersionId,
+  );
+  const runtimeContext = createRuntimeRequestContext(env, blobCache);
+  const manifestStartedAt = now();
   const manifestRead = await readManifest(
     env,
     resolution.data.manifestPath,
     runtimeContext,
   );
+  const manifestMs = elapsed(manifestStartedAt);
+  const measure = (
+    operationMs: number,
+    responseBytes?: number,
+  ): RuntimeCallMeasurements => ({
+    ...readMeasurements(runtimeContext),
+    startedAt,
+    finishedAt: now(),
+    manifestMs,
+    operationMs,
+    ...(responseBytes === undefined ? {} : { responseBytes }),
+    versionColdInIsolate,
+    isolate,
+  });
   if (manifestRead.status === "unsupported_schema") {
-    return { ok: false, error: unsupportedArtifactSchemaError(manifestRead) };
+    return withCallTiming(
+      { ok: false, error: unsupportedArtifactSchemaError(manifestRead) },
+      trace,
+      measure(0),
+    );
   }
   if (
     manifestRead.status !== "ok" ||
     !isPinnedManifest(manifestRead.manifest, resolution.data)
   ) {
-    return {
-      ok: false,
-      error: {
-        code: "version_not_found",
-        message: "The pinned documentation version is unavailable.",
+    logRuntimeFailure({
+      errorCode: "version_not_found",
+      operation,
+      resolution: resolution.data,
+      trace,
+      isolate,
+      manifestMs,
+      versionColdInIsolate,
+    });
+    return withCallTiming(
+      {
+        ok: false,
+        error: {
+          code: "version_not_found",
+          message: "The pinned documentation version is unavailable.",
+        },
       },
-    };
+      trace,
+      measure(0),
+    );
   }
 
   const context: ProjectRuntimeContext = {
@@ -532,9 +657,134 @@ export async function runResolvedRuntimeRequest(
     artifactPrefix: resolution.data.artifactPrefix,
     manifestPath: resolution.data.manifestPath,
     manifest: manifestRead.manifest,
+    ...(resolution.data.siteUrl ? { siteUrl: resolution.data.siteUrl } : {}),
   };
 
-  return runLoadedRuntimeRequest(env, context, input, runtimeContext);
+  const operationStartedAt = now();
+  const result = await runLoadedRuntimeRequest(
+    env,
+    context,
+    input,
+    runtimeContext,
+  );
+  const operationMs = elapsed(operationStartedAt);
+  const isRouteData = operation === "getRouteData";
+  // Sized only for a traced route-data call: the size costs a serialization.
+  const measured = measure(
+    operationMs,
+    isRouteData && trace && result.ok
+      ? estimateJsonSize(result.data)
+      : undefined,
+  );
+  if (isRouteData) {
+    logRouteDataReads(resolution.data, runtimeContext, result.ok, {
+      trace,
+      measured,
+    });
+  }
+  return withCallTiming(result, trace, measured);
+}
+
+function readMeasurements(
+  runtimeContext: RuntimeRequestContext,
+): Pick<
+  RuntimeCallMeasurements,
+  "firstReadEndedAt" | "reads" | "r2Reads" | "readMs"
+> {
+  const { reads } = runtimeContext;
+  return {
+    ...(reads.firstReadEndedAt === undefined
+      ? {}
+      : { firstReadEndedAt: reads.firstReadEndedAt }),
+    reads: reads.count,
+    r2Reads: reads.sources.r2,
+    readMs: reads.totalMs,
+  };
+}
+
+/** Adds `timing` only for a traced call, so an old dispatcher gets the old answer. */
+function withCallTiming(
+  result: RuntimeResponseBody,
+  trace: DocsRuntimeTrace | undefined,
+  measured: RuntimeCallMeasurements,
+): RuntimeResponseBody {
+  return trace ? { ...result, timing: toCallTiming(measured) } : result;
+}
+
+/**
+ * One `docs_runtime_reads` line for a call that failed before its operation.
+ * It never logs the payload or the raw input: only IDs from a valid
+ * resolution and a known operation name.
+ */
+function logRuntimeFailure(input: {
+  errorCode: "invalid_request" | "version_not_found";
+  operation: RuntimeOperation | null;
+  resolution: DocsHostResolution | null;
+  trace: DocsRuntimeTrace | undefined;
+  isolate: DocsRuntimeIsolateFacts;
+  manifestMs?: number;
+  versionColdInIsolate?: boolean;
+}): void {
+  console.warn(
+    JSON.stringify({
+      event: "docs_runtime_reads",
+      operation: input.operation,
+      siteId: input.resolution?.siteId ?? null,
+      publishedVersionId: input.resolution?.publishedVersionId ?? null,
+      ok: false,
+      errorCode: input.errorCode,
+      ...traceLogFields(input.trace),
+      isolate: input.isolate,
+      ...(input.manifestMs === undefined
+        ? {}
+        : { manifestMs: Math.round(input.manifestMs) }),
+      ...(input.versionColdInIsolate === undefined
+        ? {}
+        : { versionColdInIsolate: input.versionColdInIsolate }),
+    }),
+  );
+}
+
+/**
+ * One line per route-data read, with or without DOXA_DOCS_RUNTIME_TIMING.
+ * The dispatcher calls getRouteData only on an HTML or route-data cache miss,
+ * so the volume follows the misses. The read count includes the manifest
+ * reads made before the operation. `edgeCacheHits`, `blobCacheHits` and
+ * `r2Reads` split the storage reads below those reads (a tree, a blob) by
+ * where they were served; a tiered-cache miss is an R2 read. `traceId` and
+ * `caller` come from the dispatcher's trace, when the call carried one.
+ */
+function logRouteDataReads(
+  resolution: DocsHostResolution,
+  runtimeContext: RuntimeRequestContext,
+  ok: boolean,
+  call: {
+    trace: DocsRuntimeTrace | undefined;
+    measured: RuntimeCallMeasurements;
+  },
+): void {
+  const { reads } = runtimeContext;
+  const { measured } = call;
+  console.info(
+    JSON.stringify({
+      event: "docs_runtime_reads",
+      operation: "getRouteData",
+      siteId: resolution.siteId,
+      publishedVersionId: resolution.publishedVersionId,
+      ok,
+      reads: reads.count,
+      readMs: Math.round(reads.totalMs),
+      longestReadMs: Math.round(reads.longestMs),
+      edgeCacheHits: reads.sources.edgeCache,
+      blobCacheHits: reads.sources.blobCache,
+      r2Reads: reads.sources.r2,
+      ...traceLogFields(call.trace),
+      isolate: measured.isolate,
+      manifestMs: Math.round(measured.manifestMs),
+      operationMs: Math.round(measured.operationMs),
+      versionColdInIsolate: measured.versionColdInIsolate,
+    }),
+  );
 }
 
 function isPinnedManifest(
@@ -556,6 +806,7 @@ function isPinnedManifest(
 export async function runHostRuntimeRequest(
   env: RuntimeSourceEnv,
   input: HostRuntimeRequest,
+  blobCache: VersionObjectFetcher | null = null,
 ): Promise<RuntimeResponseBody> {
   const hostname = input.hostname?.trim().toLowerCase();
   if (
@@ -572,7 +823,7 @@ export async function runHostRuntimeRequest(
     };
   }
 
-  const runtimeContext = createRuntimeRequestContext(env);
+  const runtimeContext = createRuntimeRequestContext(env, blobCache);
   const loaded = await loadProjectRuntimeContext(
     env,
     { kind: "host", value: hostname },
@@ -1010,16 +1261,17 @@ async function getPrerenderPlan(
   const sections = await readSections(env, context, runtimeContext);
   for (const section of sections) {
     if (section.default || section.hidden) continue;
-    const sectionPath = normalizeHref(`/${section.slug}`);
-    const routes = await readRoutes(env, context, section.slug, runtimeContext);
-    const target = routes.find((route) => !route.noLink)?.href;
-    if (!target) continue;
-    const normalizedTarget = normalizeHref(target);
-    if (normalizedTarget !== sectionPath && pagePaths.has(normalizedTarget)) {
+    const target = await getSectionRedirectTarget(
+      env,
+      context,
+      section,
+      runtimeContext,
+    );
+    if (target && pagePaths.has(target)) {
       entries.push({
         kind: "redirect",
-        pathname: sectionPath,
-        target: normalizedTarget,
+        pathname: getSectionPath(section),
+        target,
         status: 308,
       });
     }
@@ -1047,6 +1299,24 @@ async function getRouteData(
   pathname: string,
   runtimeContext: RuntimeRequestContext,
 ): Promise<RuntimeRouteData> {
+  // Start the reads that do not depend on the page now, so that cold R2 reads
+  // overlap. The request cache gives the later awaits the same promises.
+  const sectionsRead = readSections(env, context, runtimeContext);
+  const siteConfigRead = readSiteConfig(env, context, runtimeContext);
+  const homeHrefRead = getHomeHref(env, context, runtimeContext);
+  const sectionHomeHrefsRead = sectionsRead.then((sections) =>
+    getSectionHomeHrefs(env, context, sections, runtimeContext),
+  );
+  // A redirect or a not-found page returns before these reads are awaited.
+  for (const read of [
+    sectionsRead,
+    siteConfigRead,
+    homeHrefRead,
+    sectionHomeHrefsRead,
+  ]) {
+    read.catch(() => undefined);
+  }
+
   const resolution = await resolvePage(env, context, pathname, runtimeContext);
 
   if (resolution.type === "redirect") {
@@ -1068,26 +1338,34 @@ async function getRouteData(
     };
   }
 
-  const sections = await readSections(env, context, runtimeContext);
+  const sections = await sectionsRead;
   const href = normalizeHref(resolution.href);
   const slug =
     resolution.type === "page" ? resolution.slug : normalizeSlug(href);
   const currentSection = getSectionFromHref(sections, href);
   const sectionSlug = currentSection?.slug ?? "";
-  const rawSectionNavigation = sectionSlug
-    ? await readNavigation(env, context, sectionSlug, runtimeContext)
-    : [];
+  const [
+    rawSectionNavigation,
+    sectionRoutes,
+    homeHref,
+    sectionHomeHrefs,
+    siteConfig,
+    site,
+    features,
+  ] = await Promise.all([
+    sectionSlug
+      ? readNavigation(env, context, sectionSlug, runtimeContext)
+      : Promise.resolve([]),
+    sectionSlug
+      ? readRoutes(env, context, sectionSlug, runtimeContext)
+      : Promise.resolve([]),
+    homeHrefRead,
+    sectionHomeHrefsRead,
+    siteConfigRead,
+    getSiteConfig(env, context, runtimeContext),
+    getFeatureConfig(env, context, runtimeContext),
+  ]);
   const sectionNavigation = flattenNavigation(rawSectionNavigation);
-  const sectionRoutes = sectionSlug
-    ? await readRoutes(env, context, sectionSlug, runtimeContext)
-    : [];
-  const homeHref = await getHomeHref(env, context, runtimeContext);
-  const sectionHomeHrefs = await getSectionHomeHrefs(
-    env,
-    context,
-    sections,
-    runtimeContext,
-  );
   const routeTitle =
     sectionRoutes.find((route) => normalizeHref(route.href) === href)?.title ??
     null;
@@ -1099,9 +1377,9 @@ async function getRouteData(
     slug,
     href,
     homeHref,
-    siteConfig: await readSiteConfig(env, context, runtimeContext),
-    site: await getSiteConfig(env, context, runtimeContext),
-    features: await getFeatureConfig(env, context, runtimeContext),
+    siteConfig,
+    site,
+    features,
     sections,
     currentSection,
     sectionHomeHrefs,
@@ -1124,8 +1402,20 @@ async function getSiteConfig(
   return {
     name: config.name,
     description: config.description,
-    url: env.DOCS_PUBLIC_BASE_URL?.replace(/\/+$/, "") ?? "",
+    url: getSiteUrl(env, context),
   };
+}
+
+/**
+ * The origin of canonical links. Each hostname of a site links to itself; the
+ * environment value is only for calls without a resolved hostname, such as
+ * local development.
+ */
+function getSiteUrl(
+  env: RuntimeSourceEnv,
+  context: ProjectRuntimeContext,
+): string {
+  return (context.siteUrl ?? env.DOCS_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
 }
 
 async function getFeatureConfig(
@@ -1165,12 +1455,13 @@ async function resolvePage(
     (section) => !section.default && section.slug === slug,
   );
   if (matchedSection) {
-    const firstRoute = (
-      await readRoutes(env, context, matchedSection.slug, runtimeContext)
-    )[0];
-    if (firstRoute && firstRoute.href !== href) {
-      return { type: "redirect", href: firstRoute.href, status: 308 };
-    }
+    const target = await getSectionRedirectTarget(
+      env,
+      context,
+      matchedSection,
+      runtimeContext,
+    );
+    if (target) return { type: "redirect", href: target, status: 308 };
   }
 
   const page = await getPage(env, context, href, runtimeContext);
@@ -1190,7 +1481,11 @@ async function getPage(
 
   const [sections, assets] = await Promise.all([
     readSections(env, context, runtimeContext),
-    readPageAssetVersions(env.DOCS_BUCKET, context.artifactPrefix, raw.body),
+    readPageAssetVersions(
+      runtimeContext.artifacts,
+      context.artifactPrefix,
+      raw.body,
+    ),
   ]);
   return {
     ...raw,
@@ -1353,7 +1648,7 @@ export async function readText(
     runtimeContext.cache.artifacts,
     runtimeModuleCaches.artifacts,
     `artifact:${artifactPath}`,
-    () => readTextUncached(env, artifactPath, runtimeContext.timing),
+    () => readTextUncached(env, artifactPath, runtimeContext),
     runtimeContext.timing,
     { cacheKind: "artifact", artifactKind },
   );
@@ -1362,15 +1657,18 @@ export async function readText(
 async function readTextUncached(
   env: RuntimeSourceEnv,
   path: string,
-  timing: RuntimeTiming,
+  runtimeContext: RuntimeRequestContext,
 ): Promise<string | null> {
+  const { timing } = runtimeContext;
   const artifactKind = getArtifactKind(path);
   const bucketStartedAt = now();
-  const object = await artifactReader(env.DOCS_BUCKET).get(path);
+  const object = await runtimeContext.artifacts.get(path);
+  const bucketMs = elapsed(bucketStartedAt);
+  recordArtifactRead(runtimeContext, bucketMs);
   timing.mark("artifact.bucketGet", {
     artifactKind,
     hit: Boolean(object),
-    durationMs: elapsed(bucketStartedAt),
+    durationMs: bucketMs,
   });
   if (object) {
     const textStartedAt = now();
@@ -1621,6 +1919,35 @@ async function getHomeHref(
     (href) => pagePaths.has(href),
     routes[0]?.href ?? null,
   );
+}
+
+/**
+ * Where the URL of a section sends a visitor: its first page. A page stored
+ * at the section path wins, so a section never hides it. Live routing and the
+ * pre-render plan both use this, so they always agree.
+ */
+async function getSectionRedirectTarget(
+  env: RuntimeSourceEnv,
+  context: ProjectRuntimeContext,
+  section: RuntimeSection,
+  runtimeContext: RuntimeRequestContext,
+): Promise<string | null> {
+  const sectionPath = getSectionPath(section);
+  if (hasManifestPage(context, sectionPath)) return null;
+  const firstRoute = (
+    await readRoutes(env, context, section.slug, runtimeContext)
+  )[0];
+  if (!firstRoute) return null;
+  const target = normalizeHref(firstRoute.href);
+  return target === sectionPath ? null : target;
+}
+
+function getSectionPath(section: RuntimeSection): string {
+  return normalizeHref(`/${section.slug}`);
+}
+
+function hasManifestPage(context: ProjectRuntimeContext, href: string): boolean {
+  return context.manifest.pages.some((page) => normalizeHref(page.href) === href);
 }
 
 async function getSectionHomeHrefs(

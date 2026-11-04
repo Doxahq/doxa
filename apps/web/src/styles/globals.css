@@ -385,6 +385,12 @@
   color: var(--foreground);
   font-family: var(--font-body);
   color-scheme: light;
+  /* Page content is untrusted: MDX can set any class, such as
+     "fixed inset-0 z-50". Layout containment makes the canvas the containing
+     block of fixed and absolute content and its own stacking context, so a
+     page cannot cover the dashboard around it (SEC-009). */
+  contain: layout;
+  isolation: isolate;
 }
 
 .doxa-site-canvas.dark {

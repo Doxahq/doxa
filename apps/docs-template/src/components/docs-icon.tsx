@@ -10,6 +10,8 @@ import {
 } from "@doxahq/docs-prose/icons";
 import { useRouterState } from "@tanstack/react-router";
 
+import { createLruCache } from "@/src/lib/lru-cache";
+
 const RouteIconsContext = createContext<RouteIcons | undefined>(undefined);
 
 /**
@@ -45,23 +47,35 @@ export function DocsIcon({
   return node ? <DocsIconSvg node={node} className={className} /> : null;
 }
 
-const iconComponents = new Map<string, IconComponent>();
+/**
+ * Card icon components by icon key. Icon names come from customer pages and
+ * one renderer isolate serves many sites, so the cache is bounded: Lucide has
+ * fewer than 2,000 icons, and an evicted name only gets a new component.
+ */
+const MAX_CACHED_ICON_COMPONENTS = 512;
+const iconComponents = createLruCache<string, IconComponent>(
+  MAX_CACHED_ICON_COMPONENTS
+);
 
 /**
  * The card icon component for a name, for `createProseComponents`. The same
- * name always gets the same component, so a card does not remount its icon.
+ * name gets the same component while it is cached, so a card does not
+ * remount its icon.
  */
 export function resolveDocsIcon(name: string): IconComponent | null {
   const key = docsIconKey(name);
   if (!key) return null;
-  let component = iconComponents.get(key);
-  if (!component) {
-    component = function CardIcon({ className }: { className?: string }) {
-      return <DocsIcon name={key} className={className} />;
-    };
-    iconComponents.set(key, component);
-  }
+  const cached = iconComponents.get(key);
+  if (cached) return cached;
+  const component = createCardIcon(key);
+  iconComponents.set(key, component);
   return component;
+}
+
+function createCardIcon(key: string): IconComponent {
+  return function CardIcon({ className }: { className?: string }) {
+    return <DocsIcon name={key} className={className} />;
+  };
 }
 
 export function ExternalLinkIcon({ className }: { className?: string }) {

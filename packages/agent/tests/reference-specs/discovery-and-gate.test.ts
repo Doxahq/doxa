@@ -100,6 +100,22 @@ describe("gate G1", () => {
     await expect(readSpecFile(root, "inside-link.yaml")).resolves.toEqual({ ok: false, refusal: "symbolic_link" });
   });
 
+  test.each([".env.production.yaml", "config/.ENV.json", "deploy/.env.yml"])(
+    "refuses the protected file %s, like the agent's Read tool",
+    async (path) => {
+      const root = await checkout({ [path]: "openapi: 3.1.0\npassword: synthetic\n" });
+
+      await expect(readSpecFile(root, path)).resolves.toEqual({ ok: false, refusal: "protected" });
+    },
+  );
+
+  test("refuses a spec name that links to a protected file", async () => {
+    const root = await checkout({ ".env.yaml": "password: synthetic\n" });
+    await symlink(join(root, ".env.yaml"), join(root, "openapi.yaml"));
+
+    await expect(readSpecFile(root, "openapi.yaml")).resolves.toEqual({ ok: false, refusal: "protected" });
+  });
+
   test("T5 refuses NUL bytes and invalid UTF-8", async () => {
     const root = await checkout({
       "nul.yaml": new Uint8Array([111, 0, 112]),

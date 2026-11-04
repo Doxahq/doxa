@@ -34,6 +34,8 @@ const INVITE_MESSAGES: Record<TeamInviteFailure, string> = {
   invite_expired: "This invite link has expired. Ask for a new one.",
   invite_revoked: "This invite link was revoked. Ask for a new one.",
   already_member: "You are already a member of this team.",
+  invite_email_mismatch:
+    "This invite was sent to another email address. Sign in with that address, or ask the team admin for an invite link.",
 };
 
 /** An invite link that does not work, with the reason for the accept page. */

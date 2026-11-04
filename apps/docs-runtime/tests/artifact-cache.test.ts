@@ -31,7 +31,7 @@ describe("artifact storage with the Workers cache", () => {
     vi.stubGlobal("caches", { default: cache });
     const { bucket } = createTreeBucket(set.objects);
 
-    const warm = await artifactReader(bucket).get(manifestKey);
+    const warm = await artifactReader({ DOCS_BUCKET: bucket }).get(manifestKey);
     expect(await warm?.text()).toBe(set.objects[manifestKey]);
     await vi.waitFor(() => expect(entries.size).toBe(2));
 
@@ -39,7 +39,7 @@ describe("artifact storage with the Workers cache", () => {
     const cold = Object.create(bucket) as R2Bucket;
     vi.mocked(bucket.get).mockClear();
 
-    const read = await artifactReader(cold).get(manifestKey);
+    const read = await artifactReader({ DOCS_BUCKET: cold }).get(manifestKey);
     expect(await read?.text()).toBe(set.objects[manifestKey]);
     expect(bucket.get).not.toHaveBeenCalled();
   });
@@ -47,7 +47,7 @@ describe("artifact storage with the Workers cache", () => {
   test("reads R2 when the data center has no Workers cache", async () => {
     const { bucket } = createTreeBucket(set.objects);
 
-    const read = await artifactReader(bucket).get(manifestKey);
+    const read = await artifactReader({ DOCS_BUCKET: bucket }).get(manifestKey);
 
     expect(await read?.text()).toBe(set.objects[manifestKey]);
     expect(bucket.get).toHaveBeenCalled();

@@ -11,6 +11,10 @@ memory_mb      = 4096
 min_task_count = 1
 max_task_count = 1
 
+# Optional: run no API task from 01:00 to 10:00 local time, to save cost
+# before launch. Docs sites stay up; the dashboard, MCP and publishing do not.
+# daily_pause = { stop_hour = 1, start_hour = 10, timezone = "Africa/Algiers" }
+
 alert_emails       = ["<you@example.com>"]
 monthly_budget_usd = 120
 
@@ -50,11 +54,12 @@ api_secret_names = [
 # from each deploy (--env), not from here.
 api_environment = {
   BETTER_AUTH_URL                 = "https://api.doxa.so"
-  AUTH_COOKIE_DOMAIN              = ".doxa.so"
+  # SEC-021: leave AUTH_COOKIE_DOMAIN unset so the session cookies are
+  # host-only on the API host. The dashboard reads the API's signed-in
+  # marker instead. Remove it only after the web app with that check is live.
   WEB_ORIGIN                      = "https://doxa.so"
   OAUTH_ISSUER                    = "https://api.doxa.so"
   MCP_RESOURCE_URL                = "https://mcp.doxa.so/mcp"
-  DOCS_RUNTIME_URL                = "https://preview.doxa.so"
   DOCS_BASE_DOMAIN                = "doxa.page"
   DOCS_CUSTOM_DOMAIN_CNAME_TARGET = "cname.doxa.page"
   CLOUDFLARE_ACCOUNT_ID           = "<cloudflare-account-id>"

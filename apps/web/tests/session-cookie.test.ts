@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import { resolveDashboardEntry } from "~/lib/auth/dashboard-entry"
-import { hasSessionTokenCookie, readSessionCookieIdentity } from "~/lib/auth/session-cookie"
+import { hasSessionTokenCookie, hasSignedInCookie, looksSignedIn, readSessionCookieIdentity } from "~/lib/auth/session-cookie"
 
 describe("hasSessionTokenCookie", () => {
   test("finds the Better Auth session token among other cookies", () => {
@@ -60,6 +60,24 @@ function sessionData({
   }
   return Buffer.from(JSON.stringify(payload)).toString("base64url")
 }
+
+describe("looksSignedIn", () => {
+  test("accepts the production marker, which the web host receives from the API", () => {
+    expect(hasSignedInCookie("theme=dark; doxa.signed_in=1")).toBe(true)
+    expect(looksSignedIn("theme=dark; doxa.signed_in=1")).toBe(true)
+  })
+
+  test("accepts a session cookie from before host-only cookies", () => {
+    expect(looksSignedIn("__Secure-better-auth.session_token=abc")).toBe(true)
+  })
+
+  test("rejects a cleared marker, another marker and no cookies", () => {
+    expect(looksSignedIn("doxa.signed_in=")).toBe(false)
+    expect(looksSignedIn("doxa-dev.signed_in=1")).toBe(false)
+    expect(looksSignedIn("theme=dark")).toBe(false)
+    expect(looksSignedIn(null)).toBe(false)
+  })
+})
 
 describe("readSessionCookieIdentity", () => {
   test("reads the id and email from a valid session cache cookie", () => {

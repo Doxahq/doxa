@@ -720,6 +720,7 @@ export async function writeDocPage(
     targetedRepairClasses: writerValidation.targetedRepairClasses,
     validation: {
       mdxCompile: writerValidation.mdxCompile,
+      forbiddenValues: writerValidation.forbiddenValues,
       timeoutMs: writerValidation.timeoutMs,
       restEndpointPage,
       onSpan,
@@ -748,6 +749,7 @@ export async function writeDocPage(
           tools: validationOnly
             ? [validatePageTool({
               mdxCompile: writerValidation.mdxCompile,
+              forbiddenValues: writerValidation.forbiddenValues,
               timeoutMs: writerValidation.timeoutMs,
               preserveTitle,
               restEndpointPage,
@@ -757,6 +759,7 @@ export async function writeDocPage(
               ...readOnlyTools(cwd),
               validatePageTool({
                 mdxCompile: writerValidation.mdxCompile,
+                forbiddenValues: writerValidation.forbiddenValues,
                 timeoutMs: writerValidation.timeoutMs,
                 preserveTitle,
                 restEndpointPage,
@@ -939,6 +942,7 @@ export async function writeDocPageTracked(
     targetedRepairClasses: writerValidation.targetedRepairClasses,
     validation: {
       mdxCompile: writerValidation.mdxCompile,
+      forbiddenValues: writerValidation.forbiddenValues,
       timeoutMs: writerValidation.timeoutMs,
       restEndpointPage,
       onSpan,
@@ -967,6 +971,7 @@ export async function writeDocPageTracked(
           tools: validationOnly
             ? [validatePageTool({
               mdxCompile: writerValidation.mdxCompile,
+              forbiddenValues: writerValidation.forbiddenValues,
               timeoutMs: writerValidation.timeoutMs,
               preserveTitle,
               restEndpointPage,
@@ -976,6 +981,7 @@ export async function writeDocPageTracked(
               ...trackedTools.tools,
               validatePageTool({
                 mdxCompile: writerValidation.mdxCompile,
+                forbiddenValues: writerValidation.forbiddenValues,
                 timeoutMs: writerValidation.timeoutMs,
                 preserveTitle,
                 restEndpointPage,
@@ -1119,6 +1125,7 @@ async function validateRepairedPage(
 ): Promise<{ ok: boolean; issueCodes: string[] }> {
   const report = await runPageValidation(content, {
     mdxCompile: writerValidation.mdxCompile,
+    forbiddenValues: writerValidation.forbiddenValues,
     timeoutMs: writerValidation.timeoutMs,
     preserveTitle,
     restEndpointPage,

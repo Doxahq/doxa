@@ -89,6 +89,9 @@ module "api_service" {
 
   min_task_count = var.min_task_count
   max_task_count = var.max_task_count
+  daily_pause    = var.daily_pause
+
+  enable_execute_command = var.enable_execute_command
 }
 
 module "github_deploy" {
@@ -111,4 +114,11 @@ module "monitoring" {
   service_arn        = module.api_service.service_arn
   alert_emails       = var.alert_emails
   monthly_budget_usd = var.monthly_budget_usd
+  daily_pause        = var.daily_pause
+
+  valkey = {
+    cache_name          = module.valkey.cache_name
+    max_data_storage_gb = module.valkey.max_data_storage_gb
+    max_ecpu_per_second = module.valkey.max_ecpu_per_second
+  }
 }

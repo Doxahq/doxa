@@ -9,7 +9,7 @@ so the docs renderer bundle does not include it.
 | Writer | Where |
 |---|---|
 | Generation agent and Doxabot updates | `packages/agent/src/doxa-agent/writer-pipeline.ts`, `composeFinal`, before the last `validatePage` |
-| Dashboard Write mode (planned) | Edited blocks only. See `docs/superpowers/plans/2026-09-27-dashboard-redesign.md`. |
+| Dashboard Write mode (planned) | Edited blocks only. See `docs/superpowers/plans/2026-09-27-dashboard-redesign.md` in the private ops repo (`doxa-ops`). |
 
 The dashboard MDX mode saves text exactly as the user types it.
 

@@ -23,6 +23,14 @@ export type OAuthApi = Pick<
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600;
 const REFRESH_TOKEN_IDLE_TTL_SECONDS = 14 * 24 * 3600;
+/**
+ * Dynamically registered clients expire after this (the provider default is
+ * 90 days). Each registration is a Valkey record, so unused ones must not
+ * pile up (SEC-008). A client in use renews at half of this on a token
+ * request, and it is longer than the refresh token idle time, so a working
+ * client never loses its registration.
+ */
+const CLIENT_REGISTRATION_TTL_SECONDS = 30 * 24 * 3600;
 
 export const AUTHORIZE_PATH = "/oauth/authorize";
 const METADATA_PATH = "/.well-known/oauth-authorization-server";
@@ -40,6 +48,7 @@ export function createAuthorizationServer(
     accessTokenTTL: ACCESS_TOKEN_TTL_SECONDS,
     refreshTokenTTL: REFRESH_TOKEN_TTL_SECONDS,
     refreshTokenIdleTTL: REFRESH_TOKEN_IDLE_TTL_SECONDS,
+    clientRegistrationTTL: CLIENT_REGISTRATION_TTL_SECONDS,
   });
 }
 

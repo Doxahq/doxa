@@ -17,19 +17,36 @@ import {
   readPrerenderDiagnostics,
   type PrerenderAttemptDiagnostics,
 } from "./prerender-routing";
-import { createRouteDataCacheUrl } from "./route-data-cache-entrypoint";
+import {
+  tryPreviousRouteData,
+  type PreviousFallbackEnv,
+  type PreviousRouteDataInput,
+} from "./previous-build-fallback";
+import {
+  createRouteDataCacheCall,
+  createSavedOutputCall,
+  fetchPublicCacheCall,
+  type RouteDataCacheCall,
+  type SavedOutputCacheCall,
+} from "./public-cache-calls";
 import {
   parseRouteDataRequest,
   RouteDataRequestError,
   type ParsedRouteDataRequest,
 } from "./route-data-request";
 import { mergeFreshInternalServerTiming } from "./server-timing";
+import { fetchWithoutProbeMarker } from "./versioned-entrypoint-protocol";
 import { getWorkerExports } from "./worker-exports";
 
 export interface RouteDataEndpointResult {
   response: Response;
   /** The `cf-cache-status` of the cache entrypoint used, or `BYPASS`. */
   cacheStatus: string;
+  /**
+   * True when the request's render hint equals the live render ID. The
+   * answer for that URL then cannot change (`route-data-browser-cache.ts`).
+   */
+  hintMatched: boolean;
 }
 
 /** Where one request reads its route data from. */
@@ -42,8 +59,13 @@ interface FetchedRouteData {
   diagnostics: PrerenderAttemptDiagnostics | null;
 }
 
+/** The endpoint also reads the previous-build fallback settings. */
+export type RouteDataEndpointContext = DeliveryRequestContext & {
+  env: PreviousFallbackEnv;
+};
+
 interface RouteDataLookup {
-  input: DeliveryRequestContext;
+  input: RouteDataEndpointContext;
   parsed: ParsedRouteDataRequest;
   resolution: DocsDomainResolution;
   active: ActiveDelivery;
@@ -52,7 +74,7 @@ interface RouteDataLookup {
 const BYPASS = "BYPASS";
 
 export async function handleRouteDataEndpoint(
-  input: DeliveryRequestContext,
+  input: RouteDataEndpointContext,
 ): Promise<RouteDataEndpointResult> {
   let parsed: ParsedRouteDataRequest;
   try {
@@ -81,19 +103,84 @@ export async function handleRouteDataEndpoint(
     input.rollouts,
   );
   if (!resolution || !active) return uncached(unavailable(404, false));
+  const lookup: RouteDataLookup = { input, parsed, resolution, active };
   if (parsed.renderHint && parsed.renderHint !== active.identity.renderId) {
+    return answerOtherRenderHint(lookup, parsed.renderHint);
+  }
+  const hintMatched = parsed.renderHint === active.identity.renderId;
+
+  const fetched = await fetchRouteData(lookup, selectRouteDataSource(lookup));
+  const response = await createEnvelopeResponse(
+    input,
+    active.identity.renderId,
+    fetched.response,
+  );
+  if (fetched.diagnostics) {
+    applyPrerenderDiagnostics(response, fetched.diagnostics, input.timing);
+  }
+  return { response, cacheStatus: fetched.cacheStatus, hintMatched };
+}
+
+/**
+ * A page of the previous renderer build asks for its own route data (D8).
+ * Inside the build window, a stored previous-build entry is served with that
+ * build's identity (F15); anything else is a version mismatch.
+ */
+async function answerOtherRenderHint(
+  lookup: RouteDataLookup,
+  renderHint: string,
+): Promise<RouteDataEndpointResult> {
+  const { input, parsed, resolution } = lookup;
+  const source = selectPreviousRouteDataSource(lookup);
+  const previous = source
+    ? await tryPreviousRouteData(
+        {
+          env: input.env,
+          ctx: input.ctx,
+          exports: getWorkerExports(input.ctx),
+          now: Date.now(),
+        },
+        {
+          request: input.request,
+          resolution,
+          pathname: parsed.pathname,
+          renderHint,
+          source,
+        },
+      )
+    : null;
+  if (!previous) {
     return uncached(
       Response.json({ status: "version_mismatch" }, { status: 409 }),
     );
   }
+  // The answer carries the identity that the hint names, and that URL's
+  // content never changes, so the browser may keep it like a live answer.
+  return {
+    response: await createEnvelopeResponse(
+      input,
+      previous.renderId,
+      previous.response,
+    ),
+    cacheStatus: "PREVIOUS",
+    hintMatched: true,
+  };
+}
 
-  const lookup: RouteDataLookup = { input, parsed, resolution, active };
-  const fetched = await fetchRouteData(lookup, selectRouteDataSource(lookup));
-  const response = await createEnvelopeResponse(lookup, fetched.response);
-  if (fetched.diagnostics) {
-    applyPrerenderDiagnostics(response, fetched.diagnostics, input.timing);
+/** The shared source a previous-build entry could be stored in, if any. */
+function selectPreviousRouteDataSource(
+  lookup: RouteDataLookup,
+): PreviousRouteDataInput["source"] | null {
+  switch (selectRouteDataSource(lookup)) {
+    case "live":
+      return null;
+    case "liveCache":
+      return { kind: "cachedLive" };
+    case "savedCache": {
+      const featureMode = getEnabledPrerenderMode(lookup.input.rollouts);
+      return featureMode ? { kind: "saved", featureMode } : null;
+    }
   }
-  return { response, cacheStatus: fetched.cacheStatus };
 }
 
 function selectRouteDataSource({
@@ -127,23 +214,16 @@ async function fetchSavedRouteData(
   const { input, parsed, resolution, active } = lookup;
   const featureMode = getEnabledPrerenderMode(input.rollouts);
   if (!featureMode) return fetchLiveRouteData(lookup);
-  const url = new URL(input.request.url);
-  const result = await measureCacheFetch(input, "doxa_prerender_cache", () =>
-    getWorkerExports(input.ctx)
-      .DocsPrerenderCache({
-        props: {
-          expected: active.identity,
-          featureMode,
-          hostname: url.hostname,
-          pathname: parsed.pathname,
-          representation: "data",
-          resolution,
-        },
-      })
-      // The route-data representation keeps its own internal URL space.
-      // Two representations of one route must never share a cache key.
-      .fetch(createRouteDataCacheRequest(url.origin, parsed.pathname)),
-  );
+  const call = createSavedOutputCall({
+    origin: new URL(input.request.url).origin,
+    pathname: parsed.pathname,
+    resolution,
+    identity: active.identity,
+    featureMode,
+    representation: "data",
+  });
+  const result = await measureCacheFetch(input, call);
+  if (!result) return fetchLiveRouteData(lookup);
   return {
     ...result,
     diagnostics: readPrerenderDiagnostics(result.response, result.cacheStatus),
@@ -154,19 +234,14 @@ async function fetchCachedLiveRouteData(
   lookup: RouteDataLookup,
 ): Promise<FetchedRouteData> {
   const { input, parsed, resolution, active } = lookup;
-  const url = new URL(input.request.url);
-  const result = await measureCacheFetch(input, "doxa_route_data_cache", () =>
-    getWorkerExports(input.ctx)
-      .DocsRouteDataCache({
-        props: {
-          expected: active.identity,
-          hostname: url.hostname,
-          pathname: parsed.pathname,
-          resolution,
-        },
-      })
-      .fetch(createRouteDataCacheRequest(url.origin, parsed.pathname)),
-  );
+  const call = createRouteDataCacheCall({
+    origin: new URL(input.request.url).origin,
+    pathname: parsed.pathname,
+    resolution,
+    identity: active.identity,
+  });
+  const result = await measureCacheFetch(input, call);
+  if (!result) return fetchLiveRouteData(lookup);
   return { ...result, diagnostics: null };
 }
 
@@ -186,38 +261,43 @@ async function fetchLiveRouteData({
   };
 }
 
+const TIMING_NAMES: Record<
+  (SavedOutputCacheCall | RouteDataCacheCall)["entrypoint"],
+  string
+> = {
+  DocsPrerenderCache: "doxa_prerender_cache",
+  DocsRouteDataCache: "doxa_route_data_cache",
+};
+
+/** Null when the entry was not filled twice; the caller prepares it live. */
 async function measureCacheFetch(
   input: DeliveryRequestContext,
-  timingName: string,
-  fetchEntry: () => Promise<Response>,
-): Promise<Omit<FetchedRouteData, "diagnostics">> {
+  call: SavedOutputCacheCall | RouteDataCacheCall,
+): Promise<Omit<FetchedRouteData, "diagnostics"> | null> {
   let cacheStatus = BYPASS;
   const response = await input.timing.measure(
-    timingName,
+    TIMING_NAMES[call.entrypoint],
     async () => {
-      const result = await fetchEntry();
-      cacheStatus = result.headers.get("cf-cache-status") ?? BYPASS;
+      const result = await fetchWithoutProbeMarker(call.entrypoint, () =>
+        fetchPublicCacheCall(getWorkerExports(input.ctx), call),
+      );
+      cacheStatus = result?.headers.get("cf-cache-status") ?? BYPASS;
       return result;
     },
     () => cacheStatus,
   );
+  if (!response) return null;
   mergeFreshInternalServerTiming(input.timing, response, cacheStatus);
   return { response, cacheStatus };
 }
 
-function createRouteDataCacheRequest(
-  origin: string,
-  pathname: string,
-): Request {
-  return new Request(createRouteDataCacheUrl(origin, pathname), {
-    method: "GET",
-    headers: { accept: "application/json" },
-  });
-}
-
-/** One public envelope for every source, so the client sees one contract. */
+/**
+ * One public envelope for every source, so the client sees one contract.
+ * `renderId` is the identity of the build that produced `fetched`.
+ */
 async function createEnvelopeResponse(
-  { input, active }: RouteDataLookup,
+  input: DeliveryRequestContext,
+  renderId: string,
   fetched: Response,
 ): Promise<Response> {
   if (!fetched.ok) return unavailable(503, true);
@@ -233,7 +313,7 @@ async function createEnvelopeResponse(
     {
       status: "ok",
       schemaVersion: DOCS_PRERENDER_SCHEMA_VERSION,
-      renderId: active.identity.renderId,
+      renderId,
       data: parsePublicDocsRouteDataV1(await fetched.json()),
     },
     { headers },
@@ -245,5 +325,5 @@ function unavailable(status: 404 | 503, retryable: boolean): Response {
 }
 
 function uncached(response: Response): RouteDataEndpointResult {
-  return { response, cacheStatus: BYPASS };
+  return { response, cacheStatus: BYPASS, hintMatched: false };
 }

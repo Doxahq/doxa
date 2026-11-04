@@ -14,18 +14,18 @@ describe("docs preload policy", () => {
       defaultPreload: "intent",
       defaultPreloadDelay: 75,
       defaultPreloadIntentProximity: 48,
+      defaultPreloadStaleTime: 600_000,
     });
   });
 
-  test("uses viewport preloading for configured aggressive navigation links", () => {
-    expect(docsSidebarLinkPreload).toEqual({
-      preload: "viewport",
-      preloadDelay: 50,
-    });
-    expect(docsNearRoutePreload).toEqual({
-      preload: "viewport",
-      preloadDelay: 50,
-    });
+  test("defers viewport preloading of aggressive navigation links until after load", () => {
+    const deferred = {
+      preload: "intent",
+      preloadDelay: 75,
+      deferredViewportPreload: true,
+    };
+    expect(docsSidebarLinkPreload).toEqual(deferred);
+    expect(docsNearRoutePreload).toEqual(deferred);
   });
 
   test("falls back to intent preloading when aggressive navigation prefetch is disabled", () => {

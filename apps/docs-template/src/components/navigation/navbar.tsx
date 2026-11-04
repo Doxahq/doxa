@@ -6,6 +6,7 @@ import { docsLayout } from "@doxahq/site-config";
 import { useRouterState } from "@tanstack/react-router";
 import { LuArrowUpRight, LuGithub } from "react-icons/lu";
 
+import { isChatAvailable } from "@/src/lib/chat-availability";
 import { cn } from "@/src/lib/utils";
 import { buttonVariants } from "@/src/components/ui/button";
 import { SheetClose } from "@/src/components/ui/sheet";
@@ -77,7 +78,7 @@ export function Navbar() {
             <LuGithub className="h-[1.1rem] w-[1.1rem]" />
           </a>
         )}
-        {features.ai.chat && <ChatButton />}
+        {isChatAvailable(features) && <ChatButton />}
         <ModeToggle />
       </div>
     </nav>

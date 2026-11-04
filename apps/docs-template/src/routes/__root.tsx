@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { DemoModeProvider } from "@/src/contexts/demo-mode";
 import { Providers } from "@/src/providers";
 import type { DocsDeliveryCapability } from "@/src/runtime/request-context";
@@ -20,8 +20,12 @@ import {
   HeadContent,
   Outlet,
   Scripts,
+  useRouter,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 
+import { scriptMarkAttributes } from "@/src/lib/script-mark";
+import { isChatAvailable } from "@/src/lib/chat-availability";
 import {
   DOCS_SCROLL_RESTORATION_ID,
   useDocsScrollReset,
@@ -39,10 +43,15 @@ import globalsCss from "@/src/styles/globals.css?url";
 
 const fallbackConfig = toClientSiteConfig(resolveSiteConfig({}));
 
-const ChatWithDocs = lazy(() =>
-  import("@/src/components/chat").then((module) => ({
-    default: module.ChatWithDocs,
-  }))
+// The chat draws only in the browser, after a visitor opens it. The platform
+// renderer serves no chat (see `chat-api.ts`), so its server build leaves the
+// chat code out of the server bundle.
+const ChatWithDocs = lazy<ComponentType>(() =>
+  import.meta.env.SSR && import.meta.env.DOXA_OMIT_LOCAL_CONTENT_SOURCE
+    ? Promise.resolve({ default: NoChat })
+    : import("@/src/components/chat").then((module) => ({
+        default: module.ChatWithDocs,
+      }))
 );
 const DemoChatWithDocs = lazy(() =>
   import("@/src/components/chat/demo-chat").then((module) => ({
@@ -104,6 +113,7 @@ function RootDocument({
   configHash?: string;
   isDemoMode?: boolean;
 }>) {
+  const scriptMark = useRouter().options.ssr?.nonce;
   const appScrollStyle = {
     minWidth: 0,
     flex: "1 1 0%",
@@ -113,6 +123,7 @@ function RootDocument({
 
   return (
     <html
+      {...scriptMarkAttributes(scriptMark)}
       lang="en"
       suppressHydrationWarning
       style={{ height: "100%", overflow: "hidden" }}
@@ -127,7 +138,7 @@ function RootDocument({
       >
         <SiteConfigProvider config={config}>
           <NavigationProgress />
-          <Providers>
+          <Providers scriptMark={scriptMark}>
             <DemoModeProvider value={isDemoMode}>
               <ChatProvider>
                 <div
@@ -152,6 +163,7 @@ function RootDocument({
                   </div>
                   {/* Before the first paint: the scroll position of a refresh, and the current TOC item. */}
                   <script
+                    nonce={scriptMark}
                     dangerouslySetInnerHTML={{ __html: HASH_SCROLL_SCRIPT }}
                   />
                   <ChatInterface isDemoMode={isDemoMode} />
@@ -162,6 +174,7 @@ function RootDocument({
         </SiteConfigProvider>
         {delivery && (
           <script
+            nonce={scriptMark}
             dangerouslySetInnerHTML={{
               __html: `window.__DOXA_DOCS_DELIVERY__=${serializeDeliveryCapability(delivery)};`,
             }}
@@ -179,10 +192,14 @@ function serializeDeliveryCapability(
   return JSON.stringify(capability).replace(/</g, "\\u003c");
 }
 
+function NoChat() {
+  return null;
+}
+
 function ChatInterface({ isDemoMode }: { isDemoMode: boolean }) {
   const { isOpen } = useChatContext();
   const { features } = useSiteConfig();
-  if (!features.ai.chat) return null;
+  if (!isChatAvailable(features)) return null;
 
   return (
     <>
@@ -215,7 +232,7 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error }: { error: Error }) {
+function ErrorComponent({ error }: ErrorComponentProps) {
   return (
     <RootDocument>
       <section className="flex min-h-[99vh] flex-col items-start gap-3 px-2 py-8">
@@ -224,7 +241,7 @@ function ErrorComponent({ error }: { error: Error }) {
           <p className="text-muted-foreground">Something went wrong!</p>
           {process.env.NODE_ENV === "development" && (
             <pre className="mt-4 overflow-auto rounded bg-muted p-4 text-sm">
-              {error.message}
+              {error instanceof Error ? error.message : String(error)}
             </pre>
           )}
         </div>

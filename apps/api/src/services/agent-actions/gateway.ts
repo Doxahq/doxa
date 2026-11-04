@@ -14,7 +14,7 @@ import {
   storedTargetKey,
   type ActionAccessPolicy,
 } from "./action-access";
-import { ActionDeniedError, ActionStaleError } from "./errors";
+import { ActionDeniedError, ActionExecutionError, ActionStaleError } from "./errors";
 import type { ApprovalPolicyResolver, ResolvedApprovalMode } from "./policy/approval-policy";
 import type { PreparedAction, RegisteredAction } from "./registered-action";
 import type { ActionRegistry } from "./registry";
@@ -117,6 +117,14 @@ export class AgentActionGateway {
       (existing) => isRequestingAgent(actor, existing) && prepared.matches(existing),
       now,
     );
+    // SEC-031: a member's agent cannot replace another member's pending
+    // request, so the request of the other person stays for their decider.
+    if (outcome.kind === "held_by_other") {
+      throw new ActionExecutionError(
+        "pending_request_exists",
+        "Another member's request for this target is waiting for a decision. Wait until it is decided or expires, or ask them to cancel it.",
+      );
+    }
     // A reused request was announced when it was created.
     if (outcome.kind === "created") this.deps.notifier.requested(outcome.request);
     const pending = toPendingRequest(this.deps.webOrigin, outcome.request);

@@ -96,6 +96,7 @@ export const sourceControlIrrelevantReasonSchema = z.enum([
   "unsupported_action",
   "non_default_branch_push",
   "no_repository_changes",
+  "untrusted_fork",
 ]);
 
 export const sourceControlEventParseResultSchema = z.discriminatedUnion(

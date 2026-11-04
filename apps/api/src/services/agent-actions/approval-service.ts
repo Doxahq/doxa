@@ -21,7 +21,7 @@ import { describeExecutionError } from "./action-error-codes";
 import { ApproveEligibility } from "./approve-eligibility";
 import type { ApprovalNotifier } from "./approval-notifier";
 import { toUserId } from "../agent-access/actor";
-import { ACTION_REMOVED_ERROR, type ApprovalTransition } from "./approval-lifecycle";
+import { ACTION_REMOVED_ERROR, EXPIRED_ERROR, type ApprovalTransition } from "./approval-lifecycle";
 import { decisionActivity, type DecisionTool } from "./decision-activity";
 import {
   ActionAccessDeniedError,
@@ -124,6 +124,7 @@ export class ApprovalService {
     const target = await this.requestAccess.authorize(actor, record, "approvals.decide");
     await this.assertMayApprove(actor, record);
     const stored = await this.preparedOrExpire(record);
+    await this.expireIfDue(record);
     assertPending(record);
     assertConfirmation(stored, options.confirmation);
     const prepared = stored.withChoices({ eraseBranch: options.eraseBranch });
@@ -185,6 +186,16 @@ export class ApprovalService {
       case "missing_capability":
         throw new ActionAccessDeniedError("forbidden");
     }
+  }
+
+  /**
+   * SEC-029: a request past its expiry is never approved, also before the
+   * 5-minute sweeper has marked it. It is expired here, the same way.
+   */
+  private async expireIfDue(record: ApprovalRequestRecord): Promise<void> {
+    if (record.status !== "pending" || record.expiresAt > this.deps.now()) return;
+    await this.deps.requests.transition(record.id, "pending", { to: "expired", error: EXPIRED_ERROR }, this.deps.now());
+    throw new RequestNotPendingError("expired");
   }
 
   private async preparedOrExpire(record: ApprovalRequestRecord): Promise<PreparedAction> {

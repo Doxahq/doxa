@@ -6,6 +6,7 @@
   "navbar": { "links": [{ "label": "Docs", "href": "/" }] },
   "features": {
     "feedbackEdit": true,
+    "apiPlaygroundBaseUrl": "/api/echo",
     "ai": { "chat": true, "chatWithPage": true, "floatingInput": true }
   }
 }

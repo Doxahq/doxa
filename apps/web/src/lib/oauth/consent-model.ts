@@ -20,12 +20,35 @@ export const OAUTH_SCOPE_SENTENCES: Record<OAuthScope, string> = {
 
 /**
  * The scopes the page offers, in the standard order. A client that asks for
- * no scopes gets every scope offered; the person can clear any of them.
+ * no scopes gets the read scopes only, as the API offers (SEC-013).
  */
 export function offeredScopes(requested: readonly OAuthScope[]): OAuthScope[] {
-  if (requested.length === 0) return [...OAUTH_SCOPES]
+  if (requested.length === 0) return OAUTH_SCOPES.filter(isReadScope)
   const wanted = new Set(requested)
   return OAUTH_SCOPES.filter((scope) => wanted.has(scope))
+}
+
+/** A scope that only reads. */
+export function isReadScope(scope: OAuthScope): boolean {
+  return scope.endsWith(":read")
+}
+
+/**
+ * The scopes checked when the page opens: the read scopes only. The person
+ * checks each write scope on purpose (SEC-013).
+ */
+export function initialScopes(offered: readonly OAuthScope[]): Set<OAuthScope> {
+  return new Set(offered.filter(isReadScope))
+}
+
+/**
+ * The project choice when the page opens (SEC-013): selected projects, never
+ * all. A person with one project gets it selected. A person with no project
+ * can only allow all, which also covers the projects the agent creates.
+ */
+export function initialProjectChoice(projectIds: readonly string[]): ProjectChoice {
+  if (projectIds.length === 0) return { kind: "all" }
+  return { kind: "selected", projectIds: new Set(projectIds.length === 1 ? projectIds : []) }
 }
 
 /** Every scope that the chosen scopes imply, directly or through another scope. */
@@ -121,13 +144,21 @@ const UNSAFE_REDIRECT_PROTOCOLS: ReadonlySet<string> = new Set([
 
 /**
  * True when the browser may open the redirect the API returned. The API
- * builds it from a registered redirect URI; this is a second check so the
- * page never runs script from a URL.
+ * builds it from a registered redirect URI; this is a second check (SEC-034):
+ * the browser goes only where the page told the person it goes
+ * (`redirectHost`), and never to a script URL.
+ *
+ * `redirectHost` is the host of the registered URI, or the whole URI for a
+ * native app scheme without a host (see `describeConsentClient`).
  */
-export function isNavigableRedirect(value: string): boolean {
+export function isNavigableRedirect(value: string, redirectHost: string): boolean {
+  let url: URL
   try {
-    return !UNSAFE_REDIRECT_PROTOCOLS.has(new URL(value).protocol)
+    url = new URL(value)
   } catch {
     return false
   }
+  if (UNSAFE_REDIRECT_PROTOCOLS.has(url.protocol) || redirectHost.length === 0) return false
+  if (url.host) return url.host === redirectHost
+  return value.startsWith(redirectHost)
 }

@@ -152,6 +152,7 @@ const INVITE_STATUS: Record<TeamInviteFailure, number> = {
   invite_used: 410,
   invite_expired: 410,
   invite_revoked: 410,
+  invite_email_mismatch: 403,
   already_member: 409,
 };
 

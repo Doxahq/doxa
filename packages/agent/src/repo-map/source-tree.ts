@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { isProtectedFilePath } from "../core/tools/file-access-rules";
 import { listProjectFiles } from "../utils/runtime";
 import { compareStrings } from "./collections";
 
@@ -42,6 +43,7 @@ export function createNodeRepoMapSourceTree(root: string): RepoMapSourceTree {
       return entries;
     },
     async readText(path) {
+      if (isProtectedFilePath(path)) return null;
       try {
         return await readFile(join(root, path), "utf-8");
       } catch {

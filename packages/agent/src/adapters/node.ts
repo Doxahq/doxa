@@ -26,6 +26,7 @@ import {
   ProjectPathAccessError,
   resolveProjectPath,
 } from "../core/tools/project-path";
+import { resolveReadableProjectPath } from "../core/tools/file-access-rules";
 
 const DEFAULT_IGNORES = new Set([
   ".git",
@@ -44,10 +45,8 @@ export function createNodeWorkspaceAdapter(root: string): WorkspaceAdapter {
 
     async readText(path) {
       try {
-        return await readFile(
-          await resolveProjectPath(resolvedRoot, path),
-          "utf-8",
-        );
+        const fullPath = await resolveReadableProjectPath(resolvedRoot, path);
+        return fullPath === null ? null : await readFile(fullPath, "utf-8");
       } catch (error) {
         if (error instanceof ProjectPathAccessError) throw error;
         return null;

@@ -4,6 +4,7 @@ import {
   publishGenerationReviewInputSchema,
 } from "@doxahq/contracts/generation-reviews";
 import { createApiRouter, type ApiApp, type ApiContext } from "../http/app";
+import { readClientWarmPool } from "../http/client-region";
 import type { DashboardProjectAccess } from "../http/project-access";
 import { withProjectAccess } from "../http/project-access";
 import { error, json } from "../http/response";
@@ -74,7 +75,9 @@ export function createGenerationReviewRoutes(): ApiApp {
 
         const result = await GenerationReviewService.fromEnv(
           context.env,
-        ).publish(actorScope(access), input.data);
+        ).publish(actorScope(access), input.data, {
+          warmRegion: readClientWarmPool(context.req.raw),
+        });
         return json(result);
       }),
     ),

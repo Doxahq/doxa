@@ -203,7 +203,7 @@ export const promptModules: PromptModule[] = [
     "rest": {
       "label": "REST API",
       "slug": "rest-api",
-      "description": "Public served HTTP/RPC/webhook API endpoints.",
+      "description": "HTTP/RPC/webhook API endpoints served by the project.",
       "baseUrl": "https://api.example.com/v1",
       "servers": ["https://api.example.com/v1"],
       "playground": { "enabled": true, "reason": "Browser requests are supported by the documented server." },
@@ -299,7 +299,7 @@ General rules:
 - Separate public interfaces from internal development tooling.
 - For open-source libraries/frameworks, treat the default reader as a developer adopting the package in their own app, not a contributor working inside this repository.
 - Capture canonical install/config/use workflows from README examples, exported package entrypoints, and example apps; mark repo-only demo/test/dev paths as internal-only evidence.
-- Capture REST API and SDK/library API references separately: REST API means public endpoints served by this project; API Reference means public exports consumed from a package/module. Do not mix outbound third-party API clients into REST API.
+- Capture REST API and SDK/library API references separately: REST API means every endpoint served by this project; API Reference means public exports consumed from a package/module. Do not mix outbound third-party API clients into REST API.
 - Include specific file references and names in your findings.
 - Be thorough, but keep findings grounded in the files you inspected.`,
   },

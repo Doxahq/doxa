@@ -5,10 +5,8 @@ import type {
   ProjectAnalysis,
   SourceEvidence,
 } from "../types";
-import {
-  ProjectPathAccessError,
-  resolveProjectPath,
-} from "../core/tools/project-path";
+import { ProjectPathAccessError } from "../core/tools/project-path";
+import { resolveReadableProjectPath } from "../core/tools/file-access-rules";
 import type { WriterHandoffPageBrief } from "./writer-handoff";
 import {
   isMarkdownPath,
@@ -275,8 +273,9 @@ async function readEvidence(input: {
   for (const item of uniqueEvidence(input.evidence)) {
     if (remaining <= 0) break;
     try {
-      const fullPath = await resolveProjectPath(input.cwd, item.path);
-      if (!(await fileExists(fullPath))) {
+      // The plan comes from a model, so it can name a secret file.
+      const fullPath = await resolveReadableProjectPath(input.cwd, item.path);
+      if (fullPath === null || !(await fileExists(fullPath))) {
         skippedPaths.push(item.path);
         continue;
       }

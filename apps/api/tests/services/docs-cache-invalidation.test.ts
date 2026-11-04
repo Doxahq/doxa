@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import type { DocsHostnameMapSync } from "@doxahq/contracts/docs-hostname-map";
 import { DocsCacheInvalidationWorker } from "../../src/services/docs-cache-invalidation";
+import type { DocsHostnameSource } from "../../src/services/docs-hostname-map";
 import type {
   ClaimedDocsCacheInvalidation,
   DocsCacheInvalidationStore,
@@ -37,6 +39,7 @@ describe("docs cache invalidation worker", () => {
   test("completes a task only after its purge succeeds", async () => {
     const state = fixture([{ ...task, hostname: "docs.example.com" }]);
     const worker = new DocsCacheInvalidationWorker(state.store, {
+      syncHostnames: async () => {},
       invalidate: async (input) => {
         expect(state.completed).toEqual([]);
         expect(input).toEqual({
@@ -59,6 +62,7 @@ describe("docs cache invalidation worker", () => {
       vi.spyOn(console, "warn").mockImplementation(() => {});
       const state = fixture([{ ...task, attempts }]);
       const worker = new DocsCacheInvalidationWorker(state.store, {
+      syncHostnames: async () => {},
         invalidate: async () => {
           throw new Error("upstream error");
         },
@@ -85,6 +89,7 @@ describe("docs cache invalidation worker", () => {
     const state = fixture();
     let finish: (() => void) | undefined;
     const pending = new DocsCacheInvalidationWorker(state.store, {
+      syncHostnames: async () => {},
       invalidate: () =>
         new Promise<void>((resolve) => {
           finish = resolve;
@@ -102,11 +107,112 @@ describe("docs cache invalidation worker", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const state = fixture([task, { ...task, id: "task-2", siteId: "site-2" }]);
     const worker = new DocsCacheInvalidationWorker(state.store, {
+      syncHostnames: async () => {},
       invalidate: async ({ siteId }) => {
         if (siteId === "site-1") throw new Error("failed");
       },
     });
     expect(await worker.process()).toEqual({ completed: 1, failed: 1 });
     expect(state.completed).toEqual(["task-2"]);
+  });
+
+  describe("with the hostname map", () => {
+    const hostnames: DocsHostnameSource = {
+      resolve: async () => null,
+      listSiteHostnames: async () => ["demo.doxa.page"],
+      listPublicHostnames: async () => [],
+    };
+
+    function binding(overrides: {
+      invalidate?: () => Promise<void>;
+      syncHostnames?: (input: DocsHostnameMapSync) => Promise<void>;
+    } = {}) {
+      const calls: string[] = [];
+      return {
+        calls,
+        rpc: {
+          invalidate: overrides.invalidate ?? (async () => {
+            calls.push("purge");
+          }),
+          syncHostnames:
+            overrides.syncHostnames ??
+            (async (input: DocsHostnameMapSync) => {
+              calls.push(`sync ${input.updates.map(({ hostname }) => hostname).join(",")}`);
+            }),
+        },
+      };
+    }
+
+    test("purges and rewrites the site's hostnames before completing", async () => {
+      const state = fixture([{ ...task, hostname: "old.acme.com" }]);
+      const { rpc, calls } = binding();
+      expect(
+        await new DocsCacheInvalidationWorker(state.store, rpc, hostnames).process(),
+      ).toEqual({ completed: 1, failed: 0 });
+      expect(calls.sort()).toEqual(["purge", "sync old.acme.com,demo.doxa.page"]);
+      expect(state.completed).toEqual(["task-1"]);
+    });
+
+    test("passes the publish's warm hint to the map sync, and none on a retry run", async () => {
+      const warm = { regions: ["us-west" as const] };
+      const seen: Array<DocsHostnameMapSync["warm"]> = [];
+      const { rpc } = binding({
+        syncHostnames: async (input) => {
+          seen.push(input.warm);
+        },
+      });
+      await new DocsCacheInvalidationWorker(fixture().store, rpc, hostnames).process(["task-1"], { warm });
+      await new DocsCacheInvalidationWorker(fixture().store, rpc, hostnames).process();
+      expect(seen).toEqual([warm, undefined]);
+    });
+
+    test("syncs a hostname once for several tasks of one batch", async () => {
+      const state = fixture([task, { ...task, id: "task-2" }]);
+      const { rpc, calls } = binding();
+      await new DocsCacheInvalidationWorker(state.store, rpc, hostnames).process();
+      expect(calls.filter((call) => call.startsWith("sync"))).toHaveLength(1);
+      expect(state.completed).toEqual(["task-1", "task-2"]);
+    });
+
+    test("still purges when the map write fails, and retries the task", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const state = fixture();
+      const { rpc, calls } = binding({
+        syncHostnames: async () => {
+          throw new Error("KV PUT failed: 429");
+        },
+      });
+      expect(
+        await new DocsCacheInvalidationWorker(state.store, rpc, hostnames).process(),
+      ).toEqual({ completed: 0, failed: 1 });
+      expect(calls).toEqual(["purge"]);
+      expect(state.failed).toEqual([
+        { id: "task-1", error: "hostname_sync_failed", delay: 30 },
+      ]);
+    });
+
+    test("still writes the map when the purge fails", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const state = fixture();
+      const { rpc, calls } = binding({
+        invalidate: async () => {
+          throw new Error("purge failed");
+        },
+      });
+      await new DocsCacheInvalidationWorker(state.store, rpc, hostnames).process();
+      expect(calls).toEqual(["sync demo.doxa.page"]);
+      expect(state.failed[0]?.error).toBe("purge_failed");
+    });
+
+    test("times out a stalled map write", async () => {
+      vi.useFakeTimers();
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const state = fixture();
+      const { rpc } = binding({ syncHostnames: () => new Promise<void>(() => {}) });
+      const pending = new DocsCacheInvalidationWorker(state.store, rpc, hostnames).process();
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(await pending).toEqual({ completed: 0, failed: 1 });
+      expect(state.failed[0]?.error).toBe("hostname_sync_timeout");
+    });
   });
 });

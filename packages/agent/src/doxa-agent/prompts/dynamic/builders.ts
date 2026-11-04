@@ -162,21 +162,15 @@ REST API SPEC: Doxa reads the REST endpoints in code from these OpenAPI files: $
 
 /**
  * The REST surface rules of the analysis prompt. With spec files, the
- * surface comes from code. With endpoint extraction, the answer lists
- * groups, route files and short endpoint lines, so a large API cannot
- * overflow it.
+ * surface comes from code. Without them, the answer is the REST surface:
+ * every endpoint with all of its source-evidenced facts.
  */
 function restSurfaceRules(context: PromptRenderContext): string {
   if (context.restReference?.specFiles?.length) {
     return "- Leave referenceSurfaces.rest out: Doxa reads the REST endpoints in code from the OpenAPI files. Still describe the API in summary, keyFeatures and documentationIntent.";
   }
-  if (context.restReference?.endpointExtraction) {
-    return `- referenceSurfaces.rest must contain served public HTTP/RPC/webhook endpoints only. Use label "REST API" and slug "rest-api" by default.
-- List the REST resource groups. In the sourceEvidence of each group, list every route file that registers its endpoints.
-- For each endpoint, give only id, method, path and title. Leave parameters, bodyFields, responses and authRequirement out: Doxa extracts them from the route files in a later step.
-- Each REST endpoint title must be a short plain-English phrase describing the handler's actual behavior: 2 to 5 words, imperative mood, and sentence case (for example, "Get deployment status" or "Create an API key").`;
-  }
-  return `- referenceSurfaces.rest must contain served public HTTP/RPC/webhook endpoints only. Use label "REST API" and slug "rest-api" by default.
+  return `- referenceSurfaces.rest must contain every HTTP/RPC/webhook endpoint that the project serves, not the calls it makes to other APIs. Use label "REST API" and slug "rest-api" by default.
+- Do not leave an endpoint out because it looks internal, such as an admin or health route. Leave an endpoint out only when the project instructions say so.
 - Prefer an OpenAPI specification as the authoritative source for REST endpoint metadata when one is present. Otherwise derive fields from route handlers and validation schemas, and include only source-evidenced facts.
 - Populate REST baseUrl, servers, parameters, bodyFields, bodyContentType, responses, and authRequirement from OpenAPI, route handlers, or validation schemas. Every field must have repository evidence; never invent a parameter, required flag, auth rule, request field, response field, or example.
 - Each REST endpoint title must be a short plain-English phrase describing the handler's actual behavior: 2 to 5 words, imperative mood, and sentence case (for example, "Get deployment status" or "Create an API key").

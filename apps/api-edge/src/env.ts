@@ -21,4 +21,9 @@ export interface EdgeEnv {
   DOCS_CACHE_INVALIDATOR?: Service;
   PRERENDER_QUEUE?: Service;
   AGENT_CONTAINER?: Fetcher;
+
+  // Per-IP rate limits of public requests (see ./rate-limit).
+  API_OAUTH_REGISTER_LIMITER?: RateLimit;
+  API_OAUTH_LIMITER?: RateLimit;
+  API_PUBLIC_LIMITER?: RateLimit;
 }

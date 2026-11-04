@@ -26,3 +26,43 @@ resource "aws_appautoscaling_policy" "cpu" {
     }
   }
 }
+
+# Optional daily pause. Each scheduled action sets the bounds of the target,
+# and the target moves the task count into them: 0 at stop_hour, the day
+# bounds at start_hour. An apply during the pause restores the day bounds, so
+# the task runs again until the next stop_hour.
+
+resource "aws_appautoscaling_scheduled_action" "stop" {
+  count = var.daily_pause == null ? 0 : 1
+
+  name               = "${var.name}-daily-stop"
+  service_namespace  = aws_appautoscaling_target.this.service_namespace
+  scalable_dimension = aws_appautoscaling_target.this.scalable_dimension
+  resource_id        = aws_appautoscaling_target.this.resource_id
+  schedule           = "cron(0 ${var.daily_pause.stop_hour} * * ? *)"
+  timezone           = var.daily_pause.timezone
+
+  scalable_target_action {
+    min_capacity = "0"
+    max_capacity = "0"
+  }
+}
+
+resource "aws_appautoscaling_scheduled_action" "start" {
+  count = var.daily_pause == null ? 0 : 1
+
+  name               = "${var.name}-daily-start"
+  service_namespace  = aws_appautoscaling_target.this.service_namespace
+  scalable_dimension = aws_appautoscaling_target.this.scalable_dimension
+  resource_id        = aws_appautoscaling_target.this.resource_id
+  schedule           = "cron(0 ${var.daily_pause.start_hour} * * ? *)"
+  timezone           = var.daily_pause.timezone
+
+  scalable_target_action {
+    min_capacity = tostring(var.min_task_count)
+    max_capacity = tostring(var.max_task_count)
+  }
+
+  # Application Auto Scaling can reject two changes to one target at the same time.
+  depends_on = [aws_appautoscaling_scheduled_action.stop]
+}

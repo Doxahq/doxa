@@ -6,6 +6,7 @@ import {
   type DocsPublication,
   type DocsPublicationPage,
 } from "@doxahq/contracts/docs-branches";
+import type { DocsWarmHint } from "@doxahq/contracts/docs-warm-job";
 import { DocsContentError } from "../services/docs-content/errors";
 import { withDocsPublicationEffects } from "./docs-cache-mutation";
 import { recordPublication, type PublicationAttribution } from "./docs-publications";
@@ -196,6 +197,8 @@ export class DocsHistoryRepository {
     publicationId: string;
     expectedMainVersionId: string;
     attribution?: PublicationAttribution;
+    /** Warm-job ordering, sent with the post-commit hostname sync (M45). */
+    warm?: DocsWarmHint;
   }): Promise<{ publicationId: string; versionId: string }> {
     return withDocsPublicationEffects(
       this.db,
@@ -308,6 +311,7 @@ export class DocsHistoryRepository {
 
         return { publicationId, versionId: target.versionId };
       },
+      input.warm ? { warm: input.warm } : {},
     );
   }
 

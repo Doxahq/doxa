@@ -6,6 +6,7 @@ import {
   isCacheableDocsRequest,
   isContentCacheLifetime,
   isPrerenderableDocsRequest,
+  RENDERER_API_ROUTES,
   withHtmlCachePolicy,
   withHostCachePolicy,
   withRouteDataCachePolicy,
@@ -42,11 +43,6 @@ describe("docs cache policy", () => {
   test.each<{ name: string; path: string; init: RequestInit }>([
     { name: "POST", path: "/guide", init: { method: "POST" } },
     {
-      name: "cookie",
-      path: "/guide",
-      init: { headers: { cookie: "session=private" } },
-    },
-    {
       name: "authorization",
       path: "/guide",
       init: { headers: { authorization: "Bearer private" } },
@@ -78,6 +74,8 @@ describe("docs cache policy", () => {
     },
     { name: "demo query", path: "/guide?demo=true", init: {} },
     { name: "search", path: "/api/search", init: {} },
+    { name: "API playground", path: "/api/echo/v1/notes", init: {} },
+    { name: "upper-case search", path: "/API/search", init: {} },
     { name: "server function", path: "/_serverFn/id", init: {} },
     { name: "health", path: "/.well-known/doxa-health", init: {} },
     { name: "markdown", path: "/guide.md", init: {} },
@@ -85,6 +83,34 @@ describe("docs cache policy", () => {
     { name: "malformed encoding", path: "/%zz", init: {} },
   ])("bypasses $name requests", ({ path, init }) => {
     expect(isCacheableDocsRequest(htmlRequest(path, init))).toBe(false);
+  });
+
+  test("caches a request with a cookie: public sites never read cookies (RES-1)", () => {
+    const request = htmlRequest("/guide", {
+      headers: { cookie: "_ga=GA1.1.123.456; theme=dark" },
+    });
+
+    expect(isCacheableDocsRequest(request)).toBe(true);
+    expect(isPrerenderableDocsRequest(request)).toBe(true);
+  });
+
+  test.each(["/api", "/api/notes/create", "/reference/api/search", "/apis/search"])(
+    "caches the docs page %s under an api path (RES-2)",
+    (path) => {
+      expect(isCacheableDocsRequest(htmlRequest(path))).toBe(true);
+    },
+  );
+
+  test("bypasses exactly the renderer's own server routes (RES-2)", async () => {
+    const { readdir } = await import("node:fs/promises");
+    const routes = await readdir(
+      new URL("../../docs-template/src/routes/", import.meta.url),
+    );
+    const apiRoutes = routes
+      .filter((file) => /^api\..+\.tsx?$/.test(file) && !file.includes(".test."))
+      .map((file) => file.split(".")[1]);
+
+    expect(new Set(apiRoutes)).toEqual(new Set(RENDERER_API_ROUTES));
   });
 
   test.each<{ name: string; headers: Record<string, string> }>([
@@ -104,7 +130,6 @@ describe("docs cache policy", () => {
   );
 
   test.each<{ name: string; headers: Record<string, string> }>([
-    { name: "cookie", headers: { cookie: "session=private" } },
     {
       name: "authorization",
       headers: { authorization: "Bearer private" },
@@ -133,13 +158,21 @@ describe("docs cache policy", () => {
   test("bounds the public production hostname response freshness", async () => {
     const response = withHostCachePolicy(resolution);
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=3600, must-revalidate",
+      "public, max-age=86400, stale-if-error=604800",
     );
     expect(await response.json()).toEqual(resolution);
   });
 
+  // SEC-007: a repeated unknown hostname must not reach the resolver database each time.
+  test("caches an unknown hostname for 30 seconds, without a purge tag", () => {
+    const response = withHostCachePolicy(null);
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=30, must-revalidate",
+    );
+    expect(response.headers.has("cache-tag")).toBe(false);
+  });
+
   test.each([
-    { name: "unknown", value: null },
     {
       name: "private",
       value: { ...resolution, accessPolicy: "authenticated" as const },
@@ -206,7 +239,7 @@ describe("docs cache policy", () => {
       }),
     );
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=86400, stale-while-revalidate=604800, stale-if-error=604800",
+      "public, max-age=2592000, stale-while-revalidate=604800, stale-if-error=604800",
     );
     expect(await response.text()).toBe("<h1>Guide</h1>");
   });
@@ -233,7 +266,7 @@ describe("docs cache policy", () => {
   test.each([
     {
       lifetime: "hostname" as const,
-      expected: "public, max-age=3600, must-revalidate",
+      expected: "public, max-age=86400, stale-if-error=604800",
     },
     {
       lifetime: "liveFallback" as const,
@@ -242,7 +275,7 @@ describe("docs cache policy", () => {
     {
       lifetime: "versioned" as const,
       expected:
-        "public, max-age=86400, stale-while-revalidate=604800, stale-if-error=604800",
+        "public, max-age=2592000, stale-while-revalidate=604800, stale-if-error=604800",
     },
   ])("uses one exact header for the $lifetime lifetime", ({ lifetime, expected }) => {
     expect(cacheControlFor(lifetime)).toBe(expected);

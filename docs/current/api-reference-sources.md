@@ -6,8 +6,8 @@ The REST API reference of a generated site comes from one of two routes:
   Swagger 2.0 file. Code reads it, and the spec replaces the REST surface of
   the model completely.
 - **Model route.** No spec file passes. The analysis model explores the
-  route handlers, and then one model call for each unit of route files
-  extracts the endpoints.
+  route handlers and validation schemas, and its answer is the REST surface,
+  with every endpoint fact.
 
 Both routes produce the same `RestApiReferenceSurface`, so every later stage
 is the same. There is no total page cap on either route: every endpoint gets
@@ -23,7 +23,7 @@ its page. Only the editorial budget (24 guide, concept and workflow pages for
 | The spec-reader job and its image | `apps/utility-jobs/spec-reader` |
 | Gate, job registry, job clients | `apps/agent-container/src/utility` |
 | Discovery, gates G1 and G3, sanitizer, surface | `packages/agent/src/reference-specs` |
-| Route scan, units, extraction, merge | `packages/agent/src/rest-extraction` |
+| Model route: REST rules of the analysis prompt | `restSurfaceRules` in `packages/agent/src/doxa-agent/prompts/dynamic/builders.ts` |
 
 ## The spec route
 
@@ -38,8 +38,10 @@ its page. Only the editorial budget (24 guide, concept and workflow pages for
    root when its name or its first 4 KB mark it as a spec, so that gate G1
    reports it. At most 50 roots.
 2. **Gate G1** (agent container) reads each file: a relative path inside the
-   checkout, no symbolic link on the way, no `.git` segment, `.json`, `.yaml`
-   or `.yml`, at most 25 MB, UTF-8 with no NUL byte. The BOM is removed and
+   checkout, no symbolic link on the way, no `.git` segment, not a protected
+   file (the credential names of the agent's Read tool, such as
+   `.env.production.yaml`), `.json`, `.yaml` or `.yml`, at most 25 MB, UTF-8
+   with no NUL byte. The BOM is removed and
    line endings become `\n`. One request is at most 100 MB and 200 files.
 3. **The job** (its own container) parses strict YAML 1.2 with the core schema (one
    document, no duplicate keys, no custom tags, at most 50 aliases) or JSON
@@ -102,37 +104,71 @@ detail returns the last report of the run as `referenceSource`, and
 
 ## The model route
 
-The model route has no endpoint limit either. The analysis answer is one
-model output, so it cannot hold every endpoint of a large API. The agent
-container therefore extracts the endpoints file by file after the analysis:
+The model route is the setup from before the spec route. The analysis
+prompt asks for every endpoint that the project serves, with all of its
+source-evidenced facts: base URL, servers, parameters, body fields, body
+content type, responses and auth. The answer is the REST surface. No step
+after the answer calls a model or changes the surface: it is normalized, the
+project instructions apply (see below), and every endpoint gets a page that
+the template renders.
 
-1. **Route scan.** A regex scan finds the source files that register HTTP
-   routes, in Express, Hono, Fastify, Koa, NestJS, Spring, FastAPI, Flask,
-   Django, Gin, Echo, Chi, ASP.NET, Laravel, Axum and Actix. It keeps Next.js
-   route handlers and Rails routes whole. Tests, fixtures, vendored code and
-   files over 512 KB are left out. The files that the analysis groups cite are
-   added.
-2. **Units.** Files become units of at most 40,000 characters of numbered
-   lines. A large file splits before a route registration line.
-3. **Extraction.** One model call for each unit, at most 400 units and 8 calls
-   at a time, with a strict answer schema. If an answer stops at the output
-   limit, the unit splits in half, at most four times.
-4. **Merge.** Every endpoint goes through the sanitizer and the redactor of
-   the spec route. An endpoint joins the analysis group with the same method
-   and path, else the group that cites its file, else a group named after its
-   first path segment. One method and path appears once.
+Without a spec file, the model is the only source of endpoint facts. Do not
+add a step that rebuilds, merges or replaces the REST surface of the answer.
 
-The surface records `extraction`: the prompt version, the model and the files
-that the extraction read. An incremental run reuses the endpoints of an
-unchanged file when the prompt version and the model are the same. A file
-whose extraction failed keeps the endpoints of the analysis answer. No
-extraction call starts after 20 minutes, so the plan step keeps time for the
-structure. The route is best effort: the scan cannot prove that it found
-every route.
+A file-by-file extraction ran after the answer from 21 October 2026. It
+replaced the surface of the answer with what a regex route scan found. The
+scan did not find Fastify routes whose path is on the next line. On 30
+October 2026 the flagforge site therefore lost its whole REST reference
+(generation `2745eeaf`). The extraction was removed, and
+`PLANNING_FINGERPRINT_VERSION` became `doxabot-planning-v7`, so no project
+reuses an analysis that the extraction made. Usage records of those runs keep
+the operation `rest_extraction`, and the container still accepts the
+deprecated `modelConfig.restExtractionModel` of an older worker for one
+release.
 
-The extraction uses the writer model (decision D7). The agent-worker setting
-`DOXA_REST_EXTRACTION_MODEL` can name another model of the same provider.
-Usage records show these calls as `rest_extraction` with the `writer` role.
+These tests are the incident contract. Never weaken them to make a change
+pass:
+
+- `packages/agent/tests/rest-reference-model-route.test.ts`: the analysis
+  prompt, the REST surface on the full, incremental and cached analysis
+  paths, the template pages, and a fresh analysis after a v6 baseline.
+- `apps/agent-container/tests/rest-reference-model-route.test.ts`: the hosted
+  analysis stage on a flagforge-shaped repository makes no model call after
+  the answer and keeps every endpoint.
+- `packages/agent/tests/reference-specs/reader.test.ts`: gate G3 rejects a
+  parsed spec with no operation, so an empty spec surface never replaces the
+  model surface.
+
+## What the reference documents
+
+The project owner's Doxabot instructions decide what the REST and SDK
+reference documents. The project category does not, and neither does
+whether an endpoint looks internal. Code applies the instructions
+(`packages/agent/src/doxa-agent/reference-instructions.ts`) on both routes:
+
+- **The "API reference" page type.** It is on by default. If the owner turns
+  it off, the analysis keeps no reference surface. A new plan also keeps no
+  reference page, not even a page that the planner copies from the published
+  structure.
+- **"Do not document" paths.** An endpoint or export leaves the reference when
+  each path of its evidence is under one of these globs. A glob also covers
+  the files in a folder that it matches, so `apps/admin` covers
+  `apps/admin/stats.ts`. An item without evidence of its own takes the
+  evidence of its group or module, then of the surface.
+- **Owner rules.** Rules such as "Do not document the admin endpoints" reach
+  the analysis prompt. The prompt tells the model to leave an endpoint out
+  only when the project instructions say so.
+
+Until 31 October 2026, a filter after the analysis kept a REST endpoint only
+when the model called the project an `api` project, or when an evidence path
+named docs, examples, OpenAPI or Swagger. The SDK reference had the same
+filter, on `library` and `framework`. Claude Sonnet 5.5 called flagforge a
+`platform`, so the site got one endpoint of 23 (generation `8499e18a`). The
+filter was removed, and `PLANNING_FINGERPRINT_VERSION` became
+`doxabot-planning-v8`, so no project reuses an analysis that the filter made.
+`packages/agent/tests/reference-instructions.test.ts` is the incident
+contract: every project category keeps every endpoint and export, and only
+the instructions remove them.
 
 ## Utility containers
 

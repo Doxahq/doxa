@@ -12,6 +12,13 @@ vi.mock("cloudflare:workers", () => ({
       public env: unknown,
     ) {}
   },
+  // The warm Durable Objects (M28) are exported from the same module.
+  DurableObject: class {
+    constructor(
+      public ctx: unknown,
+      public env: unknown,
+    ) {}
+  },
 }));
 
 import worker, { DocsHostCache, DocsPrerenderCache } from "../src/index";
@@ -316,6 +323,51 @@ describe("pre-render dispatcher paths", () => {
       );
     }
   });
+
+  test.each<[string, string]>([
+    ["another renderer release", "c".repeat(64)],
+    ["no configured release", ""],
+  ])(
+    "rejects a saved-output call for %s without reading R2",
+    async (_case, deployedReleaseId) => {
+      const fixture = await createFixture();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const entrypoint = new DocsPrerenderCache(
+        {
+          props: {
+            expected: fixture.identity,
+            featureMode: "all",
+            hostname: "docs.example.com",
+            pathname: "/guide",
+            representation: "html",
+            resolution,
+          },
+          exports: fixture.ctx.exports,
+          waitUntil: fixture.ctx.waitUntil,
+        } as never,
+        { ...fixture.env, DOXA_RENDERER_RELEASE_ID: deployedReleaseId } as never,
+      );
+
+      const response = await entrypoint.fetch(
+        new Request("https://docs.example.com/guide", {
+          headers: { accept: "text/html" },
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(fixture.env.DOCS_RENDERED_BUCKET.get).not.toHaveBeenCalled();
+      expect(fixture.prepare).not.toHaveBeenCalled();
+      const line = JSON.parse(String(warn.mock.calls[0]?.[0]));
+      expect(line).toMatchObject({
+        event: "docs_cache_release_rejected",
+        entrypoint: "DocsPrerenderCache",
+        siteId: "site-1",
+        requestedReleaseId: "a".repeat(64),
+      });
+      warn.mockRestore();
+    },
+  );
 
   test("does not submit repair work for an unknown route in a valid manifest", async () => {
     const fixture = await createFixture();

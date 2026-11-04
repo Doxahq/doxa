@@ -28,6 +28,8 @@ const DEFAULT_TREE_CACHE_ENTRIES = 128;
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const VERSION_KEY = /^sites\/([^/]+)\/versions\/([^/]+)\/(.*)$/;
+const BLOB_KEY = /^sites\/([^/]+)\/blobs\/([^/]+)$/;
+const TREE_KEY = /^sites\/([^/]+)\/versions\/([^/]+)\/tree\.json$/;
 
 export type VersionTreeErrorCode =
   | "tree_invalid"
@@ -164,6 +166,43 @@ export function siteBlobKey(siteId: string, sha256: string): string {
   }
 
   return `${siteBlobPrefix(siteId)}${sha256}`;
+}
+
+/**
+ * A storage key whose bytes never change: the blob of a site, or the tree of
+ * a version folder.
+ */
+export type ImmutableStorageKey =
+  | { kind: "blob"; key: string; siteId: string; sha256: string }
+  | { kind: "tree"; key: string; siteId: string; versionId: string };
+
+/**
+ * Classifies a physical key that the reader asks storage for. Returns null for
+ * every other key, and for a key with an unsafe segment or an invalid hash, so
+ * the result can never name an object outside one site.
+ */
+export function parseImmutableStorageKey(
+  key: string,
+): ImmutableStorageKey | null {
+  const blob = BLOB_KEY.exec(key);
+
+  if (blob) {
+    const [, siteId, sha256] = blob;
+    return SAFE_SEGMENT.test(siteId) && SHA256_HEX.test(sha256)
+      ? { kind: "blob", key, siteId, sha256 }
+      : null;
+  }
+
+  const tree = TREE_KEY.exec(key);
+
+  if (tree) {
+    const [, siteId, versionId] = tree;
+    return SAFE_SEGMENT.test(siteId) && SAFE_SEGMENT.test(versionId)
+      ? { kind: "tree", key, siteId, versionId }
+      : null;
+  }
+
+  return null;
 }
 
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {

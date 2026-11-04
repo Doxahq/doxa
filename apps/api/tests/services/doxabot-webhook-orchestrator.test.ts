@@ -353,11 +353,11 @@ describe("Doxabot webhook orchestrator", () => {
       writerModel: "claude-haiku-5-5",
       generationProfile: "fast-mvp",
       planningFingerprint:
-        "doxabot-planning-v6:fast-mvp",
+        "doxabot-planning-v8:fast-mvp",
       writingFingerprint:
         "doxabot-writing-v1:claude-haiku-5-5:writer-handoff-v1",
       generatorFingerprint:
-        "doxabot-v2:doxabot-planning-v6:fast-mvp:doxabot-writing-v1:claude-haiku-5-5:writer-handoff-v1",
+        "doxabot-v2:doxabot-planning-v8:fast-mvp:doxabot-writing-v1:claude-haiku-5-5:writer-handoff-v1",
     });
   });
 
@@ -372,11 +372,11 @@ describe("Doxabot webhook orchestrator", () => {
       writerModel: "x-ai/grok-4.5",
       generationProfile: "full-prod",
       planningFingerprint:
-        "doxabot-planning-v6:full-prod",
+        "doxabot-planning-v8:full-prod",
       writingFingerprint:
         "doxabot-writing-v1:x-ai/grok-4.5:writer-handoff-v1",
       generatorFingerprint:
-        "doxabot-v2:doxabot-planning-v6:full-prod:doxabot-writing-v1:x-ai/grok-4.5:writer-handoff-v1",
+        "doxabot-v2:doxabot-planning-v8:full-prod:doxabot-writing-v1:x-ai/grok-4.5:writer-handoff-v1",
     });
   });
 

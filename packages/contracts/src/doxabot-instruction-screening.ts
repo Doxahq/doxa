@@ -3,6 +3,7 @@ import type {
   DoxabotInstructionScreening,
   DoxabotInstructions,
 } from "./doxabot-instructions";
+import { screeningSkeleton } from "./instruction-text";
 
 /**
  * Finds free text that asks Doxabot for more than style or content: to drop
@@ -28,7 +29,9 @@ const OUT_OF_SCOPE_PATTERNS: readonly RegExp[] = [
 ];
 
 export function isOutOfScopeInstructionText(text: string): boolean {
-  return OUT_OF_SCOPE_PATTERNS.some((pattern) => pattern.test(text));
+  // Look-alike letters, such as a Cyrillic "і" in "іgnore", match too.
+  const skeleton = screeningSkeleton(text);
+  return OUT_OF_SCOPE_PATTERNS.some((pattern) => pattern.test(text) || pattern.test(skeleton));
 }
 
 export function screenDoxabotInstructions(

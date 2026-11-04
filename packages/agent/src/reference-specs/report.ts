@@ -29,6 +29,7 @@ export type SpecNotReadCode =
 const NOT_READ_MESSAGES = {
   invalid_path: "The path is not a relative path to a .json, .yaml or .yml file.",
   outside_checkout: "The file is outside the repository.",
+  protected: "The file can hold credentials, so no reader may send it.",
   symbolic_link: "The path goes through a symbolic link. A spec file must be a regular file in the repository.",
   not_a_file: "The path is not a regular file.",
   too_large: `The file is larger than ${SPEC_READER_LIMITS.maxFileBytes / (1024 * 1024)} MB.`,
@@ -47,6 +48,7 @@ const NOT_READ_MESSAGES = {
 const REFUSAL_CODES = {
   invalid_path: true,
   outside_checkout: true,
+  protected: true,
   symbolic_link: true,
   not_a_file: true,
   too_large: true,

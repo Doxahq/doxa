@@ -18,7 +18,7 @@ import { useRenderedPathname } from "~/lib/dashboard/use-rendered-pathname"
 export const SIDEBAR_VIEWS = ["project", "content", "site"] as const
 export type SidebarView = (typeof SIDEBAR_VIEWS)[number]
 
-/** The view a route opens. The Content view can still be left for Project without leaving the editor. */
+/** The view a route opens. */
 export function sidebarViewForPath(pathname: string): SidebarView {
   if (/^\/dashboard\/projects\/[^/]+\/content(?:\/|$)/.test(pathname)) return "content"
   // The changes of a pull request preview list their pages where the editor lists its pages.

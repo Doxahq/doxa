@@ -23,14 +23,14 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       {
-        title: matches.some((match) => match.globalNotFound || match.status === "notFound")
+        title: matches.some((match) => match._notFound || match.status === "notFound")
           ? "Page not found — Doxa"
           : "Doxa — Documentation that Updates Itself",
       },
       {
         name: "description",
         content:
-          "Doxa keeps your documentation in sync with your codebase. CLI tools, templates, and an AI agent that watches your PRs.",
+          "Doxa keeps your documentation in sync with your codebase, with templates and an AI agent that watches your PRs.",
       },
     ],
     links: [

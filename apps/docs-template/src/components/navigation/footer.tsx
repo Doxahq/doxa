@@ -1,10 +1,21 @@
 import { ConfigLink } from "@/src/site-config/config-link";
 import { useSiteConfig } from "@/src/site-config/site-config-context";
+import { useEffect, useState } from "react";
 import { FaGithub } from "react-icons/fa6";
 
 import { Logo } from "@/src/components/navigation/logo";
 
 const openSourceRepoUrl = import.meta.env.VITE_OPENSOURCE_REPO_URL;
+
+/**
+ * Production HTML stays in the cache for up to a year, so the server never
+ * renders the year. The browser adds it after hydration.
+ */
+function CopyrightYear() {
+  const [year, setYear] = useState<number | null>(null);
+  useEffect(() => setYear(new Date().getFullYear()), []);
+  return year === null ? null : <>{year} </>;
+}
 
 export function Footer() {
   const config = useSiteConfig();
@@ -40,7 +51,7 @@ export function Footer() {
         </div>
       )}
       <p className="items-center">
-        &copy; {new Date().getFullYear()}{" "}
+        &copy; <CopyrightYear />
         <ConfigLink
           title={config.name}
           aria-label={config.name}

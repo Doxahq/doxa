@@ -10,6 +10,7 @@ import {
   findSectionHeadingFromRuntimeNavigation,
   getDocsRouteDataFromMatches,
   getPreviousNextFromRuntimeRoutes,
+  MAX_RENDERED_PAGE_BYTES,
   parseDocsRouteDocument,
   resolveDocsRootRouteData,
   resolveDocsRouteData,
@@ -50,6 +51,20 @@ describe("docs route data", () => {
         href: "/overview",
         frontmatter: { title: "Overview" },
       },
+    });
+  });
+
+  test("names the root page with its slash, as the sitemap lists it", async () => {
+    const home = createPage({ href: "/", title: "Home" });
+    const source = createFakeRuntimeSource({
+      getHomeHref: async () => "/",
+      resolvePage: async () => ({ type: "page", href: "/", slug: "", page: home }),
+      getPage: async () => home,
+    });
+
+    await expect(resolveDocsRouteData(source, "/")).resolves.toMatchObject({
+      type: "page",
+      canonicalUrl: "https://docs.example.com/",
     });
   });
 
@@ -155,6 +170,84 @@ describe("docs route data", () => {
       props: { id: "overview" },
       children: [{ type: "text", value: "Overview" }],
     });
+  });
+
+  test("renders a short notice for a page above the size limit, and logs it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const body = `---\ntitle: Huge\n---\n\n${"word ".repeat(
+      MAX_RENDERED_PAGE_BYTES / 5 + 1
+    )}`;
+    const huge = createPage({ href: "/huge", title: "Huge", body });
+    const source: DoxaDocsRuntimeSource = {
+      ...createFakeRuntimeSource(),
+      cacheScope: "site:site-1:version-1",
+      async resolvePage() {
+        return { type: "page", href: "/huge", slug: "huge", page: huge };
+      },
+    };
+
+    const data = await resolveDocsRouteData(source, "/huge", {
+      includeRuntimeDocument: true,
+    });
+
+    expect(data.type).toBe("page");
+    if (data.type !== "page") return;
+    expect(data.runtimeDocument).toEqual({
+      ok: true,
+      document: {
+        frontmatter: { title: "Huge" },
+        nodes: [
+          {
+            type: "element",
+            name: "blockquote",
+            children: [
+              {
+                type: "element",
+                name: "p",
+                children: [
+                  {
+                    type: "text",
+                    value:
+                      "This page is too large to display. Its source is above the 512 KB limit for one page.",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(JSON.parse(String(warn.mock.calls[0]?.[0]))).toEqual({
+      event: "docs_page_too_large",
+      href: "/huge",
+      bytes: body.length,
+      limitBytes: MAX_RENDERED_PAGE_BYTES,
+      scope: "site:site-1:version-1",
+    });
+  });
+
+  test("renders a page at the size limit normally", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const prefix = "# Edge\n\n";
+    const body = `${prefix}${"a".repeat(MAX_RENDERED_PAGE_BYTES - prefix.length)}`;
+    const edge = createPage({ href: "/edge", title: "Edge", body });
+    const source: DoxaDocsRuntimeSource = {
+      ...createFakeRuntimeSource(),
+      async resolvePage() {
+        return { type: "page", href: "/edge", slug: "edge", page: edge };
+      },
+    };
+
+    const data = await resolveDocsRouteData(source, "/edge", {
+      includeRuntimeDocument: true,
+    });
+
+    expect(data.type === "page" && data.runtimeDocument?.ok).toBe(true);
+    if (data.type !== "page" || !data.runtimeDocument?.ok) return;
+    expect(data.runtimeDocument.document.nodes[0]).toMatchObject({
+      name: "h1",
+    });
+    expect(warn).not.toHaveBeenCalled();
   });
 
   test("highlights supported fences in parsed route documents", () => {
@@ -349,7 +442,9 @@ apiPath: /v1/users/{userId}
     ]);
     if (!data.runtimeDocument?.ok) throw new Error("expected a parsed page");
     const anchors = data.runtimeDocument.document.nodes.flatMap((node) =>
-      node.type === "element" && /^h[2-4]$/.test(node.name) ? [`#${node.props?.id}`] : []
+      node.type === "element" && /^h[2-4]$/.test(node.name)
+        ? [`#${node.props?.id}`]
+        : []
     );
     expect(anchors).toEqual(data.document?.tocs.map((toc) => toc.href));
 
@@ -807,9 +902,13 @@ function createPage({
   keywords = [],
   headings = [],
   sectionSlug = "docs",
+  body = `---\ntitle: ${title}\n---\n\n# ${title}`,
 }: Pick<RuntimePage, "href" | "title"> &
   Partial<
-    Pick<RuntimePage, "description" | "keywords" | "headings" | "sectionSlug">
+    Pick<
+      RuntimePage,
+      "description" | "keywords" | "headings" | "sectionSlug" | "body"
+    >
   >): RuntimePage {
   const slug = normalizeRuntimeSlug(href);
 
@@ -821,7 +920,7 @@ function createPage({
     keywords,
     sectionSlug,
     sourcePath: `${slug}/index.mdx`,
-    body: `---\ntitle: ${title}\n---\n\n# ${title}`,
+    body,
     headings,
   };
 }

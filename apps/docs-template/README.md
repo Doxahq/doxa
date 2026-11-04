@@ -287,7 +287,7 @@ All site settings live in `src/settings/main.ts`:
 
 ## Content Sources
 
-Doxa ships a **unified content access layer** with pluggable adapters. The AI chat agent, route renderers, and AI-native endpoints (`/llms.txt`, `/llms-full.txt`) all read from a single `contentStore` — swap the underlying backend with one env var, no code changes.
+Doxa ships a **unified content access layer** with pluggable adapters. The AI chat agent reads from a single `contentStore` — swap the underlying backend with one env var, no code changes. Pages, `.md` routes, and the AI-native endpoints (`/llms.txt`, `/llms-full.txt`) read the runtime source, which serves the bundled content.
 
 Two adapters ship out of the box:
 
@@ -339,7 +339,7 @@ Doxa exposes its documentation in the [llms.txt](https://llmstxt.org/) format so
 | `/llms.txt`      | Index of all pages with titles, URLs, descriptions   |
 | `/llms-full.txt` | Full corpus concatenated — paste into an LLM for Q&A |
 
-Both are generated on-demand from `contentStore`, so they stay in sync regardless of adapter.
+Both are generated on demand from the runtime source, in navigation order, so they list the same pages the site renders.
 
 ---
 

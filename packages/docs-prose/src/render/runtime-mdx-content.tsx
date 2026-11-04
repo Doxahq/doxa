@@ -9,6 +9,7 @@ import {
   type RuntimeMdxNode,
 } from "@doxahq/mdx-runtime";
 
+import { safeMdxProps } from "./mdx-prop-safety";
 import { isComponentOnlyParagraph, unwrapComponentParagraph } from "./normalize";
 
 export type ProseComponentMap = RuntimeMdxComponentMapBase<ElementType>;
@@ -86,7 +87,7 @@ function renderNode(
 
   return createElement(
     resolveElement(node.name, context),
-    { key, ...node.props },
+    { key, ...safeMdxProps(node.props) },
     ...renderNodes(node.children ?? [], context, key),
   );
 }

@@ -1,6 +1,8 @@
+import type { Dirent } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { join, posix } from "node:path";
+import { posix } from "node:path";
 import { cleanInstructionText } from "@doxahq/contracts";
+import { resolveReadableProjectPath } from "../../core/tools/file-access-rules";
 import { resolveProjectPath } from "../../core/tools/project-path";
 
 /**
@@ -9,7 +11,9 @@ import { resolveProjectPath } from "../../core/tools/project-path";
  * about the repository, never instructions to Doxabot.
  *
  * A missing, unreadable, binary or oversized file is skipped; loading never
- * fails a run.
+ * fails a run. Every directory listing and file check resolves its path
+ * inside the repository first, so a symlinked `.cursor/rules` or
+ * `AGENTS.md` never lists or probes anything outside it.
  */
 
 /** Root files, in reading order. */
@@ -47,7 +51,7 @@ export interface RepositoryAgentNote {
   truncated: boolean;
 }
 
-export type AgentNoteSkipReason = "too_large" | "not_text" | "unreadable" | "outside_repository" | "over_budget";
+export type AgentNoteSkipReason = "too_large" | "not_text" | "unreadable" | "outside_repository" | "protected" | "over_budget";
 
 export interface RepositoryAgentNotes {
   notes: RepositoryAgentNote[];
@@ -104,12 +108,14 @@ type NoteFileRead =
   | { kind: "read"; text: string };
 
 async function readNoteFile(projectRoot: string, path: string): Promise<NoteFileRead> {
-  let fullPath: string;
+  // A note, a `@path` pointer or a symlink never opens a secret file.
+  let fullPath: string | null;
   try {
-    fullPath = await resolveProjectPath(projectRoot, path);
+    fullPath = await resolveReadableProjectPath(projectRoot, path);
   } catch {
     return { kind: "skipped", reason: "outside_repository" };
   }
+  if (fullPath === null) return { kind: "skipped", reason: "protected" };
 
   try {
     const info = await stat(fullPath);
@@ -138,8 +144,9 @@ function pointerTargets(path: string, text: string): string[] {
 }
 
 async function listCursorRules(projectRoot: string): Promise<string[]> {
-  const names = await safeReaddir(join(projectRoot, CURSOR_RULES_DIRECTORY));
-  return names
+  const entries = await readRepositoryDirectory(projectRoot, CURSOR_RULES_DIRECTORY);
+  return entries
+    .map((entry) => entry.name)
     .filter((name) => name.endsWith(".mdc"))
     .sort()
     .slice(0, AGENT_NOTE_LIMITS.cursorRules)
@@ -159,34 +166,32 @@ async function listPackageNotes(projectRoot: string): Promise<string[]> {
   const existing: string[] = [];
   for (const path of found.sort()) {
     if (existing.length >= AGENT_NOTE_LIMITS.packageNotes) break;
-    if (await isFile(join(projectRoot, path))) existing.push(path);
+    if (await isRepositoryFile(projectRoot, path)) existing.push(path);
   }
   return existing;
 }
 
 async function listDirectories(projectRoot: string, relativeDirectory: string): Promise<string[]> {
+  const entries = await readRepositoryDirectory(projectRoot, relativeDirectory);
+  return entries
+    .filter((entry) => entry.isDirectory() && !SKIPPED_DIRECTORIES.has(entry.name) && !entry.name.startsWith("."))
+    .map((entry) => entry.name)
+    .sort();
+}
+
+/** The entries of a repository directory; none when it is missing or resolves outside the repository. */
+async function readRepositoryDirectory(projectRoot: string, relativeDirectory: string): Promise<Dirent[]> {
   try {
-    const entries = await readdir(join(projectRoot, relativeDirectory), { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory() && !SKIPPED_DIRECTORIES.has(entry.name) && !entry.name.startsWith("."))
-      .map((entry) => entry.name)
-      .sort();
+    return await readdir(await resolveProjectPath(projectRoot, relativeDirectory), { withFileTypes: true });
   } catch {
     return [];
   }
 }
 
-async function safeReaddir(directory: string): Promise<string[]> {
+/** True for a regular file that resolves inside the repository. */
+async function isRepositoryFile(projectRoot: string, path: string): Promise<boolean> {
   try {
-    return await readdir(directory);
-  } catch {
-    return [];
-  }
-}
-
-async function isFile(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isFile();
+    return (await stat(await resolveProjectPath(projectRoot, path))).isFile();
   } catch {
     return false;
   }

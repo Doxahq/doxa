@@ -3,6 +3,8 @@ BETTER_AUTH_URL=https://replace-with-api-tunnel-or-dev-api-domain
 BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3001,https://replace-with-web-preview-domain
 # Isolate local/tunnel authentication from production cookies on .doxa.so.
 AUTH_COOKIE_PREFIX=doxa-dev
+# The web app reads the signed-in marker `<prefix>.signed_in`: set
+# VITE_AUTH_COOKIE_PREFIX to the same value in apps/web/.env.local.
 # Set a domain only when the API and dashboard need to share cookies.
 # Never use the production parent domain for development cookies.
 # AUTH_COOKIE_DOMAIN=dev.doxa.so

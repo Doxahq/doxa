@@ -45,6 +45,26 @@ describe("loadRepositoryAgentNotes", () => {
     expect(skipped).toEqual([]);
   });
 
+  test("never lists a .cursor/rules folder that links outside the repository", async () => {
+    const outside = await repository({ "private.mdc": "Outside rule" });
+    const root = await repository({ "AGENTS.md": "Run pnpm test." });
+    await mkdir(join(root, ".cursor"));
+    await symlink(outside, join(root, ".cursor/rules"));
+
+    const { notes, skipped } = await loadRepositoryAgentNotes(root);
+
+    expect(notes.map((note) => note.path)).toEqual(["AGENTS.md"]);
+    expect(skipped).toEqual([]);
+  });
+
+  test("never probes a package AGENTS.md that links outside the repository", async () => {
+    const outside = await repository({ "AGENTS.md": "Outside notes" });
+    const root = await repository({ "packages/api/index.ts": "export {};" });
+    await symlink(join(outside, "AGENTS.md"), join(root, "packages/api/AGENTS.md"));
+
+    await expect(loadRepositoryAgentNotes(root)).resolves.toEqual({ notes: [], skipped: [] });
+  });
+
   test("a repository without notes gives none", async () => {
     const root = await repository({ "README.md": "Hello" });
 

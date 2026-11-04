@@ -1,7 +1,8 @@
+import { DEFAULT_DOXABOT_INSTRUCTIONS } from "@doxahq/contracts";
 import { describe, expect, test } from "vitest";
 import {
+  applyReferenceInstructions,
   applyStructureReviewDecisions,
-  filterPublicReferenceSurfaces,
   normalizeProjectAnalysis,
   validateReviewedStructure,
 } from "../src";
@@ -92,7 +93,7 @@ function aiMemoryStructure(): DocumentationStructure {
 }
 
 describe("AI Memory public generation regression", () => {
-  test("produces a concise public plan without internal endpoint reference docs", () => {
+  test("produces a concise public plan when the owner keeps the local server code out of the docs", () => {
     const legacyNormalized = normalizeProjectAnalysis({
       ...aiMemoryAnalysis(),
       referenceSurfaces: undefined,
@@ -101,7 +102,18 @@ describe("AI Memory public generation regression", () => {
     });
     expect(legacyNormalized.referenceSurfaces?.rest).toBeUndefined();
 
-    const analysis = filterPublicReferenceSurfaces(aiMemoryAnalysis());
+    // The project category does not remove the local server routes. The
+    // owner's "Do not document" path does.
+    const analysis = applyReferenceInstructions(aiMemoryAnalysis(), {
+      projectInstructions: {
+        version: 1,
+        instructions: { ...DEFAULT_DOXABOT_INSTRUCTIONS, doNotDocument: ["src/mcpServer.ts"] },
+        screening: { method: "heuristic", flags: [] },
+        repositoryFile: { status: "disabled" },
+      },
+    });
+    expect(applyReferenceInstructions(aiMemoryAnalysis(), undefined).referenceSurfaces?.rest?.groups[0]?.endpoints)
+      .toHaveLength(4);
     expect(analysis.referenceSurfaces?.rest).toBeUndefined();
 
     const enriched = applyCollectionsToStructure(aiMemoryStructure(), analysis);

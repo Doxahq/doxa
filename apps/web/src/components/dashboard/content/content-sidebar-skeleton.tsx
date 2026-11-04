@@ -37,7 +37,7 @@ export function ContentSidebarSkeleton({ onBack }: { onBack: () => void }) {
     // A box for the shimmer clock that adds nothing to the layout. Inline, so
     // a dev server that missed a new utility class cannot break the column.
     <div ref={ref} style={{ display: "contents" }}>
-      <SidebarViewHeader label="Content" backLabel="Back to project" onBack={onBack}>
+      <SidebarViewHeader label="Content" backLabel="Back to overview" onBack={onBack}>
         <BranchSwitcherSkeleton />
       </SidebarViewHeader>
       <div role="status" aria-busy="true" className="flex min-h-0 flex-1 flex-col">

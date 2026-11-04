@@ -1,4 +1,5 @@
 import type { DocsPublicationPage } from "@doxahq/contracts/docs-branches";
+import type { WarmPool } from "@doxahq/contracts/docs-warm-state";
 import type { PublicationAttribution } from "../../repositories/docs-publications";
 import type { Env } from "../../env";
 import {
@@ -6,6 +7,7 @@ import {
   NO_LONGER_RESTORABLE_MESSAGE,
 } from "../../repositories/docs-history";
 import { DocsContentError } from "../docs-content/errors";
+import { buildDocsWarmHint } from "../docs-warm-hint";
 import {
   createR2DocsContentStore,
   type DocsContentStore,
@@ -60,6 +62,8 @@ export class DocsBranchHistory {
     expectedMainVersionId: string;
     /** Set when an agent action restores. */
     attribution?: PublicationAttribution;
+    /** The restorer's cache pool, warmed first (M45). */
+    warmRegion?: WarmPool | null;
   }): Promise<{ publicationId: string; versionId: string }> {
     const candidate = await this.history.getRestoreCandidate(input);
 
@@ -89,6 +93,9 @@ export class DocsBranchHistory {
       );
     }
 
-    return this.history.restore(input);
+    // A restore swaps the whole version: the hint names the pool, no pages.
+    const { warmRegion, ...restore } = input;
+    const warm = buildDocsWarmHint({ region: warmRegion });
+    return this.history.restore(warm ? { ...restore, warm } : restore);
   }
 }

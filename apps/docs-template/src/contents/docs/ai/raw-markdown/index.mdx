@@ -34,11 +34,11 @@ The response body is the exact MDX file from `src/contents/docs/<slug>/index.mdx
     Worker -->|"otherwise"| Assets[env.ASSETS];
     Skip --> Server[src/server.ts];
     Server --> Handler[tryRawMarkdownResponse];
-    Handler --> Store[contentStore.readRaw];
+    Handler --> Store[runtimeSource.getRawPage];
     Store --> Md[Raw MDX response];`}
 />
 
-The Cloudflare worker entry skips the static-asset binding for `.md` paths so the request reaches `src/server.ts`, which calls `tryRawMarkdownResponse` from `src/lib/raw-markdown.ts`. Both vite (default) and github content adapters expose the raw source identically.
+The Cloudflare worker entry skips the static-asset binding for `.md` paths so the request reaches `src/server.ts`, which calls `tryRawMarkdownResponse` from `src/lib/raw-markdown.ts`. It reads the page through the runtime source, the same source that renders the page.
 
 ## When To Use Each Endpoint
 

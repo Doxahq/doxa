@@ -130,7 +130,7 @@ Build-time indexer at `src/scripts/content.ts` walks every MDX file, strips cust
     Export from `src/lib/components.ts`. This is the single source of truth for what's available inside MDX files.
   </StepItem>
   <StepItem title="Document it in the playbook">
-    Update `agent/component-playbook.md` (the CLI agent reads this at runtime). Cover props, variants, and an example.
+    Update `agent/component-playbook.md` (the Doxa agent reads this at runtime). Cover props, variants, and an example.
   </StepItem>
   <StepItem title="Strip it from search">
     If the component wraps text content, add its name to `customComponentNames` in `src/scripts/content.ts` so the indexer focuses on the prose.

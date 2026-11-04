@@ -95,6 +95,7 @@ const siteUrl = resolveSiteUrl(import.meta.env);
 
 export function createViteRuntimeSource(): DoxaDocsRuntimeSource {
   const source: DoxaDocsRuntimeSource = {
+    cacheScope: "local",
     async getResolvedSiteConfig() {
       return siteConfig;
     },
@@ -542,6 +543,8 @@ function cloneFeatureConfig(
     ai: { ...features.ai },
     copyPage: { ...features.copyPage },
     apiPlayground: features.apiPlayground,
+    ...(features.apiPlaygroundBaseUrl ? { apiPlaygroundBaseUrl: features.apiPlaygroundBaseUrl } : {}),
+    ...(features.apiPlaygroundTransport ? { apiPlaygroundTransport: features.apiPlaygroundTransport } : {}),
     rawMarkdown: features.rawMarkdown,
     loadFromGithub: features.loadFromGithub,
   };

@@ -62,6 +62,7 @@ vi.mock("../../src/services/docs-domain-routing", async (importOriginal) => {
 
 const { DocsDomainLifecycleService, DocsDomainProvisioningError } =
   await import("../../src/services/docs-domain-lifecycle");
+const { CloudflareCustomHostnameError } = await import("../../src/services/cloudflare-custom-hostnames");
 
 describe("DocsDomainLifecycleService", () => {
   beforeEach(() => {
@@ -257,12 +258,37 @@ describe("DocsDomainLifecycleService", () => {
         projectId: "project-1",
         hostname: "docs.example.com",
       }),
-    ).rejects.toThrow("provider unavailable");
+      // SECURITY REGRESSION GUARDRAIL (SEC-032): provider text never reaches the caller.
+    ).rejects.toThrow("Docs domain provisioning failed. Try again later.");
     expect(mocks.repository.deleteForProject).toHaveBeenCalledWith({
       userId: "user-1",
       projectId: "project-1",
       domainId: "domain-1",
     });
+  });
+
+  // SECURITY REGRESSION GUARDRAIL (SEC-032): Cloudflare's own text stays in the log.
+  test.each([
+    [409, "This hostname is already in use on Cloudflare."],
+    [400, "Cloudflare could not use this hostname. Check the hostname and its DNS record."],
+    [429, "Cloudflare is limiting hostname changes. Try again in a few minutes."],
+    [500, "Docs domain provisioning failed. Try again later."],
+  ])("maps a Cloudflare %i error to a fixed message", async (status, message) => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.createCloudflareCustomHostnamesClient.mockReturnValue(mocks.customHostnames);
+    mocks.customHostnames.create.mockRejectedValue(
+      new CloudflareCustomHostnameError("zone 0123abcd internal detail: account token scope", status),
+    );
+    const service = new DocsDomainLifecycleService(createEnv());
+
+    const creation = service.createCustomDomain({
+      userId: "user-1",
+      projectId: "project-1",
+      hostname: "docs.example.com",
+    });
+
+    await expect(creation).rejects.toThrow(message);
+    await expect(creation).rejects.not.toThrow("internal detail");
   });
 
   test("reads current provider status without restarting validation", async () => {
@@ -390,7 +416,7 @@ describe("DocsDomainLifecycleService", () => {
         domainId: "domain-1",
       });
 
-    await expect(deletion).rejects.toThrow("provider unavailable");
+    await expect(deletion).rejects.toThrow("Docs domain provisioning failed. Try again later.");
     await expect(deletion).rejects.toBeInstanceOf(DocsDomainProvisioningError);
     expect(mocks.repository.deleteForProject).not.toHaveBeenCalled();
   });

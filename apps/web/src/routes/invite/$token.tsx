@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router"
 
 import { TeamInvitePage } from "~/components/teams/team-invite-page"
-import { getDashboardSession } from "~/server/dashboard-session"
+import { hasDashboardSignIn } from "~/server/dashboard-session"
 
 /** An invite link adds a member, so no site may frame it. */
 const INVITE_LINK_HEADERS = {
@@ -14,8 +14,7 @@ const INVITE_LINK_HEADERS = {
 export const Route = createFileRoute("/invite/$token")({
   headers: () => INVITE_LINK_HEADERS,
   loader: async ({ location }) => {
-    const session = await getDashboardSession()
-    if (!session) {
+    if (!(await hasDashboardSignIn())) {
       throw redirect({ to: "/login", search: { redirect: location.href } })
     }
   },

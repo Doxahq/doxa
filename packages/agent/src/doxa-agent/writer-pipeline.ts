@@ -50,6 +50,7 @@ import {
   type ValidationHistoryEntry,
 } from "../utils/retry-hint";
 import { normalizeStepBlocks } from "../utils/step-blocks";
+import { sanitizeGeneratedMarkup } from "../utils/generated-markup";
 import {
   classifyTargetedRepairIssue,
   type ModelMdxRepairResult,
@@ -129,6 +130,8 @@ export interface WriterAttemptOptions {
     restEndpointPage?: boolean;
     /** Receives MDX validation timing spans. */
     onSpan?: AgentSpanCallback;
+    /** Exact values that no page may contain, such as the run's credentials. */
+    forbiddenValues?: readonly string[];
   };
 }
 
@@ -734,7 +737,8 @@ export function composeWriterPage(
     apiPath: metadata.apiPath,
   }, { preserveTitle: metadata.preserveTitle });
 
-  let content = composePage(frontmatter, body);
+  // Hidden content and media from other sites never reach a saved page.
+  let content = composePage(frontmatter, sanitizeGeneratedMarkup(body));
 
   const afterFrontmatter = content.replace(/^---[\s\S]*?---\s*/, "");
   if (metadata.leadingTitleHeading !== false && !afterFrontmatter.startsWith("#")) {

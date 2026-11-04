@@ -37,6 +37,36 @@ export function hasSessionTokenCookie(
   })
 }
 
+/**
+ * The API's signed-in marker, `{prefix}.signed_in=1` (SEC-021). The prefix is
+ * the API's AUTH_COOKIE_PREFIX: "doxa" in production, where the API sets no
+ * prefix and the marker has its own default. A development web app whose API
+ * sets another prefix sets VITE_AUTH_COOKIE_PREFIX to match, so the production
+ * marker on doxa.so never counts on dev.doxa.so.
+ */
+export const SIGNED_IN_COOKIE_NAME = `${import.meta.env?.VITE_AUTH_COOKIE_PREFIX || "doxa"}.signed_in`
+
+/**
+ * True when the request carries the API's signed-in marker. The session
+ * cookies are host-only on the API host, so the dashboard server sees only
+ * this marker. Like the token check, it does not prove a valid session.
+ */
+export function hasSignedInCookie(
+  cookieHeader: string | null | undefined,
+  name: string = SIGNED_IN_COOKIE_NAME,
+): boolean {
+  if (!cookieHeader) return false
+  return cookieHeader.split(";").some((pair) => pair.trim() === `${name}=1`)
+}
+
+/**
+ * True when the request looks signed in: the marker, or a session cookie from
+ * before host-only cookies. FOR DISPLAY AND ROUTING ONLY: the API checks every
+ * request, and the login page reads only the marker, so it cannot loop.
+ */
+export function looksSignedIn(cookieHeader: string | null | undefined): boolean {
+  return hasSignedInCookie(cookieHeader) || hasSessionTokenCookie(cookieHeader)
+}
 
 /** The person that the session cache cookie names. */
 export interface SessionCookieIdentity {

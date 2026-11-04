@@ -2,6 +2,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "doxa-api",
   "main": "src/index.ts",
+  "workers_dev": false,
+  "preview_urls": false,
   "compatibility_date": "2026-06-12",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
@@ -85,7 +87,6 @@
         "BETTER_AUTH_URL": "https://api.doxa.so",
         "AUTH_COOKIE_DOMAIN": ".doxa.so",
         "WEB_ORIGIN": "https://doxa.so",
-        "DOCS_RUNTIME_URL": "https://preview.doxa.so",
         "DOCS_BASE_DOMAIN": "doxa.page",
         "DOCS_CUSTOM_DOMAIN_CNAME_TARGET": "cname.doxa.page",
         "DOXA_RENDERER_RELEASE_ID": "unconfigured",

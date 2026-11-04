@@ -115,7 +115,7 @@ npm install acme
       "ApiRequestExample: client, lang, label",
       "ApiResponseExample: status, contentType",
       "ApiParams: title, detail",
-      'ApiParam: name, type, location ("path" | "query" | "header" | "cookie" | "body" | "response"), required (boolean)',
+      'ApiParam: name, type, location ("path" | "query" | "header" | "cookie" | "body" | "response"), required (boolean), enum (comma-separated allowed values), example, default',
     ],
     example: "",
     generatedOnly: true,

@@ -365,3 +365,24 @@ async function sha256(bytes: Uint8Array): Promise<string> {
 }
 
 class PrerenderDeadlineError extends Error {}
+
+/** The part of an R2 bucket that a readiness check needs. */
+export interface PrerenderHeadBucket {
+  head(key: string): Promise<unknown>;
+}
+
+/**
+ * Is the saved output of this identity committed? One `head` of the
+ * manifest, which the pre-renderer writes last. The warm job checks this
+ * before it fills `DocsPrerenderCache` keys (F21): a call through the cache
+ * entrypoint would store 30-second entries and submit repairs instead.
+ */
+export async function hasPrerenderManifest(
+  bucket: PrerenderHeadBucket,
+  identity: PrerenderIdentity,
+): Promise<boolean> {
+  const object = await bucket.head(
+    createPrerenderManifestKey(identity.siteId, identity.renderId),
+  );
+  return object !== null && object !== undefined;
+}

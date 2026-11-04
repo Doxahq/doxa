@@ -88,14 +88,23 @@ deployment command creates a temporary config with the selected mode. To move
 back to an allowlist, use this command:
 
 ```bash
-pnpm deploy:docs-template -- --mode allowlist --site-ids site-id-1,site-id-2
+pnpm deploy:docs-template -- --previous-fallback on --mode allowlist --site-ids site-id-1,site-id-2
 ```
 
 To send all requests to the shared renderer, use this command:
 
 ```bash
-pnpm deploy:docs-template -- --mode off
+pnpm deploy:docs-template -- --previous-fallback on --mode off
 ```
+
+Every renderer deploy needs `--previous-fallback on|off` (or the
+`DOXA_RENDERER_PREVIOUS_FALLBACK` variable); there is no default. `on` lets
+the dispatcher serve the replaced build's cached output while the new build
+warms; `off` does not (use it for a security fix). `--revoke <releaseId>`
+marks a release that must never be that fallback. Through the ops repo, pass
+the flag to `deploy.sh`, for example
+`scripts/deploy.sh main --step docs-rendering --previous-fallback off`. See
+[Docs Artifact Compatibility](./docs-artifact-compatibility.md#previous-build-fallback).
 
 ## Request Timing Diagnostics
 
@@ -110,7 +119,7 @@ tracked `DEBUG` Worker variable defaults to `false`.
 For a local production deployment, set the variable on the renderer command:
 
 ```bash
-DEBUG=true pnpm deploy:docs-template -- --skip-secret
+DEBUG=true pnpm deploy:docs-template -- --skip-secret --previous-fallback on
 ```
 
 Use `DEBUG=false` with the same command to turn the measurements off again. The
@@ -158,6 +167,14 @@ The shared renderer handles:
 - every permanent generation URL;
 - all traffic while dynamic mode is off;
 - safe fallback requests.
+
+A hostname that the dispatcher cannot resolve also reaches the shared
+renderer. When the runtime answers `project_not_found` (no published docs for
+the hostname), the renderer returns `404` with a short static page (plain
+text for a request that does not accept HTML) and `Cache-Control: no-store`
+(`apps/docs-template/src/lib/no-published-docs.ts`). It shows no site data and
+no error details. Every other runtime error still fails the request with a
+5xx.
 
 ## Dynamic Worker Security
 
@@ -255,11 +272,19 @@ both pass the request on, and the image answers 404.
 
 `pnpm deploy:docs-template` uses this order:
 
-1. Build the shared renderer and client assets.
-2. Validate and compress the server module graph.
-3. Deploy the shared fallback.
-4. Upload the immutable code package.
-5. Deploy the public dispatcher with the selected mode.
+1. Read the release record `renderer-code/releases/current.json` from the
+   renderer code bucket (skipped with `--dry-run`).
+2. Build the shared renderer and client assets.
+3. Validate and compress the server module graph, and plan the previous
+   build from the record and `--previous-fallback`.
+4. Upload the client assets to `client-assets/v1/assets/` in the renderer code
+   bucket, for pages loaded before this deploy. A dry run stops before this
+   step. See [Old client assets](production-docs-content-injection.md#old-client-assets).
+5. Deploy the shared fallback.
+6. Upload the immutable code package.
+7. Deploy the public dispatcher with the selected mode and the previous build.
+8. Write the new release record.
+9. Deploy the pre-render Worker and the API.
 
 The production GitHub Action defaults to `all`. It exposes the mode and
 allowlist as manual inputs for a controlled rollback.

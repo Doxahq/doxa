@@ -150,3 +150,67 @@ run "rejects_a_stop_timeout_above_the_fargate_limit" {
 
   expect_failures = [var.api_stop_timeout_seconds]
 }
+
+run "runs_all_day_without_a_daily_pause" {
+  command = plan
+
+  assert {
+    condition     = length(aws_appautoscaling_scheduled_action.stop) == 0 && length(aws_appautoscaling_scheduled_action.start) == 0
+    error_message = "Without daily_pause the service must have no scheduled actions."
+  }
+}
+
+run "stops_and_starts_the_service_every_day" {
+  command = apply
+
+  variables {
+    min_task_count = 1
+    max_task_count = 2
+    daily_pause    = { stop_hour = 1, start_hour = 10, timezone = "Africa/Algiers" }
+  }
+
+  assert {
+    condition     = aws_appautoscaling_scheduled_action.stop[0].schedule == "cron(0 1 * * ? *)" && aws_appautoscaling_scheduled_action.stop[0].timezone == "Africa/Algiers"
+    error_message = "The service must stop at 01:00 local time."
+  }
+
+  assert {
+    condition     = one(aws_appautoscaling_scheduled_action.stop[0].scalable_target_action).min_capacity == "0" && one(aws_appautoscaling_scheduled_action.stop[0].scalable_target_action).max_capacity == "0"
+    error_message = "The stop action must allow no task."
+  }
+
+  assert {
+    condition     = aws_appautoscaling_scheduled_action.start[0].schedule == "cron(0 10 * * ? *)" && aws_appautoscaling_scheduled_action.start[0].timezone == "Africa/Algiers"
+    error_message = "The service must start at 10:00 local time."
+  }
+
+  assert {
+    condition     = one(aws_appautoscaling_scheduled_action.start[0].scalable_target_action).min_capacity == "1" && one(aws_appautoscaling_scheduled_action.start[0].scalable_target_action).max_capacity == "2"
+    error_message = "The start action must restore the day bounds of the target."
+  }
+
+  assert {
+    condition     = aws_appautoscaling_scheduled_action.start[0].resource_id == aws_appautoscaling_target.this.resource_id
+    error_message = "The scheduled actions must act on the service's scaling target."
+  }
+}
+
+run "rejects_a_daily_pause_hour_outside_the_day" {
+  command = plan
+
+  variables {
+    daily_pause = { stop_hour = 1, start_hour = 24, timezone = "Africa/Algiers" }
+  }
+
+  expect_failures = [var.daily_pause]
+}
+
+run "rejects_a_daily_pause_that_stops_and_starts_at_the_same_hour" {
+  command = plan
+
+  variables {
+    daily_pause = { stop_hour = 1, start_hour = 1, timezone = "Africa/Algiers" }
+  }
+
+  expect_failures = [var.daily_pause]
+}

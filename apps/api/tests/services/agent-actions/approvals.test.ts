@@ -61,7 +61,8 @@ function setup(
   }));
   const policy = new ApprovalPolicyResolver([new PlatformOverrideSource(overrides)], AGENT_ACTIONS.rulesFor, vi.fn());
   const activity = { append: vi.fn(async () => undefined) };
-  const now = () => NOW;
+  const clock = { now: NOW };
+  const now = () => clock.now;
   const notifier = { requested: vi.fn<ApprovalNotifier["requested"]>(), decided: vi.fn<ApprovalNotifier["decided"]>() };
   const gateway = new AgentActionGateway({
     registry: AGENT_ACTIONS,
@@ -86,7 +87,7 @@ function setup(
     notifier,
   });
   const sweeper = new ApprovalSweeper({ registry: AGENT_ACTIONS, requests, access, services: fakes.services, policy, now });
-  return { requests, fakes, gateway, approvals, sweeper, activity, flags, notifier };
+  return { requests, fakes, gateway, approvals, sweeper, activity, flags, notifier, clock };
 }
 
 const USER_NAMES: Record<string, string> = { [OWNER]: "Olivia Owner", [EDITOR]: "Eddie Editor" };
@@ -242,6 +243,18 @@ describe("approval service", () => {
     const detail = await env.approvals.approve(ownerDashboard(), pending.id);
     expect(detail.status).toBe("failed");
     expect(detail.error).toEqual({ code: "mdx_invalid", message: "Publish blocked: 1 page has MDX issues." });
+  });
+
+  // SECURITY REGRESSION GUARDRAIL (SEC-029): an expired request never runs, even before the sweeper.
+  it("expires and refuses a request past its expiry", async () => {
+    const env = setup();
+    const { pending } = await pendingPublish(env);
+    env.clock.now = new Date(NOW.getTime() + 365 * 24 * 60 * 60 * 1000);
+
+    await expect(env.approvals.approve(ownerDashboard(), pending.id)).rejects.toBeInstanceOf(RequestNotPendingError);
+
+    expect((await env.requests.findById(pending.id as never))?.status).toBe("expired");
+    expect(env.notifier.decided).not.toHaveBeenCalled();
   });
 
   it("fails a second approve", async () => {
@@ -430,14 +443,34 @@ describe("approvals in a team (spec §5)", () => {
     await expect(env.approvals.cancel(dashboardActor(EDITOR), cancelled)).resolves.toMatchObject({ status: "cancelled" });
   });
 
-  it("never hands one member's pending request to another member's agent", async () => {
+  // SECURITY REGRESSION GUARDRAIL (SEC-031): one member's agent never replaces or takes another member's request.
+  it("never hands one member's pending request to another member's agent, and never replaces it", async () => {
     const env = setup({ access: teamAccess() });
     await env.flags.setProjectFlags(PROJECT, { requireOtherDecider: true });
     const ownerRequest = await pendingPublish(env);
+
+    await expect(env.gateway.perform(editorAgent(), publishRequest)).rejects.toMatchObject({
+      code: "pending_request_exists",
+    });
+    expect((await env.requests.findById(ownerRequest.pending.id as never))?.status).toBe("pending");
+  });
+
+  it("lets another member ask once a teammate's request is past its expiry", async () => {
+    const env = setup({ access: teamAccess() });
+    const ownerRequest = await pendingPublish(env);
+    env.clock.now = new Date(NOW.getTime() + 365 * 24 * 60 * 60 * 1000);
+
     const editorRequestId = await editorRequest(env);
-    // The same publish from the editor's agent is the editor's own request,
-    // so the editor's agent can follow it and the editor cannot approve it.
+
     expect(editorRequestId).not.toBe(ownerRequest.pending.id);
+    expect((await env.requests.findById(ownerRequest.pending.id as never))?.status).toBe("expired");
+  });
+
+  it("lets a member's own request wait for another decider", async () => {
+    const env = setup({ access: teamAccess() });
+    await env.flags.setProjectFlags(PROJECT, { requireOtherDecider: true });
+    const editorRequestId = await editorRequest(env);
+
     await expect(env.approvals.get(editorAgent(), editorRequestId)).resolves.toMatchObject({ status: "pending" });
     await expect(env.approvals.approve(dashboardActor(EDITOR), editorRequestId)).rejects.toBeInstanceOf(
       OtherDeciderRequiredError,

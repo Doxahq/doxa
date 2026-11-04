@@ -1,5 +1,6 @@
 import server from "./dist/server/server.js"
-import { hasSessionTokenCookie } from "./src/lib/auth/session-cookie.ts"
+import { withSecurityHeaders } from "./config/security-headers.js"
+import { looksSignedIn } from "./src/lib/auth/session-cookie.ts"
 import { isMarketingPath } from "./src/lib/marketing/marketing-paths.ts"
 
 export default {
@@ -14,18 +15,18 @@ export default {
     }
 
     // `assets.run_worker_first` sends some marketing pages here first. A visitor
-    // without a session cookie gets the prerendered page; a signed-in visitor
+    // who does not look signed in gets the prerendered page; a signed-in visitor
     // gets a server render with the Dashboard button.
     const { pathname } = new URL(request.url)
     if (isMarketingPath(pathname)) {
-      if (!hasSessionTokenCookie(request.headers.get("cookie"))) {
+      if (!looksSignedIn(request.headers.get("cookie"))) {
         const asset = await env.ASSETS.fetch(request)
-        if (asset.status !== 404) return asset
+        if (asset.status !== 404) return withSecurityHeaders(asset)
       }
-      return personal(await server.fetch(request))
+      return withSecurityHeaders(personal(await server.fetch(request)))
     }
 
-    return server.fetch(request)
+    return withSecurityHeaders(await server.fetch(request))
   },
 }
 

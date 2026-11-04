@@ -4,7 +4,7 @@ import {
   type SourceProvider,
 } from "@doxahq/contracts";
 import { createDb, schema, type DbEnv } from "@doxahq/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 
 export type WebhookDeliveryClaim = "claimed" | "duplicate";
 
@@ -51,6 +51,8 @@ export class WebhookDeliveriesRepository implements WebhookDeliveriesStore {
   async claimDelivery(
     input: ClaimWebhookDeliveryInput,
   ): Promise<WebhookDeliveryClaim> {
+    if (await this.hasSamePayload(input)) return "duplicate";
+
     const [claimed] = await this.db
       .insert(schema.scmWebhookDeliveries)
       .values(input)
@@ -63,6 +65,31 @@ export class WebhookDeliveriesRepository implements WebhookDeliveriesStore {
       .returning({ id: schema.scmWebhookDeliveries.id });
 
     return claimed ? "claimed" : "duplicate";
+  }
+
+  /**
+   * SEC-025: the HMAC covers the body, not the X-GitHub-Delivery header, so a
+   * captured signed body can come back with a new delivery ID. A body that an
+   * earlier delivery of the same repository and event already brought is a
+   * duplicate, unless that delivery failed: then GitHub's redelivery must
+   * still run. The repository index keeps the lookup small.
+   */
+  private async hasSamePayload(input: ClaimWebhookDeliveryInput): Promise<boolean> {
+    if (!input.repositoryExternalId) return false;
+    const [existing] = await this.db
+      .select({ id: schema.scmWebhookDeliveries.id })
+      .from(schema.scmWebhookDeliveries)
+      .where(
+        and(
+          eq(schema.scmWebhookDeliveries.repositoryExternalId, input.repositoryExternalId),
+          eq(schema.scmWebhookDeliveries.provider, input.provider),
+          eq(schema.scmWebhookDeliveries.eventName, input.eventName),
+          eq(schema.scmWebhookDeliveries.payloadHash, input.payloadHash),
+          notInArray(schema.scmWebhookDeliveries.status, ["failed", "enqueue_failed"]),
+        ),
+      )
+      .limit(1);
+    return existing !== undefined;
   }
 
   async getNormalizedEvent(

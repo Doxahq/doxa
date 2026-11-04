@@ -214,7 +214,7 @@ deploy that does not set it keeps the value of the running revision
 | Task | Command or place |
 |---|---|
 | Read logs | `aws logs tail /ecs/doxa-api-production --follow` |
-| Shell into the API | `aws ecs execute-command --cluster doxa-api-production --task <task-id> --container api --interactive --command sh` |
+| Shell into the API | ECS Exec is off by default. Set `enable_execute_command = true`, `terraform apply`, then deploy so a new task starts with it. Run `aws ecs execute-command --cluster doxa-api-production --task <task-id> --container api --interactive --command sh`. Set it back to `false` and apply after the session. |
 | Add a secret | Add the name to `api_secret_names`, run `pnpm secrets:api:ecs --tfvars <ops>/production.tfvars`, `terraform apply`, then deploy. |
 | Rotate a secret | `pnpm secrets:api:ecs --tfvars <ops>/production.tfvars --overwrite NAME`, then deploy. For the two shared keys, also update the edge Worker (the script prints the command). |
 | Change the task size | Set `cpu_units` and `memory_mb`, `terraform apply`, then deploy. |

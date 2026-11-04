@@ -10,10 +10,20 @@ export const OFFLINE_ACCESS_SCOPE = "offline_access";
 
 const CLIENT_NAME_MAX_LENGTH = 200;
 
-/** Spec 6.3: a client that asks for no Doxa scope is offered every scope. */
+/**
+ * The scopes the consent page offers. A client that asks for no Doxa scope
+ * is offered the read scopes only (SEC-013): one click must not give an
+ * unknown agent write, publish and domain access. It can ask for more
+ * scopes later through the MCP scope challenge.
+ */
 export function offeredScopes(requested: readonly string[]): OAuthScope[] {
   const known = [...new Set(requested.filter(isOAuthScope))];
-  return known.length > 0 ? known : [...OAUTH_SCOPES];
+  return known.length > 0 ? known : OAUTH_SCOPES.filter(isReadScope);
+}
+
+/** A scope that only reads. */
+export function isReadScope(scope: OAuthScope): boolean {
+  return scope.endsWith(":read");
 }
 
 export function wantsOfflineAccess(requested: readonly string[]): boolean {

@@ -3,10 +3,6 @@ import { describe, expect, test, vi } from "vitest";
 
 import { tryRawMarkdownResponse } from "./raw-markdown";
 
-vi.mock("@/src/lib/content/store", () => ({
-  contentStore: { readRaw: vi.fn(async () => null) },
-}));
-
 describe("tryRawMarkdownResponse", () => {
   test("reads raw markdown from the request-scoped runtime source", async () => {
     const source = {

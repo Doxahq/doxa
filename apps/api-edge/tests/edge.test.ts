@@ -3,6 +3,7 @@ import {
   API_ENTRYPOINT_METHODS,
   BRIDGE_KEY_HEADER,
   CLIENT_IP_HEADER,
+  CLIENT_REGION_HEADER,
   FORWARD_URL_HEADER,
   ORIGIN_KEY_HEADER,
   PUBLIC_URL_HEADER,
@@ -153,6 +154,12 @@ describe("origin", () => {
   });
 });
 
+/** A request as Cloudflare delivers it, with `request.cf`. */
+function withCf(request: Request, cf: Record<string, unknown>): Request {
+  Object.defineProperty(request, "cf", { value: cf });
+  return request;
+}
+
 describe("public proxy", () => {
   it("sends the request through the ORIGIN binding with the key, the public URL and the client IP", async () => {
     const origin = stubOrigin();
@@ -176,6 +183,42 @@ describe("public proxy", () => {
     expect(await sent.text()).toBe("{}");
   });
 
+  // SECURITY REGRESSION GUARDRAIL (SEC-003): the edge stops oversized bodies.
+  it("refuses a declared body above the edge limit without calling the origin", async () => {
+    const { binding, requests } = stubOrigin();
+    const { EDGE_MAX_BODY_BYTES } = await import("../src/proxy");
+
+    const response = await worker.fetch(
+      new Request("https://api.doxa.so/github/webhook", {
+        method: "POST",
+        body: "{}",
+        headers: { "content-length": String(EDGE_MAX_BODY_BYTES + 1) },
+      }),
+      createEnv({ ORIGIN: binding }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(requests).toHaveLength(0);
+  });
+
+  it("forwards a chunked body below the edge limit", async () => {
+    const { binding, requests } = stubOrigin();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"a":1}'));
+        controller.close();
+      },
+    });
+
+    const response = await worker.fetch(
+      new Request("https://api.doxa.so/projects", { method: "POST", body, duplex: "half" } as RequestInit),
+      createEnv({ ORIGIN: binding }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await requests[0]!.text()).toBe('{"a":1}');
+  });
+
   it("drops edge headers that a client sets", async () => {
     const { binding, requests } = stubOrigin();
 
@@ -186,6 +229,33 @@ describe("public proxy", () => {
 
     expect(requests[0]!.headers.get(ORIGIN_KEY_HEADER)).toBe(ORIGIN_KEY);
     expect(requests[0]!.headers.get(PUBLIC_URL_HEADER)).toBe("https://api.doxa.so/me");
+  });
+
+  it("sets the client's cache pool from request.cf, and drops one that the client sends", async () => {
+    const { binding, requests } = stubOrigin();
+    const request = withCf(
+      new Request("https://api.doxa.so/me", { headers: { [CLIENT_REGION_HEADER]: "oceania" } }),
+      { colo: "CDG", country: "FR" },
+    );
+
+    await worker.fetch(request, createEnv({ ORIGIN: binding }));
+
+    expect(requests[0]!.headers.get(CLIENT_REGION_HEADER)).toBe("eu-west");
+  });
+
+  it("sends no cache pool when the location is unknown, even when the client sends one", async () => {
+    const { binding, requests } = stubOrigin();
+
+    await worker.fetch(
+      withCf(new Request("https://api.doxa.so/me", { headers: { [CLIENT_REGION_HEADER]: "us-east" } }), { country: "IN", continent: "AS" }),
+      createEnv({ ORIGIN: binding }),
+    );
+    await worker.fetch(
+      new Request("https://api.doxa.so/me", { headers: { [CLIENT_REGION_HEADER]: "us-east" } }),
+      createEnv({ ORIGIN: binding }),
+    );
+
+    expect(requests.map((sent) => sent.headers.get(CLIENT_REGION_HEADER))).toEqual([null, null]);
   });
 
   it("keeps the origin host for a path that starts with two slashes, so the key never leaves", async () => {
@@ -263,6 +333,21 @@ describe("bridge", () => {
     expect(env.GENERATION_QUEUE.send).not.toHaveBeenCalled();
   });
 
+  it("forwards the docs dispatcher's warm status call", async () => {
+    const status = { siteId: "site-1", releaseId: null, startedAt: null, finishedAt: null, pools: [] };
+    const getWarmStatus = vi.fn(async () => status);
+    const env = createEnv({ DOCS_CACHE_INVALIDATOR: { getWarmStatus } as unknown as Service });
+
+    await expect(bridgeCall(env, "DOCS_CACHE_INVALIDATOR", "getWarmStatus", [{ siteId: "site-1" }])).resolves.toEqual(status);
+    expect(getWarmStatus).toHaveBeenCalledWith({ siteId: "site-1" });
+  });
+
+  it("fails the warm status call when the dispatcher has no such method", async () => {
+    const env = createEnv({ DOCS_CACHE_INVALIDATOR: { invalidate: vi.fn() } as unknown as Service });
+
+    await expect(bridgeCall(env, "DOCS_CACHE_INVALIDATOR", "getWarmStatus", [{ siteId: "site-1" }])).rejects.toThrow(/not a method/);
+  });
+
   it("forwards a fetch to the agent container at the forward URL", async () => {
     const containerFetch = vi.fn(async (request: Request) => new Response(`${request.method} ${request.url}`));
     const env = createEnv({ AGENT_CONTAINER: { fetch: containerFetch } as unknown as Fetcher });
@@ -331,5 +416,103 @@ describe("cron", () => {
     );
 
     await expect(Promise.all(pending)).rejects.toThrow(/HTTP 401/);
+  });
+});
+
+// SECURITY REGRESSION GUARDRAIL (SEC-008): per-IP limits before the origin.
+describe("public rate limits", () => {
+  function limiter(success: boolean) {
+    return { limit: vi.fn(async () => ({ success })) };
+  }
+
+  function env(overrides: Partial<EdgeEnv> = {}) {
+    const origin = stubOrigin();
+    return {
+      origin,
+      env: createEnv({
+        ORIGIN: origin.binding,
+        API_OAUTH_REGISTER_LIMITER: limiter(true) as never,
+        API_OAUTH_LIMITER: limiter(true) as never,
+        API_PUBLIC_LIMITER: limiter(true) as never,
+        ...overrides,
+      }),
+    };
+  }
+
+  function from(ip: string, url: string, init: RequestInit = {}) {
+    return new Request(url, { ...init, headers: { "cf-connecting-ip": ip, ...(init.headers ?? {}) } });
+  }
+
+  it("answers 429 for client registration over the limit, without calling the origin", async () => {
+    const register = limiter(false);
+    const { env: e, origin } = env({ API_OAUTH_REGISTER_LIMITER: register as never });
+
+    const response = await worker.fetch(
+      from("203.0.113.9", "https://api.doxa.so/oauth/register", { method: "POST", body: "{}" }),
+      e,
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("60");
+    expect(register.limit).toHaveBeenCalledWith({ key: "203.0.113.9" });
+    expect(origin.requests).toHaveLength(0);
+  });
+
+  it("uses the OAuth budget for the other OAuth endpoints and the public budget elsewhere", async () => {
+    const oauth = limiter(true);
+    const publicLimit = limiter(true);
+    const { env: e } = env({ API_OAUTH_LIMITER: oauth as never, API_PUBLIC_LIMITER: publicLimit as never });
+
+    await worker.fetch(from("203.0.113.9", "https://api.doxa.so/oauth/token", { method: "POST", body: "x" }), e);
+    await worker.fetch(from("203.0.113.9", "https://api.doxa.so/projects"), e);
+
+    expect(oauth.limit).toHaveBeenCalledTimes(1);
+    expect(publicLimit.limit).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not count GET /me, which the web Worker sends from a shared IP", async () => {
+    const publicLimit = limiter(false);
+    const { env: e, origin } = env({ API_PUBLIC_LIMITER: publicLimit as never });
+
+    const response = await worker.fetch(from("2a06:98c0::1", "https://api.doxa.so/me"), e);
+
+    expect(response.status).toBe(200);
+    expect(publicLimit.limit).not.toHaveBeenCalled();
+    expect(origin.requests).toHaveLength(1);
+  });
+});
+
+// SECURITY REGRESSION GUARDRAIL (SEC-008): one IPv6 client cannot rotate through its /64.
+describe("client IP rate-limit key", () => {
+  it("keys IPv4 by address and IPv6 by /64 prefix", async () => {
+    const { clientIpRateLimitKey } = await import("@doxahq/contracts/client-ip");
+    expect(clientIpRateLimitKey("203.0.113.9")).toBe("203.0.113.9");
+    expect(clientIpRateLimitKey("2001:db8:abcd:12:1::1")).toBe("2001:db8:abcd:12::/64");
+    expect(clientIpRateLimitKey("2001:DB8:ABCD:0012:ffff:ffff:ffff:ffff")).toBe("2001:db8:abcd:12::/64");
+    expect(clientIpRateLimitKey("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(clientIpRateLimitKey("::ffff:203.0.113.9")).toBe("0:0:0:0::/64");
+  });
+
+  it("does not count CORS preflights or GitHub webhooks", async () => {
+    const publicLimit = { limit: vi.fn(async () => ({ success: false })) };
+    const { binding } = stubOrigin();
+    const env = createEnv({ ORIGIN: binding, API_PUBLIC_LIMITER: publicLimit as never });
+
+    const preflight = await worker.fetch(
+      new Request("https://api.doxa.so/projects", { method: "OPTIONS", headers: { "cf-connecting-ip": "203.0.113.9" } }),
+      env,
+    );
+    const webhook = await worker.fetch(
+      new Request("https://api.doxa.so/github/webhook", {
+        method: "POST",
+        body: "{}",
+        headers: { "cf-connecting-ip": "140.82.112.1", "content-length": "2" },
+      }),
+      env,
+    );
+
+    expect(preflight.status).not.toBe(429);
+    expect(webhook.status).not.toBe(429);
+    expect(publicLimit.limit).not.toHaveBeenCalled();
   });
 });

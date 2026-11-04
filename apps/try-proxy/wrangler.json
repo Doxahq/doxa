@@ -1,0 +1,68 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doxa-try-proxy",
+  "main": "src/index.ts",
+  "workers_dev": false,
+  "preview_urls": false,
+  "compatibility_date": "2026-06-12",
+  "compatibility_flags": [
+    "global_fetch_strictly_public"
+  ],
+  "ratelimits": [
+    {
+      "name": "TRY_CLIENT",
+      "namespace_id": "3002",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "TRY_SITE",
+      "namespace_id": "3003",
+      "simple": { "limit": 300, "period": 60 }
+    },
+    {
+      "name": "TRY_TARGET",
+      "namespace_id": "3004",
+      "simple": { "limit": 600, "period": 60 }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TRY_BUDGET",
+        "class_name": "TryBudget"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "TryBudget"
+      ]
+    }
+  ],
+  "analytics_engine_datasets": [
+    {
+      "binding": "TRY_METRICS",
+      "dataset": "doxa_try"
+    }
+  ],
+  "vars": {
+    "DOXA_PROD_TRY_PROXY_MODE": "all",
+    "DOXA_TRY_BLOCKED_HOSTS": "${OPS_TRY_BLOCKED_HOSTS}",
+    "DOXA_TRY_RESERVED_ZONES": "doxa.so,doxa.page",
+    "DOXA_TRY_SITE_DAILY_LIMIT": "5000",
+    "DOXA_TRY_TARGET_DAILY_LIMIT": "50000"
+  },
+  "logpush": false,
+  "observability": {
+    "enabled": false,
+    "logs": {
+      "enabled": false,
+      "invocation_logs": false
+    },
+    "traces": {
+      "enabled": false
+    }
+  }
+}

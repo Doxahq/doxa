@@ -1,3 +1,4 @@
+import { escapeHtml } from "@doxahq/contracts/html-escape";
 import type { ContentAdapter } from "../lib/content/types";
 import { renderRuntimeMdx } from "./runtime-mdx";
 import type { RuntimeNavPage } from "./runtime-source";
@@ -131,14 +132,14 @@ function renderShell(input: {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
-  <meta name="description" content="${escapeAttribute(input.description ?? input.siteConfig.description ?? "")}" />
-  <link rel="canonical" href="${escapeAttribute(canonical)}" />
+  <meta name="description" content="${escapeHtml(input.description ?? input.siteConfig.description ?? "")}" />
+  <link rel="canonical" href="${escapeHtml(canonical)}" />
   <style>${runtimeCss}</style>
 </head>
 <body>
   <div class="doxa-app">
     <header class="doxa-header">
-      <a class="doxa-brand" href="${escapeAttribute(input.basePath || "/")}">${escapeHtml(input.siteConfig.name)}</a>
+      <a class="doxa-brand" href="${escapeHtml(input.basePath || "/")}">${escapeHtml(input.siteConfig.name)}</a>
       <span class="doxa-powered">Doxa Docs</span>
     </header>
     <div class="doxa-layout">
@@ -161,7 +162,7 @@ function renderNav(
   const items = pages.map((page) => {
     const href = `${basePath}${page.href === "/" ? "" : page.href}` || "/";
     const active = page.href === currentHref ? "true" : "false";
-    return `<a data-active="${active}" href="${escapeAttribute(href)}">${escapeHtml(page.title)}</a>`;
+    return `<a data-active="${active}" href="${escapeHtml(href)}">${escapeHtml(page.title)}</a>`;
   });
 
   return `<nav>${items.join("")}</nav>`;
@@ -219,18 +220,6 @@ function titleFromPath(path: string): string {
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function escapeAttribute(value: string): string {
-  return escapeHtml(value).replace(/'/g, "&#39;");
 }
 
 const runtimeCss = `

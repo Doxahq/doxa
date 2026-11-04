@@ -46,6 +46,11 @@ for (const app of ["docs-runtime", "agent-worker", "email-worker"]) {
       }],
       compatibilityDate: config.compatibility_date,
       compatibilityFlags: config.compatibility_flags ?? [],
+      // The docs-runtime landing page is a local preview only (SEC-022); the
+      // local wrangler vars turn it on.
+      bindings: app === "docs-runtime"
+        ? { DOCS_RUNTIME_HTML_PREVIEW: config.vars?.DOCS_RUNTIME_HTML_PREVIEW ?? "" }
+        : {},
       host: "127.0.0.1",
       port: 0,
       outboundService: () => {

@@ -198,6 +198,79 @@ describe("interactive API endpoint", () => {
     );
   });
 
+  test.each([
+    ["/", "\\evil.example/collect"],
+    ["/", "/\\evil.example/collect"],
+    ["/", "\\\\evil.example/collect"],
+    ["", "\\evil.example/collect"],
+    ["/api", "../\\evil.example"],
+  ])(
+    "keeps a path that names a host on the docs origin (base %j, path %j)",
+    (baseUrl, path) => {
+      vi.stubGlobal("window", {
+        location: { origin: "https://docs.example.com" },
+      });
+
+      const request = buildBrowserRequest({
+        method: "GET",
+        path,
+        baseUrl,
+        parameters: [
+          { name: "key", type: "apikey", location: "query", required: true },
+        ],
+        values: {},
+        token: "FAKE_CANARY",
+      });
+
+      expect(new URL(request.url).origin).toBe("https://docs.example.com");
+    }
+  );
+
+  test("refuses a path that the browser still reads as another host", () => {
+    vi.stubGlobal("window", {
+      location: { origin: "https://docs.example.com" },
+    });
+
+    // The browser drops the tab, which leaves `/\evil.example/collect`.
+    expect(() =>
+      buildBrowserRequest({
+        method: "GET",
+        path: "\t\\evil.example/collect",
+        baseUrl: "/",
+        parameters: [
+          { name: "key", type: "apikey", location: "query", required: true },
+        ],
+        values: {},
+        token: "FAKE_CANARY",
+      })
+    ).toThrow(/another host/);
+  });
+
+  test.each([
+    ["/", "/v1/users", "https://docs.example.com/v1/users"],
+    ["/", "v1/users", "https://docs.example.com/v1/users"],
+    ["/api/", "//v1/users", "https://docs.example.com/api/v1/users"],
+    ["https://api.example.com/v2", "\\users", "https://api.example.com/v2/users"],
+  ])(
+    "keeps the request on the base origin (base %j, path %j)",
+    (baseUrl, path, expected) => {
+      vi.stubGlobal("window", {
+        location: { origin: "https://docs.example.com" },
+      });
+
+      const request = buildBrowserRequest({
+        method: "GET",
+        path,
+        baseUrl,
+        parameters: [],
+        values: {},
+        token: "",
+      });
+
+      expect(request.url).toBe(expected);
+    }
+  );
+
   test("places reader-supplied authorization in its declared location", () => {
     const headerRequest = buildBrowserRequest({
       method: "GET",

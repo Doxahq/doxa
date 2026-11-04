@@ -11,6 +11,8 @@ import type {
 export class InMemoryApprovalSettingsStore implements ApprovalSettingsStore {
   readonly modes = new Map<string, ApprovalMode>();
   readonly flags = new Map<string, ProjectApprovalFlags>();
+  /** Projects that belong to a team. */
+  readonly teamProjects = new Set<string>();
 
   /** Projects that exist, with the column defaults. */
   constructor(projectIds: readonly string[] = []) {
@@ -40,6 +42,10 @@ export class InMemoryApprovalSettingsStore implements ApprovalSettingsStore {
       else this.modes.set(key, change.mode);
     }
     return previous;
+  }
+
+  async isGuardedProject(projectId: string): Promise<boolean> {
+    return this.teamProjects.has(projectId) || this.flags.get(projectId)?.requireOtherDecider === true;
   }
 
   async projectFlags(projectId: string): Promise<ProjectApprovalFlags | null> {

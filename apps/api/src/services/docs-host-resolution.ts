@@ -51,10 +51,16 @@ export async function resolveDocsHost(
   );
   if (!site) return null;
 
+  // A site with a working custom domain has one public address: its
+  // `doxa.page` hostname only redirects there.
+  const canonicalHostname = await new DocsDomainsRepository(
+    env,
+  ).findCanonicalHostname(site.siteId);
   return {
     ...site,
     hostname: generatedSubdomain.hostname,
     domainKind: "doxa_subdomain",
     renderTarget: "production",
+    ...(canonicalHostname ? { canonicalHostname } : {}),
   };
 }

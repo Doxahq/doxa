@@ -83,8 +83,13 @@ export function isOwnRequest(clientId: string, actor: Actor, record: ApprovalReq
   return record.requestedByUserId === actor.principal.userId && record.requestedByClientId === clientId;
 }
 
+/**
+ * The agent that made the request: same user, same client and same grant
+ * (SEC-030). A second grant of the client, for example with a narrower
+ * project scope, must not list, read or cancel the requests of the first.
+ */
 export function isRequestingAgent(actor: AgentActor, record: ApprovalRequestRecord): boolean {
-  return isOwnRequest(actor.channel.clientId, actor, record);
+  return isOwnRequest(actor.channel.clientId, actor, record) && record.grantRef === actor.channel.grantRef;
 }
 
 async function authorizeForRecord(

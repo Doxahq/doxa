@@ -18,6 +18,7 @@ import {
   type DocsDomainRoutingProbe,
   type DocsDomainRoutingState,
 } from "./docs-domain-routing";
+import { toSafeErrorLog } from "../http/error-log";
 
 export class DocsDomainProvisioningError extends Error {
   constructor(message: string, readonly status = 502) {
@@ -244,15 +245,35 @@ export function getDocsDomainProvisioningStatus(err: DocsDomainProvisioningError
   return err.status;
 }
 
+/**
+ * SEC-032: the message goes to the dashboard and to agents, so it is one of
+ * a fixed set. Cloudflare's own error text and any other error's text stay
+ * in the server log only.
+ */
 function toDocsDomainProvisioningError(err: unknown): DocsDomainProvisioningError {
   if (err instanceof DocsDomainProvisioningError) return err;
   if (err instanceof CreateCustomDocsDomainError) throw err;
+  console.error("Docs domain provisioning failed.", toSafeErrorLog(err));
   if (err instanceof CloudflareCustomHostnameError) {
-    return new DocsDomainProvisioningError(err.message, err.status ?? 502);
+    const status = err.status ?? 502;
+    return new DocsDomainProvisioningError(providerErrorMessage(status), status);
   }
-  return new DocsDomainProvisioningError(
-    err instanceof Error ? err.message : "Docs domain provisioning failed.",
-  );
+  return new DocsDomainProvisioningError(GENERIC_PROVISIONING_MESSAGE);
+}
+
+const GENERIC_PROVISIONING_MESSAGE = "Docs domain provisioning failed. Try again later.";
+
+function providerErrorMessage(status: number): string {
+  if (status === 409) return "This hostname is already in use on Cloudflare.";
+  if (status === 400 || status === 422) {
+    return "Cloudflare could not use this hostname. Check the hostname and its DNS record.";
+  }
+  if (status === 429) return "Cloudflare is limiting hostname changes. Try again in a few minutes.";
+  if (status === 504) return "Cloudflare did not answer in time. Try again later.";
+  if (status === 401 || status === 403 || status === 503) {
+    return "Doxa cannot manage custom hostnames right now. Try again later.";
+  }
+  return GENERIC_PROVISIONING_MESSAGE;
 }
 
 function createCustomHostnamesClient(env: Env): {

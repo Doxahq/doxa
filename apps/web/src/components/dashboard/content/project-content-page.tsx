@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react"
+import { useNavigate } from "@tanstack/react-router"
 import { AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import type { DocsMdxIssue } from "@doxahq/contracts"
@@ -48,6 +49,7 @@ import { getErrorMessage } from "~/lib/errors"
 import { useProjectBranch } from "~/lib/dashboard/project-branch-context"
 import { ReviewPageMarksProvider } from "~/lib/dashboard/review-page-marks-context"
 import { isEditableTarget, useShell } from "~/lib/dashboard/shell-context"
+import { useSaveBeforeLeavingEditor } from "~/lib/dashboard/use-save-before-leaving-editor"
 import { useSidebarPanel } from "~/lib/dashboard/sidebar-panel-context"
 import { useAgentPublishRequest } from "~/lib/dashboard/use-agent-publish-request"
 import { useBranchPreview } from "~/lib/dashboard/use-branch-preview"
@@ -184,9 +186,11 @@ export function ProjectContentPage({
 
   // The sidebar panel must not change per keystroke, so its callbacks read the
   // latest editor state through refs instead of closing over it.
+  useSaveBeforeLeavingEditor({ projectId, isDirty: state.isDirty, saveBuffer: state.saveBuffer })
   const stateRef = useLatest(state)
   const branchesRef = useLatest(branches)
   const shell = useShell()
+  const navigate = useNavigate()
   const sidebar = useSidebar()
   const sidebarRef = useLatest(sidebar)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -391,7 +395,11 @@ export function ProjectContentPage({
       )
       return (
       <>
-        <SidebarViewHeader label="Content" backLabel="Back to project" onBack={() => showView("project")}>
+        <SidebarViewHeader
+          label="Content"
+          backLabel="Back to overview"
+          onBack={() => void navigate({ to: "/dashboard/projects/$projectId/project", params: { projectId } })}
+        >
           <BranchSwitcher
             projectId={projectId}
             branch={branches.branchRef}
@@ -445,6 +453,7 @@ export function ProjectContentPage({
       openPublish,
       openSynchronization,
       pages,
+      navigate,
       projectId,
       review.setFilter,
       session,

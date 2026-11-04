@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { BRANCH_ID, OWNER, PROJECT_A } from "./support/fixtures";
+import {
+  BRANCH_ID,
+  OTHER_AGENT_BRANCH_ID,
+  OWNER,
+  PROJECT_A,
+  TEAMMATE_AGENT_BRANCH_ID,
+  USER_BRANCH_ID,
+} from "./support/fixtures";
 import { createHarness } from "./support/harness";
 import { callTool, toolError } from "./support/tool-calls";
 
@@ -179,5 +186,38 @@ describe("edit_docs", () => {
       code: "conflict",
       details: { currentRevision: 2 },
     });
+  });
+});
+
+// SECURITY REGRESSION GUARDRAIL (SEC-028): an agent changes only the branches it created.
+describe("branch ownership", () => {
+  const foreignBranches = [
+    ["a dashboard branch", USER_BRANCH_ID],
+    ["the same member's branch from another client", OTHER_AGENT_BRANCH_ID],
+    ["another member's branch from the same client", TEAMMATE_AGENT_BRANCH_ID],
+  ] as const;
+
+  it.each(foreignBranches)("write_page refuses %s and writes nothing", async (_label, branch) => {
+    const { harness, outcome } = await run("write_page", { branch, href: "/install", content: VALID });
+    expect(toolError(outcome)).toMatchObject({ code: "branch_not_found" });
+    expect(harness.written).toEqual([]);
+  });
+
+  it.each(foreignBranches)("edit_docs refuses %s and writes nothing", async (_label, branch) => {
+    const { harness, outcome } = await run("edit_docs", { branch, edits: [setContent(VALID)] });
+    expect(toolError(outcome)).toMatchObject({ code: "branch_not_found" });
+    expect(harness.written).toEqual([]);
+  });
+
+  it("lets an edit_docs dry run reach the service for a dashboard branch, without the ownership check", async () => {
+    const { harness } = await run("edit_docs", {
+      branch: USER_BRANCH_ID,
+      edits: [setContent(VALID)],
+      dryRun: true,
+    });
+    const methods = harness.calls.map((entry) => entry.method);
+    expect(methods).toContain("docs.applyEdits");
+    expect(methods).not.toContain("branches.list");
+    expect(harness.written).toEqual([]);
   });
 });

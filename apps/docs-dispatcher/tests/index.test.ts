@@ -7,20 +7,37 @@ vi.mock("cloudflare:workers", () => ({
       readonly env: unknown,
     ) {}
   },
+  // The warm Durable Objects (M28) are exported from the same module.
+  DurableObject: class {
+    constructor(
+      readonly ctx: unknown,
+      readonly env: unknown,
+    ) {}
+  },
 }));
 
-vi.mock("../src/renderer-code-package", () => ({
+vi.mock("../src/renderer-code-package", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/renderer-code-package")>()),
   loadRendererCodePackage: vi.fn(async () => ({
-    schemaVersion: 1,
-    buildId: "build-1",
-    compatibilityDate: "2026-06-12",
-    compatibilityFlags: ["nodejs_compat"],
-    mainModule: "index.js",
-    modules: { "index.js": "export default {}" },
+    code: {
+      schemaVersion: 1,
+      buildId: "build-1",
+      compatibilityDate: "2026-06-12",
+      compatibilityFlags: ["nodejs_compat"],
+      mainModule: "index.js",
+      modules: { "index.js": "export default {}" },
+    },
+    source: "cache",
   })),
 }));
 
-import worker, { DocsHostCache } from "../src/index";
+import { DOCS_HOST_CACHE_FORMAT } from "../src/cache-policy";
+import worker, {
+  DocsHostCache,
+  PrerenderRendererApi,
+  ScopedDocsContent,
+} from "../src/index";
+import { createRouteData } from "./fixtures/route-data";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -145,7 +162,7 @@ describe("docs dispatcher worker", () => {
     },
   );
 
-  test("writes structured timing logs only when DEBUG is true", async () => {
+  test("writes timing logs with DEBUG and one cache-status line without it", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const sharedRenderer = {
       fetch: async () => new Response("shared"),
@@ -171,7 +188,14 @@ describe("docs dispatcher worker", () => {
       {} as never,
     );
 
-    expect(info).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(info.mock.calls[1]?.[0]))).toEqual({
+      event: "docs_request_cache",
+      hostname: "docs.example.com",
+      path: "/guide",
+      status: 200,
+      cache: { host: "BYPASS", html: "BYPASS" },
+    });
     expect(enabledResponse.headers.get("server-timing")).toContain(
       "doxa_total;dur=",
     );
@@ -207,7 +231,10 @@ describe("docs dispatcher worker", () => {
     );
     const response = await cache.fetch();
     expect(await response.json()).toBeNull();
-    expect(response.headers.get("cache-control")).toContain("no-store");
+    // SEC-007: unknown hostnames get a short negative entry.
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=30, must-revalidate",
+    );
   });
 
   test("uses trusted cache props while keeping the public gateway uncacheable", async () => {
@@ -259,7 +286,7 @@ describe("docs dispatcher worker", () => {
     expect(await response.text()).toBe("cached html");
     expect(env.DOCS_RESOLVER.fetch).not.toHaveBeenCalled();
     expect(ctx.exports.DocsHostCache).toHaveBeenCalledWith({
-      props: { hostname: "docs.example.com" },
+      props: { hostname: "docs.example.com", format: DOCS_HOST_CACHE_FORMAT },
     });
     expect(ctx.exports.DocsHtmlCache).toHaveBeenCalledWith({
       props: {
@@ -406,5 +433,489 @@ describe("docs dispatcher worker", () => {
     expect(code?.env).not.toHaveProperty("API");
     expect(code?.env).not.toHaveProperty("DOCS_RESOLVER");
     expect(code?.env).not.toHaveProperty("DOCS_RUNTIME");
+  });
+});
+
+describe("route-data prefetch on a cold renderer start", () => {
+  const resolution = {
+    siteId: "site-1",
+    projectId: "project-1",
+    projectSlug: "demo",
+    publishedVersionId: "version-1",
+    artifactPrefix: "sites/site-1/versions/version-1",
+    manifestPath: "sites/site-1/versions/version-1/manifest.json",
+    accessPolicy: "public" as const,
+    hostname: "docs.example.com",
+    domainKind: "custom_domain" as const,
+    renderTarget: "production" as const,
+  };
+  const routeData = { ok: true as const, data: { type: "page" } };
+
+  /**
+   * A renderer that asks its content binding for route data, like
+   * docs-template, and a loader that is cold or warm.
+   */
+  function render(options: { mode: string; cold: boolean }) {
+    const runtimeRequest = vi.fn(async () => routeData);
+    const waitUntil = vi.fn();
+    const env = {
+      DOCS_RESOLVER: { fetch: vi.fn(async () => Response.json({ resolution })) },
+      DOCS_RUNTIME: { request: runtimeRequest },
+      SHARED_RENDERER: { fetch: vi.fn() },
+      LOADER: { get: vi.fn() },
+      RENDERER_CODE_BUCKET: {},
+      DOXA_PROD_DYNAMIC_RENDERER_MODE: "all",
+      DOXA_PROD_ROUTE_DATA_PREFETCH_MODE: options.mode,
+      DOXA_RENDERER_BUILD_ID: "build-1",
+      DOXA_RENDERER_PACKAGE_KEY: "renderer-code/build-1.json.gz",
+    };
+    const contentProps: unknown[] = [];
+    const ctx = {
+      waitUntil,
+      exports: {
+        DocsHostCache: ({ props }: { props: { hostname: string } }) =>
+          new DocsHostCache({ props } as never, env as never),
+        ScopedDocsContent: ({ props }: { props: unknown }) => {
+          contentProps.push(props);
+          return new ScopedDocsContent({ props } as never, env as never);
+        },
+        DocsRendererCodeCache: vi.fn(),
+      },
+    };
+    env.LOADER.get.mockImplementation(
+      (_id: string, getCode: () => Promise<WorkerLoaderWorkerCode>) => {
+        const started = options.cold ? getCode() : undefined;
+        return {
+          getEntrypoint: () => ({
+            fetch: async () => {
+              const code = await started;
+              const content = code?.env?.DOXA_DOCS_CONTENT_BINDING;
+              const binding =
+                content instanceof ScopedDocsContent
+                  ? content
+                  : new ScopedDocsContent(
+                      { props: contentProps[0] } as never,
+                      env as never,
+                    );
+              const answer = await binding.request({
+                operation: "getRouteData",
+                payload: { pathname: "/guide" },
+              });
+              return new Response(JSON.stringify(answer));
+            },
+          }),
+        };
+      },
+    );
+    const response = worker.fetch(
+      new Request("https://docs.example.com/guide/", {
+        // no-cache skips the HTML cache entrypoint and renders directly.
+        headers: { accept: "text/html", "cache-control": "no-cache" },
+      }),
+      env as never,
+      ctx as never,
+    );
+    return { response, runtimeRequest, waitUntil, contentProps };
+  }
+
+  function rendererLoadLine(info: ReturnType<typeof vi.spyOn>) {
+    const line = info.mock.calls
+      .map(([value]) => JSON.parse(String(value)))
+      .find((value) => value.event === "docs_renderer_load");
+    expect(line).toBeDefined();
+    return line;
+  }
+
+  test("a cold start sends one getRouteData and hands it to the renderer", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { response, runtimeRequest, waitUntil, contentProps } = render({
+      mode: "all",
+      cold: true,
+    });
+
+    const result = await response;
+    expect(await result.json()).toEqual(routeData);
+    expect(runtimeRequest).toHaveBeenCalledOnce();
+    expect(runtimeRequest).toHaveBeenCalledWith({
+      resolution: expect.objectContaining({
+        siteId: "site-1",
+        artifactPrefix: "sites/site-1/versions/version-1",
+      }),
+      operation: "getRouteData",
+      payload: { pathname: "/guide" },
+      trace: { id: expect.stringMatching(UUID), caller: "prefetch" },
+    });
+    expect(waitUntil).toHaveBeenCalledOnce();
+    expect(contentProps[0]).toHaveProperty("routeDataPrefetchId");
+    expect(rendererLoadLine(info).routeDataPrefetch).toMatchObject({
+      outcome: "handedOff",
+    });
+  });
+
+  test("a warm renderer prefetches nothing", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { response, runtimeRequest, waitUntil } = render({
+      mode: "all",
+      cold: false,
+    });
+
+    await (await response).text();
+    expect(runtimeRequest).toHaveBeenCalledOnce();
+    expect(waitUntil).not.toHaveBeenCalled();
+    // Only a started prefetch reports; WARM tells why none started.
+    expect(rendererLoadLine(info)).not.toHaveProperty("routeDataPrefetch");
+    expect(rendererLoadLine(info).state).toBe("WARM");
+  });
+
+  test("mode off keeps the content props and the call path unchanged", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { response, runtimeRequest, waitUntil, contentProps } = render({
+      mode: "off",
+      cold: true,
+    });
+
+    await (await response).text();
+    expect(runtimeRequest).toHaveBeenCalledOnce();
+    expect(waitUntil).not.toHaveBeenCalled();
+    expect(contentProps[0]).toEqual({
+      resolution: expect.objectContaining({ siteId: "site-1" }),
+    });
+    expect(rendererLoadLine(info)).not.toHaveProperty("routeDataPrefetch");
+  });
+});
+
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+const publicResolution = {
+  siteId: "site-1",
+  projectId: "project-1",
+  projectSlug: "demo",
+  publishedVersionId: "version-1",
+  artifactPrefix: "sites/site-1/versions/version-1",
+  manifestPath: "sites/site-1/versions/version-1/manifest.json",
+  accessPolicy: "public" as const,
+  hostname: "docs.example.com",
+  domainKind: "custom_domain" as const,
+  renderTarget: "production" as const,
+};
+
+const INJECTED_HEADERS = {
+  "x-doxa-cache-probe": "1",
+  "x-doxa-internal-render-id": "f".repeat(64),
+  "x-doxa-host": "victim.example.com",
+  "x-doxa-project-id": "project-2",
+};
+
+describe("inbound x-doxa-* headers", () => {
+  function createEnv(mode: string) {
+    const env = {
+      DOCS_RESOLVER: {
+        fetch: vi.fn(async () => Response.json({ resolution: publicResolution })),
+      },
+      DOCS_RUNTIME: { request: vi.fn() },
+      SHARED_RENDERER: {
+        fetch: vi.fn(async (_request: Request) => new Response("shared")),
+      },
+      LOADER: { get: vi.fn() },
+      RENDERER_CODE_BUCKET: {},
+      DOXA_PROD_DYNAMIC_RENDERER_MODE: mode,
+      DOXA_RENDERER_BUILD_ID: "build-1",
+      DOXA_RENDERER_PACKAGE_KEY: "renderer-code/build-1.json.gz",
+    };
+    return env;
+  }
+
+  function internalHeaders(request: Request | undefined): string[] {
+    return [...(request?.headers.keys() ?? [])].filter((name) =>
+      name.startsWith("x-doxa-"),
+    );
+  }
+
+  test("never reach the shared renderer", async () => {
+    const env = createEnv("off");
+    await worker.fetch(
+      new Request("https://docs.example.com/guide", {
+        headers: { accept: "text/html", ...INJECTED_HEADERS },
+      }),
+      env as never,
+      { exports: {} } as never,
+    );
+
+    expect(internalHeaders(env.SHARED_RENDERER.fetch.mock.calls[0]?.[0])).toEqual(
+      [],
+    );
+  });
+
+  test("never reach the HTML cache entrypoint", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const env = createEnv("all");
+    const htmlFetch = vi.fn(async (_request: Request) => new Response("html"));
+    const htmlCache = vi.fn(() => ({ fetch: htmlFetch }));
+    await worker.fetch(
+      new Request("https://docs.example.com/guide", {
+        headers: { accept: "text/html", ...INJECTED_HEADERS },
+      }),
+      env as never,
+      {
+        exports: {
+          DocsHostCache: ({ props }: { props: { hostname: string } }) =>
+            new DocsHostCache({ props } as never, env as never),
+          DocsHtmlCache: htmlCache,
+        },
+      } as never,
+    );
+
+    // No delivery rollout is on, so the dispatcher sets no render ID either.
+    expect(internalHeaders(htmlFetch.mock.calls[0]?.[0])).toEqual([]);
+    expect(htmlCache).toHaveBeenCalledWith({
+      props: expect.objectContaining({ deliveryRenderId: null }),
+    });
+  });
+
+  test("never reach an uncached dynamic render", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const env = createEnv("all");
+    const rendererFetch = vi.fn(
+      async (_request: Request) => new Response("dynamic"),
+    );
+    env.LOADER.get.mockImplementation(() => ({
+      getEntrypoint: () => ({ fetch: rendererFetch }),
+    }));
+    await worker.fetch(
+      new Request("https://docs.example.com/guide", {
+        headers: {
+          accept: "text/html",
+          "cache-control": "no-cache",
+          ...INJECTED_HEADERS,
+        },
+      }),
+      env as never,
+      {
+        exports: {
+          DocsHostCache: ({ props }: { props: { hostname: string } }) =>
+            new DocsHostCache({ props } as never, env as never),
+          ScopedDocsContent: vi.fn(),
+          DocsRendererCodeCache: vi.fn(),
+        },
+      } as never,
+    );
+
+    expect(rendererFetch).toHaveBeenCalledOnce();
+    expect(internalHeaders(rendererFetch.mock.calls[0]?.[0])).toEqual([]);
+  });
+});
+
+describe("HTTPS redirect at the gateway", () => {
+  test("mode on redirects HTTP before the hostname lookup", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const resolver = { fetch: vi.fn() };
+    const response = await worker.fetch(
+      new Request("http://docs.example.com/guide?a=1"),
+      {
+        DOCS_RESOLVER: resolver,
+        DOXA_PROD_HTTPS_REDIRECT_MODE: "on",
+        DOXA_PROD_DYNAMIC_RENDERER_MODE: "all",
+      } as never,
+      { exports: {} } as never,
+    );
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe(
+      "https://docs.example.com/guide?a=1",
+    );
+    expect(resolver.fetch).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["on", "max-age=86400"],
+    ["off", null],
+  ])("mode %s sets HSTS %s on an HTTPS page", async (mode, expected) => {
+    const env = {
+      SHARED_RENDERER: { fetch: vi.fn(async () => new Response("shared")) },
+      DOXA_PROD_HTTPS_REDIRECT_MODE: mode,
+      DOXA_PROD_DYNAMIC_RENDERER_MODE: "off",
+    };
+    const response = await worker.fetch(
+      new Request("https://docs.example.com/guide", {
+        headers: { accept: "text/html" },
+      }),
+      env as never,
+      { exports: {} } as never,
+    );
+
+    expect(await response.text()).toBe("shared");
+    expect(response.headers.get("strict-transport-security")).toBe(expected);
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+});
+
+describe("runtime call traces", () => {
+  test("the content binding sends its own trace, never the renderer's", async () => {
+    const request = vi.fn(async () => ({
+      ok: true as const,
+      data: { type: "page" },
+      timing: { totalMs: 3 },
+    }));
+    const content = new ScopedDocsContent(
+      { props: { resolution: publicResolution } } as never,
+      { DOCS_RUNTIME: { request } } as never,
+    );
+
+    const answer = await content.request({
+      operation: "getPage",
+      payload: { pathname: "/guide" },
+      // A renderer cannot choose the trace ID.
+      ...{ trace: { id: "renderer-chosen", caller: "plan" } },
+    });
+
+    expect(answer).toEqual({ ok: true, data: { type: "page" } });
+    expect(request).toHaveBeenCalledWith({
+      resolution: publicResolution,
+      operation: "getPage",
+      payload: { pathname: "/guide" },
+      trace: { id: expect.stringMatching(UUID), caller: "content" },
+    });
+  });
+
+  test("the pre-render plan call is traced as plan", async () => {
+    const request = vi.fn(async () => ({ ok: true as const, data: [] }));
+    const api = new PrerenderRendererApi(
+      {} as never,
+      { DOCS_RUNTIME: { request } } as never,
+    );
+
+    await api.getPlan({ resolution: publicResolution });
+
+    expect(request).toHaveBeenCalledWith({
+      resolution: publicResolution,
+      operation: "getPrerenderPlan",
+      trace: { id: expect.stringMatching(UUID), caller: "plan" },
+    });
+  });
+});
+
+describe("route-data prefetch for prepare", () => {
+  function prepare(options: { mode: string; cold: boolean }) {
+    const runtimeRequest = vi.fn(async () => ({
+      ok: true as const,
+      data: { type: "page" },
+    }));
+    const waitUntil = vi.fn();
+    const contentProps: unknown[] = [];
+    const env = {
+      DOCS_RUNTIME: { request: runtimeRequest },
+      LOADER: { get: vi.fn() },
+      RENDERER_CODE_BUCKET: {},
+      DOXA_PROD_ROUTE_DATA_PREFETCH_MODE: options.mode,
+      DOXA_RENDERER_BUILD_ID: "build-1",
+      DOXA_RENDERER_PACKAGE_KEY: "renderer-code/build-1.json.gz",
+    };
+    const ctx = {
+      waitUntil,
+      exports: {
+        ScopedDocsContent: ({ props }: { props: unknown }) => {
+          contentProps.push(props);
+          return new ScopedDocsContent({ props } as never, env as never);
+        },
+        DocsRendererCodeCache: vi.fn(),
+      },
+    };
+    env.LOADER.get.mockImplementation(
+      (_id: string, getCode: () => Promise<WorkerLoaderWorkerCode>) => {
+        const started = options.cold ? getCode() : undefined;
+        return {
+          getEntrypoint: () => ({
+            // Like docs-template's DocsPrerenderRenderer.prepare.
+            prepare: async () => {
+              const code = await started;
+              const content = code?.env?.DOXA_DOCS_CONTENT_BINDING;
+              const binding =
+                content instanceof ScopedDocsContent
+                  ? content
+                  : new ScopedDocsContent(
+                      { props: contentProps[0] } as never,
+                      env as never,
+                    );
+              await binding.request({
+                operation: "getRouteData",
+                payload: { pathname: "/guide" },
+              });
+              return createRouteData();
+            },
+            render: vi.fn(),
+          }),
+        };
+      },
+    );
+    const api = new PrerenderRendererApi(ctx as never, env as never);
+    const result = api.prepare({
+      resolution: publicResolution,
+      pathname: "/guide/",
+    });
+    return { result, runtimeRequest, waitUntil, contentProps };
+  }
+
+  function rendererLoadLine(info: ReturnType<typeof vi.spyOn>) {
+    return info.mock.calls
+      .map(([value]) => JSON.parse(String(value)))
+      .find((value) => value.event === "docs_renderer_load");
+  }
+
+  test("a cold prepare prefetches its route data and hands it over", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { result, runtimeRequest, waitUntil, contentProps } = prepare({
+      mode: "all",
+      cold: true,
+    });
+
+    await expect(result).resolves.toEqual(createRouteData());
+    expect(runtimeRequest).toHaveBeenCalledOnce();
+    expect(runtimeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "getRouteData",
+        payload: { pathname: "/guide" },
+        trace: expect.objectContaining({ caller: "prefetch" }),
+      }),
+    );
+    expect(waitUntil).toHaveBeenCalledOnce();
+    expect(contentProps[0]).toHaveProperty("routeDataPrefetchId");
+    const line = rendererLoadLine(info);
+    expect(line.entrypoint).toBe("prepare");
+    expect(line.routeDataPrefetch).toMatchObject({
+      outcome: "handedOff",
+      traceId: expect.stringMatching(UUID),
+    });
+  });
+
+  test("a warm prepare prefetches nothing", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { result, runtimeRequest, waitUntil } = prepare({
+      mode: "all",
+      cold: false,
+    });
+
+    await result;
+    expect(runtimeRequest).toHaveBeenCalledOnce();
+    expect(runtimeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trace: expect.objectContaining({ caller: "content" }),
+      }),
+    );
+    expect(waitUntil).not.toHaveBeenCalled();
+    expect(rendererLoadLine(info)).not.toHaveProperty("routeDataPrefetch");
+  });
+
+  test("mode off keeps prepare unchanged", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { result, waitUntil, contentProps } = prepare({
+      mode: "off",
+      cold: true,
+    });
+
+    await result;
+    expect(waitUntil).not.toHaveBeenCalled();
+    expect(contentProps[0]).toEqual({ resolution: publicResolution });
+    expect(rendererLoadLine(info)).not.toHaveProperty("routeDataPrefetch");
   });
 });

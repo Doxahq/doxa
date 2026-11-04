@@ -9,10 +9,10 @@ import {
   expectedRevisionInput,
   namedBranchInput,
   projectIdInput,
-  requireNamedBranch,
   writeAnnotations,
 } from "../shared";
 import { applyMergePatch } from "./merge-patch";
+import { OWN_BRANCH_ONLY, requireOwnBranch } from "../branches/branch-ownership";
 
 // The contract schema resolves defaults with transforms, which JSON Schema
 // cannot express. The doxa://schemas/site-config resource has the schema.
@@ -52,7 +52,7 @@ export const updateSiteSettingsTool = defineMcpTool({
   name: "update_site_settings",
   title: "Update site settings",
   description:
-    'Changes the site settings (doxa.json) on a named branch. Use mode "merge_patch" with a small patch, for example {"theme":{"primary":"#2563eb"}}, or mode "replace" with the complete settings. The result is validated against the schema (doxa://schemas/site-config), the plan, and the uploaded assets; a failure returns validation_failed with issues and writes nothing.',
+    `Changes the site settings (doxa.json) on a named branch. Use mode "merge_patch" with a small patch, for example {"theme":{"primary":"#2563eb"}}, or mode "replace" with the complete settings. The result is validated against the schema (doxa://schemas/site-config), the plan, and the uploaded assets; a failure returns validation_failed with issues and writes nothing. ${OWN_BRANCH_ONLY}`,
   scope: "site:write",
   cost: "write",
   annotations: writeAnnotations(true),
@@ -75,7 +75,7 @@ export const updateSiteSettingsTool = defineMcpTool({
     const target: UpdateTarget = {
       actor: docsActorFor(context, authorized),
       projectId: authorized.projectId,
-      branch: requireNamedBranch(input.branch),
+      branch: await requireOwnBranch(context, authorized, input.branch),
     };
     const next = await nextConfig(context, target, input);
     const working = await context.services.docs.applyEdits(

@@ -30,6 +30,12 @@ export interface ApiParameterDefinition {
   type: string;
   location: ApiParameterLocation;
   required: boolean;
+  /** The `enum` prop: the allowed values, comma-separated in the page. */
+  enumValues?: string[];
+  /** The `example` prop. It fills in a required field. */
+  example?: string;
+  /** The `default` prop. The panel shows it as a hint. */
+  defaultValue?: string;
 }
 
 export interface EndpointCodeSample {
@@ -90,6 +96,23 @@ function toParameterLocation(value: string | undefined): ApiParameterLocation {
   return value && PARAMETER_LOCATIONS.has(value)
     ? (value as ApiParameterLocation)
     : "query";
+}
+
+/** Pages from before these props have none of them, and the panel still works. */
+function optionalParameterProps(
+  node: RuntimeMdxElementNode
+): Pick<ApiParameterDefinition, "enumValues" | "example" | "defaultValue"> {
+  const enumValues = stringProp(node, "enum")
+    ?.split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const example = stringProp(node, "example");
+  const defaultValue = stringProp(node, "default");
+  return {
+    ...(enumValues?.length ? { enumValues } : {}),
+    ...(example ? { example } : {}),
+    ...(defaultValue ? { defaultValue } : {}),
+  };
 }
 
 function toRequestSample(node: RuntimeMdxElementNode): EndpointCodeSample {
@@ -155,6 +178,7 @@ export function splitEndpointDocument(
           type: stringProp(node, "type") ?? "string",
           location: toParameterLocation(stringProp(node, "location")),
           required: node.props?.required === true,
+          ...optionalParameterProps(node),
         });
       }
 

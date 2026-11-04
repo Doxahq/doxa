@@ -67,9 +67,23 @@ const pullRequestPayloadSchema = z.object({
     }),
     head: z.object({
       sha: gitObjectIdSchema,
+      // Null when the fork was deleted.
+      repo: z.object({ id: githubIdSchema }).nullable().optional(),
     }),
+    author_association: z.string().optional(),
   }),
 });
+
+/**
+ * Authors whose pull requests from a fork may start a generation (SEC-026).
+ * Anyone can open a pull request from a fork of a public repository; only
+ * people the repository already trusts may spend Doxa's model budget.
+ */
+const TRUSTED_FORK_AUTHOR_ASSOCIATIONS: ReadonlySet<string> = new Set([
+  "OWNER",
+  "MEMBER",
+  "COLLABORATOR",
+]);
 
 const pushPayloadSchema = z.object({
   ref: z.string().min(1),
@@ -197,6 +211,15 @@ function parsePullRequest(
   const parsed = pullRequestPayloadSchema.safeParse(input.payload);
   if (!parsed.success) return malformed();
   const payload = parsed.data;
+  // GitHub always sends head.repo; null means a deleted fork.
+  const headRepo = payload.pull_request.head.repo;
+  const fromFork = headRepo === null || (headRepo !== undefined && headRepo.id !== payload.repository.id);
+  if (
+    fromFork &&
+    !TRUSTED_FORK_AUTHOR_ASSOCIATIONS.has(payload.pull_request.author_association ?? "")
+  ) {
+    return irrelevant("untrusted_fork");
+  }
 
   return normalized({
     kind: "change_proposal",

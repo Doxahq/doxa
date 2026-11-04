@@ -2,6 +2,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "doxa-api",
   "main": "src/index.ts",
+  "workers_dev": false,
+  "preview_urls": false,
   "compatibility_date": "2026-06-12",
   "vars": {
     "ORIGIN_URL": "http://localhost:8786"
@@ -24,6 +26,32 @@
       }
     ]
   },
+  "ratelimits": [
+    {
+      "name": "API_OAUTH_REGISTER_LIMITER",
+      "namespace_id": "4001",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    },
+    {
+      "name": "API_OAUTH_LIMITER",
+      "namespace_id": "4002",
+      "simple": {
+        "limit": 600,
+        "period": 60
+      }
+    },
+    {
+      "name": "API_PUBLIC_LIMITER",
+      "namespace_id": "4003",
+      "simple": {
+        "limit": 1200,
+        "period": 60
+      }
+    }
+  ],
   "observability": {
     "enabled": true
   },
@@ -37,6 +65,32 @@
       "routes": [{ "pattern": "api.doxa.so", "custom_domain": true }],
       "workers_dev": false,
       "preview_urls": false,
+      "ratelimits": [
+        {
+          "name": "API_OAUTH_REGISTER_LIMITER",
+          "namespace_id": "5001",
+          "simple": {
+            "limit": 60,
+            "period": 60
+          }
+        },
+        {
+          "name": "API_OAUTH_LIMITER",
+          "namespace_id": "5002",
+          "simple": {
+            "limit": 600,
+            "period": 60
+          }
+        },
+        {
+          "name": "API_PUBLIC_LIMITER",
+          "namespace_id": "5003",
+          "simple": {
+            "limit": 1200,
+            "period": 60
+          }
+        }
+      ],
       "vars": {},
       "vpc_services": [
         {

@@ -8,16 +8,24 @@ vi.mock("../../src/services/docs-cache-invalidation", () => ({
   },
 }));
 
-import { withDocsCacheInvalidation } from "../../src/repositories/docs-cache-mutation";
+import {
+  withDocsCacheInvalidation,
+  withDocsPublicationEffects,
+} from "../../src/repositories/docs-cache-mutation";
 
 function fixture() {
   const events: string[] = [];
   const pending: unknown[] = [];
   const persisted: unknown[] = [];
+  const followUps: unknown[] = [];
   const tx = {
     insert: (table: unknown) => ({
-      values: async (value: unknown) => {
+      values: async (value: Record<string, unknown>) => {
         expect(table).toBe(schema.docsCacheInvalidations);
+        if ("nextAttemptAt" in value) {
+          followUps.push(value);
+          return;
+        }
         pending.push(value);
         events.push("enqueue");
       },
@@ -36,11 +44,14 @@ function fixture() {
       }
     },
   };
-  const binding = { invalidate: async () => {} };
+  const binding = {
+    invalidate: async () => {},
+    syncHostnames: async () => {},
+  };
   delivery.process.mockReset().mockImplementation(async () => {
     events.push("purge");
   });
-  return { db, binding, events, persisted };
+  return { db, binding, events, persisted, followUps };
 }
 
 describe("docs cache mutation transaction", () => {
@@ -48,7 +59,7 @@ describe("docs cache mutation transaction", () => {
     const state = fixture();
     const result = await withDocsCacheInvalidation(
       state.db as never,
-      state.binding,
+      { DOCS_CACHE_INVALIDATOR: state.binding },
       async (_tx, enqueue) => {
         state.events.push("publish");
         await enqueue({ siteId: "site-1" });
@@ -62,12 +73,31 @@ describe("docs cache mutation transaction", () => {
     ]);
   });
 
+  test("queues a delayed follow-up purge for a lookup that raced the first", async () => {
+    const state = fixture();
+    await withDocsCacheInvalidation(
+      state.db as never,
+      { DOCS_CACHE_INVALIDATOR: state.binding },
+      async (_tx, enqueue) => {
+        await enqueue({ siteId: "site-1", hostname: "docs.acme.com" });
+      },
+    );
+    expect(state.followUps).toEqual([
+      {
+        id: expect.any(String),
+        siteId: "site-1",
+        hostname: "docs.acme.com",
+        nextAttemptAt: expect.anything(),
+      },
+    ]);
+  });
+
   test("does not purge or retain a task after transaction rollback", async () => {
     const state = fixture();
     await expect(
       withDocsCacheInvalidation(
         state.db as never,
-        state.binding,
+        { DOCS_CACHE_INVALIDATOR: state.binding },
         async (_tx, enqueue) => {
           await enqueue({ siteId: "site-1" });
           throw new Error("publish failed");
@@ -87,7 +117,7 @@ describe("docs cache mutation transaction", () => {
     await expect(
       withDocsCacheInvalidation(
         state.db as never,
-        state.binding,
+        { DOCS_CACHE_INVALIDATOR: state.binding },
         async (_tx, enqueue) => {
           await enqueue({ siteId: "site-1" });
           return "published-version";
@@ -98,11 +128,32 @@ describe("docs cache mutation transaction", () => {
     warning.mockRestore();
   });
 
+  test("delivers a publication with its warm hint, and other mutations without one", async () => {
+    const state = fixture();
+    const warm = { regions: ["eu-east" as const], paths: ["/intro"] };
+    await withDocsPublicationEffects(
+      state.db as never,
+      { DOCS_CACHE_INVALIDATOR: state.binding },
+      async (_tx, enqueue) => {
+        await enqueue({ siteId: "site-1" });
+      },
+      { warm },
+    );
+    await withDocsPublicationEffects(
+      state.db as never,
+      { DOCS_CACHE_INVALIDATOR: state.binding },
+      async (_tx, enqueue) => {
+        await enqueue({ siteId: "site-1" });
+      },
+    );
+    expect(delivery.process.mock.calls.map((call) => call[1])).toEqual([{ warm }, {}]);
+  });
+
   test("retains the task locally without a configured binding", async () => {
     const state = fixture();
     await withDocsCacheInvalidation(
       state.db as never,
-      undefined,
+      {},
       async (_tx, enqueue) => {
         await enqueue({ siteId: "site-1" });
       },
@@ -115,7 +166,7 @@ describe("docs cache mutation transaction", () => {
     const state = fixture();
     await withDocsCacheInvalidation(
       state.db as never,
-      state.binding,
+      { DOCS_CACHE_INVALIDATOR: state.binding },
       async () => "preview",
     );
     expect(state.persisted).toEqual([]);

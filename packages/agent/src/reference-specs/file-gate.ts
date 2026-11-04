@@ -1,11 +1,12 @@
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { SPEC_READER_LIMITS } from "@doxahq/contracts/spec-reader";
-import { resolveProjectPath } from "../core/tools/project-path";
+import { resolveReadableProjectPath } from "../core/tools/file-access-rules";
 
 export type SpecFileRefusal =
   | "invalid_path"
   | "outside_checkout"
+  | "protected"
   | "symbolic_link"
   | "not_a_file"
   | "too_large"
@@ -23,20 +24,23 @@ const SPEC_FILE_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^\0\\]+\.(?:json|ya?ml
 /**
  * Gate G1: reads one spec file for the spec-reader job. The path must stay
  * inside the checkout with no symbolic link on the way and no `.git`
- * segment, the file is at most 25 MB, and its bytes are UTF-8 with no NUL.
+ * segment, and must not name a protected file (`.env.production.yaml`, the
+ * screened instructions file): the same rules as the agent's Read tool. The
+ * file is at most 25 MB, and its bytes are UTF-8 with no NUL.
  * A BOM is removed and line endings become `\n`. The gate parses nothing.
  */
 export async function readSpecFile(checkoutRoot: string, path: string): Promise<SpecFileGateResult> {
   if (!SPEC_FILE_PATH.test(path)) return refuse("invalid_path");
 
-  let canonicalPath: string;
+  let canonicalPath: string | null;
   let expectedPath: string;
   try {
-    canonicalPath = await resolveProjectPath(checkoutRoot, path);
+    canonicalPath = await resolveReadableProjectPath(checkoutRoot, path);
     expectedPath = join(await realpath(checkoutRoot), path);
   } catch {
     return refuse("outside_checkout");
   }
+  if (canonicalPath === null) return refuse("protected");
   // A link anywhere on the way makes the canonical path differ from the plain one.
   if (canonicalPath !== expectedPath) return refuse("symbolic_link");
 

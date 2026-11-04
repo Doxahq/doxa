@@ -16,6 +16,10 @@ import {
   withDocsCacheInvalidation,
   withDocsPublicationEffects,
 } from "./docs-cache-mutation";
+import {
+  canonicalCustomDomainCondition,
+  isCanonicalCustomDomain,
+} from "./docs-canonical-domain";
 
 export const RETIRED_DOCS_BASE_DOMAINS = ["docs.doxa.so"] as const;
 
@@ -107,7 +111,7 @@ export class DocsDomainsRepository {
 
     return withDocsCacheInvalidation(
       this.db,
-      this.env.DOCS_CACHE_INVALIDATOR,
+      this.env,
       async (transaction, enqueue) => {
         const [lockedProject] = await transaction
           .select({ id: schema.projects.id })
@@ -273,7 +277,13 @@ export class DocsDomainsRepository {
           )
           .returning();
 
-        if (domain && isRoutableDomain(previous) !== isRoutableDomain(domain)) {
+        // A task resyncs every hostname of the site, so the `doxa.page`
+        // hostname starts or stops redirecting to this domain too.
+        if (
+          domain &&
+          (isRoutableDomain(previous) !== isRoutableDomain(domain) ||
+            isCanonicalCustomDomain(previous) !== isCanonicalCustomDomain(domain))
+        ) {
           await enqueue({ siteId: domain.siteId, hostname: domain.hostname });
           if (isRoutableDomain(domain) && site.publishedVersionId) {
             await enqueuePrerender({
@@ -299,7 +309,7 @@ export class DocsDomainsRepository {
 
     return withDocsCacheInvalidation(
       this.db,
-      this.env.DOCS_CACHE_INVALIDATOR,
+      this.env,
       async (tx, enqueue) => {
         const [domain] = await tx
           .delete(schema.docsDomains)
@@ -319,6 +329,21 @@ export class DocsDomainsRepository {
         return Boolean(domain);
       },
     );
+  }
+
+  /**
+   * The custom domain that the site's `doxa.page` hostname redirects to: the
+   * oldest one that `canonicalCustomDomainCondition` accepts. Null while the site has
+   * none, so the `doxa.page` hostname serves the site itself.
+   */
+  async findCanonicalHostname(siteId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ hostname: schema.docsDomains.hostname })
+      .from(schema.docsDomains)
+      .where(canonicalCustomDomainCondition(siteId))
+      .orderBy(asc(schema.docsDomains.createdAt), asc(schema.docsDomains.id))
+      .limit(1);
+    return row?.hostname ?? null;
   }
 
   async resolveByHostname(
@@ -404,6 +429,8 @@ function isRoutableDomain(domain: {
 }): boolean {
   return domain.status === "active" && domain.verificationStatus === "verified";
 }
+
+
 
 function toDocsDomainDto(
   domain: typeof schema.docsDomains.$inferSelect,

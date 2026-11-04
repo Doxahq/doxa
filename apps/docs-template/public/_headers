@@ -1,0 +1,5 @@
+# Workers Static Assets serves these files without running the dispatcher,
+# so the HSTS header that the dispatcher adds (M23) is set here too.
+# Cloudflare reads this file and does not serve it.
+/*
+  Strict-Transport-Security: max-age=86400

@@ -20,7 +20,7 @@ Client navigation uses `/_doxa/route-data/v1`. This endpoint returns saved route
 
 The endpoint also works without pre-rendering. The lazy route-data cache (`DOXA_PROD_ROUTE_DATA_CACHE_MODE`) stores live route data in `DocsRouteDataCache` on first request. If both rollouts include a site, saved output has priority. See [production-docs-caching.md](./production-docs-caching.md).
 
-The public gateway always returns `Cache-Control: private, no-store`. The internal Worker entrypoints cache valid immutable output for 24 hours.
+The public gateway always returns `Cache-Control: private, no-store`. The internal Worker entrypoints cache valid immutable output for 30 days.
 
 Missing saved output uses a 30-second internal fallback TTL. This limit lets repaired output replace the live fallback quickly.
 
@@ -38,12 +38,18 @@ The pre-render Workflow writes HTML and JSON objects first. It writes the comple
 
 Rendering never changes the production pointer. A failed render keeps the live renderer available for the published version.
 
+### Readiness for the regional warm job (F21)
+
+The regional warm job ([Production Docs Caching](./production-docs-caching.md#regional-warm-job)) fills the `DocsPrerenderCache` keys of a pre-rendered site only after the saved output exists. Each regional warmer checks `DOCS_RENDERED_BUCKET.head(manifestKey)` (`hasPrerenderManifest` in `apps/docs-dispatcher/src/prerender-storage.ts`) for every hostname of the job. The manifest is written last, so its presence means the whole render committed. A check through `DocsPrerenderCache` would store 30-second entries and submit repairs instead.
+
+When the manifest is missing, the warmer checks again every 60 seconds, for at most 20 minutes. After that, the pool ends as `failed` and `docs_warm_region` logs `reason: "prerender_not_ready"`. Visitors keep the live path, and the warm state does not mark the pool. After a renderer deploy, the API pre-renders the new release (about 300 tasks per hour, F4), so a canary site can wait a few minutes.
+
 ## Release Identity
 
 The deployment script computes one renderer release ID from these values:
 
 - The immutable server package digest.
-- The client asset manifest digest.
+- The client asset manifest digest: the content-hashed files under `dist/client/assets`.
 - The output schema version.
 
 The generated API, dispatcher, and pre-render Worker configurations must contain the same release ID. The deployment script rejects a mismatch.
@@ -53,6 +59,14 @@ The generated API, dispatcher, and pre-render Worker configurations must contain
 `DOXA_PROD_PRERENDER_MODE` accepts `off`, `allowlist`, or `all`. An invalid value disables pre-rendering.
 
 `DOXA_PROD_PRERENDER_SITE_IDS` contains the site IDs for allowlist mode. It has no effect in `off` or `all` mode.
+
+The committed dispatcher config (`apps/docs-dispatcher/wrangler.json`) holds the rollout: `allowlist` with `${OPS_DOCS_PRERENDER_SITE_IDS}`, which the ops repo fills with the canary site IDs. `package-renderer.mjs` keeps these values unless a deploy passes `--prerender-mode`, `--prerender-site-ids`, or the `DOXA_PROD_PRERENDER_MODE` / `DOXA_PROD_PRERENDER_SITE_IDS` variables (F1). Before this, a deploy without those values turned pre-rendering off. `pnpm validate:production-config` accepts `off`, `allowlist`, or `all` as the committed value, and an allowlist must name sites.
+
+The switch is in the dispatcher only. The API does not read `DOXA_PROD_PRERENDER_MODE`: it already creates pre-render tasks for every public publish, whatever the dispatcher mode (F4). Turning a site on therefore needs no API change and no backfill; the dispatcher starts to read output that the API already writes.
+
+Throughput: the scheduler dispatches about 25 tasks per five-minute tick (about 300 per hour). Raise it before `all`: after a renderer deploy every public site needs new output for the new release, and until a site has it, its pages use the 30-second live fallback (or the previous build's saved output, see below).
+
+After a renderer deploy, a page whose saved output for the new release does not exist yet can serve the previous release's saved output from cache, when the previous-build fallback is on. The dispatcher asks for the new release first and probes the previous release's saved output only after that returns 404. See [Previous-build fallback](./production-docs-caching.md#previous-build-fallback).
 
 `DOXA_PRERENDER_REPAIR_ENABLED` controls request-time repair submissions. Scheduled reconciliation stays active when this setting is false.
 
@@ -82,7 +96,9 @@ The pre-render Worker is the only Worker that writes or deletes objects in the d
 6. Set an allowlist with one production site.
 7. Enable request repair for that site.
 8. Compare saved hits, forced misses, and live fallback behavior.
-9. Use `all` only after the allowlist checks pass.
+9. Use `all` only after the allowlist checks pass, and after the task throughput is raised.
+
+To change the allowlist, change `OPS_DOCS_PRERENDER_SITE_IDS` in the ops repo (`doxa-ops/wrangler/production-ids.json`) and deploy the rendering services.
 
 The deployment does not wait for output generation. Scheduled reconciliation creates current-release work after a normal deployment.
 
@@ -92,7 +108,7 @@ Saved output is deleted when it stops serving production. The scheduled garbage 
 
 A pre-render task becomes obsolete when the published version changes, when the hostname stops serving the site, or when the renderer release changes. The obsolete task records its render as collectable.
 
-The objects wait 24 hours before deletion. The dispatcher can hold a resolved hostname for one hour, so this grace period covers a request that still asks for the previous render.
+The objects wait 25 hours before deletion (`HOSTNAME_READER_GRACE_SECONDS`). The dispatcher can hold a resolved hostname for one day, so this grace period covers a request that still asks for the previous render.
 
 The collector recomputes the current render identity for every active hostname of the site before it deletes an object. A render that still serves production is kept.
 
@@ -100,7 +116,7 @@ A rollback to an earlier version revives the pre-render task for that identity, 
 
 ## Rollback
 
-Set `DOXA_PROD_PRERENDER_MODE=off` and deploy the rendering services. This setting bypasses saved HTML and route data without a cache purge.
+Deploy the rendering services with `--prerender-mode off` (or set `DOXA_PROD_PRERENDER_MODE=off` for the deploy, or commit `off` in the dispatcher config). This setting bypasses saved HTML and route data without a cache purge.
 
 Leave the task table and R2 objects in place during rollback. The live renderer remains the normal fallback path.
 

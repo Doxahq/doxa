@@ -15,6 +15,7 @@ import { loadDocsRawPage } from "@/src/runtime/runtime-route-data";
 import { useSiteConfig } from "@/src/site-config/site-config-context";
 import { docsLayout } from "@doxahq/site-config";
 
+import { isChatAvailable } from "@/src/lib/chat-availability";
 import type { ChatPageContext } from "@/src/lib/chat-page-context";
 import { components, elements } from "@/src/lib/components";
 import { cn } from "@/src/lib/utils";
@@ -48,13 +49,17 @@ const ApiReferenceBody = lazy(() =>
 // sibling `__rawSource` export injected by mdxSourceCapturePlugin. This keeps
 // raw MDX out of the client bundle while the server adapter can still read it.
 // The modules stay lazy because platform routes always use runtime documents.
-// Standalone Vite routes load only the bundled page that they render.
+// Standalone Vite routes load only the bundled page that they render. The
+// platform renderer's server build has no local content, so it leaves the
+// bundled pages out of the server bundle.
+const bundledMdxLoaders: Record<string, () => Promise<BundledMdxComponent>> =
+  import.meta.env.SSR && import.meta.env.DOXA_OMIT_LOCAL_CONTENT_SOURCE
+    ? {}
+    : import.meta.glob<BundledMdxComponent>("/src/contents/docs/**/index.mdx", {
+        import: "default",
+      });
 const mdxModules = Object.fromEntries(
-  Object.entries(
-    import.meta.glob<BundledMdxComponent>("/src/contents/docs/**/index.mdx", {
-      import: "default",
-    })
-  ).map(([path, loadComponent]) => [
+  Object.entries(bundledMdxLoaders).map(([path, loadComponent]) => [
     path,
     lazy(async () => ({ default: await loadComponent() })),
   ])
@@ -162,9 +167,10 @@ export function DocsPage({ data }: DocsPageProps) {
                 <div className="not-prose flex flex-col gap-3 @2xl/article:flex-row @2xl/article:items-start @2xl/article:justify-between">
                   <ArticleTitle title={title} apiMethod={apiMethod} />
                   <div className="flex shrink-0 flex-wrap items-center gap-2 @2xl/article:order-last">
-                    {data.features.ai.chat && data.features.ai.chatWithPage && (
-                      <ChatWithPage pageContext={pageContext} />
-                    )}
+                    {isChatAvailable(data.features) &&
+                      data.features.ai.chatWithPage && (
+                        <ChatWithPage pageContext={pageContext} />
+                      )}
                     {copyPageEnabled && (
                       <CopyPage
                         options={data.features.copyPage}

@@ -2,21 +2,21 @@ import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vitest/config";
 
+import { workspaceSourceAliases } from "./src/config/vite/workspace-aliases";
+
 export default defineConfig({
   resolve: {
-    alias: {
-      "@doxahq/mdx-runtime/highlight": fileURLToPath(
-        new URL(
-          "../../packages/mdx-runtime/src/highlight/index.ts",
-          import.meta.url
-        )
-      ),
-      "@doxahq/mdx-runtime": fileURLToPath(
-        new URL("../../packages/mdx-runtime/src/index.ts", import.meta.url)
-      ),
-      "@": fileURLToPath(new URL(".", import.meta.url)),
-      "~": fileURLToPath(new URL("./src", import.meta.url)),
-    },
+    alias: [
+      ...workspaceSourceAliases,
+      {
+        find: "@",
+        replacement: fileURLToPath(new URL(".", import.meta.url)),
+      },
+      {
+        find: "~",
+        replacement: fileURLToPath(new URL("./src", import.meta.url)),
+      },
+    ],
   },
   test: {
     environment: "node",

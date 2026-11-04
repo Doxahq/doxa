@@ -17,12 +17,18 @@ import { createLiveRouteDataResponse } from "./live-route-data";
 import { parsePrerenderMode, shouldUsePrerender } from "./prerender-policy";
 import { createPrerenderHtmlResponse } from "./prerender-response";
 import { readPrerenderedRoute } from "./prerender-storage";
+import {
+  readPreviousRendererBuild,
+  type RendererBuildEnv,
+} from "./previous-renderer-build";
+import { logRendererReleaseRejected } from "./release-check";
 import { parseSiteAllowlist } from "./rollout-policy";
 import {
   attachInternalServerTiming,
   createServerTiming,
   type ServerTimingRecorder,
 } from "./server-timing";
+import { serveVersionedEntrypoint } from "./versioned-entrypoint-protocol";
 import { getWorkerExports } from "./worker-exports";
 
 export type PrerenderRepairTasksRpc = Pick<
@@ -39,13 +45,14 @@ export interface PrerenderCacheProps {
   resolution: DocsDomainResolution;
 }
 
-interface PrerenderCacheEnv {
+interface PrerenderCacheEnv extends RendererBuildEnv {
   DEBUG?: string;
   DOCS_RENDERED_BUCKET?: R2Bucket;
   PRERENDER_TASKS?: PrerenderRepairTasksRpc;
   DOXA_PROD_PRERENDER_MODE?: string;
   DOXA_PROD_PRERENDER_SITE_IDS?: string;
   DOXA_PRERENDER_REPAIR_ENABLED?: string;
+  DOXA_RENDERER_RELEASE_ID?: string;
 }
 
 /** Cache entrypoint for immutable saved HTML and route data. */
@@ -54,97 +61,127 @@ export class DocsPrerenderCache extends WorkerEntrypoint<
   PrerenderCacheProps
 > {
   async fetch(request: Request): Promise<Response> {
-    const {
-      expected,
-      featureMode,
-      hostname,
-      pathname,
-      representation,
-      resolution,
-    } = this.ctx.props;
-    const requestUrl = new URL(request.url);
-    const configuredMode = parsePrerenderMode(
-      this.env.DOXA_PROD_PRERENDER_MODE,
-    );
-    const configuredSiteIds = parseSiteAllowlist(
-      this.env.DOXA_PROD_PRERENDER_SITE_IDS,
-    );
-    if (
-      !this.env.DOCS_RENDERED_BUCKET ||
-      configuredMode !== featureMode ||
-      !shouldUsePrerender(
-        configuredMode,
-        configuredSiteIds,
-        resolution.siteId,
-      ) ||
-      !isPublicProduction(resolution) ||
-      hostname !== requestUrl.hostname ||
-      resolution.hostname !== hostname ||
-      expected.siteId !== resolution.siteId ||
-      expected.trustedRequestOrigin !== requestUrl.origin
-    ) {
-      return withoutResponseCaching(
-        new Response("Invalid pre-render cache request", { status: 400 }),
-      );
-    }
+    const props = this.ctx.props;
+    return serveVersionedEntrypoint({
+      entrypoint: "DocsPrerenderCache",
+      request,
+      props,
+      build: {
+        requested: props.expected.rendererReleaseId,
+        deployed: this.env.DOXA_RENDERER_RELEASE_ID?.trim() || null,
+        previous: readPreviousRendererBuild(this.env)?.releaseId ?? null,
+      },
+      isTrusted: () => isTrustedPrerenderCacheRequest(request, props, this.env),
+      onBuildRejected: (reason) =>
+        logRendererReleaseRejected({
+          entrypoint: "DocsPrerenderCache",
+          expected: props.expected,
+          deployedReleaseId: this.env.DOXA_RENDERER_RELEASE_ID,
+          reason,
+        }),
+      rejection: "Invalid pre-render cache request",
+      fill: () => fillPrerenderCache(this.env, this.ctx, request, props),
+    });
+  }
+}
 
-    const timing = createServerTiming(this.env.DEBUG);
-    const lookup = await readPrerenderedRoute({
-      bucket: this.env.DOCS_RENDERED_BUCKET,
-      expected,
-      pathname,
-      representation,
-      timing,
-    });
-    enqueuePrerenderRepairIfNeeded({
-      env: this.env,
-      ctx: this.ctx,
-      expected,
-      hostname,
-      lookup,
-      pathname,
-      resolution,
-    });
-    if (representation === "html") {
-      const response = createPrerenderHtmlResponse(lookup, request.method);
-      return finalizePrerenderResponse(
-        response
-          ? withHtmlCachePolicy(response)
-          : withoutResponseCaching(
-              new Response("Saved HTML unavailable", { status: 404 }),
-            ),
-        lookup,
-        timing,
-      );
-    }
-    if (lookup.status === "hit" && lookup.data) {
-      return finalizePrerenderResponse(
-        withRouteDataCachePolicy(
-          new Response(copyToArrayBuffer(lookup.data), {
-            status: 200,
-            headers: {
-              "content-type": "application/json; charset=utf-8",
-              "x-content-type-options": "nosniff",
-              "x-doxa-representation-source": "prerender",
-            },
-          }),
-          "versioned",
-        ),
-        lookup,
-        timing,
-      );
-    }
-    const live = await createLiveRouteDataResponse(
-      getWorkerExports(this.ctx).PrerenderRendererApi({}),
-      resolution,
-      pathname,
+/**
+ * Reads saved output for an accepted call. A module function, not a method:
+ * every entrypoint method is reachable over RPC, and this one has no checks.
+ */
+async function fillPrerenderCache(
+  env: PrerenderCacheEnv,
+  ctx: ExecutionContext,
+  request: Request,
+  props: PrerenderCacheProps,
+): Promise<Response> {
+  const { expected, hostname, pathname, representation, resolution } = props;
+  const bucket = env.DOCS_RENDERED_BUCKET;
+  // The trust check required the bucket; this narrows the type.
+  if (!bucket) {
+    return withoutResponseCaching(
+      new Response("Invalid pre-render cache request", { status: 400 }),
     );
+  }
+  const timing = createServerTiming(env.DEBUG);
+  const lookup = await readPrerenderedRoute({
+    bucket,
+    expected,
+    pathname,
+    representation,
+    timing,
+  });
+  enqueuePrerenderRepairIfNeeded({
+    env,
+    ctx,
+    expected,
+    hostname,
+    lookup,
+    pathname,
+    resolution,
+  });
+  if (representation === "html") {
+    const response = createPrerenderHtmlResponse(lookup, request.method);
     return finalizePrerenderResponse(
-      withRouteDataCachePolicy(live, "liveFallback"),
+      response
+        ? withHtmlCachePolicy(response)
+        : withoutResponseCaching(
+            new Response("Saved HTML unavailable", { status: 404 }),
+          ),
       lookup,
       timing,
     );
   }
+  if (lookup.status === "hit" && lookup.data) {
+    return finalizePrerenderResponse(
+      withRouteDataCachePolicy(
+        new Response(copyToArrayBuffer(lookup.data), {
+          status: 200,
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "x-content-type-options": "nosniff",
+            "x-doxa-representation-source": "prerender",
+          },
+        }),
+        "versioned",
+      ),
+      lookup,
+      timing,
+    );
+  }
+  const live = await createLiveRouteDataResponse(
+    getWorkerExports(ctx).PrerenderRendererApi({}),
+    resolution,
+    pathname,
+  );
+  return finalizePrerenderResponse(
+    withRouteDataCachePolicy(live, "liveFallback"),
+    lookup,
+    timing,
+  );
+}
+
+function isTrustedPrerenderCacheRequest(
+  request: Request,
+  props: PrerenderCacheProps,
+  env: PrerenderCacheEnv,
+): boolean {
+  const { expected, featureMode, hostname, resolution } = props;
+  const requestUrl = new URL(request.url);
+  const configuredMode = parsePrerenderMode(env.DOXA_PROD_PRERENDER_MODE);
+  const configuredSiteIds = parseSiteAllowlist(
+    env.DOXA_PROD_PRERENDER_SITE_IDS,
+  );
+  return (
+    env.DOCS_RENDERED_BUCKET !== undefined &&
+    configuredMode === featureMode &&
+    shouldUsePrerender(configuredMode, configuredSiteIds, resolution.siteId) &&
+    isPublicProduction(resolution) &&
+    hostname === requestUrl.hostname &&
+    resolution.hostname === hostname &&
+    expected.siteId === resolution.siteId &&
+    expected.trustedRequestOrigin === requestUrl.origin
+  );
 }
 
 function finalizePrerenderResponse(

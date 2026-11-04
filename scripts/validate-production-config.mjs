@@ -3,13 +3,20 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { validateDocsPlacementConfigs } from "./lib/docs-placement-config.mjs";
+import { validateDocsRuntimeConfig } from "./lib/docs-runtime-config.mjs";
 import { validateMcpProductionConfig } from "./lib/mcp-production-config.mjs";
+import {
+  validatePrerenderRollout,
+  validatePreviousFallbackVars,
+} from "./lib/dispatcher-fallback-config.mjs";
+import { validateWarmJobConfig } from "./lib/dispatcher-warm-config.mjs";
 
 const DEFAULT_API_CONFIG = "apps/api/wrangler.json";
 const DEFAULT_SHARED_RENDERER_CONFIG =
   "apps/docs-template/wrangler.renderer.shared.production.json";
 const DEFAULT_DISPATCHER_CONFIG = "apps/docs-dispatcher/wrangler.json";
 const DEFAULT_PRERENDERER_CONFIG = "apps/docs-prerenderer/wrangler.json";
+const DEFAULT_RUNTIME_CONFIG = "apps/docs-runtime/wrangler.json";
 const CNAME_TARGET_VAR = "DOCS_CUSTOM_DOMAIN_CNAME_TARGET";
 const REQUIRED_PRODUCTION_COMPATIBILITY_FLAGS = [
   "nodejs_compat",
@@ -18,6 +25,31 @@ const REQUIRED_PRODUCTION_COMPATIBILITY_FLAGS = [
 const REQUIRED_HYPERDRIVE_BINDINGS = [
   "HYPERDRIVE",
   "HYPERDRIVE_CACHE_DISABLED",
+];
+
+/**
+ * SEC-014: no production Worker answers on workers.dev or a preview URL.
+ * Those hosts skip the zone WAF and rate rules, and the container Worker has
+ * no caller check of its own. A key under env.production wins over the top
+ * level, the same way Wrangler applies it.
+ */
+// The checked-in configs, also when a test runs this script from a copy.
+const REPOSITORY_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+
+const PRIVATE_URL_WORKER_CONFIGS = [
+  "apps/agent-container/wrangler.json",
+  "apps/agent-worker/wrangler.json",
+  "apps/api-edge/wrangler.json",
+  "apps/api/wrangler.json",
+  "apps/api/wrangler.docs-resolver.json",
+  "apps/docs-dispatcher/wrangler.json",
+  "apps/docs-prerenderer/wrangler.json",
+  "apps/docs-runtime/wrangler.json",
+  "apps/docs-template/wrangler.renderer.shared.production.json",
+  "apps/email-worker/wrangler.json",
+  "apps/mcp/wrangler.json",
+  "apps/try-proxy/wrangler.json",
+  "apps/web/wrangler.json",
 ];
 
 try {
@@ -36,6 +68,7 @@ try {
   validateHyperdriveBindings(config, configPath);
   if (process.argv.length === 2) {
     validateDocsRenderingConfigs();
+    validateDocsRuntimeConfig(readJson(DEFAULT_RUNTIME_CONFIG));
     validateDocsPlacementConfigs({
       api: config,
       resolver: readJson("apps/api/wrangler.docs-resolver.json"),
@@ -45,6 +78,7 @@ try {
       web: readJson("apps/web/wrangler.json"),
     });
     validateMcpProductionConfig({ mcp: readJson("apps/mcp/wrangler.json"), api: config });
+    validateNoPublicWorkerUrls(PRIVATE_URL_WORKER_CONFIGS);
   }
 
   globalThis.console.log(
@@ -96,14 +130,97 @@ function validateDocsRenderingConfigs() {
       `${DEFAULT_DISPATCHER_CONFIG} must default dynamic rendering to all.`,
     );
   }
-  if (dispatcher.vars?.DOXA_PROD_PRERENDER_MODE !== "off") {
-    throw new Error(
-      `${DEFAULT_DISPATCHER_CONFIG} must default pre-rendering to off.`,
-    );
-  }
+  validatePrerenderRollout(dispatcher.vars, DEFAULT_DISPATCHER_CONFIG);
+  validatePreviousFallbackVars(dispatcher.vars, DEFAULT_DISPATCHER_CONFIG);
+  validateWarmJobConfig(dispatcher, DEFAULT_DISPATCHER_CONFIG);
   if (dispatcher.vars?.DOXA_PROD_ROUTE_DATA_CACHE_MODE !== "all") {
     throw new Error(
       `${DEFAULT_DISPATCHER_CONFIG} must default the route-data cache to all.`,
+    );
+  }
+  // The shared renderer isolate rolls out per site. A typo would silently keep
+  // every site on its own isolate, so only the three modes are accepted.
+  if (
+    !["off", "allowlist", "all"].includes(
+      dispatcher.vars?.DOXA_PROD_SHARED_ISOLATE_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_SHARED_ISOLATE_MODE to off, allowlist or all.`,
+    );
+  }
+  // A typo would silently turn the route-data prefetch off.
+  if (
+    !["off", "allowlist", "all"].includes(
+      dispatcher.vars?.DOXA_PROD_ROUTE_DATA_PREFETCH_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_ROUTE_DATA_PREFETCH_MODE to off, allowlist or all.`,
+    );
+  }
+  // The hostname map rolls out off → shadow → on. A typo fails closed to off
+  // at runtime, so only the three modes are accepted here.
+  if (
+    !["off", "shadow", "on"].includes(
+      dispatcher.vars?.DOXA_PROD_KV_HOSTNAME_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_KV_HOSTNAME_MODE to off, shadow or on.`,
+    );
+  }
+  // HTTP → HTTPS and HSTS. A typo fails closed to off at runtime.
+  if (!["off", "on"].includes(dispatcher.vars?.DOXA_PROD_HTTPS_REDIRECT_MODE)) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_HTTPS_REDIRECT_MODE to off or on.`,
+    );
+  }
+  // Route data in the browser cache rolls out per site.
+  if (
+    !["off", "allowlist", "all"].includes(
+      dispatcher.vars?.DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE to off, allowlist or all.`,
+    );
+  }
+  if (
+    typeof dispatcher.vars?.DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_SITE_IDS !==
+    "string"
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must define DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_SITE_IDS.`,
+    );
+  }
+  // Text routes and old client assets roll out from off. A typo fails closed
+  // to off at runtime, so only the documented modes are accepted here.
+  if (
+    !["off", "allowlist", "all"].includes(
+      dispatcher.vars?.DOXA_PROD_TEXT_ROUTE_CACHE_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_TEXT_ROUTE_CACHE_MODE to off, allowlist or all.`,
+    );
+  }
+  if (
+    !["off", "on"].includes(
+      dispatcher.vars?.DOXA_PROD_CLIENT_ASSET_FALLBACK_MODE,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must set DOXA_PROD_CLIENT_ASSET_FALLBACK_MODE to off or on.`,
+    );
+  }
+  if (
+    !dispatcher.kv_namespaces?.some(
+      (item) => item?.binding === "DOCS_HOSTNAME_MAP" && item?.id,
+    )
+  ) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must define the DOCS_HOSTNAME_MAP KV namespace.`,
     );
   }
   if (dispatcher.vars?.DOXA_PRERENDER_REPAIR_ENABLED !== "false") {
@@ -145,10 +262,30 @@ function validateDocsRenderingConfigs() {
       `${DEFAULT_DISPATCHER_CONFIG} must cache DocsPrerenderCache internally.`,
     );
   }
+  if (dispatcher.cache?.cross_version_cache !== true) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must share cache entries across Worker versions (cache.cross_version_cache).`,
+    );
+  }
   if (dispatcher.exports?.DocsRouteDataCache?.cache?.enabled !== true) {
     throw new Error(
       `${DEFAULT_DISPATCHER_CONFIG} must cache DocsRouteDataCache internally.`,
     );
+  }
+  // Without it, every new dispatcher isolate reads the renderer code from R2.
+  if (dispatcher.exports?.DocsRendererCodeCache?.cache?.enabled !== true) {
+    throw new Error(
+      `${DEFAULT_DISPATCHER_CONFIG} must cache DocsRendererCodeCache internally.`,
+    );
+  }
+  // Without them, the text routes and old client assets reach R2 or the
+  // renderer on every request.
+  for (const entrypoint of ["DocsTextCache", "DocsClientAssetCache"]) {
+    if (dispatcher.exports?.[entrypoint]?.cache?.enabled !== true) {
+      throw new Error(
+        `${DEFAULT_DISPATCHER_CONFIG} must cache ${entrypoint} internally.`,
+      );
+    }
   }
   if (dispatcher.assets?.html_handling !== "none") {
     throw new Error(
@@ -206,6 +343,21 @@ function validateDocsRenderingConfigs() {
     "PRERENDER_QUEUE",
     DEFAULT_API_CONFIG,
   );
+}
+
+function validateNoPublicWorkerUrls(configPaths) {
+  for (const configPath of configPaths) {
+    const config = readJson(path.join(REPOSITORY_ROOT, configPath));
+    for (const scope of [config, config.env?.production].filter(Boolean)) {
+      const workersDev = scope.workers_dev ?? config.workers_dev;
+      const previewUrls = scope.preview_urls ?? config.preview_urls;
+      if (workersDev !== false || previewUrls !== false) {
+        throw new Error(
+          `${configPath} must set workers_dev and preview_urls to false.`,
+        );
+      }
+    }
+  }
 }
 
 function requireServiceBinding(config, binding, configPath) {

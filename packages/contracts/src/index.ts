@@ -59,10 +59,15 @@ export * from "./reference-source";
 export const WRITING_FINGERPRINT_VERSION = "doxabot-writing-v1";
 /**
  * The version of the planning contract. A run whose baseline has another
- * version plans every page again. Bump it whenever the planner's output
- * format changes, and update PLANNER_OUTPUT_SCHEMA_HASH with it.
+ * version analyzes the repository again and plans every page again. Bump it
+ * whenever the planner's output format changes, and update
+ * PLANNER_OUTPUT_SCHEMA_HASH with it. Bump it also when a stored analysis
+ * must not be reused, as for v7: v6 analyses without a spec file had REST
+ * endpoints without their facts, from the removed file-by-file extraction.
+ * And for v8: v7 analyses lost every endpoint and export that a filter on
+ * the project category judged internal. The project instructions decide now.
  */
-export const PLANNING_FINGERPRINT_VERSION = "doxabot-planning-v6";
+export const PLANNING_FINGERPRINT_VERSION = "doxabot-planning-v8";
 /**
  * The hash of the structure and structure review response schemas that
  * PLANNING_FINGERPRINT_VERSION was set for. A test in @doxahq/agent fails
@@ -452,6 +457,28 @@ export const updateDocsPreviewVisibilityInputSchema = z
   .strict();
 export const docsAccessPolicySchema = z.enum(["public", "authenticated"]);
 
+/**
+ * The public origin that a resolution serves, such as `https://acme.doxa.page`:
+ * a scheme and a host, with no path. Only the dispatcher and the pre-renderer
+ * set it, from the resolved hostname. docs-runtime makes it the site URL, so
+ * the canonical links of every hostname point to that hostname.
+ */
+export const docsSiteOriginSchema = z
+  .string()
+  .refine(isHttpOrigin, "Expected an HTTP(S) origin without a path");
+
+function isHttpOrigin(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      url.origin === value
+    );
+  } catch {
+    return false;
+  }
+}
+
 export const docsHostResolutionSchema = z.object({
   siteId: z.string(),
   projectId: z.string(),
@@ -460,6 +487,7 @@ export const docsHostResolutionSchema = z.object({
   artifactPrefix: z.string(),
   manifestPath: z.string(),
   accessPolicy: docsAccessPolicySchema,
+  siteUrl: docsSiteOriginSchema.optional(),
 });
 
 export const docsDomainKindSchema = z.enum(["doxa_subdomain", "custom_domain"]);
@@ -542,6 +570,12 @@ export const docsDomainResolutionSchema = docsHostResolutionSchema.extend({
   hostname: z.string(),
   domainKind: docsDomainKindSchema,
   renderTarget: docsRenderTargetSchema.optional(),
+  /**
+   * Set only on the production `doxa.page` hostname of a site that has a
+   * working custom domain: the dispatcher answers every request there with a
+   * permanent redirect to this hostname, so the site has one public address.
+   */
+  canonicalHostname: z.string().optional(),
 });
 
 export const createDocsDomainInputSchema = z.object({

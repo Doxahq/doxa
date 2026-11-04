@@ -9,6 +9,14 @@ import { promisify } from "node:util";
 
 import { init, parse } from "es-module-lexer";
 
+import {
+  parsePreviousFallbackOption,
+  parseRendererReleaseRecord,
+  parseRevokedReleaseId,
+  planPreviousBuild,
+  previousBuildVars,
+} from "../../../scripts/lib/renderer-release-record.mjs";
+
 const gzipAsync = promisify(gzip);
 const SCHEMA_VERSION = 1;
 const MAX_UNCOMPRESSED_BYTES = 25 * 1024 * 1024;
@@ -85,6 +93,10 @@ export async function createRendererPackage(options) {
     );
   }
 
+  const previousBuild = await planPackagePreviousBuild(options, {
+    buildId,
+    releaseId: rendererReleaseId,
+  });
   const objectKey = `renderer-code/${buildId}.json.gz`;
   const packagePath = path.join(outputDir, `${buildId}.json.gz`);
   const generatedConfigPath = path.join(outputDir, "wrangler.production.json");
@@ -99,14 +111,22 @@ export async function createRendererPackage(options) {
       options.debug ?? dispatcherConfig.vars?.DEBUG ?? "false",
     ),
     rendererReleaseId,
-    prerenderMode: options.prerenderMode ?? "off",
-    prerenderSiteIds: options.prerenderSiteIds ?? "",
+    // F1: without an explicit value, keep the committed rollout.
+    prerenderMode:
+      options.prerenderMode ??
+      dispatcherConfig.vars?.DOXA_PROD_PRERENDER_MODE ??
+      "off",
+    prerenderSiteIds:
+      options.prerenderSiteIds ??
+      dispatcherConfig.vars?.DOXA_PROD_PRERENDER_SITE_IDS ??
+      "",
     repairEnabled: normalizeBoolean(
       options.repairEnabled ?? "false",
       "DOXA_PRERENDER_REPAIR_ENABLED",
     ),
     routeDataCacheMode: options.routeDataCacheMode ?? "all",
     routeDataCacheSiteIds: options.routeDataCacheSiteIds ?? "",
+    previousBuild,
   });
 
   await mkdir(outputDir, { recursive: true });
@@ -127,6 +147,7 @@ export async function createRendererPackage(options) {
           objectKey,
           packagePath,
           generatedConfigPath,
+          previousBuild,
           moduleCount: Object.keys(modules).length,
           uncompressedBytes: rawPackage.byteLength,
           compressedBytes: compressedPackage.byteLength,
@@ -146,6 +167,7 @@ export async function createRendererPackage(options) {
     packagePath,
     generatedConfigPath,
     metadataPath,
+    previousBuild,
     moduleCount: Object.keys(modules).length,
     uncompressedBytes: rawPackage.byteLength,
     compressedBytes: compressedPackage.byteLength,
@@ -177,14 +199,44 @@ function createGeneratedDispatcherConfig(input) {
       DOXA_PRERENDER_REPAIR_ENABLED: input.repairEnabled,
       DOXA_PROD_ROUTE_DATA_CACHE_MODE: input.routeDataCacheMode,
       DOXA_PROD_ROUTE_DATA_CACHE_SITE_IDS: input.routeDataCacheSiteIds,
+      ...previousBuildVars(input.previousBuild),
     },
   };
 }
 
+/**
+ * The previous build for the dispatcher (M26). Without `previousFallback`
+ * (a package outside a deploy) the vars stay empty.
+ */
+async function planPackagePreviousBuild(options, current) {
+  if (options.previousFallback === undefined) {
+    return { previous: null, reason: "not_requested", deployedAt: "" };
+  }
+  const record = options.releaseRecordPath
+    ? parseRendererReleaseRecord(
+        await readFile(path.resolve(options.releaseRecordPath), "utf8"),
+      )
+    : null;
+  return planPreviousBuild({
+    record,
+    current,
+    previousFallback: parsePreviousFallbackOption(options.previousFallback),
+    revoke: (options.revoke ?? []).map(parseRevokedReleaseId),
+    now: options.now ?? new Date().toISOString(),
+  });
+}
+
+// The release ID must change only when rendered HTML would change. HTML links
+// to the content-hashed files under assets/ by name. Fixed-name files keep
+// their URLs, and the template's own pages.json and sitemap.xml change on
+// every build, which would empty the docs cache on every deploy.
+const CLIENT_DIGEST_DIR = "assets";
+
 async function createDirectoryManifestDigest(directory) {
-  const files = (await listFiles(directory)).sort();
+  const assetsDirectory = path.join(directory, CLIENT_DIGEST_DIR);
+  const files = (await listFiles(assetsDirectory).catch(() => [])).sort();
   if (files.length === 0) {
-    throw new Error(`No client assets found in ${directory}.`);
+    throw new Error(`No client assets found in ${assetsDirectory}.`);
   }
   const entries = await Promise.all(
     files.map(async (filePath) => {
@@ -319,8 +371,11 @@ export function parseRendererPackageArgs(args, environment = process.env) {
     mode: environment.DOXA_PROD_DYNAMIC_RENDERER_MODE ?? "all",
     siteIds: environment.DOXA_PROD_DYNAMIC_RENDERER_SITE_IDS ?? "",
     debug: environment.DEBUG,
-    prerenderMode: environment.DOXA_PROD_PRERENDER_MODE ?? "off",
-    prerenderSiteIds: environment.DOXA_PROD_PRERENDER_SITE_IDS ?? "",
+    // Unset falls back to the dispatcher config's vars (F1).
+    prerenderMode: readOptionalEnv(environment.DOXA_PROD_PRERENDER_MODE),
+    prerenderSiteIds: readOptionalEnv(
+      environment.DOXA_PROD_PRERENDER_SITE_IDS,
+    ),
     repairEnabled: environment.DOXA_PRERENDER_REPAIR_ENABLED ?? "false",
     routeDataCacheMode: environment.DOXA_PROD_ROUTE_DATA_CACHE_MODE ?? "all",
     routeDataCacheSiteIds: environment.DOXA_PROD_ROUTE_DATA_CACHE_SITE_IDS ?? "",
@@ -351,9 +406,20 @@ export function parseRendererPackageArgs(args, environment = process.env) {
       options.routeDataCacheMode = readArg(args, ++index, arg);
     else if (arg === "--route-data-cache-site-ids")
       options.routeDataCacheSiteIds = readArg(args, ++index, arg);
+    else if (arg === "--previous-fallback")
+      options.previousFallback = readArg(args, ++index, arg);
+    else if (arg === "--release-record")
+      options.releaseRecordPath = readArg(args, ++index, arg);
+    else if (arg === "--revoke")
+      options.revoke = [...(options.revoke ?? []), readArg(args, ++index, arg)];
     else throw new Error(`Unknown option: ${arg}`);
   }
   return options;
+}
+
+function readOptionalEnv(value) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function readArg(args, index, flag) {

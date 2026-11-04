@@ -187,6 +187,8 @@ const featureConfigSchema = z
       .object({ markdown: z.boolean(), rawText: z.boolean() })
       .strict(),
     apiPlayground: z.boolean(),
+    apiPlaygroundBaseUrl: z.string().optional(),
+    apiPlaygroundTransport: z.enum(["proxy", "browser"]).optional(),
     rawMarkdown: z.boolean(),
     loadFromGithub: z.boolean(),
   })

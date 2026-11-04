@@ -9,7 +9,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@doxahq/contracts": "workspace:*"
+    "@doxahq/contracts": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260701.1",

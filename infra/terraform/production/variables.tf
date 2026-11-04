@@ -53,6 +53,16 @@ variable "max_task_count" {
   default     = 1
 }
 
+variable "daily_pause" {
+  description = "Daily window with no running API task, to save cost before launch. Hours are local to timezone. Null runs the API all day."
+  type = object({
+    stop_hour  = number
+    start_hour = number
+    timezone   = string
+  })
+  default = null
+}
+
 variable "api_environment" {
   description = "Plain environment variables of the API. PORT and VALKEY_URL come from this stack."
   type        = map(string)
@@ -61,6 +71,19 @@ variable "api_environment" {
   validation {
     condition     = length(setintersection(keys(var.api_environment), ["PORT", "VALKEY_URL"])) == 0
     error_message = "api_environment must not set PORT or VALKEY_URL: this stack sets them."
+  }
+
+  # SEC-035: no development switch is on. The origin also refuses to start
+  # with one on. "false" and empty values are fine.
+  validation {
+    condition = alltrue([
+      for name in ["ALLOW_INTERNAL_HTTP", "DEV_ADMIN_ENABLED", "ALLOW_INSECURE_GITHUB_WEBHOOKS"] :
+      lookup(var.api_environment, name, "false") != "true"
+      ]) && alltrue([
+      for name in ["LOCAL_DEV_USER_ID", "LOCAL_GITHUB_TOKEN"] :
+      trimspace(lookup(var.api_environment, name, "")) == ""
+    ])
+    error_message = "api_environment must not turn on a development flag (ALLOW_INTERNAL_HTTP, DEV_ADMIN_ENABLED, ALLOW_INSECURE_GITHUB_WEBHOOKS set to true, or LOCAL_DEV_USER_ID, LOCAL_GITHUB_TOKEN set)."
   }
 }
 
@@ -102,4 +125,10 @@ variable "monthly_budget_usd" {
   description = "Monthly AWS cost limit of the account, in USD."
   type        = number
   default     = 120
+}
+
+variable "enable_execute_command" {
+  description = "Allow `aws ecs execute-command` into the API container, for a debug session only. Turn it off again after the session."
+  type        = bool
+  default     = false
 }

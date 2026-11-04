@@ -10,7 +10,6 @@ export interface ModelProviderEnv {
   DOXA_MODEL_PROVIDER?: string;
   /** Writes the last retry of a failing page. Defaults to the planner model. */
   DOXA_WRITER_FALLBACK_MODEL?: string;
-  DOXA_REST_EXTRACTION_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
 }
@@ -131,7 +130,6 @@ export interface GenerationModels {
   plannerModel: string;
   writerModel: string;
   writerFallbackModel?: string;
-  restExtractionModel?: string;
 }
 
 /**
@@ -139,27 +137,21 @@ export interface GenerationModels {
  * stronger model of the same provider; none is set when it equals the writer.
  */
 export function resolveGenerationModels(
-  env: Pick<ModelProviderEnv, "DOXA_WRITER_FALLBACK_MODEL" | "DOXA_REST_EXTRACTION_MODEL">,
+  env: Pick<ModelProviderEnv, "DOXA_WRITER_FALLBACK_MODEL">,
   config: { plannerModel: string; writerModel: string },
 ): GenerationModels {
   // Only the model fields: the container's model config is a strict schema,
   // and callers pass the whole execution config.
   const { plannerModel, writerModel } = config;
   const fallback = env.DOXA_WRITER_FALLBACK_MODEL?.trim() || plannerModel;
-  // The model route extracts endpoints with the writer model unless the setting names another.
-  const restExtraction = env.DOXA_REST_EXTRACTION_MODEL?.trim() || writerModel;
   return {
     plannerModel,
     writerModel,
     ...(fallback === writerModel ? {} : { writerFallbackModel: fallback }),
-    ...(restExtraction === writerModel ? {} : { restExtractionModel: restExtraction }),
   };
 }
 
 /** Every model a run calls, for the provider check. */
 export function generationModelIds(models: GenerationModels): string[] {
-  const optional = [models.writerFallbackModel, models.restExtractionModel].filter(
-    (model): model is string => model !== undefined,
-  );
-  return [models.plannerModel, models.writerModel, ...optional];
+  return [models.plannerModel, models.writerModel, ...(models.writerFallbackModel ? [models.writerFallbackModel] : [])];
 }

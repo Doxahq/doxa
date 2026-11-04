@@ -247,7 +247,11 @@ describe("Doxabot repository idempotency", () => {
         })),
       })),
     }));
-    mocks.createDb.mockReturnValue({ insert });
+    // The payload replay lookup (SEC-025) finds no earlier delivery.
+    const select = vi.fn(() => ({
+      from: () => ({ where: () => ({ limit: async () => [] }) }),
+    }));
+    mocks.createDb.mockReturnValue({ insert, select });
     const repository = new WebhookDeliveriesRepository({});
     const delivery: ClaimWebhookDeliveryInput = {
       provider: "github",

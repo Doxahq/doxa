@@ -7,6 +7,7 @@ import {
 } from "./binding-runtime-source";
 import type { PlatformRuntimeSourceConfig } from "./platform-runtime-source";
 import type { DoxaDocsRuntimeSource } from "./runtime-source";
+import { RendererPropsMissingError } from "./runtime-source-error";
 import { isRuntimeTimingEnabled } from "./runtime-timing";
 
 export type RuntimeSourceMode = "vite" | "platform" | "binding";
@@ -26,6 +27,11 @@ export async function createConfiguredRuntimeSource(
 
   switch (mode) {
     case "vite": {
+      if (import.meta.env.DOXA_OMIT_LOCAL_CONTENT_SOURCE) {
+        throw new Error(
+          'This renderer build has no local content source. Set DOXA_DOCS_RUNTIME_SOURCE to "binding" or "platform".'
+        );
+      }
       const { viteRuntimeSource } = await import("./vite");
       return viteRuntimeSource;
     }
@@ -66,26 +72,67 @@ export interface RendererWorkerEnv {
   DOXA_DOCS_CONTENT_RESOLUTION?: BindingRuntimeResolution;
 }
 
+/**
+ * The content of one request, which the dispatcher passes as entrypoint props
+ * when one renderer isolate serves many sites. The binding is pinned to the
+ * resolution by the dispatcher and works only during this request.
+ */
+export interface RendererRequestScope {
+  content: DocsContentBinding;
+  resolution: BindingRuntimeResolution;
+}
+
+export interface DispatcherRuntimeSourceOptions {
+  /** Content scope of this request. It wins over the isolate's `env`. */
+  requestScope?: RendererRequestScope;
+  /** Fallback for the shared renderer, which resolves by hostname. */
+  hostname?: string;
+  /** Wraps the content binding, for example to time its calls. */
+  wrapContent?: (binding: DocsContentBinding) => DocsContentBinding;
+}
+
+/** Reads the request scope from entrypoint props. Any other shape is absent. */
+export function readRendererRequestScope(
+  props: unknown
+): RendererRequestScope | undefined {
+  if (!isRecord(props)) return undefined;
+  const { content, resolution } = props;
+  if (!isDocsContentBinding(content) || !isBindingResolution(resolution)) {
+    return undefined;
+  }
+  return { content, resolution };
+}
+
 export function createDispatcherRuntimeSource(
   env: RendererWorkerEnv | undefined,
-  hostname?: string
+  {
+    requestScope,
+    hostname,
+    wrapContent = (binding) => binding,
+  }: DispatcherRuntimeSourceOptions = {}
 ): DoxaDocsRuntimeSource | undefined {
   if (env?.DOXA_DOCS_RUNTIME_SOURCE !== "binding") return undefined;
-  if (!env.DOXA_DOCS_CONTENT_BINDING) {
-    throw new Error("Binding runtime mode requires a content binding.");
+  if (requestScope) {
+    return createBindingRuntimeSource({
+      binding: wrapContent(requestScope.content),
+      resolution: requestScope.resolution,
+    });
   }
+  // A `build` isolate keeps no site content in its env, so a call without
+  // valid props has no content to read. Never resolve it any other way.
+  if (!env.DOXA_DOCS_CONTENT_BINDING) {
+    throw new RendererPropsMissingError();
+  }
+  const binding = wrapContent(env.DOXA_DOCS_CONTENT_BINDING);
 
   if (env.DOXA_DOCS_CONTENT_RESOLUTION) {
     return createBindingRuntimeSource({
-      binding: env.DOXA_DOCS_CONTENT_BINDING,
+      binding,
       resolution: env.DOXA_DOCS_CONTENT_RESOLUTION,
     });
   }
   if (hostname) {
-    return createBindingRuntimeSource({
-      binding: env.DOXA_DOCS_CONTENT_BINDING,
-      hostname,
-    });
+    return createBindingRuntimeSource({ binding, hostname });
   }
 
   throw new Error(
@@ -155,4 +202,38 @@ function readRequestHostname(): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isDocsContentBinding(value: unknown): value is DocsContentBinding {
+  if ((typeof value !== "object" && typeof value !== "function") || !value) {
+    return false;
+  }
+  // An RPC stub resolves its methods when they are read.
+  const request: unknown = Reflect.get(value, "request");
+  return typeof request === "function";
+}
+
+const BINDING_RESOLUTION_STRING_FIELDS = [
+  "siteId",
+  "projectId",
+  "projectSlug",
+  "publishedVersionId",
+  "artifactPrefix",
+  "manifestPath",
+] as const satisfies readonly (keyof BindingRuntimeResolution)[];
+
+function isBindingResolution(
+  value: unknown
+): value is BindingRuntimeResolution {
+  if (!isRecord(value)) return false;
+  return (
+    BINDING_RESOLUTION_STRING_FIELDS.every(
+      (field) => typeof value[field] === "string" && value[field] !== ""
+    ) &&
+    (value.accessPolicy === "public" || value.accessPolicy === "authenticated")
+  );
 }

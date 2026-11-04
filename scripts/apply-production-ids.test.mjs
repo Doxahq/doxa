@@ -1,11 +1,24 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { assertIdsFilled, fillPlaceholders, parseValues, placeholdersIn } from "./lib/production-ids.mjs";
+import { assertConfigFilled, assertIdsFilled, fillPlaceholders, parseValues, placeholdersIn } from "./lib/production-ids.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
+
+test("refuses to deploy one config that still holds a placeholder", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "doxa-ids-"));
+  try {
+    writeFileSync(path.join(root, "wrangler.json"), '{"DOXA_TRY_BLOCKED_HOSTS":"${OPS_TRY_BLOCKED_HOSTS}"}');
+    assert.throws(() => assertConfigFilled(root, "wrangler.json"), /OPS_TRY_BLOCKED_HOSTS/);
+    writeFileSync(path.join(root, "wrangler.json"), '{"DOXA_TRY_BLOCKED_HOSTS":"api.example.com"}');
+    assert.doesNotThrow(() => assertConfigFilled(root, "wrangler.json"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("finds each placeholder once", () => {
   assert.deepEqual(placeholdersIn('{"a":"${CF_X}","b":"${CF_Y}","c":"${CF_X}","d":"${NOT_CF}"}'), ["CF_X", "CF_Y"]);
@@ -25,6 +38,16 @@ test("refuses a value that could break out of its JSON string", () => {
 test("fills operator values such as an email list", () => {
   const filled = fillPlaceholders('{"ADMIN_EMAILS":"${OPS_ADMIN_EMAILS}"}', { OPS_ADMIN_EMAILS: "a@example.com,b+ops@example.com" });
   assert.deepEqual(JSON.parse(filled), { ADMIN_EMAILS: "a@example.com,b+ops@example.com" });
+});
+
+test("fills the pre-render canary site list of the docs dispatcher", () => {
+  const config = readFileSync(path.join(ROOT, "apps/docs-dispatcher/wrangler.json"), "utf8");
+  assert.ok(placeholdersIn(config).includes("OPS_DOCS_PRERENDER_SITE_IDS"));
+  const siteIds = "cd881737-04c0-4500-a1b5-180a696a4cc8,ef0a576b-88eb-498b-99f0-7099671342d8";
+  const filled = fillPlaceholders('{"DOXA_PROD_PRERENDER_SITE_IDS":"${OPS_DOCS_PRERENDER_SITE_IDS}"}', {
+    OPS_DOCS_PRERENDER_SITE_IDS: siteIds,
+  });
+  assert.equal(JSON.parse(filled).DOXA_PROD_PRERENDER_SITE_IDS, siteIds);
 });
 
 test("checks the shape of a values file", () => {

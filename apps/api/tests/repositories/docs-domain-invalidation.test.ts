@@ -44,8 +44,10 @@ const domain = {
   ...site,
   id: "domain-1",
   hostname: "docs.example.com",
+  kind: "custom_domain",
   status: "active",
   verificationStatus: "verified",
+  routingStatus: "healthy",
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -78,7 +80,12 @@ function database(selects: Row[][], deleted: Row[] = [domain]) {
     select: () => new Result(selects.shift() ?? []),
     insert: (table: unknown) => ({
       values: (values: Row) => {
-        if (table === schema.docsCacheInvalidations) invalidations.push(values);
+        // Follow-up purges carry a delayed nextAttemptAt.
+        if (
+          table === schema.docsCacheInvalidations &&
+          !("nextAttemptAt" in values)
+        )
+          invalidations.push(values);
         return new Result([{ ...domain, ...values }]);
       },
     }),
@@ -150,6 +157,25 @@ describe("custom domain invalidation", () => {
     });
     expect(tasks).toEqual([]);
   });
+
+  test.each([
+    { before: "healthy", after: "failed" },
+    { before: "failed", after: "healthy" },
+  ] as const)(
+    "resyncs the site when routing goes from $before to $after, so doxa.page starts or stops redirecting",
+    async ({ before, after }) => {
+      const tasks = database([[site], [{ ...domain, routingStatus: before }]]);
+      await new DocsDomainsRepository({} as never).applyProvisioning({
+        ...owner,
+        status: "active",
+        provisioning,
+        routing: { ...routing, status: after },
+      });
+      expect(tasks).toEqual([
+        { id: expect.any(String), siteId: "site-1", hostname: domain.hostname },
+      ]);
+    },
+  );
 
   test("invalidates the site and hostname when deleting a domain", async () => {
     const tasks = database([[site]]);

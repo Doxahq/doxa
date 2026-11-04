@@ -20,7 +20,7 @@ Doxa exposes AI-native text routes so external assistants and coding tools can d
 | `/llms.txt`      | A plain-text index of all docs pages with titles, URLs, and descriptions.        |
 | `/llms-full.txt` | The full docs corpus concatenated into one plain-text document with source URLs. |
 
-Both routes are generated at request time from `contentStore`, so they follow the active content adapter.
+Both routes are generated at request time from the runtime source, in navigation order, so they list the same pages the site renders.
 
 For per-page raw markdown (one source file per request, frontmatter included), see [Raw Markdown Routes](/ai/raw-markdown).
 
@@ -29,8 +29,8 @@ For per-page raw markdown (one source file per request, frontmatter included), s
 <Mermaid
   chart={`graph TD;
     Request[External AI requests llms route] --> Route[TanStack route handler];
-    Route --> Store[contentStore];
-    Store --> Entries[All content entries];
+    Route --> Store[Runtime source];
+    Store --> Entries[Pages in navigation order];
     Entries --> Text[Plain-text response];
     Text --> Tool[ChatGPT, Claude, Cursor, MCP client];`}
 />

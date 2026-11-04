@@ -8,6 +8,13 @@ vi.mock("cloudflare:workers", () => ({
       public env: unknown,
     ) {}
   },
+  // The warm Durable Objects (M28) are exported from the same module.
+  DurableObject: class {
+    constructor(
+      public ctx: unknown,
+      public env: unknown,
+    ) {}
+  },
 }));
 
 import worker, {
@@ -15,7 +22,10 @@ import worker, {
   DocsHtmlCache,
   DocsRouteDataCache,
 } from "../src/index";
-import { createDocsCacheTags } from "../src/cache-policy";
+import {
+  DOCS_HOST_CACHE_FORMAT,
+  createDocsCacheTags,
+} from "../src/cache-policy";
 import { createExpectedPrerenderIdentity } from "../src/prerender-policy";
 import type { RouteDataCacheProps } from "../src/route-data-cache-entrypoint";
 import { createRouteData } from "./fixtures/route-data";
@@ -129,7 +139,7 @@ describe("cache entrypoints", () => {
       "docs-site:site-1,docs-host:docs.example.com",
     );
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=3600, must-revalidate",
+      "public, max-age=86400, stale-if-error=604800",
     );
   });
 
@@ -144,6 +154,7 @@ describe("cache entrypoints", () => {
   });
 
   test("pins an HTML cache fill to the resolved production version", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const env = createEnv();
     const ctx = {
       props: {
@@ -159,13 +170,92 @@ describe("cache entrypoints", () => {
     const response = await entrypoint.fetch(htmlRequest());
     expect(await response.text()).toBe("<h1>Guide</h1>");
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=86400, stale-while-revalidate=604800, stale-if-error=604800",
+      "public, max-age=2592000, stale-while-revalidate=604800, stale-if-error=604800",
     );
     expect(env.LOADER.get).toHaveBeenCalledWith(
       "docs:site-1:version-1:build-1",
       expect.any(Function),
     );
     expect(env.DOCS_RESOLVER.fetch).not.toHaveBeenCalled();
+    // Logged without DEBUG. The mock loader keeps an isolate, so no code loads.
+    expect(JSON.parse(String(info.mock.calls.at(-1)?.[0]))).toEqual({
+      event: "docs_renderer_load",
+      entrypoint: "fetch",
+      siteId: "site-1",
+      publishedVersionId: "version-1",
+      isolateScope: "site",
+      rendererBuildId: "build-1",
+      state: "WARM",
+      totalMs: expect.any(Number),
+      ok: true,
+      status: 200,
+      bodyMs: expect.any(Number),
+      bytes: "<h1>Guide</h1>".length,
+    });
+    info.mockRestore();
+  });
+
+  test("logs the renderer's timing split and keeps its header out of the cache", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const env = createEnv();
+    const now = Date.now();
+    env.render.mockResolvedValueOnce(
+      new Response("<h1>Guide</h1>", {
+        headers: {
+          "content-type": "text/html",
+          "x-doxa-renderer-timing": JSON.stringify({
+            isolateId: "a1b2c3d4",
+            isolateRequests: 3,
+            isolateAgeMs: 4_000,
+            requestStartedAt: now,
+            routeDataMs: 120,
+            siteConfigMs: 0,
+            contentCalls: 1,
+            contentMs: 120,
+            longestContentMs: 120,
+            respondedAt: now + 130,
+          }),
+        },
+      }),
+    );
+    const entrypoint = new DocsHtmlCache(
+      {
+        props: {
+          hostname: resolution.hostname,
+          rendererBuildId: "build-1",
+          resolution,
+          lifetime: "versioned" as const,
+          deliveryRenderId: null,
+        },
+        exports: { ScopedDocsContent: () => ({ request: vi.fn() }) },
+      } as never,
+      env as never,
+    );
+
+    const response = await entrypoint.fetch(htmlRequest());
+
+    expect(response.headers.has("x-doxa-renderer-timing")).toBe(false);
+    expect(await response.text()).toBe("<h1>Guide</h1>");
+    const logged = JSON.parse(String(info.mock.calls.at(-1)?.[0]));
+    expect(logged).toMatchObject({
+      event: "docs_renderer_load",
+      renderer: {
+        isolateId: "a1b2c3d4",
+        isolateRequests: 3,
+        isolateAgeMs: 4_000,
+      },
+      phases: {
+        handlerMs: 130,
+        routeDataMs: 120,
+        siteConfigMs: 0,
+        contentCalls: 1,
+        contentMs: 120,
+        longestContentMs: 120,
+      },
+    });
+    expect(typeof logged.phases.beforeHandlerMs).toBe("number");
+    expect(typeof logged.phases.afterHandlerMs).toBe("number");
+    info.mockRestore();
   });
 
   test("stores renderer timings as private cache metadata when DEBUG is true", async () => {
@@ -277,7 +367,6 @@ describe("cache entrypoints", () => {
   });
 
   test.each<RequestInit>([
-    { headers: { cookie: "session=private" } },
     { headers: { authorization: "Bearer private" } },
     { headers: { "cache-control": "no-cache" } },
     { method: "POST" },
@@ -302,13 +391,110 @@ describe("cache entrypoints", () => {
       );
       expect(env.DOCS_RESOLVER.fetch).toHaveBeenCalledOnce();
       expect(ctx.exports.DocsHostCache).toHaveBeenCalledWith({
-        props: { hostname: "docs.example.com" },
+        props: { hostname: "docs.example.com", format: DOCS_HOST_CACHE_FORMAT },
       });
       expect(ctx.exports.DocsHtmlCache).not.toHaveBeenCalled();
       expect(env.render).toHaveBeenCalledOnce();
       expect(response.headers.get("cache-control")).toBe("private, no-store");
     },
   );
+
+  test("sends every page of a doxa.page hostname with a custom domain there, before any render", async () => {
+    const generated = {
+      ...resolution,
+      hostname: "demo.doxa.page",
+      domainKind: "doxa_subdomain" as const,
+      canonicalHostname: "docs.example.com",
+    };
+    const env = createEnv(generated);
+    const ctx = {
+      exports: {
+        DocsHostCache: vi.fn(
+          ({ props }: { props: { hostname: string } }) =>
+            new DocsHostCache({ props } as never, env as never),
+        ),
+        DocsHtmlCache: vi.fn(),
+      },
+    };
+    const response = await worker.fetch(
+      new Request("https://demo.doxa.page/guides/start?tab=npm", {
+        headers: { accept: "text/html" },
+      }),
+      env as never,
+      ctx as never,
+    );
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe(
+      "https://docs.example.com/guides/start?tab=npm",
+    );
+    expect(ctx.exports.DocsHtmlCache).not.toHaveBeenCalled();
+    expect(env.render).not.toHaveBeenCalled();
+  });
+
+  describe("a visitor with a cookie (RES-1)", () => {
+    const cookie = { headers: { cookie: "_ga=GA1.1.123.456" } };
+
+    test("reads the HTML cache of a public production site", async () => {
+      const env = createEnv();
+      const ctx = {
+        exports: {
+          DocsHostCache: vi.fn(
+            ({ props }: { props: { hostname: string } }) =>
+              new DocsHostCache({ props } as never, env as never),
+          ),
+          DocsHtmlCache: vi.fn(),
+          ScopedDocsContent: vi.fn(() => ({ request: vi.fn() })),
+        },
+      };
+      await worker.fetch(htmlRequest(cookie), env as never, ctx as never);
+      expect(ctx.exports.DocsHtmlCache).toHaveBeenCalledOnce();
+    });
+
+    test("fills the HTML cache through the trusted entrypoint", async () => {
+      const env = createEnv();
+      const entrypoint = new DocsHtmlCache(
+        {
+          props: {
+            hostname: resolution.hostname,
+            rendererBuildId: "build-1",
+            resolution,
+            lifetime: "versioned" as const,
+            deliveryRenderId: null,
+          },
+          exports: { ScopedDocsContent: vi.fn(() => ({ request: vi.fn() })) },
+        } as never,
+        env as never,
+      );
+      const response = await entrypoint.fetch(htmlRequest(cookie));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toContain("public");
+    });
+
+    test("keeps a preview on the uncached shared renderer", async () => {
+      const env = createEnv({
+        ...resolution,
+        renderTarget: "preview" as const,
+        accessPolicy: "authenticated" as const,
+      });
+      const ctx = {
+        exports: {
+          DocsHostCache: vi.fn(
+            ({ props }: { props: { hostname: string } }) =>
+              new DocsHostCache({ props } as never, env as never),
+          ),
+          DocsHtmlCache: vi.fn(),
+        },
+      };
+      const response = await worker.fetch(
+        htmlRequest(cookie),
+        env as never,
+        ctx as never,
+      );
+      expect(await response.text()).toBe("shared");
+      expect(ctx.exports.DocsHtmlCache).not.toHaveBeenCalled();
+    });
+  });
 
   test.each([
     null,
@@ -340,8 +526,9 @@ describe("cache entrypoints", () => {
       expect(await response.text()).toBe("shared");
       expect(ctx.exports.DocsHtmlCache).not.toHaveBeenCalled();
       expect(response.headers.get("cache-control")).toBe("private, no-store");
+      // SEC-007: the host entry of an unknown hostname is a short negative entry.
       expect((await hostEntrypoint.fetch()).headers.get("cache-control")).toBe(
-        "private, no-store",
+        value === null ? "public, max-age=30, must-revalidate" : "private, no-store",
       );
       expect((await hostEntrypoint.fetch()).headers.has("cache-tag")).toBe(
         false,
@@ -402,7 +589,7 @@ describe("cache entrypoints", () => {
       ctx as never,
     );
     expect(hostCache).toHaveBeenCalledWith({
-      props: { hostname: "docs.example.com" },
+      props: { hostname: "docs.example.com", format: DOCS_HOST_CACHE_FORMAT },
     });
     expect(ctx.exports.DocsHtmlCache).not.toHaveBeenCalled();
     expect(response.headers.get("cache-control")).toBe("private, no-store");
@@ -439,6 +626,8 @@ describe("route-data cache entrypoint", () => {
       } as never,
       {
         DOXA_PROD_ROUTE_DATA_CACHE_MODE: "all",
+        // F14: only the deployed release fills an entry.
+        DOXA_RENDERER_RELEASE_ID: "a".repeat(64),
         ...envOverrides,
       } as never,
     );
@@ -454,12 +643,34 @@ describe("route-data cache entrypoint", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(createRouteData());
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=86400, stale-while-revalidate=604800, stale-if-error=604800",
+      "public, max-age=2592000, stale-while-revalidate=604800, stale-if-error=604800",
     );
     expect(prepare).toHaveBeenCalledWith({
       resolution: expect.objectContaining({ siteId: "site-1" }),
       pathname: "/guide",
     });
+  });
+
+  test("logs a call for another renderer release", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { entrypoint, prepare } = createRouteDataCache(
+      await createRouteDataProps(),
+      { DOXA_RENDERER_RELEASE_ID: "c".repeat(64) },
+    );
+
+    const response = await entrypoint.fetch(new Request(routeDataUrl));
+
+    expect(response.status).toBe(400);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(JSON.parse(String(warn.mock.calls[0]?.[0]))).toEqual({
+      event: "docs_cache_release_rejected",
+      entrypoint: "DocsRouteDataCache",
+      reason: "release_mismatch",
+      siteId: "site-1",
+      requestedReleaseId: "a".repeat(64),
+      deployedReleaseId: "c".repeat(64),
+    });
+    warn.mockRestore();
   });
 
   test("never stores a failed preparation", async () => {
@@ -539,6 +750,16 @@ describe("route-data cache entrypoint", () => {
       url: `${routeDataUrl}?path=/other`,
     },
     { name: "HEAD request", change: (props) => props, method: "HEAD" },
+    {
+      name: "another renderer release",
+      change: (props) => props,
+      env: { DOXA_RENDERER_RELEASE_ID: "c".repeat(64) },
+    },
+    {
+      name: "missing renderer release",
+      change: (props) => props,
+      env: { DOXA_RENDERER_RELEASE_ID: "" },
+    },
   ])("rejects a $name request before rendering", async (scenario) => {
     const props = scenario.change(await createRouteDataProps());
     const { entrypoint, prepare } = createRouteDataCache(props, scenario.env);

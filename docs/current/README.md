@@ -4,9 +4,9 @@ This directory is the canonical description of the platform as it exists in
 the current working tree. Update it in the same task as every architecture,
 runtime, contract, or operational behavior change.
 
-Historical implementation plans remain under `docs/superpowers/plans`. Those
-plans explain intent; the files in this directory describe the implemented
-state.
+Historical implementation plans are in `docs/superpowers/plans` of the private
+ops repo (`doxa-ops`). Those plans explain intent; the files in this directory
+describe the implemented state.
 
 ## Current topics
 

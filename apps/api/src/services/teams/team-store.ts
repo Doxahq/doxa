@@ -47,6 +47,8 @@ export interface InviteLookup {
   readonly expiresAt: Date;
   readonly usedAt: Date | null;
   readonly revokedAt: Date | null;
+  /** Lowercase. Null for an invite link without an address. */
+  readonly invitedEmail: string | null;
 }
 
 export interface NewTeamInvite {
@@ -104,13 +106,23 @@ export interface TeamStore {
   createInvite(invite: NewTeamInvite): Promise<TeamInviteRecord>;
   /** Invites of the team sent by email after `since`, for the hourly limit. */
   countEmailedInvitesSince(teamId: string, since: Date): Promise<number>;
+  /** Invites sent by email by this user in any team after `since`. */
+  countEmailedInvitesBySenderSince(userId: string, since: Date): Promise<number>;
+  /** Invites this user sent by email to this address, in any team, after `since`. */
+  countEmailedInvitesToSince(userId: string, email: string, since: Date): Promise<number>;
+  /** Teams in which the user is an owner. */
+  countOwnedTeams(userId: string): Promise<number>;
   /** False when no pending invite of this team has the ID. */
   revokeInvite(teamId: string, inviteId: string, now: Date): Promise<boolean>;
   findInvite(tokenHash: string): Promise<InviteLookup | null>;
+  /** The user's email in lowercase, or null when it is not verified. */
+  findVerifiedEmail(userId: string): Promise<string | null>;
   /** Marks the invite used and adds the member, or fails without a change. */
   acceptInvite(tokenHash: string, userId: string, now: Date): Promise<InviteAcceptance>;
   setRole(teamId: string, userId: string, role: TeamRole, now: Date): Promise<MembershipChange>;
   removeMember(teamId: string, userId: string): Promise<MembershipChange>;
+  /** Projects of the team whose owner (`projects.user_id`) is this user. */
+  listProjectsOwnedBy(teamId: string, userId: string): Promise<TeamProject[]>;
   /** Moves a personal project into a team. */
   moveProject(projectId: string, teamId: string, now: Date): Promise<ProjectMove>;
 }

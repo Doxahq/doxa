@@ -23,6 +23,9 @@ import { describeNamedBranch } from "~/lib/dashboard/branch-purpose"
 import { ROLE_RESTRICTED_MESSAGE } from "~/lib/dashboard/use-project-capabilities"
 import { cn } from "~/lib/utils"
 
+// Rows of a group sit apart, so a highlighted row never touches the next one.
+const MENU_GROUP_CLASS = "[&_[cmdk-group-items]]:flex [&_[cmdk-group-items]]:flex-col [&_[cmdk-group-items]]:gap-1 [&_[cmdk-group-heading]]:pb-2"
+
 interface BranchSwitcherProps {
   projectId: string
   branch: BranchRef
@@ -149,7 +152,7 @@ export function BranchSwitcher(props: BranchSwitcherProps) {
             <CommandEmpty className="py-4 text-center text-xs text-muted-foreground">
               {canCreateFromSearch ? null : "No branch matches."}
             </CommandEmpty>
-            <CommandGroup heading={<MenuSectionLabel>Branches</MenuSectionLabel>}>
+            <CommandGroup heading={<MenuSectionLabel>Branches</MenuSectionLabel>} className={MENU_GROUP_CLASS}>
               <BranchRow
                 value="main production live"
                 name="main"
@@ -216,7 +219,7 @@ export function BranchSwitcher(props: BranchSwitcherProps) {
               </CommandGroup>
             ) : null}
             <CommandSeparator className="my-1.5 bg-divider" />
-            <CommandGroup>
+            <CommandGroup className={MENU_GROUP_CLASS}>
               {canWrite ? (
                 <CommandItem
                   value="new branch create"

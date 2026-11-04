@@ -4,6 +4,7 @@ import {
   type DocsPublicationSummary,
   type PublishDocsBranchResult,
 } from "@doxahq/contracts/docs-branches";
+import type { DocsWarmHint } from "@doxahq/contracts/docs-warm-job";
 import { DocsContentError } from "../services/docs-content/errors";
 import { withDocsPublicationEffects } from "./docs-cache-mutation";
 import { recordPublication, type PublicationAttribution } from "./docs-publications";
@@ -32,6 +33,8 @@ export interface PublishStoredBranchInput {
   pageMoves?: readonly PageMove[];
   /** Pages that the publication removes, so their locks go with them. */
   removedHrefs?: readonly string[];
+  /** Warm-job ordering, sent with the post-commit hostname sync (M45). */
+  warm?: DocsWarmHint;
 }
 
 /** The branch changed after the user reviewed it, so the review is stale. */
@@ -268,6 +271,7 @@ export class DocsBranchPublicationRepository {
           review: closedReview,
         };
       },
+      input.warm ? { warm: input.warm } : {},
     );
   }
 }

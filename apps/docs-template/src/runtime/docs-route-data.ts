@@ -4,11 +4,13 @@ import {
 } from "@doxahq/contracts/docs-assets";
 import {
   parseRuntimeMdx,
+  readFrontmatter,
   runtimeMdxHeadings,
   type RuntimeMdxDocument,
   type RuntimeMdxParseOptions,
 } from "@doxahq/mdx-runtime";
 
+import { utf8ByteLength } from "../lib/utf8";
 import { loadRouteIcons, type RouteIcons } from "./route-icons";
 import {
   filterLinkableRuntimePages,
@@ -115,10 +117,24 @@ export type DocsRootRouteData =
   | DocsRouteData
   | { type: "empty"; homeHref: string | null };
 
+export type DocsParserHighlighter = NonNullable<
+  RuntimeMdxParseOptions["highlighter"]
+>;
+
+/** Highlights a page with a highlighter that has the page's grammars loaded. */
+export interface DocsPageHighlighting {
+  parse<T>(
+    source: string,
+    parse: (highlighter: DocsParserHighlighter) => T
+  ): Promise<T>;
+}
+
 export interface ResolveDocsRouteDataOptions {
   includeRawDocument?: boolean;
   includeRuntimeDocument?: boolean;
   highlighter?: RuntimeMdxParseOptions["highlighter"];
+  /** Wins over `highlighter`. */
+  highlighting?: DocsPageHighlighting;
   timing?: RuntimeTimingSink;
 }
 
@@ -170,6 +186,7 @@ async function resolveDocsRouteDataWithoutIcons(
         pathname,
         {
           highlighter,
+          highlighting: options.highlighting,
           includeRawDocument,
           includeRuntimeDocument,
           startedAt,
@@ -284,13 +301,7 @@ async function resolveDocsRouteDataWithoutIcons(
       ? await measureDocsRouteStep(
           timing,
           "route.parseRuntimeDocument",
-          () =>
-            parseDocsRouteDocument(
-              page.body,
-              page.href,
-              options.highlighter,
-              page.assets
-            ),
+          () => parseDocsRoutePage(page, options, source.cacheScope),
           { sourceBytes: page.body.length }
         )
       : null;
@@ -334,6 +345,7 @@ async function resolveDocsRouteDataWithoutIcons(
 
 interface CompleteRuntimeRouteDataOptions {
   highlighter?: RuntimeMdxParseOptions["highlighter"];
+  highlighting?: DocsPageHighlighting;
   includeRawDocument: boolean;
   includeRuntimeDocument: boolean;
   startedAt: number;
@@ -348,6 +360,7 @@ async function completeDocsRouteDataFromRuntimeRouteData(
 ): Promise<DocsRouteData> {
   const {
     highlighter,
+    highlighting,
     includeRawDocument,
     includeRuntimeDocument,
     startedAt,
@@ -381,6 +394,7 @@ async function completeDocsRouteDataFromRuntimeRouteData(
     runtimeRouteData,
     {
       highlighter,
+      highlighting,
       includeRawDocument,
       includeRuntimeDocument,
       timing,
@@ -406,7 +420,11 @@ async function buildDocsRoutePageDataFromRuntimeRouteData(
   runtimeRouteData: RuntimeRoutePageData,
   options: Pick<
     CompleteRuntimeRouteDataOptions,
-    "highlighter" | "includeRawDocument" | "includeRuntimeDocument" | "timing"
+    | "highlighter"
+    | "highlighting"
+    | "includeRawDocument"
+    | "includeRuntimeDocument"
+    | "timing"
   >
 ): Promise<DocsRoutePageData> {
   const page = runtimeRouteData.page;
@@ -427,13 +445,7 @@ async function buildDocsRoutePageDataFromRuntimeRouteData(
       ? await measureDocsRouteStep(
           options.timing,
           "route.parseRuntimeDocument",
-          () =>
-            parseDocsRouteDocument(
-              page.body,
-              page.href,
-              options.highlighter,
-              page.assets
-            ),
+          () => parseDocsRoutePage(page, options, source.cacheScope),
           { sourceBytes: page.body.length }
         )
       : null;
@@ -520,6 +532,59 @@ export async function resolveDocsRootRouteData(
   }
 
   return resolution;
+}
+
+async function parseDocsRoutePage(
+  page: RuntimePage,
+  options: Pick<ResolveDocsRouteDataOptions, "highlighter" | "highlighting">,
+  cacheScope?: string
+): Promise<ParsedDocument> {
+  const bytes = utf8ByteLength(page.body);
+  if (bytes > MAX_RENDERED_PAGE_BYTES) {
+    logPageTooLarge({ href: page.href, bytes, cacheScope });
+    return pageTooLargeDocument(page.body);
+  }
+  const parse = (highlighter?: DocsParserHighlighter) =>
+    parseDocsRouteDocument(page.body, page.href, highlighter, page.assets);
+  return options.highlighting
+    ? options.highlighting.parse(page.body, parse)
+    : parse(options.highlighter);
+}
+
+/**
+ * Pages above this much MDX render a short notice instead of their content.
+ * Not every write path enforces this size, and one renderer isolate serves
+ * many sites, so the renderer checks it too.
+ */
+export const MAX_RENDERED_PAGE_BYTES = 512 * 1024;
+
+const PAGE_TOO_LARGE_NOTICE =
+  "> This page is too large to display. Its source is above the 512 KB limit for one page.";
+
+function pageTooLargeDocument(body: string): ParsedDocument {
+  return {
+    ok: true,
+    document: {
+      frontmatter: readFrontmatter(body).frontmatter,
+      nodes: parseRuntimeMdx(PAGE_TOO_LARGE_NOTICE).nodes,
+    },
+  };
+}
+
+function logPageTooLarge(input: {
+  href: string;
+  bytes: number;
+  cacheScope: string | undefined;
+}): void {
+  console.warn(
+    JSON.stringify({
+      event: "docs_page_too_large",
+      href: input.href,
+      bytes: input.bytes,
+      limitBytes: MAX_RENDERED_PAGE_BYTES,
+      ...(input.cacheScope ? { scope: input.cacheScope } : {}),
+    })
+  );
 }
 
 export function parseDocsRouteDocument(
@@ -750,7 +815,8 @@ function stripFrontmatter(source: unknown): string {
 function getCanonicalUrl(siteUrl: string, href: string): string {
   const base = siteUrl.replace(/\/+$/, "");
   const normalizedHref = normalizeRuntimeHref(href);
-  return normalizedHref === "/" ? base || "/" : `${base}${normalizedHref}`;
+  // The root keeps its slash, as in the sitemap: `https://host/`.
+  return `${base}${normalizedHref}`;
 }
 
 function isDefaultPrefixedSlug(slug: string): boolean {

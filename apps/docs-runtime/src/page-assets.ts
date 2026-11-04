@@ -2,8 +2,7 @@ import {
   docsAssetArtifactPath,
   docsAssetNamesInSource,
 } from "@doxahq/contracts/docs-assets";
-import type { VersionTree } from "@doxahq/docs-engine";
-import { artifactReader } from "./artifact-storage";
+import type { VersionTree, VersionTreeReader } from "@doxahq/docs-engine";
 
 /**
  * The content hash of each asset that a page links to, by name, from the
@@ -12,7 +11,7 @@ import { artifactReader } from "./artifact-storage";
  * page without images keeps its exact former shape.
  */
 export async function readPageAssetVersions(
-  bucket: R2Bucket,
+  reader: Pick<VersionTreeReader, "readTree">,
   artifactPrefix: string,
   body: string,
 ): Promise<Record<string, string> | undefined> {
@@ -22,7 +21,7 @@ export async function readPageAssetVersions(
   // `/assets/{name}` URL still loads the image.
   let tree: VersionTree | null;
   try {
-    tree = await artifactReader(bucket).readTree(artifactPrefix);
+    tree = await reader.readTree(artifactPrefix);
   } catch {
     return undefined;
   }

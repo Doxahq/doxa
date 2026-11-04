@@ -6,6 +6,7 @@ import {
   type ApprovalRequestStatus,
 } from "@doxahq/contracts/approval-requests";
 import {
+  EXPIRED_ERROR,
   isAllowedTransition,
   REPLACED_ERROR,
   type ActiveApprovalStatus,
@@ -62,6 +63,8 @@ export type NewApprovalRequest = Pick<
 
 export type PendingInsertOutcome =
   | { readonly kind: "reused"; readonly request: ApprovalRequestRecord }
+  /** Another person's request for the target is pending; it is kept (SEC-031). */
+  | { readonly kind: "held_by_other"; readonly request: ApprovalRequestRecord }
   | {
       readonly kind: "created";
       readonly request: ApprovalRequestRecord;
@@ -91,7 +94,9 @@ export interface PendingCursor {
 export interface AgentApprovalRequestStore {
   /**
    * Inserts a pending request. A pending request for the same target is
-   * returned when `isSameRequest` accepts it, else marked stale and replaced.
+   * returned when `isSameRequest` accepts it. Another request of the same
+   * person is marked stale and replaced; another person's request is kept,
+   * and the outcome is `held_by_other`.
    */
   insertPending(
     input: NewApprovalRequest,
@@ -253,11 +258,19 @@ export class AgentApprovalRequestsRepository implements AgentApprovalRequestStor
   ): Promise<PendingInsertOutcome> {
     return this.db.transaction(async (tx) => {
       const existing = await lockPendingForTarget(tx, input);
-      if (existing && isSameRequest(existing)) return { kind: "reused", request: existing };
+      // A request past its expiry no longer holds the target: it is expired
+      // here, as the sweeper would, and never reused or kept (SEC-029/031).
+      const expired = existing !== null && existing.expiresAt <= now;
+      if (existing && !expired && isSameRequest(existing)) return { kind: "reused", request: existing };
+      if (existing && !expired && existing.requestedByUserId !== input.requestedByUserId) {
+        return { kind: "held_by_other", request: existing };
+      }
       if (existing) {
         await tx
           .update(table)
-          .set(transitionColumns({ to: "stale", error: REPLACED_ERROR }, now))
+          .set(
+            transitionColumns(expired ? { to: "expired", error: EXPIRED_ERROR } : { to: "stale", error: REPLACED_ERROR }, now),
+          )
           .where(and(eq(table.id, existing.id), eq(table.status, "pending")));
       }
       const [inserted] = await tx

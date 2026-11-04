@@ -199,6 +199,10 @@ These components render REST request and response metadata. The generator writes
 
 On a page whose frontmatter carries `apiMethod` and `apiPath`, the renderer draws the method and path bar, the request and response cards, the parameter groups, and their headings. Write only the introduction and usage notes as prose. Do not add headings for Authorizations, Parameters, Body, or Response.
 
+The "Try it" playground sends requests only to the API base URL that the site owner sets in the site settings. The `baseUrl` of an `ApiEndpoint` appears in the request samples and never decides where a reader's request goes. A Doxa server sends each request by default, so the API needs no CORS setup. Do not tell readers that a request comes from their browser, and do not ask them to set up CORS.
+
+The optional `ApiParam` props `enum` (comma-separated allowed values), `example` and `default` give the playground typed inputs and hints. The row on the page does not draw them.
+
 ## Markdown Features
 
 - GitHub-flavored tables
@@ -209,6 +213,7 @@ On a page whose frontmatter carries `apiMethod` and `apiPath`, the renderer draw
 - Line numbers with `showLineNumbers`
 - Line highlighting with `{3,5-7}`
 - KaTeX math with inline `$$...$$` and fenced `math` blocks
+- Size limits: a code block above 32 KB, or the code after 128 KB of highlighted code on one page, renders as plain text without colors. A line above 2,000 characters renders without colors. A page above 512 KB of MDX renders only a "page too large" notice.
 
 ````md
 ```ts {2} showLineNumbers
@@ -233,6 +238,8 @@ const widget = new Widget({
 10. Do not put real tokens or secrets in examples or prose.
 11. Do not embed a video to show what an image or a short code block shows, or from a provider other than YouTube, Vimeo, or Loom.
 12. Do not leave image alt text empty. Describe what the image shows.
+13. Do not paste very large generated files or minified code into a code block. Show a short excerpt and link to the full file.
+14. Do not use `className` to position content: positioning classes (`fixed`, `absolute`, `sticky`, `inset-*`, `top-*` and the other offsets, `z-*`, arbitrary `[...]` properties) are removed when the page renders, and a `style` attribute is ignored. Use `className` for spacing and similar small adjustments only.
 
 ## Composition Rules
 

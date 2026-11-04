@@ -27,6 +27,8 @@ describe("documentation response headers", () => {
       });
 
       expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+      // SECURITY REGRESSION GUARDRAIL (SEC-033): a preview hostname never leaves in a Referer.
+      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     },
   );
 
@@ -77,5 +79,14 @@ describe("documentation response headers", () => {
     );
 
     expect(response.headers.get("x-frame-options")).toBe("DENY");
+  });
+});
+
+// SECURITY REGRESSION GUARDRAIL (SEC-023): docs HTML never loads plugins or rebases URLs.
+describe("docs content security policy", () => {
+  test("blocks object, embed and base tags on every gateway response", () => {
+    const response = withDocsSecurityHeaders(new Response("<html></html>", { headers: { "content-type": "text/html" } }));
+
+    expect(response.headers.get("content-security-policy")).toBe("base-uri 'self'; object-src 'none'");
   });
 });

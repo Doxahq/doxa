@@ -52,7 +52,8 @@ import {
   normalizeStepBlocks,
   type StepProblemKind,
 } from "./step-blocks";
-import { findSecret } from "../reference-specs/secrets";
+import { REDACTED, SecretRedactor, findSecret } from "../reference-specs/secrets";
+import { findUnsafeMarkup } from "./generated-markup";
 
 export { stripAgentCommentary } from "./commentary-patterns";
 
@@ -111,6 +112,15 @@ export function validatePage(
   }
 
   for (const [key, value] of Object.entries(frontmatter)) {
+    const values = Array.isArray(value) ? value : [value];
+    if (values.some((item) => typeof item === "string" && findSecret(item) !== null)) {
+      // No snippet: the retry prompt must not repeat the value.
+      errors.push({
+        field: `frontmatter.${key}`,
+        message: "Frontmatter value contains what looks like a real credential.",
+        severity: "error",
+      });
+    }
     if (!["title", "description", "keywords", "icon", "apiMethod", "apiPath"].includes(key)) {
       errors.push({
         field: `frontmatter.${key}`,
@@ -338,6 +348,26 @@ function detectLeakedSecret(body: string): ContentQualityIssue | null {
       "Replace the credential with a clear placeholder such as `YOUR_API_KEY`. " +
       "Never copy a real key, token, or private key from the repository into the docs.",
     fixExample: { bad: "Authorization: Bearer sk-ant-api03-…", good: "Authorization: Bearer YOUR_API_KEY" },
+  };
+}
+
+/**
+ * Detect raw HTML that a generated page never needs, such as `<script>` or a
+ * raw `<a>`. Hidden classes and outside media are removed at the final
+ * compose step instead, so they need no retry.
+ */
+function detectUnsafeMarkup(body: string): ContentQualityIssue | null {
+  const unsafe = findUnsafeMarkup(body);
+  if (!unsafe) return null;
+  return {
+    check: "unsafeMarkup",
+    severity: "hard",
+    message: `The page contains raw HTML that docs pages do not allow (${unsafe.reason}).`,
+    location: { line: unsafe.line, snippet: unsafe.snippet },
+    fixInstruction:
+      "Remove the raw HTML. Use a Markdown link `[text](url)` instead of `<a>`, and the registered MDX " +
+      "components for everything else. Never add scripts, styles, frames, forms, event handlers or hidden content.",
+    fixExample: { bad: '<a href="https://example.com">Example</a>', good: "[Example](https://example.com)" },
   };
 }
 
@@ -814,6 +844,7 @@ function trimToLastCompleteSentence(body: string): string {
 
 const DETECTORS: ReadonlyArray<(body: string) => ContentQualityIssue | null> = [
   detectLeakedSecret,
+  detectUnsafeMarkup,
   detectSkeletonPage,
   detectCutoffContent,
   detectUnclosedCodeBlocks,
@@ -906,6 +937,11 @@ export interface RunPageValidationOptions extends PageValidationOptions {
   minBodyLength?: number;
   /** Receives MDX validation timing spans. */
   onSpan?: AgentSpanCallback;
+  /**
+   * Exact values that no page may contain, such as the credentials of this
+   * run. Known key formats are rejected without this list.
+   */
+  forbiddenValues?: readonly string[];
 }
 
 const SNIPPET_MAX = 240;
@@ -1011,6 +1047,18 @@ export async function runPageValidation(
     }
   }
 
+  if (containsForbiddenValue(content, opts.forbiddenValues)) {
+    // No line or snippet: the retry prompt must not repeat the value.
+    issues.push({
+      rule: "forbiddenValue",
+      severity: "hard",
+      message: "The page contains a secret value of this generation run.",
+      hint:
+        "Remove the secret value. Never copy a credential, token or environment value into the docs; " +
+        "use a clear placeholder such as `YOUR_API_KEY`.",
+    });
+  }
+
   const allowed = loadAllowedComponents();
   const referenced = extractMdxComponents(content);
   const unknownComponents = referenced.filter((name) => !allowed.has(name));
@@ -1048,7 +1096,31 @@ export async function runPageValidation(
   }
 
   const ok = issues.every((i) => i.severity !== "hard");
-  return { ok, issues };
+  // Any detector can quote the line with a secret, and the report goes back
+  // into the next model prompt.
+  return { ok, issues: issues.map((issue) => maskIssueSecrets(issue, opts.forbiddenValues)) };
+}
+
+function maskIssueSecrets(issue: ToolValidationIssue, forbiddenValues: readonly string[] | undefined): ToolValidationIssue {
+  const mask = (text: string) => forbiddenValueVariants(forbiddenValues)
+    .reduce((current, value) => current.split(value).join(REDACTED), new SecretRedactor().redact(text));
+  return {
+    ...issue,
+    message: mask(issue.message),
+    hint: mask(issue.hint),
+    ...(issue.snippet !== undefined ? { snippet: mask(issue.snippet) } : {}),
+  };
+}
+
+/** Matches a forbidden value as written, URL-encoded or base64-encoded. */
+export function containsForbiddenValue(content: string, values: readonly string[] | undefined): boolean {
+  return forbiddenValueVariants(values).some((candidate) => content.includes(candidate));
+}
+
+function forbiddenValueVariants(values: readonly string[] | undefined): string[] {
+  return (values ?? [])
+    .filter((value) => value.length > 0)
+    .flatMap((value) => [value, encodeURIComponent(value), Buffer.from(value).toString("base64")]);
 }
 
 function fromUnknownComponent(

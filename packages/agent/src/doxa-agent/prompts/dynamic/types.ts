@@ -87,13 +87,11 @@ export interface PromptRenderContext {
 
 /**
  * `specFiles`: code read the REST surface from these spec files, so the
- * model leaves it out. `endpointExtraction`: a later step extracts endpoint
- * details from the route files, so the model lists groups, route files and
- * short endpoint lines only.
+ * model leaves it out. Without them, the analysis answer gives the REST
+ * surface with every endpoint fact.
  */
 export interface RestReferencePromptMode {
   specFiles?: string[];
-  endpointExtraction?: boolean;
 }
 
 export interface OrderingSectionInput {

@@ -15,5 +15,8 @@ export function toHostResolution(
     artifactPrefix: resolution.artifactPrefix,
     manifestPath: resolution.manifestPath,
     accessPolicy: resolution.accessPolicy,
+    // Canonical links of each hostname point to that hostname. Docs hosts
+    // serve HTTPS only (M23).
+    siteUrl: `https://${resolution.hostname}`,
   };
 }

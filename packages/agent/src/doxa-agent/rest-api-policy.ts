@@ -94,11 +94,11 @@ export function isRestApiPlaygroundEnabled(
 }
 
 /**
- * The first server URL that the playground may call from a reader's
- * browser: `https:`, a public DNS name, and no user name or password. An IP
- * address, `localhost`, a single-label host and the reserved local names
- * never qualify, so the docs cannot point a reader's browser at the
- * reader's own network. Doxa has no proxy, so the request is never Doxa's.
+ * The first server URL that the playground may call: `https:`, a public DNS
+ * name, and no user name or password. An IP address, `localhost`, a
+ * single-label host and the reserved local names never qualify. The same rules
+ * apply to the proxy (`parseDocsTryTarget`) and to the reader's browser, so the
+ * docs cannot point either of them at a private network.
  */
 export function playgroundServerUrl(surface: RestApiReferenceSurface | undefined): string | undefined {
   return [surface?.baseUrl, ...(surface?.servers ?? [])]

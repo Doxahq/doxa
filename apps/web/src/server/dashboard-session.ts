@@ -1,18 +1,11 @@
-import { currentUserResponseSchema } from "@doxahq/contracts"
 import { createServerFn } from "@tanstack/react-start"
 import { getRequest } from "@tanstack/react-start/server"
 
-import {
-  createDashboardSession,
-  createDevDashboardSession,
-  type DashboardSession,
-} from "~/lib/auth/dashboard-session"
+import { createDevDashboardSession } from "~/lib/auth/dashboard-session"
 import { resolveDashboardEntry, type DashboardEntry } from "~/lib/auth/dashboard-entry"
-import { getApiUrl } from "~/lib/platform-api"
+import { hasSignedInCookie } from "~/lib/auth/session-cookie"
 
 const DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID
-const DASHBOARD_SESSION_TIMEOUT_MS = 5_000
-const DASHBOARD_SESSION_SLOW_THRESHOLD_MS = 2_000
 
 export type { DashboardEntry }
 
@@ -29,78 +22,29 @@ export const getDashboardEntry = createServerFn({ method: "GET" }).handler(
   },
 )
 
-export const getDashboardSession = createServerFn({ method: "GET" }).handler(
-  async (): Promise<DashboardSession | null> => {
-    if (DEV_USER_ID) {
-      return createDevDashboardSession(DEV_USER_ID)
-    }
-
-    const startedAt = Date.now()
-
-    try {
-      const request = getRequest()
-      const response = await fetch(getApiUrl("/me"), {
-        headers: forwardedAuthHeaders(request.headers),
-        signal: AbortSignal.timeout(DASHBOARD_SESSION_TIMEOUT_MS),
-      })
-
-      if (response.status === 401) return null
-
-      if (!response.ok) {
-        console.error("Dashboard session probe failed.", {
-          status: response.status,
-          body: await response.text().catch(() => null),
-        })
-        return null
-      }
-
-      const payload = await response.json()
-      const parsed = currentUserResponseSchema.safeParse(payload)
-
-      if (!parsed.success) {
-        console.error("Dashboard session response did not match the expected shape.", {
-          issues: parsed.error.issues,
-        })
-        return null
-      }
-
-      return createDashboardSession(parsed.data.user)
-    } catch (error) {
-      const durationMs = Date.now() - startedAt
-      const timedOut = isNamedError(error, "TimeoutError")
-
-      if (timedOut) {
-        console.error(`Dashboard session probe timed out after ${durationMs}ms.`)
-      } else {
-        console.error("Dashboard session probe failed before receiving a response.", error)
-      }
-      return null
-    } finally {
-      const durationMs = Date.now() - startedAt
-      if (durationMs >= DASHBOARD_SESSION_SLOW_THRESHOLD_MS && durationMs < DASHBOARD_SESSION_TIMEOUT_MS) {
-        console.warn(`Dashboard session probe was slow (${durationMs}ms).`)
-      }
-    }
+/**
+ * True when the request looks signed in: the API's signed-in marker or a
+ * session cookie. The session cookies are host-only on the API host
+ * (SEC-021), so the dashboard server cannot ask the API who is signed in. The
+ * page confirms the session in the browser, where every API call checks it,
+ * and a stale marker is cleared by the first 401.
+ */
+export const hasDashboardSignIn = createServerFn({ method: "GET" }).handler(
+  async (): Promise<boolean> => {
+    if (DEV_USER_ID) return true
+    return resolveDashboardEntry(getRequest().headers.get("cookie"), null) !== null
   },
 )
 
-function forwardedAuthHeaders(requestHeaders: Headers): Headers {
-  const headers = new Headers({ accept: "application/json" })
-  copyHeader(requestHeaders, headers, "cookie")
-  copyHeader(requestHeaders, headers, "authorization")
-  return headers
-}
-
-function copyHeader(source: Headers, target: Headers, name: string): void {
-  const value = source.get(name)
-  if (value) {
-    target.set(name, value)
-  }
-}
-
-function isNamedError(error: unknown, name: string): boolean {
-  return typeof error === "object"
-    && error !== null
-    && "name" in error
-    && error.name === name
-}
+/**
+ * The login page's check: the marker only. A session cookie from before the
+ * host-only change can hold a revoked session, and /login would then send the
+ * person to a dashboard that sends them back (a loop). The API clears a stale
+ * marker on the first 401 or empty session read, so this cannot loop.
+ */
+export const hasSignedInMarker = createServerFn({ method: "GET" }).handler(
+  async (): Promise<boolean> => {
+    if (DEV_USER_ID) return true
+    return hasSignedInCookie(getRequest().headers.get("cookie"))
+  },
+)

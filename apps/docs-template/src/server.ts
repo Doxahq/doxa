@@ -1,9 +1,24 @@
 import { preparePublicDocsRouteData } from "@/src/runtime/prerender-renderer";
+import {
+  startRendererTiming,
+  type RendererTiming,
+  type RendererTimingPhase,
+} from "@/src/runtime/renderer-timing";
 import type { DocsRequestContext } from "@/src/runtime/request-context";
-import type { DoxaDocsRuntimeSource } from "@/src/runtime/runtime-source";
+import type {
+  DoxaDocsRuntimeSource,
+  RuntimeRouteData,
+} from "@/src/runtime/runtime-source";
+import {
+  isNoPublishedDocsError,
+  RENDERER_ERROR_HEADER,
+  RENDERER_PROPS_MISSING_CODE,
+  RendererPropsMissingError,
+} from "@/src/runtime/runtime-source-error";
 import {
   createConfiguredRuntimeSource,
   createDispatcherRuntimeSource,
+  readRendererRequestScope,
   type RendererWorkerEnv,
 } from "@/src/runtime/runtime-source-selection";
 import { loadSiteConfig } from "@/src/site-config/load-site-config";
@@ -24,6 +39,7 @@ import {
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import { getAccessGateResponse } from "@/src/lib/access-gate";
+import { noPublishedDocsResponse } from "@/src/lib/no-published-docs";
 import { tryRawMarkdownResponse } from "@/src/lib/raw-markdown";
 import { getRendererHealthResponse } from "@/src/lib/renderer-health";
 import { getRedirectResponse } from "@/src/lib/request-redirects";
@@ -105,7 +121,11 @@ export class DocsPrerenderRenderer extends WorkerEntrypoint<RendererWorkerEnv> {
   }
 
   private getRuntimeSource(): DoxaDocsRuntimeSource {
-    const source = createDispatcherRuntimeSource(this.env);
+    const source = withPropsMissingLog("DocsPrerenderRenderer", () =>
+      createDispatcherRuntimeSource(this.env, {
+        requestScope: readRendererRequestScope(this.ctx.props),
+      })
+    );
     if (!source) {
       throw new Error("The private renderer requires a pinned content source.");
     }
@@ -114,68 +134,173 @@ export class DocsPrerenderRenderer extends WorkerEntrypoint<RendererWorkerEnv> {
 }
 
 const server = {
-  async fetch(request: Request, env?: RendererWorkerEnv) {
-    const { host, hostname, pathname } = new URL(request.url);
-    const runtimeSource = createDispatcherRuntimeSource(env, hostname);
-
-    const health = getRendererHealthResponse(request);
-    if (health) return health;
-
-    const redirect = getRedirectResponse(request);
-    if (redirect) return redirect;
-
-    const gate = await getAccessGateResponse(request);
-    if (gate) return gate;
-
-    if (pathname.startsWith("/_doxa/assets/")) {
-      if (request.method !== "GET" && request.method !== "HEAD")
-        return new Response(null, { status: 405 });
-      const hash = sha256Schema.safeParse(
-        pathname.slice("/_doxa/assets/".length)
-      );
-      if (!hash.success) return new Response(null, { status: 404 });
-      // This branch runs before TanStack Start, so the platform source cannot
-      // read the host from a Start request context. Pass it from the request.
-      // `host` keeps the port, like `getRequestHost` on the page render path.
-      const source =
-        runtimeSource ??
-        (await createConfiguredRuntimeSource(process.env, host));
-      const response =
-        (await source.getAsset?.(hash.data)) ??
-        new Response(null, { status: 404 });
-      return request.method === "HEAD"
-        ? new Response(null, response)
-        : response;
+  async fetch(
+    request: Request,
+    env?: RendererWorkerEnv,
+    ctx?: ExecutionContext
+  ): Promise<Response> {
+    try {
+      return await handleDocsRequest(request, env, ctx);
+    } catch (error) {
+      // A host without published docs is a missing page, not a failure.
+      // Every other error still reaches the platform as a 5xx.
+      if (isNoPublishedDocsError(error)) {
+        return noPublishedDocsResponse(request);
+      }
+      if (error instanceof RendererPropsMissingError) {
+        logRendererPropsMissing("fetch");
+        return rendererPropsMissingResponse();
+      }
+      throw error;
     }
-
-    const versionAsset = await tryVersionAssetResponse(
-      request,
-      runtimeSource,
-      host
-    );
-    if (versionAsset) return versionAsset;
-
-    const rawMarkdown = await tryRawMarkdownResponse(pathname, runtimeSource);
-    if (rawMarkdown) return rawMarkdown;
-
-    const context: DocsRequestContext = runtimeSource
-      ? {
-          runtimeSource,
-          runtimeSourceMode: "binding",
-          ...getTrustedDeliveryContext(request),
-        }
-      : {};
-    if (
-      runtimeSource &&
-      request.method === "GET" &&
-      request.headers.get("accept")?.includes("text/html")
-    ) {
-      const route = await runtimeSource.getRouteData?.(pathname);
-      context.siteConfig = await loadSiteConfig(runtimeSource, route);
-    }
-    return startHandler(request, { context });
   },
 };
+
+/**
+ * Logs a renderer call without its request scope. The dispatcher logs the
+ * same code with the site; this log shows the isolate saw it.
+ */
+function logRendererPropsMissing(entrypoint: string): void {
+  console.error(
+    JSON.stringify({ event: RENDERER_PROPS_MISSING_CODE, entrypoint })
+  );
+}
+
+function withPropsMissingLog<T>(entrypoint: string, create: () => T): T {
+  try {
+    return create();
+  } catch (error) {
+    if (error instanceof RendererPropsMissingError) {
+      logRendererPropsMissing(entrypoint);
+    }
+    throw error;
+  }
+}
+
+/** A 5xx with no content. The code tells the dispatcher why. */
+function rendererPropsMissingResponse(): Response {
+  return new Response("The renderer request has no scope.", {
+    status: 500,
+    headers: {
+      "cache-control": "private, no-store",
+      "content-type": "text/plain; charset=utf-8",
+      [RENDERER_ERROR_HEADER]: RENDERER_PROPS_MISSING_CODE,
+    },
+  });
+}
+
+async function handleDocsRequest(
+  request: Request,
+  env?: RendererWorkerEnv,
+  ctx?: ExecutionContext
+): Promise<Response> {
+  const { host, hostname, pathname } = new URL(request.url);
+  const requestScope = readRendererRequestScope(ctx?.props);
+  // Only a dispatcher-pinned render reports its timing: the dispatcher reads
+  // the header and removes it. The shared renderer resolves by hostname.
+  const timing =
+    requestScope || env?.DOXA_DOCS_CONTENT_RESOLUTION
+      ? startRendererTiming()
+      : undefined;
+  const runtimeSource = createDispatcherRuntimeSource(env, {
+    requestScope,
+    hostname,
+    wrapContent: timing?.wrapContent,
+  });
+
+  const health = getRendererHealthResponse(request);
+  if (health) return health;
+
+  const redirect = getRedirectResponse(request);
+  if (redirect) return redirect;
+
+  const gate = await getAccessGateResponse(request);
+  if (gate) return gate;
+
+  if (pathname.startsWith("/_doxa/assets/")) {
+    if (request.method !== "GET" && request.method !== "HEAD")
+      return new Response(null, { status: 405 });
+    const hash = sha256Schema.safeParse(
+      pathname.slice("/_doxa/assets/".length)
+    );
+    if (!hash.success) return new Response(null, { status: 404 });
+    // This branch runs before TanStack Start, so the platform source cannot
+    // read the host from a Start request context. Pass it from the request.
+    // `host` keeps the port, like `getRequestHost` on the page render path.
+    const source =
+      runtimeSource ?? (await createConfiguredRuntimeSource(process.env, host));
+    const response =
+      (await source.getAsset?.(hash.data)) ??
+      new Response(null, { status: 404 });
+    return request.method === "HEAD" ? new Response(null, response) : response;
+  }
+
+  const versionAsset = await tryVersionAssetResponse(
+    request,
+    runtimeSource,
+    host
+  );
+  if (versionAsset) return versionAsset;
+
+  const rawMarkdown = await tryRawMarkdownResponse(pathname, runtimeSource);
+  if (rawMarkdown) return rawMarkdown;
+
+  const context: DocsRequestContext = runtimeSource
+    ? {
+        runtimeSource,
+        runtimeSourceMode: "binding",
+        ...getTrustedDeliveryContext(request),
+      }
+    : {};
+  if (
+    runtimeSource &&
+    request.method === "GET" &&
+    request.headers.get("accept")?.includes("text/html")
+  ) {
+    const preloadPageGrammars = startServerHighlighter();
+    const route = await measurePhase(timing, "routeDataMs", async () =>
+      runtimeSource.getRouteData?.(pathname)
+    );
+    preloadPageGrammars(route);
+    context.siteConfig = await measurePhase(timing, "siteConfigMs", () =>
+      loadSiteConfig(runtimeSource, route)
+    );
+  }
+  const response = await startHandler(request, { context });
+  return timing ? timing.attach(response) : response;
+}
+
+/**
+ * Starts the server highlighter while the content request is in flight: it
+ * does not depend on the content. The module is imported here, not at the
+ * top, so its evaluation also overlaps the request instead of the isolate
+ * start. The returned function starts loading the page's code grammars once
+ * the route data is known, before the route loader parses the page.
+ */
+function startServerHighlighter(): (
+  route: RuntimeRouteData | undefined
+) => void {
+  const highlighter = import("@/src/runtime/server-highlighter");
+  highlighter
+    .then((module) => module.warmServerHighlighter())
+    .catch(() => undefined);
+
+  return (route) => {
+    if (!route || !("page" in route) || !route.page) return;
+    const { body } = route.page;
+    highlighter
+      .then((module) => module.preloadServerHighlighterLanguages(body))
+      .catch(() => undefined);
+  };
+}
+
+function measurePhase<T>(
+  timing: RendererTiming | undefined,
+  phase: RendererTimingPhase,
+  operation: () => Promise<T>
+): Promise<T> {
+  return timing ? timing.measure(phase, operation) : operation();
+}
 
 /**
  * An image of the served version at `/assets/{name}`. A miss falls through,

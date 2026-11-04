@@ -53,7 +53,7 @@ const publicationId = "33333333-3333-4333-8333-333333333333";
 
 function request(
   path: string,
-  options: { method?: string; body?: unknown; accept?: string } = {},
+  options: { method?: string; body?: unknown; accept?: string; region?: string } = {},
 ) {
   const app = createApiRouter();
   app.route("/projects/:projectId/branches", createDocsBranchRoutes());
@@ -67,6 +67,7 @@ function request(
           headers: {
             "content-type": "application/json",
             ...(options.accept ? { accept: options.accept } : {}),
+            ...(options.region ? { "x-doxa-client-region": options.region } : {}),
           },
           body: JSON.stringify(options.body),
         }),
@@ -153,6 +154,22 @@ describe("branch action routes", () => {
         eraseBranch: true,
       },
     });
+  });
+
+  test("passes the publisher's cache pool from the edge header (M45)", async () => {
+    mocks.publish.mockResolvedValue({ versionId, versionNumber: 2, publicationId, branchErased: true });
+    mocks.restore.mockResolvedValue({ publicationId, versionId });
+
+    await request(`/branches/${branchId}/publish`, { body: publishBody, region: "hong-kong" });
+    await request(`/history/${publicationId}/restore`, {
+      body: { expectedMainVersionId: versionId },
+      region: "oceania",
+    });
+    await request(`/branches/${branchId}/publish`, { body: publishBody, region: "nowhere" });
+
+    expect(mocks.publish.mock.calls[0]?.[0]).toMatchObject({ warmRegion: "hong-kong" });
+    expect(mocks.restore.mock.calls[0]?.[0]).toMatchObject({ warmRegion: "oceania" });
+    expect(mocks.publish.mock.calls[1]?.[0]).not.toHaveProperty("warmRegion");
   });
 
   test("streams the publish stages, then the result", async () => {

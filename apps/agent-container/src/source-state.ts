@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { isProtectedFilePath } from "@doxahq/agent";
 import {
   GENERATION_STATE_SCHEMA_VERSION,
   generationSourceStateSchema,
@@ -10,6 +11,11 @@ import {
   type SourceFileHash,
 } from "@doxahq/contracts";
 
+/**
+ * Hashes every checkout file that the agent can read. A protected file, such
+ * as `.env`, is never opened: no reader sends it to a model, so a change to it
+ * cannot change a page.
+ */
 export async function captureGenerationSourceState(
   checkoutPath: string,
   snapshot: RepositorySnapshot,
@@ -39,7 +45,8 @@ async function listFiles(root: string, directory = root): Promise<string[]> {
     if (entry.isDirectory()) {
       files.push(...await listFiles(root, fullPath));
     } else if (entry.isFile()) {
-      files.push(relative(root, fullPath).replace(/\\/g, "/"));
+      const path = relative(root, fullPath).replace(/\\/g, "/");
+      if (!isProtectedFilePath(path)) files.push(path);
     }
   }
   return files;

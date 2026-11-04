@@ -18,6 +18,21 @@ interface InstallationRepositoriesResponse {
   }>;
 }
 
+interface UserTokenResponse {
+  access_token?: string;
+  error?: string;
+}
+
+interface UserInstallationsResponse {
+  installations?: Array<{
+    id: number;
+    account?: {
+      login?: string;
+      type?: string;
+    } | null;
+  }>;
+}
+
 export interface InstallationAccessToken {
   token: string;
   expiresAt: string | null;
@@ -29,6 +44,10 @@ export interface InstallationAccessTokenScope {
 }
 
 const GITHUB_API_BASE_URL = "https://api.github.com";
+const GITHUB_OAUTH_TOKEN_URL = "https://github.com/login/oauth/access_token";
+const GITHUB_PAGE_SIZE = 100;
+const MAX_USER_INSTALLATION_PAGES = 10;
+const MAX_USER_REPOSITORY_PAGES = 50;
 
 /** Local development uses `LOCAL_GITHUB_TOKEN` instead of a GitHub App installation. */
 export function isLocalInstallation(installationId: string): boolean {
@@ -100,14 +119,142 @@ export async function listInstallationRepositories(token: string) {
   }
 
   const payload = (await response.json()) as InstallationRepositoriesResponse;
-  return (payload.repositories ?? []).map((repo) => ({
+  return (payload.repositories ?? []).map(toRepositoryRecord);
+}
+
+export interface UserInstallation {
+  installationId: string;
+  accountLogin: string;
+  accountType: string;
+}
+
+/**
+ * Exchanges the `code` of the GitHub App web flow for a user access token.
+ * `redirectUri` must be the one that the authorize request used.
+ */
+export async function exchangeUserAuthorizationCode(
+  env: Pick<Env, "GITHUB_CLIENT_ID" | "GITHUB_CLIENT_SECRET">,
+  code: string,
+  redirectUri: string,
+): Promise<string> {
+  if (!env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) {
+    throw new Error("GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are required for GitHub App authorization.");
+  }
+
+  const response = await fetch(GITHUB_OAUTH_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "user-agent": "doxa-platform",
+    },
+    body: JSON.stringify({
+      client_id: env.GITHUB_CLIENT_ID,
+      client_secret: env.GITHUB_CLIENT_SECRET,
+      code,
+      redirect_uri: redirectUri,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub user authorization request failed (${response.status}).`);
+  }
+
+  // GitHub answers 200 with an `error` field when the code is bad or used.
+  const payload = (await response.json()) as UserTokenResponse;
+  if (!payload.access_token) {
+    throw new GitHubAuthorizationError(payload.error ?? "missing_token");
+  }
+
+  return payload.access_token;
+}
+
+/**
+ * The installation as the user's own token sees it, or null when the user
+ * cannot access it. GitHub lists only the installations of this App that the
+ * user has explicit permission to access.
+ */
+export async function findUserInstallation(
+  userToken: string,
+  installationId: string,
+): Promise<UserInstallation | null> {
+  for (let page = 1; page <= MAX_USER_INSTALLATION_PAGES; page += 1) {
+    const response = await fetch(
+      `${GITHUB_API_BASE_URL}/user/installations?per_page=${GITHUB_PAGE_SIZE}&page=${page}`,
+      { headers: githubHeaders(`Bearer ${userToken}`) },
+    );
+    if (!response.ok) {
+      throw new Error(`GitHub user installations request failed (${response.status}).`);
+    }
+
+    const payload = (await response.json()) as UserInstallationsResponse;
+    const installations = payload.installations ?? [];
+    const match = installations.find((installation) => String(installation.id) === installationId);
+    if (match) {
+      return {
+        installationId: String(match.id),
+        accountLogin: match.account?.login ?? "unknown",
+        accountType: match.account?.type ?? "User",
+      };
+    }
+    if (installations.length < GITHUB_PAGE_SIZE) return null;
+  }
+
+  return null;
+}
+
+export type InstallationRepositoryRecord = ReturnType<typeof toRepositoryRecord>;
+
+export interface UserInstallationRepositories {
+  repositories: InstallationRepositoryRecord[];
+  /**
+   * False when the list stopped at the page cap. Then a repository missing
+   * from it can still be one that the user can access.
+   */
+  complete: boolean;
+}
+
+/** The repositories of the installation that this user can access. */
+export async function listUserInstallationRepositories(
+  userToken: string,
+  installationId: string,
+): Promise<UserInstallationRepositories> {
+  const repositories: InstallationRepositoryRecord[] = [];
+  for (let page = 1; page <= MAX_USER_REPOSITORY_PAGES; page += 1) {
+    const response = await fetch(
+      `${GITHUB_API_BASE_URL}/user/installations/${encodeURIComponent(installationId)}/repositories?per_page=${GITHUB_PAGE_SIZE}&page=${page}`,
+      { headers: githubHeaders(`Bearer ${userToken}`) },
+    );
+    if (!response.ok) {
+      throw new Error(`GitHub user installation repositories request failed (${response.status}).`);
+    }
+
+    const payload = (await response.json()) as InstallationRepositoriesResponse;
+    const pageRepositories = payload.repositories ?? [];
+    repositories.push(...pageRepositories.map(toRepositoryRecord));
+    if (pageRepositories.length < GITHUB_PAGE_SIZE) return { repositories, complete: true };
+  }
+
+  return { repositories, complete: false };
+}
+
+/** The code exchange failed at GitHub, for example because the code expired. */
+export class GitHubAuthorizationError extends Error {
+  constructor(readonly code: string) {
+    super(`GitHub user authorization failed (${code}).`);
+    this.name = "GitHubAuthorizationError";
+  }
+}
+
+function toRepositoryRecord(repo: NonNullable<InstallationRepositoriesResponse["repositories"]>[number]) {
+  return {
     githubRepoId: String(repo.id),
     fullName: repo.full_name,
     owner: repo.owner?.login ?? repo.full_name.split("/")[0] ?? "unknown",
     name: repo.name,
     defaultBranch: repo.default_branch ?? "main",
     isPrivate: repo.private,
-  }));
+  };
 }
 
 async function createGitHubAppJwt(env: Env): Promise<string> {

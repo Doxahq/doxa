@@ -137,6 +137,7 @@ describe("API vars", () => {
     GITHUB_CLIENT_ID: "h",
     GITHUB_CLIENT_SECRET: "h",
     DATABASE_URL: "postgresql://localhost/doxa",
+    WEB_ORIGIN: "https://doxa.so",
   };
 
   it("keeps server-only settings out of the API env", () => {
@@ -165,6 +166,22 @@ describe("API vars", () => {
 
   it("rejects a missing secret and an unknown generation mode", () => {
     expect(() => readApiVars({ ...required, BETTER_AUTH_SECRET: "" })).toThrow();
+    // SECURITY REGRESSION GUARDRAIL (SEC-035): a production origin refuses development flags.
+    for (const flag of [
+      { LOCAL_DEV_USER_ID: "local-dev-user" },
+      { ALLOW_INTERNAL_HTTP: "true" },
+      { DEV_ADMIN_ENABLED: "true" },
+      { ALLOW_INSECURE_GITHUB_WEBHOOKS: "true" },
+      { LOCAL_GITHUB_TOKEN: "ghp_local" },
+    ]) {
+      expect(() => readApiVars({ ...required, NODE_ENV: "production", ...flag })).toThrow(/Development flags/);
+      expect(() => readApiVars({ ...required, NODE_ENV: "production", DOXA_RUNTIME_ENVIRONMENT: "development", ...flag })).not.toThrow();
+      expect(() => readApiVars({ ...required, ...flag })).not.toThrow();
+    }
+    expect(() => readApiVars({ ...required, NODE_ENV: "production", ALLOW_INTERNAL_HTTP: "false" })).not.toThrow();
+    // SECURITY REGRESSION GUARDRAIL (SEC-020): no WEB_ORIGIN, no start.
+    const { WEB_ORIGIN: _webOrigin, ...withoutWebOrigin } = required;
+    expect(() => readApiVars(withoutWebOrigin)).toThrow();
     expect(() => readApiVars({ ...required, GENERATION_MODE: "fast" })).toThrow();
   });
 });

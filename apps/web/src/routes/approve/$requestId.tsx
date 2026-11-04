@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router"
 
 import { ApprovalLinkPage } from "~/components/approvals/approval-link-page"
-import { getDashboardSession } from "~/server/dashboard-session"
+import { hasDashboardSignIn } from "~/server/dashboard-session"
 
 /** Approval links lead to decisions, so no site may frame them. */
 const APPROVAL_LINK_HEADERS = {
@@ -12,8 +12,7 @@ const APPROVAL_LINK_HEADERS = {
 export const Route = createFileRoute("/approve/$requestId")({
   headers: () => APPROVAL_LINK_HEADERS,
   loader: async ({ location }) => {
-    const session = await getDashboardSession()
-    if (!session) {
+    if (!(await hasDashboardSignIn())) {
       throw redirect({ to: "/login", search: { redirect: location.href } })
     }
   },

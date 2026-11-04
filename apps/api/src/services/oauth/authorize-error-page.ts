@@ -1,3 +1,5 @@
+import { escapeHtml } from "@doxahq/contracts/html-escape";
+
 const PAGE_HEADERS = {
   "content-type": "text/html; charset=utf-8",
   "cache-control": "no-store",
@@ -20,13 +22,4 @@ export function authorizeErrorPage(description: string, status = 400): Response 
 </body>
 </html>`;
   return new Response(body, { status, headers: PAGE_HEADERS });
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }

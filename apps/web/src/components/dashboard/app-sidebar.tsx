@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router"
+import { Link, useNavigate } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 
 import { LogoWordmark } from "~/components/navigation/logo"
@@ -11,7 +11,6 @@ import { SidebarViewFooter, SidebarViewHeader, SidebarViewStack } from "~/compon
 import { SiteSettingsSidebarView } from "~/components/dashboard/shell/site-settings-sidebar-view"
 import { Sidebar, SidebarHeader } from "~/components/ui/sidebar"
 import { useSidebarPanelSlot } from "~/lib/dashboard/sidebar-panel-context"
-import { useShell } from "~/lib/dashboard/shell-context"
 import type { useSidebarWidth } from "~/lib/dashboard/sidebar-width"
 import { useContentOverviewFailed } from "~/lib/dashboard/use-content-overview-failed"
 
@@ -80,16 +79,16 @@ export function AppSidebar({
  * The Content view before the editor fills it. It shows the skeleton of the
  * page list from the server render until the editor publishes the real list,
  * which it does in the same frame as the page body. A project without docs
- * keeps an empty view. Both keep the way back to the project.
+ * keeps an empty view. Both keep the way back to the project overview.
  */
 function ContentViewPlaceholder({ projectId }: { projectId: string }) {
-  const { showView } = useShell()
+  const navigate = useNavigate()
   const hasNoList = useContentOverviewFailed(projectId)
-  const back = () => showView("project")
+  const back = () => void navigate({ to: "/dashboard/projects/$projectId/project", params: { projectId } })
   if (!hasNoList) return <ContentSidebarSkeleton onBack={back} />
   return (
     <>
-      <SidebarViewHeader label="Content" backLabel="Back to project" onBack={back} />
+      <SidebarViewHeader label="Content" backLabel="Back to overview" onBack={back} />
       <div className="flex-1" />
     </>
   )

@@ -9,9 +9,9 @@ import { defineMcpTool } from "../../tool-definition";
 import {
   namedBranchInput,
   projectIdInput,
-  requireNamedBranch,
   writeAnnotations,
 } from "../shared";
+import { OWN_BRANCH_ONLY, requireOwnBranch } from "../branches/branch-ownership";
 
 const MAX_MB = DOCS_ASSET_LIMITS.maxBytes / (1024 * 1024);
 /** Base64 of the largest file, with room for line breaks. */
@@ -30,7 +30,7 @@ function imageMarkdown(path: string, altText: string | undefined): string {
 export const uploadAssetTool = defineMcpTool({
   name: "upload_asset",
   title: "Upload image",
-  description: `Adds an image to a named branch and returns the path to use in MDX, for example /assets/rate-limits-diagram.png. Send PNG, JPEG, WebP, GIF, or SVG bytes as base64, at most ${MAX_MB} MB. The type comes from the bytes, not the file name. SVG files are cleaned: scripts, event attributes, and external references are removed (sanitized: true). A branch can add ${DOCS_ASSET_LIMITS.maxFilesPerBranch} images. A name in use gets a number suffix, so always use the returned path; the same file again returns its path (reused: true). Put the path in a page with write_page or edit_docs. The image goes live with the next approved publish of the branch, and build_preview shows it.`,
+  description: `Adds an image to a named branch and returns the path to use in MDX, for example /assets/rate-limits-diagram.png. Send PNG, JPEG, WebP, GIF, or SVG bytes as base64, at most ${MAX_MB} MB. The type comes from the bytes, not the file name. SVG files are cleaned: scripts, event attributes, and external references are removed (sanitized: true). A branch can add ${DOCS_ASSET_LIMITS.maxFilesPerBranch} images. A name in use gets a number suffix, so always use the returned path; the same file again returns its path (reused: true). Put the path in a page with write_page or edit_docs. The image goes live with the next approved publish of the branch, and build_preview shows it. ${OWN_BRANCH_ONLY}`,
   scope: "docs:write",
   cost: "expensive",
   annotations: writeAnnotations(true),
@@ -59,9 +59,9 @@ export const uploadAssetTool = defineMcpTool({
     .strict(),
   output: docsAssetUploadResultSchema,
   async run(context, input) {
-    const branch = requireNamedBranch(input.branch);
     const authorized = await context.authorize(input.projectId, "docs.write");
     const bytes = decodeAssetBase64(input.contentBase64);
+    const branch = await requireOwnBranch(context, authorized, input.branch);
     const uploaded = await context.services.branches.uploadAsset({
       userId: authorized.ownerUserId,
       projectId: authorized.projectId,

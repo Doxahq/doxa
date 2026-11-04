@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { TEAM_INVITE_EMAILS_PER_HOUR, type TeamRole } from "@doxahq/contracts/teams";
+import {
+  MAX_OWNED_TEAMS,
+  TEAM_INVITE_EMAILS_PER_HOUR,
+  TEAM_INVITE_EMAILS_PER_RECIPIENT_PER_DAY,
+  TEAM_INVITE_EMAILS_PER_SENDER_PER_HOUR,
+  type TeamRole,
+} from "@doxahq/contracts/teams";
 import { dashboardActor, agentActor } from "../../../src/services/agent-access/actor";
 import { MembershipProjectAccessPolicy } from "../../../src/services/agent-access/membership-project-access-policy";
 import {
@@ -280,6 +286,22 @@ describe("members and roles", () => {
     await expect(env.service.changeRole(ADMIN, teamId, NEWCOMER, "viewer")).rejects.toBeInstanceOf(TeamNotFoundError);
   });
 
+  // SECURITY REGRESSION GUARDRAIL (SEC-016): a member who owns a team project stays in the team.
+  it("refuses to remove or let leave a member who still owns a team project", async () => {
+    const env = setup();
+    const teamId = await team(env);
+    await env.service.moveProject(ADMIN, PERSONAL, teamId);
+
+    await expect(env.service.removeMember(OWNER, teamId, ADMIN)).rejects.toMatchObject({
+      code: "member_owns_projects",
+      status: 409,
+    });
+    await expect(env.service.removeMember(ADMIN, teamId, ADMIN)).rejects.toMatchObject({
+      code: "member_owns_projects",
+    });
+    await expect(env.service.removeMember(OWNER, teamId, EDITOR)).resolves.toBeUndefined();
+  });
+
   it("lets a member leave, which ends their project access at once", async () => {
     const env = setup();
     const teamId = await team(env);
@@ -362,6 +384,77 @@ describe("invites by email", () => {
 
     expect(invite.email).toBeNull();
     expect(env.inviteMailer.sent).toHaveLength(0);
+  });
+
+  // SECURITY REGRESSION GUARDRAIL (SEC-017): an emailed invite works only for that verified address.
+  it("lets only the invited verified address accept an emailed invite", async () => {
+    const env = setup();
+    const teamId = await team(env);
+    const { invite } = await env.service.createInvite(ADMIN, teamId, { role: "admin", email: "Invitee@Example.com" }, ORIGIN);
+    const token = tokenOf(invite.url);
+
+    await expect(env.service.previewInvite(NEWCOMER, token)).rejects.toMatchObject({ code: "invite_email_mismatch" });
+    await expect(env.service.acceptInvite(NEWCOMER, token)).rejects.toMatchObject({ code: "invite_email_mismatch" });
+
+    env.store.verifiedEmails.set(NEWCOMER, "someone@example.com");
+    await expect(env.service.acceptInvite(NEWCOMER, token)).rejects.toMatchObject({ code: "invite_email_mismatch" });
+
+    env.store.verifiedEmails.set(NEWCOMER, "invitee@example.com");
+    await expect(env.service.acceptInvite(NEWCOMER, token)).resolves.toEqual({ teamId, role: "admin" });
+  });
+
+  // SECURITY REGRESSION GUARDRAIL (SEC-015): new teams cannot multiply the invite email budget.
+  it("limits invites by email for each sender over all their teams", async () => {
+    const env = setup();
+    const teamIds: string[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      teamIds.push((await env.service.create(OWNER, `Team ${index}`)).id);
+    }
+    let sent = 0;
+    for (const teamId of teamIds) {
+      for (let index = 0; index < TEAM_INVITE_EMAILS_PER_HOUR && sent < TEAM_INVITE_EMAILS_PER_SENDER_PER_HOUR; index += 1) {
+        await env.service.createInvite(OWNER, teamId, { role: "viewer", email: `user${sent}@example.com` }, ORIGIN);
+        sent += 1;
+      }
+    }
+
+    await expect(
+      env.service.createInvite(OWNER, teamIds[2]!, { role: "viewer", email: "late@example.com" }, ORIGIN),
+    ).rejects.toMatchObject({ code: "invite_sender_limit", status: 429 });
+  });
+
+  it("limits the invite emails one sender sends to one address in one day", async () => {
+    const env = setup();
+    for (let index = 0; index < TEAM_INVITE_EMAILS_PER_RECIPIENT_PER_DAY; index += 1) {
+      const teamId = (await env.service.create(OWNER, `Team ${index}`)).id;
+      await env.service.createInvite(OWNER, teamId, { role: "viewer", email: "Victim@Example.com" }, ORIGIN);
+    }
+    const another = (await env.service.create(OWNER, "Another")).id;
+
+    await expect(
+      env.service.createInvite(OWNER, another, { role: "viewer", email: "victim@example.com" }, ORIGIN),
+    ).rejects.toMatchObject({ code: "invite_recipient_limit", status: 429 });
+
+    // Another sender's real team is not blocked by those invites.
+    const realTeam = (await env.service.create(ADMIN, "Real team")).id;
+    await expect(
+      env.service.createInvite(ADMIN, realTeam, { role: "viewer", email: "victim@example.com" }, ORIGIN),
+    ).resolves.toBeDefined();
+
+    env.advance(DAY);
+    await expect(
+      env.service.createInvite(OWNER, another, { role: "viewer", email: "victim@example.com" }, ORIGIN),
+    ).resolves.toBeDefined();
+  });
+
+  it("limits how many teams one person owns", async () => {
+    const env = setup();
+    for (let index = 0; index < MAX_OWNED_TEAMS; index += 1) {
+      await env.service.create(OWNER, `Team ${index}`);
+    }
+
+    await expect(env.service.create(OWNER, "One more")).rejects.toMatchObject({ code: "team_limit", status: 409 });
+    await expect(env.service.create(ADMIN, "Ada's team")).resolves.toBeDefined();
   });
 
   it("limits invites by email for each team in one hour, but not invite links", async () => {

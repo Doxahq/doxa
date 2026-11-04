@@ -37,7 +37,7 @@ An entry whose target has no collector in this deployment returns to the work li
 
 The inspect step is mandatory. Enqueue records an intent. Only the collector decides that deletion is correct.
 
-A grace period covers stale readers. The dispatcher can hold a resolved hostname for one hour, so pre-rendered output waits 24 hours.
+A grace period covers stale readers. The dispatcher can hold a resolved hostname for one day (`DOCS_HOSTNAME_CACHE_TTL_SECONDS` in `@doxahq/contracts`), so every collector that a cached hostname can reach waits that long plus one hour (`HOSTNAME_READER_GRACE_SECONDS`, 25 hours). The Workers KV hostname map has the same limit: the dispatcher ignores an entry that the API resolved more than one day ago (`DOCS_HOSTNAME_MAP_MAX_AGE_SECONDS`). Pre-rendered output waits 25 hours.
 
 Deletion runs in the Worker that owns the write binding for that storage. The API drives policy and never holds a delete binding it does not need.
 
@@ -101,6 +101,8 @@ Both collectors accept only a validated `{ siteId, versionId }` resource. They b
 
 Both collectors delete the physical keys of the folder: its `tree.json` and, until the storage migration ends, its old flat files. They never delete a blob. After a complete deletion, they enqueue a `docs_site_blobs` entry for the site.
 
+The tiered blob cache of the docs runtime (`DocsBlobCache`) can keep a deleted tree for up to one day and a deleted blob for up to one year. No reader reaches them: a reader asks only for the folder of a version row that serves it. See [Trees and Deleted Versions](docs-content-storage.md#trees-and-deleted-versions).
+
 ## Branch Image Folders
 
 An image upload (MCP `upload_asset`) writes a version folder with one file,
@@ -152,7 +154,7 @@ A collector can return `retain` with `recheckAfterSeconds`. The runner then puts
 
 A job insert takes a key share lock on the project row, so no generation can start between the check and the delete.
 
-The `docs_deleted_site` collector has the resource `{ siteId }` and a grace period of one hour, for dispatchers that still hold a resolved hostname. Its inspect step keeps the storage while a site row with this id exists. Its collect step deletes every key under `sites/<siteId>/` except blobs: version folders, generation state, and site assets. A large site returns to the work list in batches. After a complete deletion, it enqueues a `docs_site_blobs` entry. No tree of the site remains, so the sweep deletes every blob that is older than one hour.
+The `docs_deleted_site` collector has the resource `{ siteId }` and a grace period of 25 hours (`HOSTNAME_READER_GRACE_SECONDS`), for dispatchers that still hold a resolved hostname. Its inspect step keeps the storage while a site row with this id exists. Its collect step deletes every key under `sites/<siteId>/` except blobs: version folders, generation state, and site assets. A large site returns to the work list in batches. After a complete deletion, it enqueues a `docs_site_blobs` entry. No tree of the site remains, so the sweep deletes every blob that is older than one hour.
 
 The `docs_prerender_render` entries need no new rule. With the site row gone, no hostname resolves to a render, so the collector deletes it after its usual 24-hour grace period.
 
@@ -172,7 +174,7 @@ A production version stays restorable while either history rule keeps it. `resol
 
 ## Retired Versions
 
-The `docs_retired_version` collector deletes the folder of a version that stopped serving. Its resource is `{ siteId, versionId }`, and the grace period is one hour. These events queue an entry in the transaction that moves the pointer:
+The `docs_retired_version` collector deletes the folder of a version that stopped serving. Its resource is `{ siteId, versionId }`, and the grace period is 25 hours (`HOSTNAME_READER_GRACE_SECONDS`). These events queue an entry in the transaction that moves the pointer:
 
 | Event | Code | Version queued |
 |---|---|---|

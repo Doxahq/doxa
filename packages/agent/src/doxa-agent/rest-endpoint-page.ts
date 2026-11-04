@@ -251,7 +251,7 @@ function renderAuthorizationGroup(
 ): string | undefined {
   if (!auth || auth.scheme === "none") return undefined;
   const location = auth.location ?? "header";
-  const name = auth.name ?? (auth.scheme === "apiKey" ? "API key" : "Authorization");
+  const name = auth.name ?? (auth.scheme === "apiKey" ? (location === "header" ? "X-API-Key" : "api_key") : "Authorization");
   const description = appendAuthenticationLink(
     auth.description ?? defaultAuthDescription(auth.scheme),
     surface,
@@ -308,6 +308,8 @@ function renderParameterGroup(
       location,
       required: parameter.required,
       description: parameterDescription(parameter),
+      ...(parameter.enumValues?.length ? { enumValues: parameter.enumValues } : {}),
+      ...(parameter.example ? { example: parameter.example } : {}),
     }));
   return matching.length > 0 ? renderParams(title, matching) : undefined;
 }
@@ -338,6 +340,7 @@ function renderFieldGroup(
     location,
     required: field.required,
     description: describedValue(field.description, field.example),
+    ...(location === "body" && field.example ? { example: field.example } : {}),
   })), detail);
 }
 
@@ -362,6 +365,19 @@ interface RenderedParameter {
   location: string;
   required: boolean;
   description: string;
+  enumValues?: readonly string[];
+  example?: string;
+}
+
+/** The props that the playground reads. A value with a comma cannot go in the list. */
+function playgroundProps(parameter: RenderedParameter): string {
+  const enumValues = parameter.enumValues?.every((value) => !value.includes(","))
+    ? parameter.enumValues.join(",")
+    : undefined;
+  return [
+    enumValues ? ` enum=${attribute(enumValues)}` : "",
+    parameter.example ? ` example=${attribute(parameter.example)}` : "",
+  ].join("");
 }
 
 function renderParams(
@@ -372,7 +388,7 @@ function renderParams(
   return [
     `<ApiParams title=${attribute(title)}${detail ? ` detail=${attribute(detail)}` : ""}>`,
     ...parameters.flatMap((parameter) => {
-      const opening = `  <ApiParam name=${attribute(parameter.name)} type=${attribute(parameter.type)} location=${attribute(parameter.location)}${parameter.required ? " required" : ""}`;
+      const opening = `  <ApiParam name=${attribute(parameter.name)} type=${attribute(parameter.type)} location=${attribute(parameter.location)}${parameter.required ? " required" : ""}${playgroundProps(parameter)}`;
       // The type and the name say all that the source gives; no filler sentence.
       return parameter.description
         ? [`${opening}>`, `    ${mdxText(parameter.description)}`, "  </ApiParam>"]

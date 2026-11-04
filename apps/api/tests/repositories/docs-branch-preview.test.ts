@@ -18,6 +18,7 @@ vi.mock("../../src/repositories/docs-version-gc-entries", () => ({
 }));
 vi.mock("../../src/repositories/preview-channels", () => ({
   createChannelHostnameCandidates: async () => ["example-br-feature.doxa.page"],
+  createRandomHex: () => "0123456789abcdef",
   ensureBranchPreviewChannelWithCandidates: async () => ({
     id: "channel-1",
     hostname: "example-br-feature.doxa.page",

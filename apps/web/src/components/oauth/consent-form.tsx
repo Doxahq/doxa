@@ -8,6 +8,8 @@ import { ConsentScopeList } from "~/components/oauth/consent-scope-list"
 import { Button } from "~/components/ui/button"
 import {
   buildApproveInput,
+  initialProjectChoice,
+  initialScopes,
   offeredScopes,
   projectChoiceIssue,
   scopeOptions,
@@ -30,8 +32,10 @@ export function ConsentForm({
   onDecide: (request: ConsentDecisionRequest) => void
 }) {
   const offered = useMemo(() => offeredScopes(details.requestedScopes), [details.requestedScopes])
-  const [chosen, setChosen] = useState<ReadonlySet<OAuthScope>>(() => new Set(offered))
-  const [projectChoice, setProjectChoice] = useState<ProjectChoice>({ kind: "all" })
+  const [chosen, setChosen] = useState<ReadonlySet<OAuthScope>>(() => initialScopes(offered))
+  const [projectChoice, setProjectChoice] = useState<ProjectChoice>(() =>
+    initialProjectChoice(details.projects.map((project) => project.id)),
+  )
 
   const busy = decisionState !== "idle"
   const options = scopeOptions(offered, chosen)

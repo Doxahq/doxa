@@ -1,9 +1,10 @@
 # Alerts for the API service, sent by email through one SNS topic:
 #
-#   no running task   no CPU samples for 3 minutes
+#   no running task   no CPU samples for 3 minutes, muted in the daily pause
 #   high CPU / memory the task is close to its size
 #   failed deploy     ECS rolled a deploy back or cannot start tasks
 #   monthly budget    the AWS bill passes the limit
+#   valkey            the cache nears its storage or ECPU limit, or throttles
 #
 # Each address gets a confirmation email from AWS and receives alerts only
 # after the link in it is opened.
@@ -15,6 +16,10 @@ locals {
     ClusterName = var.cluster_name
     ServiceName = var.service_name
   }
+
+  # The task needs a few minutes after start_hour to report CPU again.
+  pause_start_grace_minutes = 15
+  pause_hours               = var.daily_pause == null ? 0 : (var.daily_pause.start_hour - var.daily_pause.stop_hour + 24) % 24
 }
 
 resource "aws_sns_topic" "alerts" {
@@ -68,6 +73,27 @@ resource "aws_cloudwatch_metric_alarm" "no_running_task" {
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+# The alarm keeps its state during the mute, but sends nothing. If the task is
+# still down when the mute ends, CloudWatch sends the ALARM email then.
+resource "aws_cloudwatch_alarm_mute_rule" "daily_pause" {
+  count = var.daily_pause == null ? 0 : 1
+
+  name        = "${var.name}-daily-pause"
+  description = "The API runs no task during its daily pause."
+
+  rule {
+    schedule {
+      expression = "cron(0 ${var.daily_pause.stop_hour} * * ?)"
+      duration   = format("PT%dH%dM", local.pause_hours, local.pause_start_grace_minutes)
+      timezone   = var.daily_pause.timezone
+    }
+  }
+
+  mute_targets {
+    alarm_names = [aws_cloudwatch_metric_alarm.no_running_task.alarm_name]
+  }
 }
 
 resource "aws_cloudwatch_metric_alarm" "high_usage" {
@@ -136,4 +162,58 @@ resource "aws_budgets_budget" "monthly" {
     threshold_type             = "PERCENTAGE"
     subscriber_email_addresses = var.alert_emails
   }
+}
+
+# Valkey holds the sessions and the OAuth state. At its storage or ECPU limit
+# the cache refuses writes or throttles, and sign-in fails for everyone, so
+# alert well before a limit (SEC-008).
+resource "aws_cloudwatch_metric_alarm" "valkey_usage" {
+  for_each = var.valkey == null ? {} : {
+    storage = {
+      metric      = "BytesUsedForCache"
+      statistic   = "Maximum"
+      threshold   = var.valkey.max_data_storage_gb * 1024 * 1024 * 1024 * var.valkey_alarm_percent / 100
+      description = "Valkey stores more than ${var.valkey_alarm_percent}% of its ${var.valkey.max_data_storage_gb} GB limit."
+    }
+    # The metric counts ECPUs per period, and the limit is per second.
+    ecpu = {
+      metric      = "ElastiCacheProcessingUnits"
+      statistic   = "Sum"
+      threshold   = var.valkey.max_ecpu_per_second * 60 * var.valkey_alarm_percent / 100
+      description = "Valkey uses more than ${var.valkey_alarm_percent}% of its ${var.valkey.max_ecpu_per_second} ECPU per second limit."
+    }
+  }
+
+  alarm_name          = "${var.name}-valkey-${each.key}"
+  alarm_description   = each.value.description
+  namespace           = "AWS/ElastiCache"
+  metric_name         = each.value.metric
+  dimensions          = { clusterId = var.valkey.cache_name }
+  statistic           = each.value.statistic
+  period              = 60
+  evaluation_periods  = 5
+  comparison_operator = "GreaterThanThreshold"
+  threshold           = each.value.threshold
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+# Any throttled command means the ECPU limit was reached.
+resource "aws_cloudwatch_metric_alarm" "valkey_throttled" {
+  count = var.valkey == null ? 0 : 1
+
+  alarm_name          = "${var.name}-valkey-throttled"
+  alarm_description   = "Valkey throttled commands at its ECPU limit."
+  namespace           = "AWS/ElastiCache"
+  metric_name         = "ThrottledCmds"
+  dimensions          = { clusterId = var.valkey.cache_name }
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanThreshold"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 }

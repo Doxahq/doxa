@@ -74,10 +74,9 @@ import {
   hostedPageFailureAction,
   resolvedEditorialPageBudget,
   resolvedPageConcurrency,
-  resolvedRestExtractionModel,
 } from "./generation-profile";
 import { HOSTED_AGENT_TOOL_POLICY } from "./worker-core";
-import { createWriterDiagnosticLogger } from "./logging";
+import { createWriterDiagnosticLogger, outputSecrets } from "./logging";
 import { GenerationStageInvariantError } from "./generation-stage-errors";
 import { releaseWriterLimiter, throttleOnRetry, writerLimiterForJob } from "./writer-width";
 import {
@@ -864,7 +863,7 @@ function createAgentConfig(
     ...writerWidthConfig(input),
     writerExploration: HOSTED_WRITER_EXPLORATION,
     writerMaxSteps: HOSTED_WRITER_MAX_STEPS,
-    writerValidation: HOSTED_WRITER_VALIDATION,
+    writerValidation: { ...HOSTED_WRITER_VALIDATION, forbiddenValues: outputSecrets(input) },
     docsQuality: HOSTED_DOCS_QUALITY,
     pageFailureMaxRetries: HOSTED_PAGE_FAILURE_MAX_RETRIES,
     pageRetryConcurrency: resolvedPageConcurrency(input),
@@ -876,7 +875,6 @@ function createAgentConfig(
     documentationBrief: resolveRunBrief(input),
     // Each stage execution gets its own job instance; the analysis destroys it when done.
     specReader: (runtime.createSpecReader ?? resolveSpecReaderClient)(stageExecutionId),
-    restExtractionModel: resolvedRestExtractionModel(input),
   };
 }
 
@@ -936,7 +934,7 @@ export function toGenerationUsageRecord(
     stageExecutionId,
     stage: input.stage,
     operation: context.operation,
-    modelRole: modelRoleOf(input.stage, context.operation),
+    modelRole: input.stage === "write" ? "writer" : "planner",
     model: record.model,
     pageId: hasPage ? context.pageId! : null,
     pageTitle: hasPage ? context.pageTitle! : null,
@@ -958,14 +956,6 @@ export function toGenerationUsageRecord(
     finishReason: record.finishReason ?? null,
     recordedAt: record.recordedAt,
   };
-}
-
-/** Endpoint extraction runs in the plan stage, but on the writer model. */
-function modelRoleOf(
-  stage: ContainerGenerationStageRequest["stage"],
-  operation: AgentUsageRecord["context"]["operation"],
-): GenerationUsageRecord["modelRole"] {
-  return stage === "write" || operation === "rest_extraction" ? "writer" : "planner";
 }
 
 /** One entry per page, with the reason of its last failure. */

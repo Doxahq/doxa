@@ -16,6 +16,7 @@ import { streamEvents } from "../http/progress-stream";
 import { forbidden, withProjectAccess } from "../http/project-access";
 import { parseValidatedJson } from "../http/validation";
 import { error, json, notFound } from "../http/response";
+import { createDocsWarmStatusRoutes } from "./docs-warm-status";
 import { JobsRepository } from "../repositories/jobs";
 import { GenerationCacheRepository } from "../repositories/generation-cache";
 import { PreviewVisibilityRepository } from "../repositories/preview-visibility";
@@ -194,6 +195,7 @@ export function createProjectRoutes(): ApiApp {
   app.route("/:projectId/generations", createGenerationChangesRoutes());
   app.route("/:projectId/page-locks", createPageLockRoutes());
   app.route("/:projectId/history", createDocsHistoryRoutes());
+  app.route("/:projectId/warm-status", createDocsWarmStatusRoutes());
   app.route("/:projectId/assets", createSiteAssetsRoutes());
   app.route("/:projectId/docs-domains", createDocsDomainRoutes());
   app.route("/:projectId/doxabot", createDoxabotRoutes());

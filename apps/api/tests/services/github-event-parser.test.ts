@@ -22,7 +22,8 @@ function pullRequestPayload(overrides: {
   draft?: boolean;
   merged?: boolean;
   baseRef?: string;
-  headRepositoryId?: number;
+  headRepositoryId?: number | null;
+  authorAssociation?: string;
 } = {}) {
   return {
     action: overrides.action ?? "opened",
@@ -45,10 +46,12 @@ function pullRequestPayload(overrides: {
       },
       head: {
         sha: headSha,
-        repo: repository({
-          id: overrides.headRepositoryId ?? 123456,
-        }),
+        repo:
+          overrides.headRepositoryId === null
+            ? null
+            : repository({ id: overrides.headRepositoryId ?? 123456 }),
       },
+      author_association: overrides.authorAssociation ?? "OWNER",
     },
   };
 }
@@ -123,11 +126,11 @@ describe("GitHub event parser", () => {
     });
   });
 
-  test("accepts pull requests whose head comes from a fork", () => {
+  test("accepts pull requests from a fork by a trusted author", () => {
     const result = parseGitHubEvent({
       eventName: "pull_request",
       deliveryId: "delivery-5",
-      payload: pullRequestPayload({ headRepositoryId: 654321 }),
+      payload: pullRequestPayload({ headRepositoryId: 654321, authorAssociation: "COLLABORATOR" }),
     });
 
     expect(result.outcome).toBe("normalized");
@@ -147,6 +150,39 @@ describe("GitHub event parser", () => {
       },
       repository: { externalId: "123456" },
     });
+  });
+
+  // SECURITY REGRESSION GUARDRAIL (SEC-026): outsiders cannot start runs from a fork.
+  test.each(["NONE", "CONTRIBUTOR", "FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR", "MANNEQUIN"])(
+    "ignores a fork pull request by a %s author",
+    (authorAssociation) => {
+      expect(
+        parseGitHubEvent({
+          eventName: "pull_request",
+          deliveryId: "delivery-fork",
+          payload: pullRequestPayload({ headRepositoryId: 654321, authorAssociation }),
+        }),
+      ).toEqual({ outcome: "irrelevant", reason: "untrusted_fork" });
+    },
+  );
+
+  test("ignores a pull request from a deleted fork by an untrusted author", () => {
+    expect(
+      parseGitHubEvent({
+        eventName: "pull_request",
+        deliveryId: "delivery-deleted-fork",
+        payload: pullRequestPayload({ headRepositoryId: null, authorAssociation: "NONE" }),
+      }),
+    ).toEqual({ outcome: "irrelevant", reason: "untrusted_fork" });
+  });
+
+  test("accepts a same-repository pull request whatever the author association", () => {
+    const result = parseGitHubEvent({
+      eventName: "pull_request",
+      deliveryId: "delivery-same-repo",
+      payload: pullRequestPayload({ authorAssociation: "CONTRIBUTOR" }),
+    });
+    expect(result.outcome).toBe("normalized");
   });
 
   test("preserves non-default pull request bases for policy filtering later", () => {

@@ -1,6 +1,7 @@
 import {
   CLIENT_COUNTRY_HEADER,
   CLIENT_IP_HEADER,
+  CLIENT_REGION_HEADER,
   CRON_PATH,
   EDGE_ONLY_HEADERS,
   ORIGIN_KEY_HEADER,
@@ -8,6 +9,7 @@ import {
   RPC_PATH_PREFIX,
   secretsMatch,
 } from "@doxahq/api-bridge";
+import { isWarmPool } from "@doxahq/contracts/docs-warm-region";
 import type { Env } from "../../env";
 import type { ScopedFetch } from "../../http/request-scope";
 
@@ -34,8 +36,9 @@ export interface OriginHandlerDeps {
  * here and never reaches the API, so its headers cannot steer a request.
  *
  * A public request continues to the API as the client sent it to the edge:
- * with the public URL (https://api.doxa.so/…, not the tunnel hostname), and
- * the client IP and country under the header names that Better Auth reads.
+ * with the public URL (https://api.doxa.so/…, not the tunnel hostname), the
+ * client IP and country under the header names that Better Auth reads, and
+ * the client's cache pool under `CLIENT_REGION_HEADER` (see `client-region.ts`).
  */
 export function createOriginHandler(deps: OriginHandlerDeps): (request: Request) => Promise<Response> {
   return async (request) => {
@@ -52,15 +55,22 @@ export function createOriginHandler(deps: OriginHandlerDeps): (request: Request)
   };
 }
 
-/** The request as the API expects it: the public URL, client headers as Cloudflare names them, edge headers gone. */
+/**
+ * The request as the API expects it: the public URL, client headers as
+ * Cloudflare names them, edge headers gone. Only the cache pool keeps its
+ * edge header name, re-set here from the keyed request's value when it names
+ * a known pool, so the API can trust it.
+ */
 export function asPublicRequest(request: Request): Request {
   const headers = new Headers(request.headers);
   const url = publicUrlOf(headers.get(PUBLIC_URL_HEADER)) ?? request.url;
   const clientIp = headers.get(CLIENT_IP_HEADER);
   const country = headers.get(CLIENT_COUNTRY_HEADER);
+  const region = headers.get(CLIENT_REGION_HEADER);
   for (const name of [...EDGE_ONLY_HEADERS, ...CLIENT_IP_CLAIMS]) headers.delete(name);
   if (clientIp) headers.set("cf-connecting-ip", clientIp);
   if (country) headers.set("cf-ipcountry", country);
+  if (isWarmPool(region)) headers.set(CLIENT_REGION_HEADER, region);
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
   return new Request(url, {

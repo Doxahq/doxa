@@ -38,6 +38,10 @@ export interface RuntimeFeatureConfig {
     rawText: boolean;
   };
   apiPlayground: boolean;
+  /** The owner's "Try it" target (SEC-010); unset turns Try it off. */
+  apiPlaygroundBaseUrl?: string;
+  /** Who sends "Try it" requests. Unset means the proxy, when it can. */
+  apiPlaygroundTransport?: "proxy" | "browser";
   rawMarkdown: boolean;
   loadFromGithub: boolean;
 }
@@ -166,6 +170,12 @@ export interface RuntimeRoutePageData {
 }
 
 export interface DoxaDocsRuntimeSource {
+  /**
+   * Names whose content this source reads, for caches that one renderer
+   * isolate shares between sites, for example `site:{siteId}:{versionId}`.
+   * A source without it is never cached across requests.
+   */
+  readonly cacheScope?: string;
   getAsset?(hash: string): Promise<Response>;
   /**
    * An image of the served version, at `/assets/{name}`. `version` is the

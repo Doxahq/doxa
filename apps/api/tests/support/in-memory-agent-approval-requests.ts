@@ -9,6 +9,7 @@ import type {
   TransitionOutcome,
 } from "../../src/repositories/agent-approval-requests";
 import {
+  EXPIRED_ERROR,
   isAllowedTransition,
   REPLACED_ERROR,
   type ActiveApprovalStatus,
@@ -29,8 +30,14 @@ export class InMemoryAgentApprovalRequestStore implements AgentApprovalRequestSt
     now: Date,
   ): Promise<PendingInsertOutcome> {
     const existing = this.pendingForTarget(input);
-    if (existing && isSameRequest(existing)) return { kind: "reused", request: existing };
-    if (existing) this.apply(existing, { to: "stale", error: REPLACED_ERROR }, now);
+    const expired = existing !== null && existing.expiresAt <= now;
+    if (existing && !expired && isSameRequest(existing)) return { kind: "reused", request: existing };
+    if (existing && !expired && existing.requestedByUserId !== input.requestedByUserId) {
+      return { kind: "held_by_other", request: existing };
+    }
+    if (existing) {
+      this.apply(existing, expired ? { to: "expired", error: EXPIRED_ERROR } : { to: "stale", error: REPLACED_ERROR }, now);
+    }
     const request: ApprovalRequestRecord = {
       ...input,
       id: toApprovalRequestId(crypto.randomUUID()),

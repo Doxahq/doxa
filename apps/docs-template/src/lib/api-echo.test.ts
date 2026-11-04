@@ -50,3 +50,37 @@ describe("API playground echo", () => {
     });
   });
 });
+
+// SECURITY REGRESSION GUARDRAIL (SEC-007): the echo route reads a bounded body.
+describe("echo body limit", () => {
+  test("answers 413 for a declared body above 64 KB", async () => {
+    const response = await createEchoResponse(
+      new Request("https://acme.doxa.page/api/echo/v1/messages", {
+        method: "POST",
+        body: "{}",
+        headers: { "content-length": String(64 * 1024 + 1) },
+      }),
+      "v1/messages",
+    );
+
+    expect(response.status).toBe(413);
+  });
+
+  test("answers 413 for a streamed body above 64 KB", async () => {
+    const response = await createEchoResponse(
+      new Request("https://acme.doxa.page/api/echo/v1/messages", {
+        method: "POST",
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(64 * 1024 + 1).fill(97));
+            controller.close();
+          },
+        }),
+        duplex: "half",
+      } as RequestInit),
+      "v1/messages",
+    );
+
+    expect(response.status).toBe(413);
+  });
+});

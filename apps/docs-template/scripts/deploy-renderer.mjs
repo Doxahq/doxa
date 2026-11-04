@@ -1,10 +1,33 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import {
+  listClientAssetFiles,
+  planClientAssetUploads,
+  runQuietCommand,
+  uploadClientAssets,
+} from "../../../scripts/lib/client-assets-upload.mjs";
 import { requireResolverBinding } from "../../../scripts/lib/docs-placement-config.mjs";
+import {
+  RENDERER_RELEASE_RECORD_KEY,
+  createRendererReleaseRecord,
+  describeReleaseRecordWriteFailure,
+  findPreviousBuildVarsProblem,
+  isMissingObjectOutput,
+  parsePreviousFallbackOption,
+  parseRendererReleaseRecord,
+  parseRevokedReleaseId,
+  previousBuildVars,
+  releaseRecordPutArgs,
+  retryReleaseRecordWrite,
+} from "../../../scripts/lib/renderer-release-record.mjs";
+import {
+  describeQueueProblems,
+  findQueueProblems,
+} from "../../../scripts/lib/warm-queue-preflight.mjs";
 import { preparePrerenderConfigs } from "./prepare-prerender-configs.mjs";
 
 const SHARED_WORKER_NAME = "doxa-docs-renderer-shared";
@@ -25,10 +48,45 @@ if (options.help) {
 }
 
 try {
+  // F10: fail before any build when the operator did not choose.
+  const previousFallback = parsePreviousFallbackOption(options.previousFallback);
+  const revoke = options.revoke.map(parseRevokedReleaseId);
   validateMode(options.mode, options.siteIds);
-  validateMode(options.prerenderMode, options.prerenderSiteIds);
+  // Unset keeps the committed rollout (F1); package-renderer reads it.
+  if (options.prerenderMode !== undefined) {
+    validateMode(options.prerenderMode, options.prerenderSiteIds);
+  }
   validateMode(options.routeDataCacheMode, options.routeDataCacheSiteIds);
   validateBoolean(options.repairEnabled, "repair-enabled");
+  const sourceDispatcherConfig = readJson(
+    path.join(dispatcherRoot, "wrangler.json"),
+  );
+  // F2: a missing queue fails the dispatcher deploy after the shared
+  // renderer went live. Check before any build or upload.
+  if (options.dryRun) {
+    globalThis.console.log(
+      "[deploy-renderer] Dry run: the warm queues are not checked.",
+    );
+  } else {
+    assertQueuesExist(sourceDispatcherConfig);
+  }
+  // Read before packaging: the package plans the previous build from it.
+  const releaseRecord = options.dryRun
+    ? null
+    : readReleaseRecord(getCodeBucketName(sourceDispatcherConfig));
+  if (options.dryRun) {
+    globalThis.console.log(
+      "[deploy-renderer] Dry run: the release record is not read; the previous build stays empty.",
+    );
+  }
+  const releaseRecordPath = path.join(
+    dispatcherRoot,
+    "dist/release-record.read.json",
+  );
+  if (releaseRecord) {
+    mkdirSync(path.dirname(releaseRecordPath), { recursive: true });
+    writeFileSync(releaseRecordPath, `${JSON.stringify(releaseRecord)}\n`);
+  }
   const sharedConfigPath = path.resolve(templateRoot, options.sharedConfig);
   const sharedGeneratedConfigPath = path.resolve(
     templateRoot,
@@ -43,6 +101,8 @@ try {
       ...process.env,
       CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH: options.sharedConfig,
       DOXA_DEPLOY_TARGET: "cloudflare",
+      // Minified server code without the local content source.
+      DOXA_RENDERER_BUILD: "platform",
     },
   });
 
@@ -62,14 +122,19 @@ try {
     "../docs-template/dist/server",
     "--mode",
     options.mode,
-    "--prerender-mode",
-    options.prerenderMode,
     "--repair-enabled",
     options.repairEnabled,
     "--route-data-cache-mode",
     options.routeDataCacheMode,
+    "--previous-fallback",
+    previousFallback,
   ];
+  if (releaseRecord) packageArgs.push("--release-record", releaseRecordPath);
+  for (const releaseId of revoke) packageArgs.push("--revoke", releaseId);
   if (options.siteIds) packageArgs.push("--site-ids", options.siteIds);
+  if (options.prerenderMode) {
+    packageArgs.push("--prerender-mode", options.prerenderMode);
+  }
   if (options.prerenderSiteIds) {
     packageArgs.push("--prerender-site-ids", options.prerenderSiteIds);
   }
@@ -90,7 +155,15 @@ try {
   assertFile(dispatcherConfigPath);
   const metadata = readJson(metadataPath);
   const dispatcherConfig = readJson(dispatcherConfigPath);
-  validateDispatcherConfig(dispatcherConfig, dispatcherConfigPath, metadata);
+  validateDispatcherConfig(
+    dispatcherConfig,
+    dispatcherConfigPath,
+    metadata,
+    sourceDispatcherConfig,
+  );
+  globalThis.console.log(
+    `[deploy-renderer] Previous build: ${metadata.previousBuild.previous?.buildId ?? "none"} (${metadata.previousBuild.reason}).`,
+  );
   const preparedConfigs = await preparePrerenderConfigs({
     workspaceRoot,
     metadataPath: "apps/docs-dispatcher/dist/renderer-package.json",
@@ -105,17 +178,21 @@ try {
 
   if (options.dryRun) {
     globalThis.console.log(
-      `[deploy-renderer] Dry run complete. Dynamic mode: ${options.mode}. Pre-render mode: ${options.prerenderMode}. Route-data cache mode: ${options.routeDataCacheMode}. Release: ${preparedConfigs.releaseId}.`
+      `[deploy-renderer] Dry run complete. Dynamic mode: ${options.mode}. Pre-render mode: ${dispatcherConfig.vars.DOXA_PROD_PRERENDER_MODE}. Route-data cache mode: ${options.routeDataCacheMode}. Release: ${preparedConfigs.releaseId}.`
     );
     process.exit(0);
   }
+
+  const codeBucket = getCodeBucketName(dispatcherConfig);
+  // Pages from earlier deploys still load their old hashed client files. Put
+  // this build's files next to the older ones before any Worker serves it.
+  await uploadBuildClientAssets(codeBucket);
 
   // Publish the fallback before moving the public route to the dispatcher.
   run("pnpm", ["exec", "wrangler", "deploy", "-c", sharedGeneratedConfigPath], {
     cwd: templateRoot,
   });
 
-  const codeBucket = getCodeBucketName(dispatcherConfig);
   run(
     "pnpm",
     [
@@ -143,6 +220,23 @@ try {
     cwd: dispatcherRoot,
   });
 
+  // The dispatcher now serves this build, so the record names it (F10).
+  // A failed write does not stop the prerenderer and API deploys (they must
+  // match the live dispatcher); the deploy still exits non-zero at the end.
+  const recordWritten = await writeReleaseRecord(
+    codeBucket,
+    createRendererReleaseRecord({
+      record: releaseRecord,
+      current: {
+        buildId: metadata.buildId,
+        releaseId: metadata.rendererReleaseId,
+        packageKey: metadata.objectKey,
+      },
+      plan: metadata.previousBuild,
+      revoke,
+    }),
+  );
+
   run(
     "pnpm",
     [
@@ -164,10 +258,36 @@ try {
   );
 
   globalThis.console.log(
-    `[deploy-renderer] Docs rendering deployment complete. Dynamic mode: ${options.mode}. Pre-render mode: ${options.prerenderMode}. Route-data cache mode: ${options.routeDataCacheMode}. Release: ${preparedConfigs.releaseId}.`
+    `[deploy-renderer] Docs rendering deployment complete. Dynamic mode: ${options.mode}. Pre-render mode: ${dispatcherConfig.vars.DOXA_PROD_PRERENDER_MODE}. Route-data cache mode: ${options.routeDataCacheMode}. Release: ${preparedConfigs.releaseId}.`
   );
+  if (!recordWritten) {
+    fail(
+      `The release record was not written. Run the command printed above before the next renderer deploy.`,
+    );
+  }
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
+}
+
+async function uploadBuildClientAssets(bucket) {
+  const assetsDirectory = path.join(templateRoot, "dist/client/assets");
+  const uploads = planClientAssetUploads({
+    assetsDirectory,
+    files: await listClientAssetFiles(assetsDirectory),
+  });
+  const count = await uploadClientAssets({
+    uploads,
+    bucket,
+    run: (args, upload) =>
+      runQuietCommand("pnpm", args, {
+        cwd: dispatcherRoot,
+        label: "deploy-renderer",
+        description: `client asset ${upload.key}`,
+      }),
+  });
+  globalThis.console.log(
+    `[deploy-renderer] Uploaded ${count} client assets to ${bucket}.`,
+  );
 }
 
 function parseArgs(args) {
@@ -176,16 +296,19 @@ function parseArgs(args) {
     sharedGeneratedConfig: DEFAULT_SHARED_GENERATED_CONFIG,
     mode: process.env.DOXA_PROD_DYNAMIC_RENDERER_MODE?.trim() || "all",
     siteIds: process.env.DOXA_PROD_DYNAMIC_RENDERER_SITE_IDS?.trim() || "",
-    prerenderMode:
-      process.env.DOXA_PROD_PRERENDER_MODE?.trim() || "off",
+    // Unset keeps the committed rollout of the dispatcher config (F1).
+    prerenderMode: process.env.DOXA_PROD_PRERENDER_MODE?.trim() || undefined,
     prerenderSiteIds:
-      process.env.DOXA_PROD_PRERENDER_SITE_IDS?.trim() || "",
+      process.env.DOXA_PROD_PRERENDER_SITE_IDS?.trim() || undefined,
     repairEnabled:
       process.env.DOXA_PRERENDER_REPAIR_ENABLED?.trim() || "false",
     routeDataCacheMode:
       process.env.DOXA_PROD_ROUTE_DATA_CACHE_MODE?.trim() || "all",
     routeDataCacheSiteIds:
       process.env.DOXA_PROD_ROUTE_DATA_CACHE_SITE_IDS?.trim() || "",
+    previousFallback:
+      process.env.DOXA_RENDERER_PREVIOUS_FALLBACK?.trim() || undefined,
+    revoke: [],
     dryRun: false,
     help: false,
   };
@@ -211,6 +334,10 @@ function parseArgs(args) {
       parsed.routeDataCacheMode = readArg(args, ++index, arg);
     } else if (arg === "--route-data-cache-site-ids") {
       parsed.routeDataCacheSiteIds = readArg(args, ++index, arg);
+    } else if (arg === "--previous-fallback") {
+      parsed.previousFallback = readArg(args, ++index, arg);
+    } else if (arg === "--revoke") {
+      parsed.revoke.push(readArg(args, ++index, arg));
     } else if (arg === "--dry-run") {
       parsed.dryRun = true;
     } else if (arg === "--skip-secret") {
@@ -289,7 +416,7 @@ function validateSharedRendererEntrypoint(config, configPath) {
   }
 }
 
-function validateDispatcherConfig(config, configPath, metadata) {
+function validateDispatcherConfig(config, configPath, metadata, sourceConfig) {
   const label = path.relative(path.resolve(templateRoot, "../.."), configPath);
   requireResolverBinding(config, label);
   if (config.name !== DISPATCHER_WORKER_NAME) {
@@ -318,8 +445,24 @@ function validateDispatcherConfig(config, configPath, metadata) {
   if (config.vars?.DOXA_PROD_DYNAMIC_RENDERER_MODE !== options.mode) {
     throw new Error(`${label} does not match the requested rollout mode.`);
   }
-  if (config.vars?.DOXA_PROD_PRERENDER_MODE !== options.prerenderMode) {
+  const prerenderMode =
+    options.prerenderMode ?? sourceConfig.vars?.DOXA_PROD_PRERENDER_MODE;
+  if (config.vars?.DOXA_PROD_PRERENDER_MODE !== prerenderMode) {
     throw new Error(`${label} does not match the pre-render rollout mode.`);
+  }
+  validateMode(
+    config.vars.DOXA_PROD_PRERENDER_MODE,
+    config.vars.DOXA_PROD_PRERENDER_SITE_IDS,
+  );
+  // F24: deploy.sh --step docs-rendering skips the raw-config validation, so
+  // the previous-build vars are checked here, on the generated config.
+  const previousProblem = findPreviousBuildVarsProblem(config.vars);
+  if (previousProblem) throw new Error(`${label}: ${previousProblem}.`);
+  const expectedPrevious = previousBuildVars(metadata.previousBuild);
+  for (const [name, value] of Object.entries(expectedPrevious)) {
+    if (config.vars[name] !== value) {
+      throw new Error(`${label} does not match the planned ${name}.`);
+    }
   }
   if (
     config.vars?.DOXA_PRERENDER_REPAIR_ENABLED !== options.repairEnabled
@@ -344,6 +487,88 @@ function validateDispatcherConfig(config, configPath, metadata) {
   if (typeof outputBucket !== "string" || !outputBucket.trim()) {
     throw new Error(`${label} must define DOCS_RENDERED_BUCKET.`);
   }
+}
+
+/** Read-only: `wrangler queues info` for every queue the dispatcher binds. */
+function assertQueuesExist(config) {
+  const problems = findQueueProblems(config, (name) => {
+    const args = ["exec", "wrangler", "queues", "info", name];
+    globalThis.console.log(`[deploy-renderer] pnpm ${args.join(" ")}`);
+    const result = spawnSync("pnpm", args, {
+      cwd: dispatcherRoot,
+      env: process.env,
+      shell: false,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (result.error) throw result.error;
+    return {
+      status: result.status,
+      output: `${result.stdout ?? ""}\n${result.stderr ?? ""}`,
+    };
+  });
+  if (problems.missing.length > 0 || problems.unchecked.length > 0) {
+    throw new Error(describeQueueProblems(problems));
+  }
+}
+
+/** The stored record, or null before the first deploy that writes one. */
+function readReleaseRecord(bucket) {
+  const target = `${bucket}/${RENDERER_RELEASE_RECORD_KEY}`;
+  const filePath = path.join(dispatcherRoot, "dist/release-record.download.json");
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  const args = ["exec", "wrangler", "r2", "object", "get", target, "--file", filePath, "--remote"];
+  globalThis.console.log(`[deploy-renderer] pnpm ${args.join(" ")}`);
+  const result = spawnSync("pnpm", args, {
+    cwd: dispatcherRoot,
+    env: process.env,
+    shell: false,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.error) throw result.error;
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  if (result.status !== 0) {
+    if (isMissingObjectOutput(output)) {
+      globalThis.console.log(
+        `[deploy-renderer] No release record at ${target}; this deploy has no previous build.`,
+      );
+      return null;
+    }
+    globalThis.console.error(output);
+    throw new Error(`Could not read ${target}. Fix access, or check the object.`);
+  }
+  return parseRendererReleaseRecord(readFileSync(filePath, "utf8"));
+}
+
+/**
+ * Writes the record with retries (FC-M4). Returns false after the last failed
+ * attempt, once the exact record and command are printed for the operator.
+ */
+async function writeReleaseRecord(bucket, record) {
+  const filePath = path.join(dispatcherRoot, "dist/release-record.next.json");
+  writeFileSync(filePath, `${JSON.stringify(record, null, 2)}\n`);
+  const args = releaseRecordPutArgs(bucket, filePath);
+  const result = await retryReleaseRecordWrite({
+    attempt: (attempt) => {
+      globalThis.console.log(
+        `[deploy-renderer] (attempt ${attempt}) pnpm ${args.join(" ")}`,
+      );
+      return tryRun("pnpm", args, { cwd: dispatcherRoot });
+    },
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  });
+  if (result.ok) return true;
+  globalThis.console.error(
+    `[deploy-renderer] ${describeReleaseRecordWriteFailure({
+      bucket,
+      record,
+      filePath,
+      cwd: dispatcherRoot,
+      attempts: result.attempts,
+    })}`,
+  );
+  return false;
 }
 
 function getCodeBucketName(config) {
@@ -393,6 +618,21 @@ function run(command, args, options) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+/** Like `run`, but reports a failed command instead of exiting. */
+function tryRun(command, args, options) {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd,
+    env: process.env,
+    shell: false,
+    stdio: "inherit",
+  });
+  if (result.error) {
+    globalThis.console.error(`[deploy-renderer] ${result.error.message}`);
+    return false;
+  }
+  return result.status === 0;
+}
+
 function fail(message) {
   globalThis.console.error(`[deploy-renderer] ${message}`);
   process.exitCode = 1;
@@ -407,7 +647,8 @@ Usage:
 Options:
   --mode <off|allowlist|all>  Production Dynamic Worker rollout. Default: all
   --site-ids <id,id>          Production site IDs used by allowlist mode
-  --prerender-mode <mode>     Saved-output rollout: off, allowlist, or all
+  --prerender-mode <mode>     Saved-output rollout: off, allowlist, or all.
+                              Default: the dispatcher wrangler.json value
   --prerender-site-ids <ids>  Site IDs used by pre-render allowlist mode
   --repair-enabled <boolean>  Enable or disable request-time repairs
   --route-data-cache-mode <mode>
@@ -415,6 +656,14 @@ Options:
                               Default: all
   --route-data-cache-site-ids <ids>
                               Site IDs used by route-data cache allowlist mode
+  --previous-fallback <on|off>
+                              Required. on: the build this deploy replaces stays
+                              the cached fallback for 24 hours (M26). off: no
+                              fallback (a security fix, or a bad build).
+                              A rollback to the previous release is off
+                              automatically.
+  --revoke <releaseId>        Never use this renderer release as the previous
+                              build again. Repeatable.
   --config <path>             Shared renderer source config
   --generated-config <path>   Shared renderer generated config
   --dry-run                   Build, package, and validate without deploying
@@ -422,6 +671,7 @@ Options:
   -h, --help                  Show this help
 
 Environment alternatives:
+  DOXA_RENDERER_PREVIOUS_FALLBACK
   DOXA_PROD_DYNAMIC_RENDERER_MODE
   DOXA_PROD_DYNAMIC_RENDERER_SITE_IDS
   DOXA_PROD_PRERENDER_MODE

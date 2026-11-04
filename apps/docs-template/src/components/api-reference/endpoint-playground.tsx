@@ -40,7 +40,6 @@ import {
   jsonBodyToFieldValues,
   loadSessionAuthToken,
   requestInputParameters,
-  requestTargetOrigin,
   saveSessionAuthToken,
   type BrowserRequestInput,
 } from "@/src/lib/api-request";
@@ -286,7 +285,6 @@ export function EndpointPlayground({
   }, [sampleClient, requestInput]);
 
   // The host that receives the key. It needs `window`, so it appears after hydration.
-  const targetHost = hydrated ? new URL(requestTargetOrigin(baseUrl)).host : null;
   const targetChanged =
     proxyRefusedTarget ||
     (config?.mode === "proxy" &&
@@ -517,11 +515,7 @@ export function EndpointPlayground({
         )}
       </header>
 
-      <PlaygroundNotice
-        config={config}
-        targetHost={targetHost}
-        targetChanged={targetChanged}
-      />
+      <PlaygroundNotice config={config} targetChanged={targetChanged} />
 
       <div className="flex gap-1 border-b p-1.5 md:hidden" role="group" aria-label="View">
         {(["request", "response"] as const).map((view) => (
@@ -643,34 +637,22 @@ export function EndpointPlayground({
 }
 
 /**
- * Shows only when the reader must act: the target changed, the playground is
- * off, or a preview can use a target that differs from the live site. A normal
- * page shows nothing.
+ * Shows only when the reader must act: the target changed or the playground is
+ * off. A normal page and a preview show nothing.
  */
 function PlaygroundNotice({
   config,
-  targetHost,
   targetChanged,
 }: {
   config: DocsTryConfig | null;
-  targetHost: string | null;
   targetChanged: boolean;
 }) {
   if (!config) return null;
-  let text: ReactNode = null;
+  let text: string | null = null;
   if (targetChanged) {
     text = DOCS_TRY_TARGET_CHANGED_TITLE;
   } else if (config.mode === "off") {
     text = "The owner of this site turned off the playground.";
-  } else if (config.preview) {
-    const host = config.mode === "proxy" ? config.targetHost : targetHost;
-    text = (
-      <>
-        This is a preview. It sends requests to{" "}
-        <span className="font-code">{host ?? "the API"}</span>. Check this host
-        before you enter a key.
-      </>
-    );
   }
   if (!text) return null;
   return (

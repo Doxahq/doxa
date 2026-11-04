@@ -209,14 +209,10 @@ describe("the config route", () => {
     expect(await configOf()).toMatchObject({ mode: "proxy", targetHost: "api.acme.com" });
   });
 
-  test("marks a preview, so the panel can show the banner", async () => {
-    expect(await configOf(undefined, { renderTarget: "preview" })).toMatchObject({
-      mode: "proxy",
-      preview: true,
-    });
-    expect(await configOf(undefined, { renderTarget: "generation_snapshot" })).toMatchObject({
-      preview: true,
-    });
+  test("answers a preview as it answers the live site", async () => {
+    const live = await configOf();
+    expect(await configOf(undefined, { renderTarget: "preview" })).toEqual(live);
+    expect(await configOf(undefined, { renderTarget: "generation_snapshot" })).toEqual(live);
   });
 
   test("answers off with no playground", async () => {

@@ -7,7 +7,7 @@
 
 ## Request path
 
-1. The panel calls `GET /__doxa/try/config`. The answer gives the mode, the host and a `targetId`. The panel shows no note about the mode. It shows a note only on a preview, or when the playground is off. If the host in the answer differs from the page's own base URL, the panel clears the key, disables Send and asks the reader to reload.
+1. The panel calls `GET /__doxa/try/config`. The answer gives the mode, the host and a `targetId`. The panel shows no note about the mode or about a preview. It shows a message only when the playground is off. If the host in the answer differs from the page's own base URL, the panel clears the key, disables Send and asks the reader to reload.
 2. The panel posts to `POST /__doxa/try` on its own origin. The request holds a method, a path and the `targetId`, and it has no URL or host field. The proxy refuses the send if the `targetId` does not match the current target.
 3. `apps/docs-dispatcher/src/try-route.ts` checks the method, `Sec-Fetch-Site`, `Origin` and the content type. It resolves the site from the hostname, then reads `features` from the docs runtime. It never reads the body.
 4. `apps/try-proxy` (`TryProxyApi`, service binding only) applies the kill switch, the target rules, the blocklist and the limits. It builds a new URL and new headers, then sends.
@@ -70,7 +70,7 @@ The rate limit bindings count per Cloudflare location. Only `TryBudget` counts a
 
 `pnpm dev` runs `apps/try-proxy/dev/gateway.ts` on `127.0.0.1:8792`. It stands in for the dispatcher, which `pnpm dev` does not run. The Vite renderer forwards `/__doxa/try*` to it.
 
-The gateway uses the real route and the real send code in `workerd`, with the limits of `wrangler.json`. It treats each local site as a public production site, so the private site and preview rules do not apply locally. No deploy script uses it. If it is not running, the panel uses browser mode.
+The gateway uses the real route and the real send code in `workerd`, with the limits of `wrangler.json`. It treats each local site as a public production site, so the private site rule does not apply locally. No deploy script uses it. If it is not running, the panel uses browser mode.
 
 Locally, the target sees your own IP address, because `wrangler dev` sends from your machine.
 

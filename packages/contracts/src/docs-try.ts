@@ -74,9 +74,8 @@ export type DocsTryConfig =
       /** The request sends this back, so the proxy can compare it at send time. */
       targetId: string;
       limits: { requestBytes: number; responseBytes: number; timeoutMs: number };
-      preview?: boolean;
     }
-  | { mode: "browser"; reason: DocsTryBrowserReason; preview?: boolean }
+  | { mode: "browser"; reason: DocsTryBrowserReason }
   | { mode: "off" };
 
 export interface DocsTryResult {

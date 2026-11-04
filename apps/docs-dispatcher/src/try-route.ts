@@ -65,22 +65,18 @@ export async function handleDocsTryRequest(
   const resolution = await dependencies.resolveHost(url.hostname);
   if (!resolution) return isConfig ? configAnswer({ mode: "off" }) : tryOff();
 
-  const preview = resolution.renderTarget !== undefined && resolution.renderTarget !== "production";
-  const withPreview = (config: DocsTryConfig): DocsTryConfig =>
-    preview && config.mode !== "off" ? { ...config, preview: true } : config;
-
   const settings = await readPlaygroundSettings(dependencies.runtime, resolution);
   if (!settings) return isConfig ? configAnswer({ mode: "off" }) : tryOff();
 
   const browserReason = readBrowserReason(settings, resolution, url.hostname);
   if (browserReason) {
     return isConfig
-      ? configAnswer(withPreview({ mode: "browser", reason: browserReason }))
+      ? configAnswer({ mode: "browser", reason: browserReason })
       : tryOff();
   }
   if (!dependencies.proxy) {
     return isConfig
-      ? configAnswer(withPreview({ mode: "browser", reason: "proxy_off" }))
+      ? configAnswer({ mode: "browser", reason: "proxy_off" })
       : tryOff();
   }
 
@@ -90,7 +86,7 @@ export async function handleDocsTryRequest(
     clientKey: clientIpRateLimitKey(request.headers.get("cf-connecting-ip") ?? "unknown"),
   };
   return isConfig
-    ? configAnswer(withPreview(await dependencies.proxy.config(context)))
+    ? configAnswer(await dependencies.proxy.config(context))
     : dependencies.proxy.send(request.body, context);
 }
 

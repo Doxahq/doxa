@@ -62,20 +62,18 @@ export function SidebarViewHeader({
 }) {
   return (
     <div className="flex shrink-0 flex-col gap-2.5 border-b border-divider px-3 py-2.5">
-      <div className="-ml-1 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label={backLabel}
-          title={backLabel}
-          className="grid size-7 place-items-center text-muted-foreground transition-colors hover:bg-overlay hover:text-foreground [&_svg]:size-4"
-        >
-          <ArrowLeft aria-hidden="true" />
-        </button>
-        <span className="font-mono text-[11px] font-medium tracking-[0.16em] text-foreground uppercase">
+      <button
+        type="button"
+        onClick={onBack}
+        aria-label={backLabel}
+        title={backLabel}
+        className="-ml-1 flex h-7 w-fit max-w-full items-center gap-1.5 rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-overlay hover:text-foreground [&_svg]:size-4 [&_svg]:shrink-0"
+      >
+        <ArrowLeft aria-hidden="true" />
+        <span className="truncate font-mono text-[11px] font-medium tracking-[0.16em] text-foreground uppercase">
           {label}
         </span>
-      </div>
+      </button>
       {children}
     </div>
   )

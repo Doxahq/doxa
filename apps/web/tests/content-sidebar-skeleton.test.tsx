@@ -24,7 +24,7 @@ describe("the content sidebar skeleton", () => {
   test("announces the loading list and keeps the search box out of reach", () => {
     render(<ContentSidebarSkeleton onBack={vi.fn()} />)
     expect(screen.getByRole("status").textContent).toContain("Loading pages")
-    expect(screen.getByRole("button", { name: "Back to project" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Back to overview" })).toBeTruthy()
     expect(screen.queryByRole("textbox")).toBeNull()
   })
 })

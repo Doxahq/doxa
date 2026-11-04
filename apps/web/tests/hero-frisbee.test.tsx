@@ -3,7 +3,7 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
-import { HeroFrisbee } from "~/components/marketing/home/hero-frisbee"
+import { HeroFrisbee } from "~/components/marketing/about/hero-frisbee"
 
 const art = vi.hoisted(() => ({ attach: vi.fn(), stop: vi.fn() }))
 
@@ -39,7 +39,7 @@ function hero() {
   return render(
     <header>
       <HeroFrisbee />
-      <div className="hero__grid" />
+      <div className="ab-hero" />
     </header>,
   )
 }
@@ -65,7 +65,7 @@ describe("HeroFrisbee", () => {
     const [canvas, content] = art.attach.mock.calls[0]
     expect(canvas).toBe(container.querySelector("canvas.hero__frisbee"))
     expect(canvas.getAttribute("aria-hidden")).toBe("true")
-    expect(content).toBe(container.querySelector(".hero__grid"))
+    expect(content).toBe(container.querySelector(".ab-hero"))
   })
 
   test("the button pauses it and resumes it", async () => {

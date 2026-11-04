@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 
+import { ArtToggle } from "~/components/marketing/art-toggle"
 import type { FrisbeeArt } from "~/lib/marketing/frisbee-art"
 
-const PLAY_PATH = "M0 0 9 5 0 10Z"
-const PAUSE_PATH = "M0 0H3V10H0ZM6 0H9V10H6Z"
-
-/** Below this width, the space beside the hero copy is too small for the hands. Keep in sync with home.css. */
+/** Below this width, the space beside the hero copy is too small for the hands. Keep in sync with about.css. */
 const WIDE_ENOUGH = "(min-width: 1400px)"
 
 /**
@@ -27,7 +25,7 @@ export function HeroFrisbee() {
 
   useEffect(() => {
     const surface = canvas.current
-    const content = surface?.parentElement?.querySelector<HTMLElement>(".hero__grid")
+    const content = surface?.parentElement?.querySelector<HTMLElement>(".ab-hero")
     if (!surface || !content) return
     let cancelled = false
     let started = false
@@ -54,14 +52,7 @@ export function HeroFrisbee() {
   return (
     <>
       <canvas ref={canvas} className="hero__frisbee" aria-hidden="true" />
-      {playing === null ? null : (
-        <button type="button" className="btn btn--line btn--sm hero__frisbee-toggle" onClick={toggle}>
-          <svg width="9" height="10" viewBox="0 0 9 10" aria-hidden="true">
-            <path fill="currentColor" d={playing ? PAUSE_PATH : PLAY_PATH} />
-          </svg>
-          {playing ? "Pause" : "Play"}
-        </button>
-      )}
+      {playing === null ? null : <ArtToggle playing={playing} onToggle={toggle} className="hero__frisbee-toggle" />}
     </>
   )
 }

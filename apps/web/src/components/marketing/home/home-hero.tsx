@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router"
 import { Aurora } from "~/components/marketing/aurora"
 import { Hr } from "~/components/marketing/guides"
-import { HeroFrisbee } from "~/components/marketing/home/hero-frisbee"
+import { HeroSolve } from "~/components/marketing/home/hero-solve"
 import { SiteNav } from "~/components/marketing/site-nav"
 import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 
@@ -10,7 +10,6 @@ export function HomeHero() {
     <header className="hero">
       <Aurora dpi={1} />
       <div className="hero__scrim" />
-      <HeroFrisbee />
 
       <SiteNav current="home" />
       <Hr />
@@ -42,45 +41,7 @@ export function HomeHero() {
               </a>
             </div>
           </div>
-          <div className="hero__side vdiv">
-            <a className="hcard" href="#">
-              <span className="hcard__icon hcard__icon--solid">
-                <svg width="8" height="8" aria-hidden="true">
-                  <rect width="8" height="8" fill="#3D7BFF" />
-                </svg>
-              </span>
-              <span className="hcard__body">
-                <span className="hcard__title">
-                  Doxa Agent <span className="hcard__tag">BETA</span>
-                </span>
-                <p>Writes your docs from the repository and rewrites the affected pages on every merge.</p>
-              </span>
-            </a>
-            <a className="hcard" href="#">
-              <span className="hcard__icon">
-                <svg width="14" height="2" aria-hidden="true">
-                  <rect width="14" height="2" fill="#EDEDED" />
-                </svg>
-              </span>
-              <span className="hcard__body">
-                <span className="hcard__title">Docs Platform</span>
-                <p>Branches, previews and edge publishing for MDX. Search, AI chat and llms.txt built in.</p>
-              </span>
-            </a>
-            <Link className="hcard" to="/mcp">
-              <span className="hcard__icon hcard__icon--dotted">
-                <svg width="8" height="8" aria-hidden="true">
-                  <rect width="8" height="8" fill="#EDEDED" />
-                </svg>
-              </span>
-              <span className="hcard__body">
-                <span className="hcard__title">
-                  MCP Server <span className="hcard__tag">NEW</span>
-                </span>
-                <p>Edit docs from Claude, Cursor or Codex. Every publish waits for your approval.</p>
-              </span>
-            </Link>
-          </div>
+          <HeroSolve />
         </div>
       </div>
     </header>

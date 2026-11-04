@@ -1,5 +1,5 @@
 /**
- * The values to play with for the robotic hands in the home hero.
+ * The values to play with for the robotic hands in the About hero.
  */
 
 /**

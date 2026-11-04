@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react"
-
-import { attachSolveArt, type SolveArt } from "~/lib/marketing/solve-art"
+import { ArtToggle } from "~/components/marketing/art-toggle"
+import { useSolveArt } from "~/lib/marketing/use-solve-art"
 
 const MOVES = [
   {
@@ -21,50 +20,15 @@ const MOVES = [
   },
 ]
 
-const PLAY_PATH = "M0 0 9 5 0 10Z"
-const PAUSE_PATH = "M0 0H3V10H0ZM6 0H9V10H6Z"
-
-/** Start the art one screen before the section arrives, so it never draws in view. */
-const ATTACH_MARGIN = "100% 0px"
-
 /**
- * Section 01. Two robotic hands solve a cube behind the copy, in plain WebGL2. The
- * art code comes with the page, so nothing more loads, and the art plays by itself
- * and loops. Without WebGL2, the copy stands on the page color. The button stays
+ * The "How we solve docs" section of the About page, hidden for now by
+ * `SHOW_SOLVE_SECTION` in `about-page.tsx`. Two robotic hands solve a cube behind the
+ * copy, in plain WebGL2. The art code comes with the page, so nothing more loads, and
+ * the art plays by itself and loops. Without WebGL2, the copy stands on the page color. The button stays
  * hidden until the art has drawn, so it never controls art that is not there.
  */
 export function AboutSolve() {
-  const canvas = useRef<HTMLCanvasElement>(null)
-  const stage = useRef<HTMLDivElement>(null)
-  const art = useRef<SolveArt | null>(null)
-  const [playing, setPlaying] = useState<boolean | null>(null)
-
-  const toggle = () => {
-    if (!art.current) return
-    art.current.setPlaying(!art.current.playing)
-    setPlaying(art.current.playing)
-  }
-
-  useEffect(() => {
-    const surface = canvas.current
-    const area = stage.current
-    if (!surface || !area) return
-    const near = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return
-        near.disconnect()
-        art.current = attachSolveArt(surface, area)
-        if (art.current) setPlaying(art.current.playing)
-      },
-      { rootMargin: ATTACH_MARGIN },
-    )
-    near.observe(surface)
-    return () => {
-      near.disconnect()
-      art.current?.stop()
-      art.current = null
-    }
-  }, [])
+  const { canvas, stage, playing, toggle } = useSolveArt()
 
   return (
     <section className="ab-solve" aria-label="How we solve docs for the age of AI">
@@ -90,12 +54,7 @@ export function AboutSolve() {
           </div>
           <div ref={stage} className="ab-solve__stage">
             <div className="ab-solve__hud" hidden={playing === null}>
-              <button type="button" className="btn btn--line btn--sm" onClick={toggle}>
-                <svg width="9" height="10" viewBox="0 0 9 10" aria-hidden="true">
-                  <path fill="currentColor" d={playing ? PAUSE_PATH : PLAY_PATH} />
-                </svg>
-                {playing ? "Pause" : "Play"}
-              </button>
+              {playing === null ? null : <ArtToggle playing={playing} onToggle={toggle} />}
             </div>
           </div>
         </div>

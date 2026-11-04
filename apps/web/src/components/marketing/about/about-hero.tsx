@@ -1,3 +1,4 @@
+import { HeroFrisbee } from "~/components/marketing/about/hero-frisbee"
 import { HeroTicks } from "~/components/marketing/about/hero-ticks"
 import { Aurora } from "~/components/marketing/aurora"
 import { Hr } from "~/components/marketing/guides"
@@ -11,6 +12,7 @@ export function AboutHero() {
       <Aurora dpi={1} />
       <div className="hero__scrim" />
       <HeroTicks />
+      <HeroFrisbee />
       <SiteNav current="about" />
       <Hr />
       <div className="col">

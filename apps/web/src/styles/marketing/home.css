@@ -22,7 +22,7 @@
 /* ---------- Hero ---------- */
 .pg--home .hero { position: relative; isolation: isolate; overflow: hidden; }
 /* The hero sits above the page rails (z-index 6) and draws its own copy of them behind its
-   content, so the product cards cover the right rail and the panel stays open on that side. */
+   content, so the robotic hands pass in front of the rails. */
 .pg--home .hero { z-index: 7; }
 .pg--home .hero::after { content: ""; position: absolute; top: 0; bottom: 0; left: var(--gutter); right: var(--gutter); z-index: 1; pointer-events: none; background-image: var(--dash-y), var(--dash-y); background-size: 1px 8px, 1px 8px; background-position: left top, right top; background-repeat: repeat-y; }
 /* The aurora shader draws in canvas space, so a short, wide canvas squashes it into a
@@ -32,22 +32,18 @@
    sits inside the hero column, and fade its right edge so the cut does not show. */
 .pg--home .hero__aurora { position: absolute; top: 0; left: 0; width: 100%; height: max(calc(100% + 200px), 72vw); z-index: -2; pointer-events: none; transform: translateX(-18%); -webkit-mask-image: linear-gradient(90deg, #000 84%, transparent 100%); mask-image: linear-gradient(90deg, #000 84%, transparent 100%); }
 .pg--home .hero__scrim { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(90deg, rgba(10, 10, 10, 0.72) 0%, rgba(10, 10, 10, 0.35) 38%, rgba(10, 10, 10, 0) 64%), linear-gradient(180deg, rgba(10, 10, 10, 0.4) 0%, rgba(10, 10, 10, 0) 16%, rgba(10, 10, 10, 0) 62%, var(--night) 100%); }
-.pg--home .hero__grid { position: relative; z-index: 2; display: grid; grid-template-columns: minmax(0, 1fr) 420px; min-height: 780px; }
+.pg--home .hero__grid { position: relative; z-index: 2; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 45%); min-height: 780px; }
 .pg--home .hero__copy { display: flex; flex-direction: column; justify-content: center; gap: 28px; padding: 72px 48px 96px 0; }
 .pg--home .pill { display: inline-flex; align-items: center; gap: 10px; width: fit-content; height: 28px; padding: 0 10px 0 4px; border: 1px solid var(--line-strong); background: rgba(10, 10, 10, 0.5); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: #c7c7c7; }
 .pg--home .pill b { font-weight: 400; font-size: 10px; padding: 3px 6px; background: var(--accent); color: #ffffff; }
 .pg--home .hero h1 { font-size: 76px; line-height: 0.98; }
 .pg--home .hero__lede { max-width: 480px; font-size: 17px; line-height: 27px; color: #b5b5b5; }
 .pg--home .hero__ctas { display: flex; flex-wrap: wrap; gap: 10px; }
-.pg--home .hero__side { display: flex; flex-direction: column; justify-content: center; gap: 0; padding: 72px 0 96px 0; }
-.pg--home .hcard { display: flex; gap: 16px; padding: 22px 22px; background: rgba(14, 14, 16, 0.6); border: 1px solid var(--line-strong); border-left: 0; border-right: 0; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
-.pg--home .hcard + .hcard { border-top: 0; }
 /* Hero outlines, like baseten.co: the top and bottom edge of each copy row runs from off the
    left of the page to the cards' line, behind the text. The hero clips the lines at the page
-   edge. The cards have no right edge and no outlines, so the panel is open to the right. */
+   edge. The art column has no outlines, so it is open to the right. */
 .pg--home .hero__row { position: relative; display: flex; flex-direction: column; }
 .pg--home .hero__row.hero__ctas { flex-direction: row; }
-.pg--home .hcard { position: relative; }
 .pg--home .hero__row::before, .pg--home .hero__row::after { content: ""; position: absolute; height: 1px; pointer-events: none; background-image: var(--dash-x); background-size: 8px 1px; background-repeat: repeat-x; }
 .pg--home .hero__row::before, .pg--home .hero__row::after { z-index: -1; left: -100vw; right: -48px; background-position: right top; transform-origin: 100% 50%; animation: mk-home-outline 1.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .pg--home .hero__row::before { top: 0; }
@@ -55,15 +51,6 @@
 .pg--home .hero__row:nth-child(2)::before, .pg--home .hero__row:nth-child(2)::after { animation-delay: 0.08s; }
 .pg--home .hero__row:nth-child(3)::before, .pg--home .hero__row:nth-child(3)::after { animation-delay: 0.16s; }
 .pg--home .hero__row:nth-child(4)::before, .pg--home .hero__row:nth-child(4)::after { animation-delay: 0.24s; }
-.pg--home .hcard:hover { background: rgba(30, 30, 34, 0.7); }
-.pg--home .hcard__icon { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border: 1px dashed rgba(255, 255, 255, 0.4); }
-.pg--home .hcard__icon--solid { border-style: solid; }
-.pg--home .hcard__icon--dotted { border-style: dotted; }
-.pg--home .hcard__body { display: flex; flex-direction: column; gap: 6px; }
-.pg--home .hcard__title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 500; color: #fafafa; }
-.pg--home .hcard__tag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; color: var(--ice); padding: 2px 6px; background: rgba(61, 123, 255, 0.2); }
-.pg--home .hcard p { font-size: 13px; line-height: 19px; color: #a3a3a3; }
-.pg--home .hcard__go { margin-left: auto; align-self: center; color: var(--dim); }
 
 /* ---------- Works with ---------- */
 .pg--home .works { display: grid; grid-template-columns: 200px minmax(0, 1fr); }
@@ -239,8 +226,6 @@
 }
 @media (max-width: 1100px) {
   .pg--home .hero__grid { grid-template-columns: minmax(0, 1fr); }
-  .pg--home .hero__side { padding: 0 0 72px; }
-  .pg--home .hcard { border-left: 1px solid var(--line-strong); border-right: 1px solid var(--line-strong); }
   .pg--home .vdiv { background-image: none; }
   /* One column: the copy has no right line to end at, so drop the outlines, like baseten.co. */
   .pg--home .hero__row::before, .pg--home .hero__row::after { display: none; }
@@ -293,9 +278,17 @@
   .pg--home .op__win pre div { white-space: pre-wrap; overflow-wrap: anywhere; }
 }
 
-/* ---------- Hero frisbee: robotic hands throw a disc behind the hero content ---------- */
-.pg--home .hero__frisbee { position: absolute; inset: 0; z-index: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
-.pg--home .hero__frisbee-toggle { position: absolute; right: 24px; bottom: 24px; z-index: 3; cursor: pointer; }
-@media (max-width: 1399px) {
-  .pg--home .hero__frisbee, .pg--home .hero__frisbee-toggle { display: none; }
+/* ---------- Hero solve: robotic hands solve a cube in the right column ---------- */
+/* The copy stays above the canvas. The canvas stays above the dashed line of the column. */
+.pg--home .hero__copy { position: relative; z-index: 1; }
+.pg--home .hero__stage { position: relative; z-index: 0; min-width: 0; }
+.pg--home .hero__solve { position: absolute; top: 0; left: 50%; z-index: -1; display: block; width: 1200px; height: 100%; margin-left: -600px; pointer-events: none; }
+.pg--home .hero__solve-toggle { position: absolute; right: 24px; bottom: 24px; cursor: pointer; }
+@media (max-width: 1100px) {
+  .pg--home .hero__stage { height: 480px; }
+  .pg--home .hero__solve { width: 100vw; margin-left: -50vw; }
+}
+@media (max-width: 720px) {
+  .pg--home .hero__stage { height: 360px; }
+  .pg--home .hero__solve-toggle { right: 0; bottom: 16px; }
 }

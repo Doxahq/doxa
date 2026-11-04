@@ -432,9 +432,11 @@ convert Tailwind-v3 `[--var]` classes to the v4 `(--var)` form.
 - The default 404 (`components/navigation/not-found-page.tsx`, set as
   `defaultNotFoundComponent` in `router.tsx`) can show outside the marketing
   layout. It draws the same look with the global tokens, not the marketing CSS.
-- The About page section "How we solve docs for the age of AI" draws two robotic
-  hands that solve a cube behind its copy (`lib/marketing/solve-art/`). It uses
-  plain WebGL2 with no library, and its code comes with the About page. It plays by
+- The right column of the home hero draws two robotic hands that solve a cube
+  (`components/marketing/home/hero-solve.tsx`, art in `lib/marketing/solve-art/`). The
+  About page section "How we solve docs for the age of AI" uses the same art, and it is
+  hidden for now by `SHOW_SOLVE_SECTION` in `about-page.tsx`. It uses
+  plain WebGL2 with no library, and its code comes with the page. It plays by
   itself for every visitor, including visitors with reduced motion (a product
   decision), loops, runs only on screen, and has a Pause button. Its colors are the
   theme's (ice, accent, deep, lavender, text), with the Doxa logo on the cube. The motion comes from a speedcuber's solve: both hands grip from the sides,
@@ -442,8 +444,8 @@ convert Tailwind-v3 `[--var]` classes to the v4 `(--var)` form.
   take a new grip when the cube rolls. A solve starts scrambled. When it ends, one
   hand shakes the cube and the cube is scrambled again, with no scramble moves.
   `apps/web/tests/solve-art.test.ts` holds these rules.
-- On windows of 1400px or wider, the home hero shows two robotic hands in the empty
-  space beside its content (`components/marketing/home/hero-frisbee.tsx`, art in
+- On windows of 1400px or wider, the About hero shows two robotic hands in the empty
+  space beside its content (`components/marketing/about/hero-frisbee.tsx`, art in
   `lib/marketing/frisbee-art/`). They throw a disc behind the content, and it adds no
   layout. It plays by itself for every visitor, loops, and has a Pause button. When
   the visitor scrolls past it or leaves the page, a disc in flight first reaches a

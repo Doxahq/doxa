@@ -11,19 +11,33 @@ import { MarketingPage } from "~/components/marketing/marketing-page"
 import { SiteFooter } from "~/components/marketing/site-footer"
 import { BANDS } from "~/lib/marketing/bands"
 
+/**
+ * The "How we solve docs" section is hidden while its art plays in the home hero. To
+ * bring it back, set this to true: the section numbers below follow.
+ */
+const SHOW_SOLVE_SECTION: boolean = false
+
+function sectionLabel(position: number, name: string): string {
+  return `${String(position + (SHOW_SOLVE_SECTION ? 1 : 0)).padStart(2, "0")} / ${name}`
+}
+
 export function AboutPage() {
   return (
     <MarketingPage page="about">
       <AboutHero />
-      <Hr label="01 / SOLVE" />
-      <AboutSolve />
-      <Hr label="02 / WHY" />
+      {SHOW_SOLVE_SECTION ? (
+        <>
+          <Hr label="01 / SOLVE" />
+          <AboutSolve />
+        </>
+      ) : null}
+      <Hr label={sectionLabel(1, "WHY")} />
       <AboutWhy />
-      <Hr label="03 / OPEN" />
+      <Hr label={sectionLabel(2, "OPEN")} />
       <AboutOpen />
-      <Hr label="04 / BELIEFS" />
+      <Hr label={sectionLabel(3, "BELIEFS")} />
       <AboutBeliefs />
-      <Hr label="05 / TEAM" />
+      <Hr label={sectionLabel(4, "TEAM")} />
       <AboutTeam />
       <Band spec={BANDS.beforeCta} />
       <AboutCta />

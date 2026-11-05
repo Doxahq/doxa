@@ -14,6 +14,8 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  bigint,
+  date,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
@@ -577,6 +579,25 @@ export const docsSites = pgTable(
       .notNull()
       .default("public"),
     /**
+     * The search provider that serves the live site. It changes only after the
+     * index worker finishes, so a site never points to an index that does not
+     * exist yet. The site setting and the plan decide the provider.
+     */
+    searchProvider: text("search_provider").notNull().default("minisearch"),
+    /**
+     * The remote index that serves searches. It can belong to the previous
+     * version while the live version's index builds. Null with browser search.
+     */
+    searchIndexKey: text("search_index_key"),
+    /**
+     * When a sweep first saw that index behind the live version. It limits how
+     * long the site serves old results, across publishes and retries. Null while
+     * the site serves its live version's result.
+     */
+    searchIndexStaleSince: timestamp("search_index_stale_since", {
+      withTimezone: true,
+    }),
+    /**
      * Set when an operator clears the generation cache. Versions created at or
      * before this instant are ineligible as generation baselines, so the next
      * run analyzes from scratch. Published docs keep serving throughout.
@@ -1032,6 +1053,80 @@ export const docsDomains = pgTable(
       .where(sql`${table.kind} = 'custom_domain' AND ${table.providerHostnameId} IS NOT NULL`),
     index("docs_domains_project_id_idx").on(table.projectId),
     index("docs_domains_site_id_idx").on(table.siteId),
+  ],
+);
+
+/**
+ * One search index task per published version. The row is also the record of
+ * what the version costs: its documents and its indexed bytes.
+ */
+export const docsSearchIndexes = pgTable(
+  "docs_search_indexes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => docsSites.id, { onDelete: "cascade" }),
+    versionId: uuid("version_id").notNull(),
+    /** pending, running, ready, skipped, failed, superseded or retired. */
+    status: text("status").notNull().default("pending"),
+    /** The provider of this version. Set before a remote write starts. */
+    provider: text("provider"),
+    /** The remote index of this build. Set before a remote write starts. */
+    indexKey: text("index_key"),
+    documentCount: integer("document_count"),
+    indexedBytes: bigint("indexed_bytes", { mode: "number" }),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    claimToken: text("claim_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("docs_search_indexes_site_version_idx").on(
+      table.siteId,
+      table.versionId,
+    ),
+    index("docs_search_indexes_due_idx").on(table.status, table.nextAttemptAt),
+  ],
+);
+
+/**
+ * Search usage of a site per day, rolled up from the gateway's data points. It
+ * has no foreign key, because the cost of a deleted site stays readable. No
+ * column holds search text.
+ */
+export const docsSearchUsageDaily = pgTable(
+  "docs_search_usage_daily",
+  {
+    day: date("day").notNull(),
+    siteId: uuid("site_id").notNull(),
+    provider: text("provider").notNull(),
+    outcome: text("outcome").notNull(),
+    events: bigint("events", { mode: "number" }).notNull().default(0),
+    responseBytes: bigint("response_bytes", { mode: "number" })
+      .notNull()
+      .default(0),
+    elapsedMsTotal: bigint("elapsed_ms_total", { mode: "number" })
+      .notNull()
+      .default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.day, table.siteId, table.provider, table.outcome],
+    }),
+    index("docs_search_usage_daily_site_idx").on(table.siteId, table.day),
   ],
 );
 

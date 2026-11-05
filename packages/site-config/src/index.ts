@@ -17,6 +17,7 @@ export {
   apiPlaygroundBaseUrlSchema,
   apiPlaygroundTransportSchema,
   featuresSchema,
+  searchProviderChoiceSchema,
 } from "./schema/features";
 export {
   DEFAULT_LAYOUT,

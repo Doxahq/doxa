@@ -27,7 +27,10 @@ import {
 import { DocsContentError } from "../docs-content/errors";
 import type { EntitlementsService } from "../entitlements";
 import type { SiteAssetStore } from "../site-assets/store";
-import { validateConfigForSite } from "../docs-content/site-config";
+import {
+  assertSearchChoiceAllowed,
+  validateConfigForSite,
+} from "../docs-content/site-config";
 import { EffectiveTree } from "./effective-tree";
 import { prepareWorkingChanges, type DesiredChange } from "./working-changes";
 
@@ -85,6 +88,17 @@ export async function buildEditWrites(input: {
         input.entitlements,
         input.assets,
       );
+      await assertSearchChoiceAllowed({
+        choice: config.features.searchProvider,
+        readPreviousChoice: async () => {
+          const { features } = await loadSiteConfig();
+          return features && typeof features === "object" && !Array.isArray(features)
+            ? features.searchProvider
+            : undefined;
+        },
+        projectId: input.main.projectId,
+        entitlements: input.entitlements,
+      });
 
       desired.set(SITE_CONFIG_PATH, canonicalJson(config));
       siteConfig = null;

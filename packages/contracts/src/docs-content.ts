@@ -1,4 +1,6 @@
 import { z } from "zod";
+
+import { docsSearchProviderSchema } from "./docs-search";
 import { siteConfigSchema } from "@doxahq/site-config";
 import { projectEntitlementsSchema } from "./entitlements";
 
@@ -90,6 +92,14 @@ export const docsContentOverviewSchema = z
     publishedVersion: docsContentVersionSchema,
     working: docsContentWorkingSchema,
     entitlements: projectEntitlementsSchema,
+    /** Optional: an older API sends no search rules. */
+    searchPolicy: z
+      .object({
+        defaultProvider: docsSearchProviderSchema,
+        allowedProviders: z.array(docsSearchProviderSchema),
+      })
+      .strict()
+      .optional(),
     siteConfig: z
       .object({
         published: siteConfigSchema,

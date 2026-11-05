@@ -41,6 +41,9 @@ class Result extends Promise<Row[]> {
   returning() {
     return this;
   }
+  onConflictDoUpdate() {
+    return this;
+  }
 }
 
 function database(selects: Row[][]) {

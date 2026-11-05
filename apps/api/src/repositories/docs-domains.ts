@@ -1,5 +1,6 @@
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { createDb, schema } from "@doxahq/db";
+import { readDocsSearchTarget } from "../services/docs-search/site-provider";
 import type {
   DocsDomainDto,
   DocsDomainProvider,
@@ -362,6 +363,8 @@ export class DocsDomainsRepository {
         manifestPath: schema.docsVersions.manifestPath,
         hostname: schema.docsDomains.hostname,
         domainKind: schema.docsDomains.kind,
+        searchProvider: schema.docsSites.searchProvider,
+        searchIndexKey: schema.docsSites.searchIndexKey,
       })
       .from(schema.docsDomains)
       .innerJoin(
@@ -394,6 +397,7 @@ export class DocsDomainsRepository {
         previewVisibility: "private",
         gateEnabled: false,
       }),
+      ...readDocsSearchTarget(row),
       hostname: row.hostname,
       domainKind: row.domainKind,
     };

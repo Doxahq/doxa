@@ -7,7 +7,10 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./contracts": "./src/contracts.ts"
+    "./browser": "./src/browser.ts",
+    "./browser-artifacts": "./src/browser-artifacts.ts",
+    "./contracts": "./src/contracts.ts",
+    "./providers": "./src/providers/index.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

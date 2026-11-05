@@ -7,6 +7,8 @@ import {
 } from "@doxahq/site-config";
 import type { PublishedDocsContentVersion } from "../../repositories/docs-content";
 import type { EntitlementsService } from "../entitlements";
+import type { DocsSearchProvider } from "@doxahq/contracts/docs-search";
+import { FREE_PLAN_SEARCH_POLICY } from "@doxahq/contracts/entitlements";
 import type { SiteAssetStore } from "../site-assets/store";
 import {
   SiteConfigValidationError,
@@ -27,6 +29,34 @@ export function readPublishedSiteConfig(
       manifest,
     },
   );
+}
+
+/**
+ * SECURITY: an owner cannot choose a search provider that the plan does not
+ * allow, through the dashboard, MCP, an agent or the JSON tab. The index worker
+ * applies the plan again, so this check is not the only guard.
+ *
+ * It runs only on a save, and only for a new choice. A site that lost its plan
+ * still holds its old choice, and it must stay able to save and to publish: the
+ * worker gives it the plan's default. So `validateConfigForSite`, which every
+ * publish runs, does not check this.
+ */
+export async function assertSearchChoiceAllowed(input: {
+  choice: DocsSearchProvider | undefined;
+  readPreviousChoice: () => Promise<unknown>;
+  projectId: string;
+  entitlements: EntitlementsService;
+}): Promise<void> {
+  if (!input.choice) return;
+  const policy =
+    (await input.entitlements.getSearchPolicy?.(input.projectId)) ??
+    FREE_PLAN_SEARCH_POLICY;
+  const allowed: readonly DocsSearchProvider[] = policy.allowedProviders;
+  if (allowed.includes(input.choice)) return;
+  if ((await input.readPreviousChoice()) === input.choice) return;
+  throw new SiteConfigValidationError([
+    createValidationIssue("entitlement_required", "/features/searchProvider"),
+  ]);
 }
 
 export async function validateConfigForSite(

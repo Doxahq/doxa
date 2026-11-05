@@ -114,6 +114,7 @@ import {
   withDocsSecurityHeaders,
 } from "./security-headers";
 import { handleSiteAssetRequest } from "./site-assets";
+import { handleDocsSearchRequest, isDocsSearchRequest } from "./search-route";
 import { handleDocsTryRequest, isDocsTryRequest } from "./try-route";
 import {
   DocsTextCacheEntrypoint,
@@ -189,6 +190,12 @@ interface DispatcherEnv
   DOXA_PROD_KV_HOSTNAME_MODE?: string;
   /** Sends "Try it" requests. Without it, the reader's browser sends them. */
   TRY_PROXY?: DocsTryProxyRpc;
+  /** `on` moves search from the renderer to the browser and the gateway. */
+  DOXA_PROD_SEARCH_MODE?: string;
+  /** The HTTPS origin of the search gateway. */
+  SEARCH_GATEWAY_ORIGIN?: string;
+  /** Counts browser index downloads for the cost report. */
+  SEARCH_USAGE?: AnalyticsEngineDataset;
 }
 
 /** Workers Cache caches fetch entrypoints, not custom RPC methods. */
@@ -494,6 +501,23 @@ const docsGateway = {
       timing,
       resolveHost,
     };
+
+    if (isDocsSearchRequest(request)) {
+      const answer = await handleDocsSearchRequest(request, {
+        resolveHost,
+        runtime: env.DOCS_RUNTIME,
+        mode: env.DOXA_PROD_SEARCH_MODE,
+        gatewayOrigin: env.SEARCH_GATEWAY_ORIGIN,
+        usage: env.SEARCH_USAGE,
+        // The DOM types in this package do not know `caches.default`.
+        cache: (caches as unknown as { default: Cache }).default,
+        waitUntil: (work) => ctx.waitUntil(work),
+      });
+      return withDocsPreviewSearchPolicy(
+        withDocsSecurityHeaders(answer),
+        resolvedHost,
+      );
+    }
 
     if (isDocsTryRequest(request)) {
       const answer = await handleDocsTryRequest(request, {

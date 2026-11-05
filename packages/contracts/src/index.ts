@@ -7,6 +7,10 @@ import {
 } from "./generation-reviews";
 import { siteConfigSchema } from "@doxahq/site-config";
 import { projectEntitlementsSchema } from "./entitlements";
+import {
+  docsSearchIndexKeySchema,
+  docsSearchRemoteProviderSchema,
+} from "./docs-search";
 import { generationInstructionsSchema } from "./doxabot-instructions";
 import type { ModelAccessToken } from "./model-access";
 import {
@@ -488,6 +492,13 @@ export const docsHostResolutionSchema = z.object({
   manifestPath: z.string(),
   accessPolicy: docsAccessPolicySchema,
   siteUrl: docsSiteOriginSchema.optional(),
+  /**
+   * The remote search target of a production site. Absent means browser search,
+   * so a site without a remote index keeps its resolution shape. These fields
+   * must not reach a cache key: see `withoutSearchTarget`.
+   */
+  searchProvider: docsSearchRemoteProviderSchema.optional(),
+  searchIndexKey: docsSearchIndexKeySchema.optional(),
 });
 
 export const docsDomainKindSchema = z.enum(["doxa_subdomain", "custom_domain"]);

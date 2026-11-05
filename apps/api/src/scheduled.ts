@@ -4,6 +4,7 @@ import { DocsCacheInvalidationMaintenance } from "./services/docs-cache-invalida
 import { DocsDomainStatusChecks } from "./services/docs-domain-status-checks";
 import { DocsHostnameMapReconciler } from "./services/docs-hostname-map";
 import { DocsPrerenderTaskMaintenance } from "./services/docs-prerender-tasks";
+import { runDocsSearchMaintenance } from "./services/docs-search/maintenance";
 import { MergeGenerationScheduler } from "./services/doxabot/merge-generations";
 import { DoxabotQueueOutboxPublisher } from "./services/doxabot/queue-outbox";
 import { EmailDeliverySweeper } from "./services/email/email-delivery-sweeper";
@@ -22,6 +23,7 @@ export function runScheduledJobs(scheduledTime: number, env: Env, context: Execu
   context.waitUntil(DocsCacheInvalidationMaintenance.fromEnv(env).run());
   context.waitUntil(runHostnameMapReconcile(scheduledTime, env));
   context.waitUntil(DocsPrerenderTaskMaintenance.fromEnv(env).run());
+  context.waitUntil(runDocsSearchMaintenance(scheduledTime, env));
   context.waitUntil(createStorageGarbageCollector(env).run());
   context.waitUntil(runDomainStatusChecks(env));
   context.waitUntil(runApprovalSweep(env, context));

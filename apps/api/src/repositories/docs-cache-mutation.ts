@@ -16,6 +16,11 @@ import {
 import { dispatchDocsPrerenderTasks } from "./docs-prerender-delivery";
 import { DocsPrerenderTasksRepository } from "./docs-prerender-tasks";
 import { DocsHostnameSourceRepository } from "./docs-hostname-source";
+import { enqueueDocsSearchIndexTask } from "./docs-search-index-tasks";
+import {
+  startDocsSearchIndexing,
+  type DocsSearchIndexingEnv,
+} from "../services/docs-search/start-indexing";
 import type { Env } from "../env";
 
 type EnqueueInvalidation = (input: DocsCacheInvalidation) => Promise<void>;
@@ -57,7 +62,11 @@ export interface DocsPublicationEffectsOptions {
   warm?: DocsWarmHint;
 }
 
-/** The production pointer, cache purge, and pre-render intent commit together. */
+/**
+ * The production pointer, cache purge, pre-render intent, and search index
+ * task commit together. Every production publish path passes through here:
+ * the dashboard, MCP, agents, generations, restores and domain changes.
+ */
 export async function withDocsPublicationEffects<T>(
   db: DoxaDb,
   env: Pick<
@@ -71,7 +80,8 @@ export async function withDocsPublicationEffects<T>(
     | "DATABASE_URL"
     | "HYPERDRIVE"
     | "HYPERDRIVE_CACHE_DISABLED"
-  >,
+  > &
+    DocsSearchIndexingEnv,
   mutate: (
     tx: DocsMutationTransaction,
     enqueueInvalidation: EnqueueInvalidation,
@@ -81,6 +91,7 @@ export async function withDocsPublicationEffects<T>(
 ): Promise<T> {
   const invalidationIds: string[] = [];
   const prerenderTaskIds: string[] = [];
+  const searchTaskIds: string[] = [];
   const prerenderConfig = readDocsPrerenderTaskConfig(env);
   const result = await db.transaction((tx) =>
     mutate(
@@ -96,10 +107,16 @@ export async function withDocsPublicationEffects<T>(
             input,
           )),
         );
+        const searchTaskId = await enqueueDocsSearchIndexTask(tx, {
+          siteId: input.siteId,
+          versionId: input.publishedVersionId,
+        });
+        if (searchTaskId) searchTaskIds.push(searchTaskId);
       },
     ),
   );
   await deliverCacheInvalidations(db, env, invalidationIds, options.warm);
+  startDocsSearchIndexing(env, searchTaskIds);
   if (env.PRERENDER_QUEUE && prerenderTaskIds.length > 0) {
     try {
       await dispatchDocsPrerenderTasks(

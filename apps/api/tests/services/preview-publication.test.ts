@@ -522,6 +522,13 @@ function createInsertQuery(state: TestState, table: unknown) {
           },
         };
       }
+      if (table === schema.docsSearchIndexes) {
+        return {
+          onConflictDoUpdate: () => ({
+            returning: async () => [{ id: "search-task" }],
+          }),
+        };
+      }
       if (table === schema.storageGcEntries) {
         return {
           onConflictDoUpdate() {

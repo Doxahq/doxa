@@ -11,7 +11,7 @@ import {
   type DocsContentStore,
 } from "../docs-content/store";
 import type { EntitlementsService } from "../entitlements";
-import { freePlanEntitlements } from "../free-plan-entitlements";
+import { createEntitlements } from "../free-plan-entitlements";
 import {
   createR2SiteAssetStore,
   type SiteAssetStore,
@@ -37,7 +37,7 @@ export class DocsBranchPreview {
     return new DocsBranchPreview({
       previews: new DocsBranchPreviewRepository(env),
       store: createR2DocsContentStore(env.DOCS_BUCKET),
-      entitlements: freePlanEntitlements,
+      entitlements: createEntitlements(env),
       assets: createR2SiteAssetStore(env.DOCS_BUCKET),
       docsBaseDomain: env.DOCS_BASE_DOMAIN,
       docsRendererBaseUrl: env.DOCS_RENDERER_BASE_URL,

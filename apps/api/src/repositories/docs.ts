@@ -1,5 +1,6 @@
 import { and, eq, ne, sql } from "drizzle-orm";
 import { createDb, schema } from "@doxahq/db";
+import { readDocsSearchTarget } from "../services/docs-search/site-provider";
 import type {
   CompleteJobOutputInput,
   CompleteJobOutputResult,
@@ -60,6 +61,8 @@ export class DocsRepository {
         publishedVersionId: schema.docsSites.publishedVersionId,
         artifactPrefix: schema.docsVersions.artifactPrefix,
         manifestPath: schema.docsVersions.manifestPath,
+        searchProvider: schema.docsSites.searchProvider,
+        searchIndexKey: schema.docsSites.searchIndexKey,
       })
       .from(schema.docsSites)
       .innerJoin(
@@ -82,6 +85,7 @@ export class DocsRepository {
         previewVisibility: "private",
         gateEnabled: this.previewGateEnabled,
       }),
+      ...readDocsSearchTarget(row),
     };
   }
 
@@ -96,6 +100,8 @@ export class DocsRepository {
         publishedVersionId: schema.docsSites.publishedVersionId,
         artifactPrefix: schema.docsVersions.artifactPrefix,
         manifestPath: schema.docsVersions.manifestPath,
+        searchProvider: schema.docsSites.searchProvider,
+        searchIndexKey: schema.docsSites.searchIndexKey,
       })
       .from(schema.docsSites)
       .innerJoin(
@@ -118,6 +124,7 @@ export class DocsRepository {
         previewVisibility: "private",
         gateEnabled: this.previewGateEnabled,
       }),
+      ...readDocsSearchTarget(row),
     };
   }
 

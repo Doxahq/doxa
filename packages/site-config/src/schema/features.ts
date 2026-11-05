@@ -30,6 +30,13 @@ export const apiPlaygroundBaseUrlSchema = z
  */
 export const apiPlaygroundTransportSchema = z.enum(["proxy", "browser"]);
 
+/**
+ * Which search a site asks for. Unset means the default of the site's plan.
+ * The plan decides at publish time, so a stored choice never gives a site a
+ * provider that its plan does not allow.
+ */
+export const searchProviderChoiceSchema = z.enum(["typesense", "minisearch"]);
+
 export const featuresSchema = z
   .object({
     branding: z.boolean().default(true),
@@ -60,5 +67,7 @@ export const featuresSchema = z
     apiPlaygroundTransport: apiPlaygroundTransportSchema.optional(),
     rawMarkdown: z.boolean().default(true),
     loadFromGithub: z.boolean().default(false),
+    // No default, for the same reason.
+    searchProvider: searchProviderChoiceSchema.optional(),
   })
   .strict();

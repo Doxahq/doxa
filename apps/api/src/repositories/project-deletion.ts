@@ -8,6 +8,10 @@ import {
   collectableRenderColumns,
   enqueueDocsPrerenderRenderCollection,
 } from "./docs-prerender-tasks";
+import {
+  enqueueDocsSearchIndexCollection,
+  listCollectableDocsSearchIndexes,
+} from "./docs-search-indexes";
 import { enqueueDocsDeletedSite } from "./docs-version-gc-entries";
 
 export type ProjectDeletionErrorCode = "project_not_found" | "generation_active";
@@ -137,6 +141,10 @@ export class ProjectDeletionRepository {
               .where(eq(schema.docsPrerenderTasks.siteId, site.id))
           : [];
 
+        const searchIndexes = site
+          ? await listCollectableDocsSearchIndexes(tx, site.id)
+          : [];
+
         await tx.delete(schema.projects).where(eq(schema.projects.id, project.id));
 
         if (!site) {
@@ -160,6 +168,14 @@ export class ProjectDeletionRepository {
           const id = await enqueueDocsPrerenderRenderCollection(
             tx,
             render,
+            "project_deleted",
+          );
+          if (id) storageEntryIds.push(id);
+        }
+        for (const resource of searchIndexes) {
+          const id = await enqueueDocsSearchIndexCollection(
+            tx,
+            resource,
             "project_deleted",
           );
           if (id) storageEntryIds.push(id);

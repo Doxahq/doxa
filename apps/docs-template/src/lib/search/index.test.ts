@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { searchDocs } from "./index";
+import { resetSearchSession } from "./session";
 
 describe("searchDocs", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    resetSearchSession();
   });
 
   test("requests ranked results from the current docs server", async () => {

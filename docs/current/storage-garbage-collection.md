@@ -72,6 +72,14 @@ The delete call reaches the pre-render Worker through the `PrerenderQueue` servi
 
 A rollback republishes a retired identity. The task row revives, and the inspect step reports the render as current, so the objects stay.
 
+## Remote Search Indexes
+
+The `docs_search_index` collector deletes the remote index of a published version. See [Docs Search](docs-search.md).
+
+An entry names one exact index, and an index name is never used twice. So one index retires once, and a delete cannot hit a later build. An entry is created when the site stops serving an index and another version is live, when a version changes provider, and when a project is deleted. It waits 15 minutes, until every writer that might use the index has stopped, and because a retired index still uses cluster RAM.
+
+The schema checks that the index belongs to the site, so an entry cannot name another collection. The inspect step is a last safety check: an index in use stays, and it is checked again in an hour.
+
 ## Documentation Version Prefixes
 
 A version folder holds one `tree.json`. Its files are content-addressed blobs under `sites/<siteId>/blobs/`, which several versions can share. See [Docs Content Storage](docs-content-storage.md).

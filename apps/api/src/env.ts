@@ -23,6 +23,15 @@ export interface Env extends AuthEnv {
    */
   MODEL_TOKEN_BROKER?: ModelTokenBroker;
   DATABASE_URL?: string;
+  /** The search cluster. Without both, every site stays on browser search. */
+  SEARCH_TYPESENSE_HOST?: string;
+  /** Scoped to `s_*` collections. It never leaves the API. */
+  SEARCH_TYPESENSE_WRITE_KEY?: string;
+  /** Project IDs on a paid search plan, until billing stores the plan. */
+  DOXA_PROD_SEARCH_PAID_PROJECT_IDS?: string;
+  /** Rolls gateway usage into `docs_search_usage_daily`. */
+  SEARCH_USAGE_ACCOUNT_ID?: string;
+  SEARCH_USAGE_API_TOKEN?: string;
   GENERATION_MODE?: GenerationMode;
   AGENT_CONTAINER_URL?: string;
   OPENROUTER_API_KEY?: string;

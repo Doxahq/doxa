@@ -2,6 +2,8 @@ import type { StorageCollector } from "@doxahq/contracts/storage-gc";
 
 import type { Env } from "../../env";
 import { DocsPrerenderTasksRepository } from "../../repositories/docs-prerender-tasks";
+import { DocsSearchIndexesRepository } from "../../repositories/docs-search-indexes";
+import { createDocsSearchWriters } from "../docs-search/providers";
 import { DocsVersionGcRepository } from "../../repositories/docs-version-gc";
 import { DocsVersionGcEntriesRepository } from "../../repositories/docs-version-gc-entries";
 import { DocsVersionRetentionRepository } from "../../repositories/docs-version-retention";
@@ -12,6 +14,7 @@ import { createDocsDeletedSiteCollector } from "./collectors/docs-deleted-site";
 import { createDocsGenerationStateCollector } from "./collectors/docs-generation-state";
 import { createDocsPrerenderRenderCollector } from "./collectors/docs-prerender-render";
 import { createDocsRetiredVersionCollector } from "./collectors/docs-retired-version";
+import { createDocsSearchIndexCollector } from "./collectors/docs-search-index";
 import { createDocsSiteBlobsCollector } from "./collectors/docs-site-blobs";
 import {
   createDocsOrphanVersionPrefixCollector,
@@ -66,6 +69,15 @@ export function createStorageCollectors(env: Env): StorageCollector[] {
         gcEntries.enqueueSiteBlobs({ siteId }, "deleted_site_collected"),
     }) as StorageCollector,
   ];
+  const searchWriters = createDocsSearchWriters(env);
+  if (Object.keys(searchWriters).length > 0) {
+    collectors.push(
+      createDocsSearchIndexCollector({
+        indexes: new DocsSearchIndexesRepository(env),
+        writers: searchWriters,
+      }) as StorageCollector,
+    );
+  }
   if (env.PRERENDER_QUEUE) {
     collectors.push(
       createDocsPrerenderRenderCollector({

@@ -54,6 +54,8 @@ export function TextArea({
 export interface SelectOption<TValue extends string> {
   value: TValue
   label: string
+  /** Visible, but a person cannot choose it. */
+  disabled?: boolean
 }
 
 /**
@@ -103,7 +105,7 @@ export function Select<TValue extends string>({
       </SelectTrigger>
       <SelectContent container={container}>
         {options.map((option) => (
-          <SelectItem key={option.value} value={toOptionKey(option.value)}>
+          <SelectItem key={option.value} value={toOptionKey(option.value)} disabled={option.disabled ?? false}>
             {option.label}
           </SelectItem>
         ))}
@@ -217,10 +219,8 @@ export function onRadioGroupKeyDown<TValue>(
   radios?.[next]?.focus()
 }
 
-export interface SegmentedOption<TValue extends string> extends SelectOption<TValue> {
-  /** Shown struck through and never selectable, for a choice the rules forbid. */
-  disabled?: boolean
-}
+/** A disabled option is shown struck through, for a choice the rules forbid. */
+export type SegmentedOption<TValue extends string> = SelectOption<TValue>
 
 /**
  * A single choice from a few options, shown as joined buttons. `disabled`

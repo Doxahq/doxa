@@ -11,6 +11,9 @@ const pending = vi.hoisted(() => ({
   mergeRuns: vi.fn(),
 }));
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+vi.mock("../../src/services/docs-search/maintenance", () => ({
+  runDocsSearchMaintenance: () => Promise.resolve({ processed: 0 }),
+}));
 vi.mock("../../src/services/doxabot/queue-outbox", () => ({
   DoxabotQueueOutboxPublisher: {
     fromEnv: () => ({ publishPending: pending.generations }),
@@ -78,6 +81,7 @@ describe("scheduled cache invalidation", () => {
       { status: "fulfilled", value: { completed: 1, failed: 0 } },
       { status: "fulfilled", value: { slot: 3, due: 1, stored: 1, deleted: 0 } },
       { status: "fulfilled", value: { dispatched: 2 } },
+      { status: "fulfilled", value: { processed: 0 } },
       { status: "fulfilled", value: { collected: 1 } },
       { status: "fulfilled", value: { checked: 3, failed: 0 } },
       {

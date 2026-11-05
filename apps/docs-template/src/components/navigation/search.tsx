@@ -15,14 +15,23 @@ import {
   nonDefaultSections,
   visibleSections,
 } from "@/src/settings/sections";
-import { searchDocs, type SearchResult } from "@/src/lib/search";
+import {
+  isSearchInstant,
+  preloadSearch,
+  searchDocs,
+  type SearchResult,
+} from "@/src/lib/search";
+import { isChatAvailable } from "@/src/lib/chat-availability";
 import { highlightTerms } from "@/src/lib/search/highlight";
 import { loadRecent, saveRecent } from "@/src/lib/search/recent";
+import { createSearchActivations } from "@/src/lib/search/search-activations";
+import { useSiteConfig } from "@/src/site-config/site-config-context";
 import { cn } from "@/src/lib/utils";
 import { ScrollArea } from "@/src/components/ui/scroll-area";
 import { useChatContext } from "@/src/components/chat/chat-context";
 
 const MIN_QUERY_LENGTH = 2;
+const SEARCH_DEBOUNCE_MS = 150;
 
 type SectionFilter = "all" | string;
 
@@ -37,6 +46,8 @@ export default function SearchDialog({
 }: SearchDialogProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  // The query that `results` answers. "No results" waits for this query.
+  const [answeredQuery, setAnsweredQuery] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [recent, setRecent] = useState<string[]>([]);
   const [sectionFilter, setSectionFilter] = useState<SectionFilter>("all");
@@ -44,6 +55,8 @@ export default function SearchDialog({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
   const { submitQuery } = useChatContext();
+  const { features } = useSiteConfig();
+  const chatAvailable = isChatAvailable(features);
 
   const trimmed = query.trim();
   const hasQuery = trimmed.length >= MIN_QUERY_LENGTH;
@@ -57,24 +70,34 @@ export default function SearchDialog({
   }, [results, sectionFilter]);
 
   useEffect(() => {
-    if (isOpen) setRecent(loadRecent());
+    if (!isOpen) return;
+    setRecent(loadRecent());
+    void preloadSearch({ visitorAsked: true });
   }, [isOpen]);
 
   useEffect(() => {
     if (!hasQuery) {
       setResults([]);
+      setAnsweredQuery(null);
       setSelectedIndex(0);
       return;
     }
     let cancelled = false;
+    let timeout: number | undefined;
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => {
+    const run = () => {
       void searchDocs(trimmed, 8, controller.signal).then((hits) => {
         if (cancelled) return;
         setResults(hits);
+        setAnsweredQuery(trimmed);
         setSelectedIndex(0);
       });
-    }, 150);
+    };
+    void isSearchInstant().then((instant) => {
+      if (cancelled) return;
+      if (instant) run();
+      else timeout = window.setTimeout(run, SEARCH_DEBOUNCE_MS);
+    });
     return () => {
       cancelled = true;
       window.clearTimeout(timeout);
@@ -109,22 +132,24 @@ export default function SearchDialog({
     inputRef.current?.focus();
   }, []);
 
-  const activations = useMemo<(() => void)[]>(() => {
-    if (hasQuery) {
-      return [
-        ...filteredResults.map((r) => () => navigateToResult(r)),
-        () => handleAskAi(),
-      ];
-    }
-    return recent.map((q) => () => runRecent(q));
-  }, [
-    hasQuery,
-    filteredResults,
-    recent,
-    navigateToResult,
-    handleAskAi,
-    runRecent,
-  ]);
+  const activations = useMemo(
+    () =>
+      createSearchActivations({
+        hasQuery,
+        resultActions: filteredResults.map((r) => () => navigateToResult(r)),
+        recentActions: recent.map((q) => () => runRecent(q)),
+        askAi: chatAvailable ? handleAskAi : null,
+      }),
+    [
+      hasQuery,
+      filteredResults,
+      recent,
+      navigateToResult,
+      handleAskAi,
+      runRecent,
+      chatAvailable,
+    ]
+  );
 
   const selectedIndexRef = useRef(selectedIndex);
   const activationsRef = useRef(activations);
@@ -262,12 +287,20 @@ export default function SearchDialog({
                 ref={listRef}
                 className="flex w-full flex-col items-stretch gap-0.5 px-2 pt-2 pr-3 pb-2 sm:pr-4"
               >
-                {filteredResults.length === 0 && (
-                  <p className="px-3 py-4 text-sm text-muted-foreground">
-                    No results for{" "}
-                    <span className="text-primary">{`"${trimmed}"`}</span>
-                  </p>
-                )}
+                {filteredResults.length === 0 &&
+                  (answeredQuery === trimmed ? (
+                    <p className="px-3 py-4 text-sm text-muted-foreground">
+                      No results for{" "}
+                      <span className="text-primary">{`"${trimmed}"`}</span>
+                    </p>
+                  ) : (
+                    <p
+                      role="status"
+                      className="px-3 py-4 text-sm text-muted-foreground"
+                    >
+                      Searching...
+                    </p>
+                  ))}
 
                 {filteredResults.map((result, index) => (
                   <SearchResultRow
@@ -279,12 +312,14 @@ export default function SearchDialog({
                   />
                 ))}
 
-                <AskAiRow
-                  query={trimmed}
-                  selected={selectedIndex === filteredResults.length}
-                  onHover={() => setSelectedIndex(filteredResults.length)}
-                  onClick={handleAskAi}
-                />
+                {chatAvailable && (
+                  <AskAiRow
+                    query={trimmed}
+                    selected={selectedIndex === filteredResults.length}
+                    onHover={() => setSelectedIndex(filteredResults.length)}
+                    onClick={handleAskAi}
+                  />
+                )}
               </div>
             </ScrollArea>
           )}

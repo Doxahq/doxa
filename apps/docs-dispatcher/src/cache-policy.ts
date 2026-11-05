@@ -1,3 +1,4 @@
+import { withoutSearchTarget } from "@doxahq/contracts/docs-search";
 import {
   DOCS_HOSTNAME_CACHE_TTL_SECONDS,
   type DocsCacheInvalidation,
@@ -50,7 +51,8 @@ export function isContentCacheLifetime(
  * resolution JSON changes shape. The new deploy then uses new keys.
  */
 // 2: resolutions carry `canonicalHostname`.
-export const DOCS_HOST_CACHE_FORMAT = 2;
+// 3: resolutions carry the remote search target.
+export const DOCS_HOST_CACHE_FORMAT = 3;
 
 export interface HostCacheProps {
   hostname: string;
@@ -164,7 +166,7 @@ export function createHtmlCacheProps(
   return {
     hostname: new URL(request.url).hostname,
     rendererBuildId: identity.rendererBuildId,
-    resolution,
+    resolution: withoutSearchTarget(resolution),
     lifetime: identity.lifetime ?? "versioned",
     deliveryRenderId: identity.deliveryRenderId,
   };

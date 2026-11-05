@@ -33,6 +33,7 @@
     "./client-ip": "./src/client-ip.ts",
     "./html-escape": "./src/html-escape.ts",
     "./docs-script-mark": "./src/docs-script-mark.ts",
+    "./docs-search": "./src/docs-search.ts",
     "./docs-try": "./src/docs-try.ts",
     "./docs-warm-job": "./src/docs-warm-job.ts",
     "./storage-gc": "./src/storage-gc.ts",

@@ -699,7 +699,16 @@ describe("JobsRepository generation actions", () => {
     const transactionDatabase = {
       select: vi.fn(() => selectChain(selectResults.shift() ?? [])),
       insert: vi.fn((table: unknown) => ({
-        values: table === schema.docsVersions ? versionValues : eventValues,
+        values:
+          table === schema.docsSearchIndexes
+            ? () => ({
+                onConflictDoUpdate: () => ({
+                  returning: async () => [{ id: "search-task" }],
+                }),
+              })
+            : table === schema.docsVersions
+              ? versionValues
+              : eventValues,
       })),
       update: vi.fn((table: unknown) => {
         updatedTables.push(table);

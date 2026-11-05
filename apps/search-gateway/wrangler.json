@@ -1,0 +1,39 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doxa-search-gateway",
+  "main": "src/index.ts",
+  "workers_dev": false,
+  "preview_urls": false,
+  "compatibility_date": "2026-06-12",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "routes": [{ "pattern": "lexis.doxa.so", "custom_domain": true }],
+  "vars": {
+    "DOXA_PROD_SEARCH_GATEWAY_MODE": "on",
+    "SEARCH_TYPESENSE_HOST": "https://${OPS_SEARCH_TYPESENSE_HOSTNAME}"
+  },
+  "ratelimits": [
+    {
+      "name": "SEARCH_CLIENT",
+      "namespace_id": "3010",
+      "simple": { "limit": 300, "period": 60 }
+    },
+    {
+      "name": "SEARCH_SITE",
+      "namespace_id": "3011",
+      "simple": { "limit": 6000, "period": 60 }
+    }
+  ],
+  "analytics_engine_datasets": [
+    { "binding": "SEARCH_USAGE", "dataset": "doxa_search_usage" }
+  ],
+  "kv_namespaces": [
+    { "binding": "DOCS_HOSTNAME_MAP", "id": "${CF_DOCS_HOSTNAME_MAP_KV_ID}" }
+  ],
+  "services": [
+    { "binding": "DOCS_RESOLVER", "service": "doxa-docs-resolver-production" }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "invocation_logs": false }
+  }
+}

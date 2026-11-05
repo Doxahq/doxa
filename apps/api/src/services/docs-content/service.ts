@@ -20,6 +20,10 @@ import type {
   DocsBranchStore,
   StoredBranchChange,
 } from "../../repositories/docs-branches";
+import {
+  FREE_PLAN_SEARCH_POLICY,
+  type PlanSearchPolicy,
+} from "@doxahq/contracts/entitlements";
 import type { EntitlementsService } from "../entitlements";
 import type { SiteAssetStore } from "../site-assets/store";
 import {
@@ -182,6 +186,10 @@ export class DocsContentService {
       working: toWorkingDto(context, changes),
       entitlements:
         await this.deps.entitlements.getProjectEntitlements(projectId),
+      searchPolicy: toSearchPolicyDto(
+        (await this.deps.entitlements.getSearchPolicy?.(projectId)) ??
+          FREE_PLAN_SEARCH_POLICY,
+      ),
       siteConfig: {
         published: publishedConfig,
         working: workingConfig,
@@ -555,4 +563,11 @@ function findManifestPage(manifest: DocsManifest, href: string) {
   }
 
   return page;
+}
+
+function toSearchPolicyDto(policy: PlanSearchPolicy) {
+  return {
+    defaultProvider: policy.defaultProvider,
+    allowedProviders: [...policy.allowedProviders],
+  };
 }

@@ -12,8 +12,8 @@ import { z } from "zod";
  * See docs/current/production-docs-content-injection.md, "Route-Data Trace".
  */
 
-/** Who sent the call: the route-data prefetch, the renderer's content binding, or the pre-render plan. */
-export const DOCS_RUNTIME_CALLERS = ["prefetch", "content", "plan"] as const;
+/** Who sent the call: the route-data prefetch, the renderer's content binding, the pre-render plan, or the browser search files. */
+export const DOCS_RUNTIME_CALLERS = ["prefetch", "content", "plan", "search"] as const;
 
 export const docsRuntimeCallerSchema = z.enum(DOCS_RUNTIME_CALLERS);
 

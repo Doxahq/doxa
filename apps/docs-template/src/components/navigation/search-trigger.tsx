@@ -8,7 +8,53 @@ import {
 } from "react";
 import { LuSearch } from "react-icons/lu";
 
-const SearchDialog = lazy(() => import("@/src/components/navigation/search"));
+const loadSearchDialog = () => import("@/src/components/navigation/search");
+const SearchDialog = lazy(loadSearchDialog);
+
+/** The longest wait for an idle moment after the page loads. */
+const PRELOAD_IDLE_TIMEOUT_MS = 1_500;
+
+/**
+ * Loads the dialog code and the search index right after the page finishes
+ * loading, in an idle moment. The page never waits for it, and a visitor who
+ * goes straight to search finds it ready.
+ */
+function preloadSearchWhenIdle(): () => void {
+  let cancelIdle = () => {};
+  const start = () => {
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(runPreload, {
+        timeout: PRELOAD_IDLE_TIMEOUT_MS,
+      });
+      cancelIdle = () => window.cancelIdleCallback(handle);
+    } else {
+      const handle = window.setTimeout(runPreload, 200);
+      cancelIdle = () => window.clearTimeout(handle);
+    }
+  };
+  if (document.readyState === "complete") {
+    start();
+    return () => cancelIdle();
+  }
+  window.addEventListener("load", start, { once: true });
+  return () => {
+    window.removeEventListener("load", start);
+    cancelIdle();
+  };
+}
+
+function runPreload(): void {
+  void loadSearchDialog();
+  void import("@/src/lib/search").then(({ preloadSearch }) => preloadSearch());
+}
+
+/** The visitor moved to the search box, so it loads on any connection. */
+function preloadOnIntent(): void {
+  void loadSearchDialog();
+  void import("@/src/lib/search").then(({ preloadSearch }) =>
+    preloadSearch({ visitorAsked: true }),
+  );
+}
 
 /** `compact`: a narrower box for the right side of the top bar. */
 export default function SearchTrigger({
@@ -31,6 +77,8 @@ export default function SearchTrigger({
       requestAnimationFrame(() => triggerRef.current?.focus());
     }
   }, []);
+
+  useEffect(() => preloadSearchWhenIdle(), []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -62,6 +110,8 @@ export default function SearchTrigger({
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         onClick={openSearch}
+        onPointerEnter={preloadOnIntent}
+        onFocus={preloadOnIntent}
         className={
           compact
             ? "relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border bg-background text-left text-sm text-muted-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-[180px] sm:justify-start sm:pr-2 sm:pl-9 xl:w-[220px]"

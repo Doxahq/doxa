@@ -64,6 +64,30 @@ describe("client validation", () => {
     expect(validateSiteSettings(editable(), context)).toEqual([])
   })
 
+  test("a plan without cloud search cannot choose it", () => {
+    const config = editable()
+    const choosing = { ...config, features: { ...config.features, searchProvider: "typesense" as const } }
+    expect(validateSiteSettings(choosing, context)).toContainEqual(
+      expect.objectContaining({ code: "entitlement_required" }),
+    )
+    expect(
+      validateSiteSettings(choosing, {
+        ...context,
+        searchPolicy: { allowedProviders: ["typesense", "minisearch"] },
+      }).filter((issue) => issue.code === "entitlement_required"),
+    ).toEqual([])
+  })
+
+  test("a site that lost its plan can still save with its stored choice", () => {
+    const config = editable()
+    const stored = { ...config, features: { ...config.features, searchProvider: "typesense" as const } }
+    expect(
+      validateSiteSettings(stored, { ...context, savedSearchProvider: "typesense" }).filter(
+        (issue) => issue.code === "entitlement_required",
+      ),
+    ).toEqual([])
+  })
+
   test("shared rules report the field pointer and code", () => {
     const config = editable()
     const issues = validateSiteSettings(

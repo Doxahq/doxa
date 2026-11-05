@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { FREE_PLAN_SEARCH_POLICY, type PlanSearchPolicy } from "@doxahq/contracts/entitlements"
 import { useQueryClient } from "@tanstack/react-query"
 import type { DocsContentOverviewDto } from "@doxahq/contracts"
 import type { BranchRef } from "@doxahq/contracts/docs-branches"
@@ -86,9 +87,17 @@ export function useSiteSettings({
     void queryClient.invalidateQueries({ queryKey: docsBranchQueryKeys.list(projectId) })
   }, [branch, projectId, queryClient])
 
+  const searchPolicy: PlanSearchPolicy = overview.searchPolicy ?? FREE_PLAN_SEARCH_POLICY
+  const savedConfig = overview.siteConfig.working ?? overview.siteConfig.published
+
   const context = useMemo<SiteSettingsContext>(
-    () => ({ pageHrefs: overview.pages.map((page) => page.href), entitlements: overview.entitlements }),
-    [overview.entitlements, overview.pages],
+    () => ({
+      pageHrefs: overview.pages.map((page) => page.href),
+      entitlements: overview.entitlements,
+      searchPolicy,
+      savedSearchProvider: savedConfig.features.searchProvider,
+    }),
+    [overview.entitlements, overview.pages, savedConfig, searchPolicy],
   )
 
   const buffer = useDraftBuffer<EditableSiteConfig>({
@@ -300,6 +309,7 @@ export function useSiteSettings({
     hasWorkingConfig: overview.siteConfig.working !== null,
     status,
     entitlements: overview.entitlements,
+    searchPolicy,
     pageHrefs: context.pageHrefs,
     pages: overview.pages,
     navigation: overview.navigation,

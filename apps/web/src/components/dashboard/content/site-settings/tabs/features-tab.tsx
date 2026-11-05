@@ -1,11 +1,20 @@
 import type { EditableSiteConfig } from "@doxahq/site-config"
 
-import { SettingsSection, SwitchRow, TextInput } from "~/components/dashboard/content/site-settings/fields/controls"
+import { Select, SettingsSection, SwitchRow, TextInput } from "~/components/dashboard/content/site-settings/fields/controls"
+import { EntitlementBadge } from "~/components/dashboard/content/site-settings/fields/entitlement-gate"
 import { ValidatedField } from "~/components/dashboard/content/site-settings/fields/validated-field"
 import { useSiteSettingsContext } from "~/components/dashboard/content/site-settings/site-settings-context"
 import { fieldIdForPointer } from "~/lib/dashboard/site-settings-issues"
 
 type Features = EditableSiteConfig["features"]
+type SearchProviderChoice = NonNullable<Features["searchProvider"]>
+
+const SEARCH_PROVIDER_OPTIONS: readonly { value: SearchProviderChoice; label: string }[] = [
+  { value: "typesense", label: "Cloud search (Typesense)" },
+  { value: "minisearch", label: "Browser search (MiniSearch)" },
+]
+
+const SEARCH_LOCKED_REASON = "Only paid plans can use cloud search. Upgrade the plan to turn it on."
 
 /**
  * The features a reader can notice. `branding`, `loadFromGithub`, and
@@ -15,6 +24,14 @@ type Features = EditableSiteConfig["features"]
 export function FeaturesTab() {
   const { state } = useSiteSettingsContext()
   const { features } = state.config
+  const isSearchAllowed = (provider: string) => state.searchPolicy.allowedProviders.some((allowed) => allowed === provider)
+  // A site that lost its plan keeps its stored choice, but it uses the default.
+  const searchProvider =
+    features.searchProvider && isSearchAllowed(features.searchProvider)
+      ? features.searchProvider
+      : state.searchPolicy.defaultProvider
+  const isCloudSearchLocked = !isSearchAllowed("typesense")
+  const hasLostCloudSearch = isCloudSearchLocked && features.searchProvider === "typesense"
   const setFeatures = (recipe: (current: Features) => Features) =>
     state.update((current) => ({ ...current, features: recipe(current.features) }))
   const flag = (key: "rightSidebar" | "tableOfContents" | "scrollToTop" | "feedbackEdit" | "apiPlayground" | "rawMarkdown") => ({
@@ -47,6 +64,34 @@ export function FeaturesTab() {
           <SwitchRow {...flag("scrollToTop")} title="Scroll to top" description="A button that returns to the top of a long page." />
           <SwitchRow {...flag("feedbackEdit")} title="Feedback and edit links" description="Links that let readers report a problem or suggest an edit." />
         </div>
+      </SettingsSection>
+
+      <SettingsSection title="Search">
+        <ValidatedField
+          pointer="/features/searchProvider"
+          label="Search engine"
+          actions={<EntitlementBadge locked={isCloudSearchLocked} reason={SEARCH_LOCKED_REASON} />}
+          description={
+            hasLostCloudSearch
+              ? "This plan does not include cloud search, so this site uses browser search."
+              : searchProvider === "typesense"
+                ? "Fast on large sites, with stronger typo handling. Readers' search text passes through Doxa to Typesense. It applies after the next publish."
+                : "The search index downloads to the reader's browser, and searches stay on the device. It works best up to about 800 pages."
+          }
+          className="py-3"
+        >
+          {(control) => (
+            <Select
+              {...control}
+              value={searchProvider}
+              options={SEARCH_PROVIDER_OPTIONS.map((option) => ({
+                ...option,
+                disabled: !isSearchAllowed(option.value),
+              }))}
+              onValueChange={(next) => setFeatures((current) => ({ ...current, searchProvider: next }))}
+            />
+          )}
+        </ValidatedField>
       </SettingsSection>
 
       <SettingsSection title="AI assistant">

@@ -38,6 +38,8 @@ const STEPS = [
   { name: "docs-runtime", title: "Deploy the docs runtime", command: ["pnpm", "deploy:docs-runtime"] },
   // The dispatcher binds to it, and a binding needs an existing Worker.
   { name: "try-proxy", title: "Deploy the playground proxy", command: ["pnpm", "deploy:try-proxy"] },
+  // Before the dispatcher, which sends searches to it. It binds to the resolver.
+  { name: "search-gateway", title: "Deploy the search gateway", command: ["pnpm", "deploy:search-gateway"] },
   {
     name: "docs-rendering",
     title: "Deploy the docs renderer, dispatcher, prerenderer and API",

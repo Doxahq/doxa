@@ -147,6 +147,13 @@ exports[`issue model and schema output > emits stable JSON Schemas 1`] = `
           "default": true,
           "type": "boolean",
         },
+        "searchProvider": {
+          "enum": [
+            "typesense",
+            "minisearch",
+          ],
+          "type": "string",
+        },
         "tableOfContents": {
           "default": true,
           "type": "boolean",

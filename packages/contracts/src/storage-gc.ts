@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  docsSearchIndexKeySchema,
+  docsSearchRemoteProviderSchema,
+  isDocsSearchIndexKeyOfSite,
+} from "./docs-search";
+
 /**
  * Generic storage garbage collection.
  *
@@ -253,3 +259,30 @@ export const DOCS_GENERATION_STATE_TARGET = "docs_generation_state" as const;
 
 /** Days between two inspections of a resource that the policy keeps. */
 export const RETAINED_BY_POLICY_RECHECK_SECONDS = 24 * 60 * 60;
+
+/**
+ * One remote search index. An index name is never used twice, so one index
+ * retires once, and no later build can depend on this entry.
+ */
+export const DOCS_SEARCH_INDEX_TARGET = "docs_search_index";
+
+export const docsSearchIndexResourceSchema = z
+  .object({
+    siteId: z.uuid(),
+    provider: docsSearchRemoteProviderSchema,
+    indexKey: docsSearchIndexKeySchema,
+  })
+  .strict()
+  .refine((resource) =>
+    isDocsSearchIndexKeyOfSite(resource.indexKey, resource.siteId),
+  );
+
+export type DocsSearchIndexResource = z.infer<
+  typeof docsSearchIndexResourceSchema
+>;
+
+export function docsSearchIndexEntryKey(
+  resource: DocsSearchIndexResource,
+): string {
+  return `${resource.provider}:${resource.indexKey}`;
+}

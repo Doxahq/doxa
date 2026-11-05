@@ -14,6 +14,7 @@ import {
   type DocsHostnameMapSync,
   type DocsHostnameMapUpdate,
 } from "@doxahq/contracts/docs-hostname-map";
+import { withoutSearchTarget } from "@doxahq/contracts/docs-search";
 
 /**
  * - `off`: the dispatcher does not read the map.
@@ -235,7 +236,7 @@ export function compareHostnameMap(
     ? resolution
     : null;
   if (lookup.status !== "hit") return expected ? "missing" : "agree";
-  return expected && sameResolution(lookup.resolution, expected)
+  return expected && canonicalJson(lookup.resolution) === canonicalJson(expected)
     ? "agree"
     : "disagree";
 }
@@ -284,18 +285,25 @@ function isLiveChange(
     case "none":
       return true;
     case "found":
-      return !sameResolution(before.resolution, resolution);
+      return !sameLiveContent(before.resolution, resolution);
   }
 }
 
-function sameResolution(
+/**
+ * A search target change is not a new live version: it must not start a warm
+ * job. The map entry itself still updates.
+ */
+function sameLiveContent(
   left: DocsDomainResolution,
   right: DocsDomainResolution,
 ): boolean {
-  return canonicalJson(left) === canonicalJson(right);
+  return (
+    canonicalJson(withoutSearchTarget(left)) ===
+    canonicalJson(withoutSearchTarget(right))
+  );
 }
 
-function canonicalJson(resolution: DocsDomainResolution): string {
+function canonicalJson(resolution: Partial<DocsDomainResolution>): string {
   return JSON.stringify(
     Object.entries(resolution)
       .filter(([, value]) => value !== undefined)

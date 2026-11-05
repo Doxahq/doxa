@@ -1,3 +1,4 @@
+import { withoutSearchTarget } from "@doxahq/contracts/docs-search";
 import type { DocsDomainResolution } from "@doxahq/contracts";
 import {
   normalizePublicDocsPathname,
@@ -220,7 +221,7 @@ export function createSavedOutputCall(input: {
     hostname: new URL(input.origin).hostname,
     pathname: input.pathname,
     representation: input.representation,
-    resolution: input.resolution,
+    resolution: withoutSearchTarget(input.resolution),
   };
   const request =
     input.representation === "html"
@@ -246,7 +247,7 @@ export function createRouteDataCacheCall(input: {
       expected: input.identity,
       hostname: new URL(input.origin).hostname,
       pathname: input.pathname,
-      resolution: input.resolution,
+      resolution: withoutSearchTarget(input.resolution),
     },
     request: createRouteDataRequest(input.origin, input.pathname),
   };

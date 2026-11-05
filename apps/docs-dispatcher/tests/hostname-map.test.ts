@@ -145,7 +145,64 @@ describe("hostname map reads", () => {
   });
 });
 
+describe("shadow comparison of the search target", () => {
+  // The warm job ignores the search target, but the shadow diagnostic must not:
+  // switching readers changes which index receives searches.
+  test("reports a disagreement when only the search target differs", () => {
+    const withIndex = (key: string) => ({
+      ...resolution,
+      searchProvider: "typesense" as const,
+      searchIndexKey: key,
+    });
+    const first = `s_${"1".repeat(32)}_${"2".repeat(32)}_${"a".repeat(32)}`;
+    const second = `s_${"1".repeat(32)}_${"2".repeat(32)}_${"b".repeat(32)}`;
+    expect(
+      compareHostnameMap(HOST, { status: "hit", resolution: withIndex(first) }, withIndex(second)),
+    ).toBe("disagree");
+    expect(
+      compareHostnameMap(HOST, { status: "hit", resolution: withIndex(first) }, withIndex(first)),
+    ).toBe("agree");
+  });
+});
+
 describe("hostname map writes", () => {
+  // PRODUCT REGRESSION GUARDRAIL: a search change is not a new live version, so
+  // it must not start the regional warm job for the site.
+  test("updates the search target without a live change", async () => {
+    const { store, values } = memoryStore();
+    const onLiveChange = vi.fn();
+    await applyHostnameMapUpdates(store, {
+      updates: [{ hostname: HOST, resolvedAt: NOW, resolution }],
+    });
+    const withIndex = {
+      ...resolution,
+      searchProvider: "typesense" as const,
+      searchIndexKey: `s_${"1".repeat(32)}_${"2".repeat(32)}_abcdef01abcdef01abcdef01abcdef01`,
+    };
+    await applyHostnameMapUpdates(
+      store,
+      { updates: [{ hostname: HOST, resolvedAt: NOW, resolution: withIndex }] },
+      { onLiveChange },
+    );
+    expect(onLiveChange).not.toHaveBeenCalled();
+    expect(JSON.parse(values.get(`host:${HOST}`) ?? "null").resolution).toEqual(withIndex);
+
+    await applyHostnameMapUpdates(
+      store,
+      {
+        updates: [
+          {
+            hostname: HOST,
+            resolvedAt: NOW,
+            resolution: { ...withIndex, publishedVersionId: "a-newer-version" },
+          },
+        ],
+      },
+      { onLiveChange },
+    );
+    expect(onLiveChange).toHaveBeenCalledOnce();
+  });
+
   test("stores a public production resolution with an expiration", async () => {
     const { store, values, puts } = memoryStore();
     await applyHostnameMapUpdates(store, {

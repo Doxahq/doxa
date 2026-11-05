@@ -217,6 +217,20 @@ async function handleDocsRequest(
   const gate = await getAccessGateResponse(request);
   if (gate) return gate;
 
+  // Vite development only. The build removes this branch and its module.
+  if (import.meta.env.DEV) {
+    const { isLocalSearchRequest, localSearchResponse } = await import(
+      "@/src/lib/search/local-search-routes"
+    );
+    if (isLocalSearchRequest(pathname)) {
+      return localSearchResponse(
+        request,
+        runtimeSource ??
+          (await createConfiguredRuntimeSource(process.env, host))
+      );
+    }
+  }
+
   if (pathname.startsWith("/_doxa/assets/")) {
     if (request.method !== "GET" && request.method !== "HEAD")
       return new Response(null, { status: 405 });

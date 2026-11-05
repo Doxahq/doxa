@@ -30,6 +30,10 @@ const TEXT_TOKEN_PAIRS = [
 ] as const
 
 export interface SiteSettingsContext {
+  /** Absent means the free plan: browser search only. */
+  searchPolicy?: { allowedProviders: readonly string[] }
+  /** A site that lost its plan may keep its stored choice, as the API allows. */
+  savedSearchProvider?: string | undefined
   pageHrefs: readonly string[]
   entitlements: ProjectEntitlements
 }
@@ -47,6 +51,14 @@ export function validateSiteSettings(
   const issues: ValidationIssue[] = []
   if (!config.branding.poweredBy && !context.entitlements.removePoweredBy) {
     issues.push(createValidationIssue("entitlement_required", "/branding/poweredBy"))
+  }
+  const searchChoice = config.features.searchProvider
+  if (
+    searchChoice &&
+    searchChoice !== context.savedSearchProvider &&
+    !(context.searchPolicy?.allowedProviders ?? ["minisearch"]).includes(searchChoice)
+  ) {
+    issues.push(createValidationIssue("entitlement_required", "/features/searchProvider"))
   }
 
   const strict = parseSiteConfigStrict(config)

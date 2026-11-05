@@ -21,7 +21,7 @@ import {
 } from "../../repositories/docs-branches";
 import { DocsContentError } from "../docs-content/errors";
 import type { EntitlementsService } from "../entitlements";
-import { freePlanEntitlements } from "../free-plan-entitlements";
+import { createEntitlements } from "../free-plan-entitlements";
 import {
   createR2DocsContentStore,
   type DocsContentStore,
@@ -71,7 +71,7 @@ export class DocsBranchService {
       },
       management: {
         branches,
-        entitlements: freePlanEntitlements,
+        entitlements: createEntitlements(env),
       },
     });
   }

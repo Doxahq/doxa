@@ -10,10 +10,12 @@ import {
   type RuntimeSearchArtifact,
   type RuntimeSearchDocument,
   type RuntimeSearchResult,
-  type SearchIndexLine,
 } from "./contracts";
+import { SEARCH_FIELD_CONFIG } from "./engine-config";
+import { toSearchResult } from "./results";
 
 export * from "./contracts";
+export { toSearchResult } from "./results";
 
 interface IndexableSearchDocument extends RuntimeSearchDocument {
   headingsText: string;
@@ -21,24 +23,9 @@ interface IndexableSearchDocument extends RuntimeSearchDocument {
 }
 
 const INDEX_CONFIG = {
-  idField: "id",
-  fields: ["title", "headingsText", "keywordsText", "content"],
+  ...SEARCH_FIELD_CONFIG,
   storeFields: ["slug", "title", "breadcrumb", "icon", "section", "lines"],
-  searchOptions: {
-    prefix: true,
-    fuzzy: 0.2,
-    combineWith: "AND" as const,
-    boost: {
-      title: 5,
-      headingsText: 3,
-      keywordsText: 2,
-      content: 1,
-    },
-  },
 };
-
-const MAX_SNIPPET_LENGTH = 180;
-const SNIPPET_CONTEXT_RADIUS = 70;
 
 export interface SearchEngine {
   readonly contentVersion: string;
@@ -114,30 +101,14 @@ function toRuntimeSearchResults(
   query: string,
   limit: number,
 ): RuntimeSearchResult[] {
-  const queryTerms = extractTerms(query);
-
   return hits.slice(0, limit).map((hit) => {
     const stored = runtimeStoredResultSchema.parse(hit);
-    const terms = [
-      ...new Set([
-        ...queryTerms,
-        ...hit.terms.map((term) => term.toLowerCase()),
-      ]),
-    ];
-    const snippet = pickSnippet(stored.lines, terms);
-
-    return {
-      id: stored.id,
-      slug: stored.slug,
-      title: stored.title,
-      breadcrumb: stored.breadcrumb,
-      ...(stored.icon ? { icon: stored.icon } : {}),
-      ...(stored.section ? { section: stored.section } : {}),
-      snippetLine: snippet.text,
-      ...(snippet.anchor ? { snippetAnchor: snippet.anchor } : {}),
+    return toSearchResult({
+      stored,
+      query,
+      matchedTerms: hit.terms,
       score: hit.score,
-      terms,
-    };
+    });
   });
 }
 
@@ -204,71 +175,4 @@ function hashText(value: string): string {
     hash = Math.imul(hash, 16_777_619);
   }
   return (hash >>> 0).toString(16).padStart(8, "0");
-}
-
-function extractTerms(query: string): string[] {
-  return query
-    .toLowerCase()
-    .split(/\s+/)
-    .map((term) => term.trim())
-    .filter(Boolean);
-}
-
-function pickSnippet(
-  lines: SearchIndexLine[],
-  terms: string[],
-): { text: string; anchor?: string } {
-  const firstLine = lines.find((line) => line.text.trim().length > 0);
-  if (!firstLine) return { text: "" };
-
-  let bestLine = firstLine;
-  let bestScore = 0;
-  let bestMatchIndex = 0;
-
-  for (const line of lines) {
-    const candidate = scoreLine(line.text, terms);
-    if (candidate.score <= bestScore) continue;
-    bestLine = line;
-    bestScore = candidate.score;
-    bestMatchIndex = candidate.firstMatchIndex;
-  }
-
-  return {
-    text: truncateAround(bestLine.text, bestMatchIndex),
-    ...(bestLine.anchor ? { anchor: bestLine.anchor } : {}),
-  };
-}
-
-function scoreLine(
-  text: string,
-  terms: string[],
-): { score: number; firstMatchIndex: number } {
-  const lower = text.toLowerCase();
-  const seen = new Set<string>();
-  let score = 0;
-  let firstMatchIndex = 0;
-  let hasMatch = false;
-
-  for (const term of terms) {
-    const index = lower.indexOf(term);
-    if (index < 0) continue;
-    if (!hasMatch || index < firstMatchIndex) firstMatchIndex = index;
-    hasMatch = true;
-    if (!seen.has(term)) {
-      score += 10;
-      seen.add(term);
-    }
-    if (index < 40) score += 2;
-  }
-
-  return { score, firstMatchIndex };
-}
-
-function truncateAround(text: string, anchorIndex: number): string {
-  if (text.length <= MAX_SNIPPET_LENGTH) return text;
-  const start = Math.max(0, anchorIndex - SNIPPET_CONTEXT_RADIUS);
-  const end = Math.min(text.length, start + MAX_SNIPPET_LENGTH);
-  return `${start > 0 ? "…" : ""}${text.slice(start, end).trim()}${
-    end < text.length ? "…" : ""
-  }`;
 }

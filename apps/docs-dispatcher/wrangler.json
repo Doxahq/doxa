@@ -111,6 +111,9 @@
       "simple": { "limit": 3000, "period": 60 }
     }
   ],
+  "analytics_engine_datasets": [
+    { "binding": "SEARCH_USAGE", "dataset": "doxa_search_usage" }
+  ],
   "kv_namespaces": [
     {
       "binding": "DOCS_HOSTNAME_MAP",
@@ -212,6 +215,8 @@
     "DOXA_PROD_KV_HOSTNAME_MODE": "on",
     "DOXA_PROD_HTTPS_REDIRECT_MODE": "on",
     "DOXA_PROD_DOCS_CSP_MODE": "enforce",
+    "DOXA_PROD_SEARCH_MODE": "on",
+    "SEARCH_GATEWAY_ORIGIN": "https://lexis.doxa.so",
     "DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_MODE": "all",
     "DOXA_PROD_ROUTE_DATA_BROWSER_CACHE_SITE_IDS": "",
     "DOXA_PROD_TEXT_ROUTE_CACHE_MODE": "all",

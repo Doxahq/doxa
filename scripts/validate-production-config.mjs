@@ -48,6 +48,7 @@ const PRIVATE_URL_WORKER_CONFIGS = [
   "apps/docs-template/wrangler.renderer.shared.production.json",
   "apps/email-worker/wrangler.json",
   "apps/mcp/wrangler.json",
+  "apps/search-gateway/wrangler.json",
   "apps/try-proxy/wrangler.json",
   "apps/web/wrangler.json",
 ];

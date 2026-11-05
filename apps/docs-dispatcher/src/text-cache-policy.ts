@@ -1,3 +1,4 @@
+import { withoutSearchTarget } from "@doxahq/contracts/docs-search";
 import type { DocsDomainResolution } from "@doxahq/contracts";
 
 import {
@@ -182,7 +183,7 @@ export function createTextCacheProps(
   return {
     hostname: new URL(request.url).hostname,
     rendererBuildId: identity.rendererBuildId,
-    resolution,
+    resolution: withoutSearchTarget(resolution),
     route: identity.route,
     deliveryRenderId: identity.deliveryRenderId,
     format: DOCS_TEXT_CACHE_FORMAT,

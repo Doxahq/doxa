@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@doxahq/contracts": "workspace:*",
+    "@doxahq/docs-search": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -14,6 +14,7 @@ import type { DocsMdxIssue } from "@doxahq/contracts"
 import type { BranchRef, DocsBranchPageDiff } from "@doxahq/contracts/docs-branches"
 import type { GenerationReviewPage } from "@doxahq/contracts/generation-reviews"
 
+import { ContentEmptyState } from "~/components/dashboard/content/content-empty-state"
 import { ContentPageList } from "~/components/dashboard/content/content-page-list"
 import {
   BranchPageDiffPane,
@@ -605,14 +606,7 @@ export function ProjectContentPage({
         {/* While the content loads, the editor panes draw the skeleton, so it is
             the same one until the page arrives, with nothing remounting. */}
         {!state.isLoading && state.pages.length === 0 ? (
-          <div className="surface-card m-4 px-4 py-10 text-center sm:m-6">
-            <p className="font-mono text-xs font-bold tracking-[0.14em] text-foreground uppercase">
-              No documentation yet
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Generate documentation first. The editor works on the published version.
-            </p>
-          </div>
+          <ContentEmptyState projectId={projectId} />
         ) : session ? (
           <ReviewModeArea
             projectId={projectId}

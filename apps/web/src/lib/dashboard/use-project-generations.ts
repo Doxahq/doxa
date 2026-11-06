@@ -78,6 +78,7 @@ export function useProjectGenerations(projectId: string) {
 
   return {
     generations,
+    activeGeneration,
     start,
     isPending: generationsQuery.isPending,
     isFetching: generationsQuery.isFetching,

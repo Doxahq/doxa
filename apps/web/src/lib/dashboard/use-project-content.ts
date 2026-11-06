@@ -8,7 +8,11 @@ import type {
   DocsContentPageDetailDto,
 } from "@doxahq/contracts"
 import { branchRefSchema, type BranchRef } from "@doxahq/contracts/docs-branches"
-import { getDocsBranchErrorMessage, isMissingPageError } from "~/lib/dashboard/docs-branch-errors"
+import {
+  getDocsBranchErrorMessage,
+  isMissingPageError,
+  isUnpublishedSiteError,
+} from "~/lib/dashboard/docs-branch-errors"
 import {
   dashboardQueryKeys,
   projectContentMdxReportQueryOptions,
@@ -393,7 +397,7 @@ export function useProjectContent(
   ])
 
   const errors = [
-    overviewQuery.error
+    overviewQuery.error && !isUnpublishedSiteError(overviewQuery.error, branch)
       ? getDocsBranchErrorMessage(overviewQuery.error, "Failed to load docs content.")
       : null,
     pageQuery.error && !isRequestUnconfirmed && !isMissingPageError(pageQuery.error)

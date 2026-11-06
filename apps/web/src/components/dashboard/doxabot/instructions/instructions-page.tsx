@@ -10,13 +10,15 @@ import {
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
 import { ROLE_RESTRICTED_MESSAGE, useProjectCapabilities } from "~/lib/dashboard/use-project-capabilities"
-import { useDoxabotInstructions } from "~/lib/dashboard/use-doxabot-instructions"
+import { useDoxabotInstructions, type InstructionsWriteError } from "~/lib/dashboard/use-doxabot-instructions"
 import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
 
 import { CodeLanguagesSection } from "./code-languages-section"
+import { InstructionsBarFrame } from "./instructions-bar-frame"
 import { PagesSection } from "./pages-section"
 import { ProjectContextSection } from "./project-context-section"
 import { ReadersVoiceSection } from "./readers-voice-section"
+import { SaveAndStartBar } from "./save-and-start-bar"
 import {
   InstructionsHistoryCard,
   InstructionsLimitsCard,
@@ -27,8 +29,17 @@ import { TerminologySection } from "./terminology-section"
 import { UnsavedChangesGuard } from "./unsaved-changes-guard"
 import { WritingRulesSection } from "./writing-rules-section"
 
-/** Doxabot → Instructions: the editor for the project's Doxabot instructions. */
-export function DoxabotInstructionsPage({ projectId }: { projectId: string }) {
+/**
+ * Doxabot → Instructions: the editor for the project's Doxabot instructions.
+ * With `startsGeneration`, the page is a step before a generation.
+ */
+export function DoxabotInstructionsPage({
+  projectId,
+  startsGeneration = false,
+}: {
+  projectId: string
+  startsGeneration?: boolean
+}) {
   const editor = useDoxabotInstructions(projectId)
   const canConfigure = useProjectCapabilities(projectId).can("instructions.configure")
   const disabled = !canConfigure || editor.isSaving || editor.isRestoring
@@ -68,6 +79,13 @@ export function DoxabotInstructionsPage({ projectId }: { projectId: string }) {
           <AlertDescription>{ROLE_RESTRICTED_MESSAGE} Only a project owner or admin can change the instructions.</AlertDescription>
         </Alert>
       )}
+      {canConfigure && startsGeneration ? (
+        <Alert>
+          <AlertDescription>
+            The generation has not started yet. Add your instructions, then start it at the bottom of this page.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -78,18 +96,20 @@ export function DoxabotInstructionsPage({ projectId }: { projectId: string }) {
           <WritingRulesSection {...sectionProps} screening={editor.screening} />
           <ProjectContextSection {...sectionProps} screening={editor.screening} />
 
-          {canConfigure ? (
+          {!canConfigure ? null : startsGeneration ? (
+            <SaveAndStartBar projectId={projectId} editor={editor} />
+          ) : (
             <SaveBar
               isDirty={editor.isDirty}
               isSaving={editor.isSaving}
               nextVersion={(current?.version ?? 0) + 1}
               validationMessage={editor.validationMessage}
               writeError={editor.writeError}
-              onSave={editor.save}
+              onSave={() => void editor.save()}
               onDiscard={editor.discard}
               onReload={editor.reload}
             />
-          ) : null}
+          )}
         </div>
 
         <aside className="flex w-full flex-col gap-4 lg:w-80 lg:shrink-0">
@@ -125,7 +145,7 @@ function SaveBar({
   isSaving: boolean
   nextVersion: number
   validationMessage: string | null
-  writeError: { message: string; stale: boolean } | null
+  writeError: InstructionsWriteError | null
   onSave: () => void
   onDiscard: () => void
   onReload: () => void
@@ -135,10 +155,12 @@ function SaveBar({
     : validationMessage ?? `Saving creates version ${nextVersion}. The next generation rewrites pages with it.`
 
   return (
-    <div className="surface-card flex flex-col gap-2 px-5 py-3.5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[13px] text-muted-foreground">{note}</p>
-        <div className="flex gap-2">
+    <InstructionsBarFrame
+      note={note}
+      writeError={writeError}
+      onReload={onReload}
+      actions={(
+        <>
           <Button variant="ghost" disabled={!isDirty || isSaving} onClick={onDiscard}>
             Discard
           </Button>
@@ -146,18 +168,8 @@ function SaveBar({
             {isSaving ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
             Save instructions
           </Button>
-        </div>
-      </div>
-      {writeError ? (
-        <p role="alert" className="flex flex-wrap items-center gap-2 text-[13px] text-destructive">
-          {writeError.message}
-          {writeError.stale ? (
-            <Button variant="outline" size="sm" onClick={onReload}>
-              Reload
-            </Button>
-          ) : null}
-        </p>
-      ) : null}
-    </div>
+        </>
+      )}
+    />
   )
 }

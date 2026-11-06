@@ -75,8 +75,15 @@ export function useDoxabotInstructions(projectId: string) {
     screening,
     previewLines,
     validationMessage: check.ok ? null : check.message,
-    save: () => {
-      if (check.ok) save.mutate(check.instructions)
+    /** True when the draft was saved. The error is in `writeError`. */
+    save: async (): Promise<boolean> => {
+      if (!check.ok) return false
+      try {
+        await save.mutateAsync(check.instructions)
+        return true
+      } catch {
+        return false
+      }
     },
     isSaving: save.isPending,
     restore: (version: number) => restore.mutate(version),

@@ -4,37 +4,53 @@ import { useNavigate } from "@tanstack/react-router"
 import type { GitHubRepositoryDto } from "@doxahq/contracts"
 import { toast } from "sonner"
 
+import type { InstructionsOfferChoice } from "~/components/dashboard/instructions-offer-dialog"
 import { writeLastProjectId } from "~/lib/dashboard/last-project"
 import { useGitHub } from "~/lib/dashboard/use-github"
 import { getErrorMessage } from "~/lib/errors"
 import { startGeneration } from "~/lib/platform-api"
 
 /**
- * Creates a project for a GitHub repository and starts the first Doxabot
- * generation, then opens the generation page. When the project exists but the
- * generation does not start, it opens the project overview, which offers the
- * start again.
+ * Creates a project for a GitHub repository, as the person chose: open the
+ * instructions page first, or start the first Doxabot generation at once. When
+ * the project exists but the generation does not start, it opens the project
+ * overview, which offers the start again.
  */
 export function useGenerateFromRepository() {
   const github = useGitHub()
   const navigate = useNavigate()
   const start = useMutation({ mutationFn: (projectId: string) => startGeneration(projectId) })
-  // Stays on until the next page opens, so the button does not come back
-  // between the two requests and the navigation.
-  const [isGenerating, setIsGenerating] = useState(false)
+  // Stays set until the next page opens, so the buttons do not come back
+  // between the requests and the navigation.
+  const [pendingChoice, setPendingChoice] = useState<InstructionsOfferChoice | null>(null)
 
-  async function generate(repository: GitHubRepositoryDto): Promise<void> {
-    setIsGenerating(true)
-    let projectId: string
+  /** Null when the create failed. The error renders in the dialog. */
+  async function createProject(repository: GitHubRepositoryDto): Promise<string | null> {
     try {
       const project = await github.createProject({ githubRepositoryId: repository.id, name: repository.name })
-      projectId = project.id
+      writeLastProjectId(project.id)
+      return project.id
     } catch {
-      // The create error renders in the dialog.
-      setIsGenerating(false)
-      return
+      setPendingChoice(null)
+      return null
     }
-    writeLastProjectId(projectId)
+  }
+
+  async function addInstructions(repository: GitHubRepositoryDto): Promise<void> {
+    setPendingChoice("instructions")
+    const projectId = await createProject(repository)
+    if (projectId === null) return
+    await navigate({
+      to: "/dashboard/projects/$projectId/doxabot/instructions",
+      params: { projectId },
+      search: { then: "generate" },
+    })
+  }
+
+  async function generate(repository: GitHubRepositoryDto): Promise<void> {
+    setPendingChoice("generation")
+    const projectId = await createProject(repository)
+    if (projectId === null) return
 
     try {
       const result = await start.mutateAsync(projectId)
@@ -56,7 +72,8 @@ export function useGenerateFromRepository() {
 
   return {
     github,
+    addInstructions,
     generate,
-    isGenerating,
+    pendingChoice,
   }
 }

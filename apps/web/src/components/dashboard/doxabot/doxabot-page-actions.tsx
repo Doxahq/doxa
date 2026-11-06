@@ -1,9 +1,9 @@
 import { Link } from "@tanstack/react-router"
 import { Loader2, Play } from "lucide-react"
 
-import { GenerationStartConfirmationDialog } from "~/components/dashboard/generation-start-confirmation-dialog"
+import { GenerationStartDialogs } from "~/components/dashboard/generation-start-dialogs"
 import { Button } from "~/components/ui/button"
-import { useGenerationStarter } from "~/lib/dashboard/use-generation-starter"
+import { useGenerationStartFlow } from "~/lib/dashboard/use-generation-start-flow"
 import { useProjectGenerations } from "~/lib/dashboard/use-project-generations"
 
 /** The Doxabot page header actions: open the generations, or start one as the Generations page does. */
@@ -22,7 +22,7 @@ export function DoxabotPageActions({ projectId, canRun }: { projectId: string; c
 
 function RunGenerationButton({ projectId }: { projectId: string }) {
   const generations = useProjectGenerations(projectId)
-  const { startGeneration, confirmationDialogProps } = useGenerationStarter(projectId, generations)
+  const { startGeneration, dialogProps } = useGenerationStartFlow(projectId, generations)
   const isBusy = generations.isStarting || generations.hasActiveGeneration
 
   return (
@@ -31,7 +31,7 @@ function RunGenerationButton({ projectId }: { projectId: string }) {
         {isBusy ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Play aria-hidden="true" />}
         {generations.isStarting ? "Starting…" : generations.hasActiveGeneration ? "Generating…" : "Run generation"}
       </Button>
-      <GenerationStartConfirmationDialog {...confirmationDialogProps} />
+      <GenerationStartDialogs {...dialogProps} />
     </>
   )
 }

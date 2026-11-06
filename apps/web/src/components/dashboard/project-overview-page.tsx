@@ -10,7 +10,7 @@ import {
 } from "~/components/dashboard/dashboard-header"
 import { ConnectRepositoryDialog } from "~/components/dashboard/connect-repository-dialog"
 import { ConnectRepositoryWelcome } from "~/components/dashboard/connect-repository-welcome"
-import { GenerationStartConfirmationDialog } from "~/components/dashboard/generation-start-confirmation-dialog"
+import { GenerationStartDialogs } from "~/components/dashboard/generation-start-dialogs"
 import { GenerationWelcome } from "~/components/dashboard/generation-welcome"
 import { JobStatusBadge } from "~/components/dashboard/dashboard-status"
 import { ReviewWaitingBanner } from "~/components/dashboard/review/review-waiting-banner"
@@ -27,7 +27,7 @@ import {
   readPendingRepositoryConnect,
 } from "~/lib/dashboard/pending-repository-connect"
 import { useProjectBranch } from "~/lib/dashboard/project-branch-context"
-import { useGenerationStarter } from "~/lib/dashboard/use-generation-starter"
+import { useGenerationStartFlow } from "~/lib/dashboard/use-generation-start-flow"
 import { useProjectCapabilities } from "~/lib/dashboard/use-project-capabilities"
 import { useProjectGenerations } from "~/lib/dashboard/use-project-generations"
 import { ProjectOverviewSkeleton } from "~/components/dashboard/skeletons/project-skeletons"
@@ -42,7 +42,7 @@ export function ProjectOverviewPage({ projectId }: { projectId: string }) {
   const reviewQuery = useQuery(generationReviewQueryOptions(projectId))
   const pendingMergesQuery = useQuery(pendingMergesQueryOptions(projectId))
   const doxabotQuery = useQuery(projectDoxabotQueryOptions(projectId))
-  const { startGeneration, confirmationDialogProps } = useGenerationStarter(projectId, generations)
+  const { startGeneration, dialogProps } = useGenerationStartFlow(projectId, generations)
   const branch = useProjectBranch()
   const hasRepository = Boolean(workspace.project?.githubRepositoryId)
   const showWelcome = workspace.project !== null && workspace.latestJob === null
@@ -163,7 +163,7 @@ export function ProjectOverviewPage({ projectId }: { projectId: string }) {
         </section>
       ) : null}
 
-      <GenerationStartConfirmationDialog {...confirmationDialogProps} />
+      <GenerationStartDialogs {...dialogProps} />
       <ConnectRepositoryDialog projectId={projectId} open={connectOpen} onOpenChange={setConnectOpen} />
     </PageBody>
   )

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
-import { AlertCircle, Check, Github, Link2, Loader2, Search, Sparkles } from "lucide-react"
+import type { GitHubRepositoryDto } from "@doxahq/contracts"
+import { AlertCircle, Check, Github, Link2, Search, Sparkles } from "lucide-react"
 
+import { InstructionsOfferContent } from "~/components/dashboard/instructions-offer-dialog"
 import { RepositoryOption } from "~/components/dashboard/repository-option"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
@@ -21,8 +23,8 @@ import { cn } from "~/lib/utils"
 const STEPS = ["Connect GitHub", "Choose a repository", "Generate"] as const
 
 /**
- * Connect GitHub, choose a repository, and start the first Doxabot
- * generation. Without the GitHub App, it sends the user to install it; GitHub
+ * Connect GitHub, choose a repository, answer the instructions offer, and
+ * start the first Doxabot generation. Without the GitHub App, it sends the user to install it; GitHub
  * returns to `/dashboard?github=connected`, which opens this dialog again.
  *
  * The content mounts only while the dialog is open, so the repository list
@@ -68,9 +70,12 @@ function GenerateFromRepositoryForm({
   onClose: () => void
   onStartWithoutRepository: () => void
 }) {
-  const { github, generate, isGenerating } = useGenerateFromRepository()
+  const { github, addInstructions, generate, pendingChoice } = useGenerateFromRepository()
+  const isGenerating = pendingChoice !== null
   useEffect(() => onBusyChange(isGenerating), [isGenerating, onBusyChange])
   const [selectedId, setSelectedId] = useState("")
+  // No project exists yet at this step, so going back leaves nothing behind.
+  const [offerRepository, setOfferRepository] = useState<GitHubRepositoryDto | null>(null)
   const [query, setQuery] = useState("")
   const repositories = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -81,6 +86,19 @@ function GenerateFromRepositoryForm({
   const selected = github.repositories.find((repo) => repo.id === selectedId) ?? null
   const selectedProject = selectedId ? github.projectByRepositoryId.get(selectedId) ?? null : null
   const currentStep = github.isConnected ? 1 : 0
+
+  if (offerRepository) {
+    return (
+      <InstructionsOfferContent
+        isStep
+        pendingChoice={pendingChoice}
+        error={github.createError}
+        onCancel={() => setOfferRepository(null)}
+        onAddInstructions={() => void addInstructions(offerRepository)}
+        onGenerateWithout={() => void generate(offerRepository)}
+      />
+    )
+  }
 
   return (
     <>
@@ -134,11 +152,11 @@ function GenerateFromRepositoryForm({
               <span>
                 {selected ? (
                   <>
-                    Doxabot creates the project <span className="font-mono text-body">{selected.name}</span> and
-                    starts writing. You can follow along on the generation page.
+                    Doxabot creates the project <span className="font-mono text-body">{selected.name}</span>. You can
+                    add instructions before it starts writing.
                   </>
                 ) : (
-                  "Choose a repository. Doxabot creates a project for it and starts writing."
+                  "Choose a repository. Doxabot creates a project for it and writes your docs."
                 )}
               </span>
             </p>
@@ -184,10 +202,10 @@ function GenerateFromRepositoryForm({
             type="button"
             size="sm"
             disabled={!selected || Boolean(selectedProject) || isGenerating}
-            onClick={() => selected && void generate(selected)}
+            onClick={() => setOfferRepository(selected)}
           >
-            {isGenerating ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Sparkles aria-hidden="true" />}
-            {isGenerating ? "Starting…" : "Generate docs"}
+            <Sparkles aria-hidden="true" />
+            Generate docs
           </Button>
         ) : null}
       </DialogFooter>

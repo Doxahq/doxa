@@ -7,7 +7,7 @@ import type { GenerationJobDto } from "@doxahq/contracts"
 import { PageBody, PageHeading } from "~/components/dashboard/dashboard-header"
 import { ConnectRepositoryDialog } from "~/components/dashboard/connect-repository-dialog"
 import { ConnectRepositoryWelcome } from "~/components/dashboard/connect-repository-welcome"
-import { GenerationStartConfirmationDialog } from "~/components/dashboard/generation-start-confirmation-dialog"
+import { GenerationStartDialogs } from "~/components/dashboard/generation-start-dialogs"
 import { GenerationWelcome } from "~/components/dashboard/generation-welcome"
 import { JobStatusBadge } from "~/components/dashboard/dashboard-status"
 import { Alert, AlertDescription } from "~/components/ui/alert"
@@ -18,7 +18,7 @@ import {
   getGenerationDurationMs,
   shortenGenerationId,
 } from "~/lib/dashboard/generation-model"
-import { useGenerationStarter } from "~/lib/dashboard/use-generation-starter"
+import { useGenerationStartFlow } from "~/lib/dashboard/use-generation-start-flow"
 import { useProjectCapabilities } from "~/lib/dashboard/use-project-capabilities"
 import { useProjectGenerations } from "~/lib/dashboard/use-project-generations"
 import { useProjectWorkspace } from "~/lib/dashboard/use-project-workspace"
@@ -33,7 +33,7 @@ const GENERATION_DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
 
 export function ProjectGenerationsPage({ projectId }: { projectId: string }) {
   const state = useProjectGenerations(projectId)
-  const { startGeneration, confirmationDialogProps } = useGenerationStarter(projectId, state)
+  const { startGeneration, dialogProps } = useGenerationStartFlow(projectId, state)
   const isEmpty = !state.isPending && !state.error && state.generations.length === 0
   const workspace = useProjectWorkspace(projectId)
   const needsRepository = workspace.project !== null && !workspace.project.githubRepositoryId
@@ -107,7 +107,7 @@ export function ProjectGenerationsPage({ projectId }: { projectId: string }) {
         ) : null}
       </section>
 
-      <GenerationStartConfirmationDialog {...confirmationDialogProps} />
+      <GenerationStartDialogs {...dialogProps} />
       <ConnectRepositoryDialog projectId={projectId} open={connectOpen} onOpenChange={setConnectOpen} />
     </PageBody>
   )

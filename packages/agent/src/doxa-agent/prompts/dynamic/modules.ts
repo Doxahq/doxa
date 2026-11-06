@@ -6,6 +6,7 @@ import {
   formatPublicEditorialBrief,
   formatStructureSummary,
 } from "./formatters";
+import { lineForReaders } from "./readers";
 import type { PromptModule, PromptStage } from "./types";
 
 function bulletList(items: string[]): string {
@@ -62,12 +63,11 @@ const publicPolicyModules: PromptModule[] = PUBLIC_POLICY_STAGES.map((stage) => 
   priority: 1,
   render: (context) => {
     const policy = resolveDocumentationPolicy(resolveDocumentationBrief(context.documentationBrief));
-    return `PUBLIC DOCUMENTATION POLICY (${policy.version})
+    return `${policy.heading} (${policy.version})
 - ${policy.primaryRule}
 - ${policy.evidenceRule}
 - ${policy.contextRule}
-- Infer the public reader from the product: SDK adopter, API consumer, tool user, application operator, or the closest evidence-backed role.
-- Internal implementation, private team workflows, diagnostics, tests, and repository-only tooling are not public product documentation.`;
+${bulletList(policy.scopeRules)}`;
   },
 }));
 
@@ -93,7 +93,7 @@ const projectInstructionsModules: PromptModule[] = PUBLIC_POLICY_STAGES.map((sta
   priority: PROJECT_INSTRUCTIONS_PRIORITY,
   render: (context) => {
     const projectInstructions = context.documentationBrief?.projectInstructions;
-    return projectInstructions ? renderProjectInstructionsBlock(projectInstructions) : undefined;
+    return projectInstructions ? renderProjectInstructionsBlock(projectInstructions, stage) : undefined;
   },
 }));
 
@@ -284,7 +284,7 @@ Classification evidence must be concrete. Prefer README, package metadata, route
     stage: "exploration",
     priority: 10,
     // No job paths here: this prompt is the cached prefix, which other jobs reuse.
-    render: (_context, profile) => `You are an expert technical documentation architect performing a deep analysis of a software project.
+    render: (context, profile) => `You are an expert technical documentation architect performing a deep analysis of a software project.
 
 Your job is to gather concrete, file-backed facts for documentation generation.
 
@@ -297,8 +297,14 @@ General rules:
 - Read README and package/build metadata before tracing implementation details.
 - Identify what users can do with the project, not only what libraries it uses.
 - Separate public interfaces from internal development tooling.
-- For open-source libraries/frameworks, treat the default reader as a developer adopting the package in their own app, not a contributor working inside this repository.
-- Capture canonical install/config/use workflows from README examples, exported package entrypoints, and example apps; mark repo-only demo/test/dev paths as internal-only evidence.
+- ${lineForReaders(context, {
+    public: "For open-source libraries/frameworks, treat the default reader as a developer adopting the package in their own app, not a contributor working inside this repository.",
+    team: "The reader is the team that builds and runs the product: architecture, tests, and team workflows are part of what they need.",
+  })}
+- ${lineForReaders(context, {
+    public: "Capture canonical install/config/use workflows from README examples, exported package entrypoints, and example apps; mark repo-only demo/test/dev paths as internal-only evidence.",
+    team: "Capture canonical install/config/use workflows from README examples, exported package entrypoints, and example apps, and the team's own setup, test, and release workflows.",
+  })}
 - Capture REST API and SDK/library API references separately: REST API means every endpoint served by this project; API Reference means public exports consumed from a package/module. Do not mix outbound third-party API clients into REST API.
 - Include specific file references and names in your findings.
 - Be thorough, but keep findings grounded in the files you inspected.`,
@@ -355,7 +361,7 @@ Every page must have a clear reason to exist. Prefer fewer strong pages over man
     id: "structure-universal-rules",
     stage: "structure",
     priority: 30,
-    render: () => `UNIVERSAL STRUCTURE RULES
+    render: (context) => `UNIVERSAL STRUCTURE RULES
 
 SECTION-vs-PAGE RULE (read this twice before you generate sections):
 - The FIRST section MUST always be "Documentation" with "default": true. Every user-facing page goes here by default.
@@ -380,8 +386,11 @@ PAGE RULES:
 - REST API and API Reference are separate surfaces. Do not combine SDK exports into REST API, and do not put served endpoint pages under API Reference.
 - Collection pages must carry item-specific install/config/use details from their source evidence and share the collection title as their navigation group.
 - Page titles must describe product capabilities, workflows, references, or concepts.
-- Default pages are consumer/adopter docs. Do not create internal maintainer pages such as "Architecture", "Package Map", "E2E Testing", "Internal Tooling", or "Development Setup" unless the user explicitly requested maintainer docs or the page is inside a Development section.
-- If an architecture concept helps consumers, title it "How It Works" and explain public runtime concepts, not source-repo organization.
+${lineForReaders(context, {
+    public: `- Default pages are consumer/adopter docs. Do not create internal maintainer pages such as "Architecture", "Package Map", "E2E Testing", "Internal Tooling", or "Development Setup" unless the user explicitly requested maintainer docs or the page is inside a Development section.
+- If an architecture concept helps consumers, title it "How It Works" and explain public runtime concepts, not source-repo organization.`,
+    team: `- The pages are for the team that builds and runs the product. Pages such as "Architecture", "Package Map", "E2E Testing", and "Development Setup" belong in Documentation when the evidence supports them.`,
+  })}
 - Titles and nav labels must have balanced punctuation. Avoid code, paths, package import strings, and parenthetical fragments in titles.
 - Do not create pages that are only names of internal scripts.
 - Do not duplicate the same topic under multiple sections.
@@ -392,10 +401,13 @@ PAGE RULES:
     id: "writer-system-base",
     stage: "writer",
     priority: 10,
-    render: () => `You are an expert technical documentation writer producing production-quality documentation for software projects.
+    render: (context) => `You are an expert technical documentation writer producing production-quality documentation for software projects.
 
-Write documentation for end users first. Mention implementation details only when the page is explicitly for development, contribution, architecture, or public library API reference.
-For reusable libraries/frameworks, the end user is a developer installing and configuring the package in their own project. Do not write as if they are inside this source repository.
+${lineForReaders(context, {
+    public: `Write documentation for end users first. Mention implementation details only when the page is explicitly for development, contribution, architecture, or public library API reference.
+For reusable libraries/frameworks, the end user is a developer installing and configuring the package in their own project. Do not write as if they are inside this source repository.`,
+    team: "Write documentation for the team that builds and runs the product. Explain implementation details, repository layout, and team workflows where they help that team.",
+  })}
 
 OUTPUT FORMAT (STRICT):
 - The first character of your response MUST be \`-\` (the first dash of the frontmatter block).
@@ -471,12 +483,15 @@ The full component reference, with every prop and a usage example, follows.`,
     id: "writer-quality-contract",
     stage: "writer",
     priority: 30,
-    render: () => `QUALITY CONTRACT
+    render: (context) => `QUALITY CONTRACT
 - Do not produce skeleton pages, placeholder text, TODOs, empty sections, or heading-only content.
 - Every page must contain concrete facts, useful examples, and practical guidance.
 - Use tables for options, parameters, config fields, and structured reference data.
 - Cross-reference related pages naturally when useful.
-- Consumer pages must not expose repo-only paths, demo app credentials, package workspace internals, Playwright/test workflows, or local contributor scripts as setup instructions.
+- ${lineForReaders(context, {
+    public: "Consumer pages must not expose repo-only paths, demo app credentials, package workspace internals, Playwright/test workflows, or local contributor scripts as setup instructions.",
+    team: "Pages must not expose demo app credentials or other secret values.",
+  })}
 - Use canonical workflows from the project context consistently across pages. Do not invent competing setup patterns for the same framework or package.
 - Quickstart and Getting Started pages must choose one canonical workflow, stay under 650 prose words, import every non-global constructor, assign shell variables before use, and end with the source-backed verification result.
 - Links to other docs pages must use exact routes from the documentation structure; do not invent /documentation/... links.

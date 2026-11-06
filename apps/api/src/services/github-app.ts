@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { isGitHubRateLimited } from "./github-rate-limit";
 
 interface InstallationTokenResponse {
   token?: string;
@@ -54,6 +55,31 @@ export function isLocalInstallation(installationId: string): boolean {
   return installationId.startsWith("local");
 }
 
+/**
+ * GitHub refused an installation token. The status and the rate-limit signal
+ * tell a lost installation from an outage or a rate limit.
+ */
+export class InstallationTokenRequestError extends Error {
+  constructor(readonly status: number, readonly rateLimited = false) {
+    super(`GitHub installation token request failed (${status}${rateLimited ? ", rate limited" : ""}).`);
+    this.name = "InstallationTokenRequestError";
+  }
+}
+
+/** The statuses with which GitHub refuses a token for good, unless the answer is a rate limit. */
+const LOST_INSTALLATION_STATUSES: readonly number[] = [401, 403, 404, 422];
+
+/**
+ * Whether GitHub refused a token for good: the app was uninstalled (404),
+ * suspended or lost a permission (401, 403), or the repository is no longer
+ * in the installation (422). A 403 rate limit passes, so it is not one.
+ */
+export function isLostInstallationAccess(error: unknown): boolean {
+  return error instanceof InstallationTokenRequestError
+    && !error.rateLimited
+    && LOST_INSTALLATION_STATUSES.includes(error.status);
+}
+
 export async function createInstallationAccessToken(
   env: Env,
   installationId: string,
@@ -76,7 +102,7 @@ export async function createInstallationAccessToken(
   });
 
   if (!response.ok) {
-    throw new Error(`GitHub installation token request failed (${response.status}).`);
+    throw new InstallationTokenRequestError(response.status, await isGitHubRateLimited(response));
   }
 
   const payload = (await response.json()) as InstallationTokenResponse;

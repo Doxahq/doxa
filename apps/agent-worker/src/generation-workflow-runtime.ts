@@ -3,6 +3,7 @@ import {
   DEFAULT_DOXA_WRITER_MODEL,
   GENERATION_STATE_SCHEMA_VERSION,
   MAX_WRITE_GROUP_PAGES,
+  NO_PROJECT_INSTRUCTIONS_FINGERPRINT,
   WORKFLOW_STEP_FAILED_EVENT_TYPE,
   PUBLIC_DOCUMENTATION_POLICY_VERSION,
   WRITING_CONTRACT_VERSION,
@@ -32,6 +33,7 @@ import {
   type WriterHandoffManifest,
 } from "@doxahq/contracts";
 import { GENERATION_CHECKPOINT_PREFIX } from "@doxahq/contracts/storage-lifecycle";
+import type { PageNotice } from "@doxahq/contracts/generation-reviews";
 import {
   createR2GenerationPageCheckpointStore,
   parseGenerationPageCheckpoint,
@@ -70,8 +72,34 @@ import {
   resolveGenerationModels,
   resolveStageModelAuth,
 } from "./model-provider";
-import { pageBriefFingerprints, pageSourcesOf } from "./review-evidence";
+import {
+  pageBriefFingerprints,
+  pageInstructionsFingerprints,
+  pageSourcesOf,
+} from "./review-evidence";
 import { syncReusableStateWithLive } from "./live-state-sync";
+import {
+  executionContextFailureMessage,
+  GENERATION_CONTEXT_UNAVAILABLE_EVENT_TYPE,
+  isPermanentContextFailure,
+} from "./execution-context-failure";
+import { checkPageFailureBudgetStep, NO_STEP_RETRIES, runBestEffortStep, settleWritePhase } from "./best-effort-step";
+import {
+  pageNoticePayloadKey,
+  readPageNoticePayload,
+  storePageNoticePayload,
+  writePhaseOutcomeOf,
+  type PageNoticePayload,
+  type RecordedWritePhaseOutcome,
+  type WritePhaseOutcome,
+} from "./write-phase-outcome";
+import {
+  behindInstructionPageIds,
+  failuresUnderBudget,
+  publishedBehindPageIds,
+  readInstructionCatchUpLedger,
+  recordInstructionCatchUp,
+} from "./instruction-catch-up";
 import { findSiteNavigation, loadSeedSite, loadSiteNavigation } from "./seed-site";
 import { readPreviousPages } from "./previous-pages";
 import { withStepCallDeadline } from "./step-call-deadline";
@@ -97,12 +125,20 @@ import {
 import {
   assertPageFailureBudget,
   collectPageBatchOutcomes,
+  isPageFailureBudgetExceeded,
   isRunStoppingError,
   pageTitlesFromStructure,
   planWithFailedPages,
   recordFlaggedPages,
+  type PageBatchOutcome,
   type SettledBatch,
 } from "./generation-page-failures";
+import {
+  behindInstructionCandidates,
+  behindInstructionsNotices,
+  openIssueNotices,
+  recordPageNotices,
+} from "./page-notices";
 import {
   applyPageLocks,
   changedSourcePaths,
@@ -411,11 +447,44 @@ export class GenerationWorkflowRunner {
       }).catch(() => undefined);
       throw error;
     }
-    const executionContext = await step.do(
-      "resolve generation execution mode",
-      boundedStepConfig(event.timestamp, overallTimeoutMs, 2 * 60_000),
-      () => this.env.API.getGenerationExecutionContext(input.jobId),
-    );
+    let executionContext: Awaited<ReturnType<Env["API"]["getGenerationExecutionContext"]>>;
+    try {
+      executionContext = await step.do(
+        "resolve generation execution mode",
+        boundedStepConfig(event.timestamp, overallTimeoutMs, 2 * 60_000),
+        async () => {
+          try {
+            return await this.env.API.getGenerationExecutionContext(input.jobId);
+          } catch (error) {
+            // A refusal stays a refusal, so the step stops without retries.
+            if (isPermanentContextFailure(error)) {
+              throw new NonRetryableError(executionContextFailureMessage(error));
+            }
+            throw error;
+          }
+        },
+      );
+    } catch (error) {
+      // The step failed after its retries. Without this the job would stay
+      // queued with no message.
+      const message = executionContextFailureMessage(error);
+      await this.env.API.markJobFailed(input.jobId, message).catch(() => undefined);
+      await this.env.API.addJobEvent(input.jobId, {
+        type: GENERATION_CONTEXT_UNAVAILABLE_EVENT_TYPE,
+        message,
+        source: "worker",
+      }).catch(() => undefined);
+      throw error;
+    }
+    const projectInstructions = executionContext?.doxabotInstructions;
+    if (projectInstructions) {
+      // Its own step, so a retry or "Continue run" records the event once.
+      await step.do(
+        "record project instructions",
+        boundedStepConfig(event.timestamp, overallTimeoutMs, 60_000),
+        () => recordProjectInstructions(this.env, input.jobId, projectInstructions.version),
+      );
+    }
     if (
       executionContext?.job.publicationMode === "preview" ||
       isRevisionAwareProductionContext(executionContext)
@@ -715,7 +784,7 @@ export class GenerationWorkflowRunner {
           });
         },
       });
-      const writeOutcome = await step.do(
+      const writeOutcome: PageBatchOutcome & { noticesKey?: string | null } = await step.do(
         "record flagged pages",
         boundedStepConfig(event.timestamp, overallTimeoutMs, 2 * 60_000),
         async () => {
@@ -726,6 +795,12 @@ export class GenerationWorkflowRunner {
             pageTitlesFromStructure(structureCheckpoint.structureCheckpoint),
           );
           assertPageFailureBudget(outcome.failedPages, structure.pageIds.length);
+          // Every read comes before the flag events, so a failed read never
+          // repeats them when the step is retried.
+          const noticesKey = await this.storeNoticePayload(input.jobId, pageNoticePayloadKey(checkpointPrefix, "full"), {
+            openIssueNotices: await this.collectOpenIssueNotices(input.jobId, outcome.keys),
+            behindCandidates: [],
+          });
           const { flaggedPages } = planWithFailedPages(
             { regeneratePageIds: [...structure.pageIds], reusePageIds: [] },
             outcome.failedPages,
@@ -736,9 +811,16 @@ export class GenerationWorkflowRunner {
             routeOf: () => undefined,
             addJobEvent: (flagEvent) => this.env.API.addJobEvent(input.jobId, flagEvent),
           });
-          return outcome;
+          return { ...outcome, noticesKey };
         },
       );
+      await this.recordNoticesStep(step, input.jobId, {
+        name: "record page notices",
+        config: bestEffortStepConfig(event.timestamp, overallTimeoutMs, 2 * 60_000),
+        // Absent in step results recorded before page notices.
+        noticesKey: writeOutcome.noticesKey ?? null,
+        exhaustedPageIds: [],
+      });
       const pageKeys = writeOutcome.keys;
       const failedPageIds = new Set(writeOutcome.failedPages.map((page) => page.id));
 
@@ -840,6 +922,74 @@ export class GenerationWorkflowRunner {
       );
       throw error instanceof NonRetryableError ? error : new NonRetryableError(message);
     }
+  }
+
+  /**
+   * The notices of the pages the writer kept with open issues. Notices only
+   * add information, so a failed checkpoint read gives none rather than a
+   * failed step.
+   */
+  private async collectOpenIssueNotices(jobId: string, pageKeys: readonly string[]): Promise<PageNotice[]> {
+    try {
+      const writtenBatches = await Promise.all(
+        pageKeys.map((key) => readPageCheckpoint(this.env.DOCS_BUCKET, key)),
+      );
+      return openIssueNotices(writtenBatches.flat());
+    } catch (error) {
+      logBestEffortStepError(jobId, "open_issue_notices", error);
+      return [];
+    }
+  }
+
+  /**
+   * Stores the run's notices next to its checkpoints and gives their key.
+   * The step result then carries only the key, however many pages and issues
+   * there are. A failed write is logged and gives no notices, never a failed run.
+   */
+  private async storeNoticePayload(jobId: string, key: string, payload: PageNoticePayload): Promise<string | null> {
+    try {
+      return await storePageNoticePayload(this.env.DOCS_BUCKET, key, payload);
+    } catch (error) {
+      logBestEffortStepError(jobId, "page_notice_payload", error);
+      return null;
+    }
+  }
+
+  /**
+   * Records the run's page notices in their own step, which runs once: it
+   * reads the payload that an earlier step stored, adds the notices of the
+   * pages that the ledger marks as exhausted, and logs and skips a failure.
+   */
+  private async recordNoticesStep(
+    step: GenerationWorkflowStep,
+    jobId: string,
+    input: {
+      name: string;
+      config: ReturnType<typeof bestEffortStepConfig>;
+      noticesKey: string | null;
+      exhaustedPageIds: readonly string[];
+    },
+  ): Promise<void> {
+    if (input.noticesKey === null) return;
+    const noticesKey = input.noticesKey;
+    await runBestEffortStep({
+      step,
+      name: input.name,
+      config: input.config,
+      fallback: undefined,
+      onError: (error) => logBestEffortStepError(jobId, "page_notices", error),
+      work: async () => {
+        const payload = await readPageNoticePayload(this.env.DOCS_BUCKET, noticesKey);
+        await recordPageNotices({
+          notices: [
+            ...payload.openIssueNotices,
+            ...behindInstructionsNotices({ candidates: payload.behindCandidates, exhaustedPageIds: input.exhaustedPageIds }),
+          ],
+          addJobEvent: (noticeEvent) => this.env.API.addJobEvent(jobId, noticeEvent),
+          onError: (_notice, error) => logBestEffortStepError(jobId, "page_notice", error),
+        });
+      },
+    });
   }
 
   private async runRevisionAwareGeneration(
@@ -1035,6 +1185,7 @@ export class GenerationWorkflowRunner {
               context,
               reusableState,
               result.snapshot?.changes,
+              analysisResult.analysisState.projectInstructionsFingerprint,
             );
             await Promise.all([
               this.env.DOCS_BUCKET.put(
@@ -1180,6 +1331,7 @@ export class GenerationWorkflowRunner {
                 context,
                 reusableState,
                 analysisResult.snapshot?.changes,
+                analysisResult.analysisState.projectInstructionsFingerprint,
               );
               const key =
                 `${checkpointPrefix}/${checkpointScope}-structure.json`;
@@ -1406,38 +1558,110 @@ export class GenerationWorkflowRunner {
         boundedStepConfig(event.timestamp, overallTimeoutMs, 60_000),
         () => releaseWriterSlotLeases(writerSlots, batchResults),
       );
-      const writeOutcome = await step.do(
+      const recordedWriteOutcome: RecordedWritePhaseOutcome = await step.do(
         `record flagged ${checkpointScope} pages`,
         boundedStepConfig(event.timestamp, overallTimeoutMs, 2 * 60_000),
-        async () => {
-          const structureResult = await readStructureStageResult(
-            this.env.DOCS_BUCKET,
-            structure.key,
-          );
+        async (): Promise<WritePhaseOutcome> => {
+          // Every read comes before the flag events, so a failed read never
+          // repeats them when the step is retried.
+          const [analysisResult, structureResult] = await Promise.all([
+            readAnalysisStageResult(this.env.DOCS_BUCKET, analysis.key),
+            readStructureStageResult(this.env.DOCS_BUCKET, structure.key),
+          ]);
           const outcome = collectPageBatchOutcomes(
             batches,
             batchResults,
             pageTitlesFromStructure(structureResult.checkpoint),
           );
-          assertPageFailureBudget(
-            outcome.failedPages,
-            structure.regeneratePageIds.length,
-          );
+          const budgeted = failuresUnderBudget({
+            failedPages: outcome.failedPages,
+            regeneratePageIds: structure.regeneratePageIds,
+            catchUpPageIds: structureResult.plan.catchUpPageIds,
+          });
+          const failedPageIds = new Set(outcome.failedPages.map((page) => page.id));
+          const writtenPageIds = structure.regeneratePageIds.filter((pageId) => !failedPageIds.has(pageId));
           const reusableState = await loadReusableState(this.env.DOCS_BUCKET, context);
           const baselinePages = baselinePageStates(reusableState);
-          const { flaggedPages } = planWithFailedPages(
-            structureResult.plan,
-            outcome.failedPages,
-            new Set(baselinePages.keys()),
-          );
-          await recordFlaggedPages({
-            flaggedPages,
-            routeOf: (pageId) => baselinePages.get(pageId)?.route,
-            addJobEvent: (flagEvent) => this.env.API.addJobEvent(input.jobId, flagEvent),
+          const runFingerprint = analysisResult.analysisState.projectInstructionsFingerprint;
+          const previousRunFingerprint = reusableState?.analysis.projectInstructionsFingerprint;
+          const noticesKey = await this.storeNoticePayload(input.jobId, pageNoticePayloadKey(checkpointPrefix, checkpointScope), {
+            openIssueNotices: await this.collectOpenIssueNotices(input.jobId, outcome.keys),
+            behindCandidates: behindInstructionCandidates({
+              previousPages: reusableState?.pages ?? [],
+              previousRunFingerprint,
+              runFingerprint,
+              currentPageIds: structure.pageIds,
+              writtenPageIds,
+              lockedHrefs: lockedHrefsOf(context),
+            }),
           });
-          return outcome;
+          // The budget decides in its own step after the ledger step, so a
+          // run that stops still counts its catch-up failures; it records no flags.
+          if (!isPageFailureBudgetExceeded(budgeted.failedPages.length, budgeted.plannedCount)) {
+            const { flaggedPages } = planWithFailedPages(
+              structureResult.plan,
+              outcome.failedPages,
+              new Set(baselinePages.keys()),
+            );
+            await recordFlaggedPages({
+              flaggedPages,
+              routeOf: (pageId) => baselinePages.get(pageId)?.route,
+              addJobEvent: (flagEvent) => this.env.API.addJobEvent(input.jobId, flagEvent),
+            });
+          }
+          return {
+            ...outcome,
+            budgeted,
+            writtenPageIds,
+            runFingerprint: runFingerprint ?? null,
+            catchUpPageIds: structureResult.plan.catchUpPageIds ?? [],
+            publishedBehindPageIds: publishedBehindPageIds({
+              previousPages: reusableState?.pages ?? [],
+              previousRunFingerprint,
+              currentPageIds: structure.pageIds,
+            }),
+            noticesKey,
+          };
         },
       );
+      const writeOutcome = writePhaseOutcomeOf(recordedWriteOutcome, structure.regeneratePageIds);
+      const writtenPageIds = writeOutcome.writtenPageIds;
+      const exhaustedCatchUpPageIds = await settleWritePhase({
+        recordCatchUp: () => runBestEffortStep({
+          step,
+          name: `record ${checkpointScope} instruction catch-up`,
+          config: bestEffortStepConfig(event.timestamp, overallTimeoutMs, 60_000),
+          fallback: [],
+          onError: (error) => logBestEffortStepError(input.jobId, "instruction_catch_up", error),
+          work: async () => {
+            const runFingerprint = writeOutcome.runFingerprint;
+            if (runFingerprint === null) return [];
+            if (!isPreview) await ensureJobActive(this.env, input.jobId);
+            return recordInstructionCatchUp({
+              bucket: this.env.DOCS_BUCKET,
+              siteId: context.project.siteId,
+              jobId: input.jobId,
+              runFingerprint,
+              writeLedger: !isPreview,
+              catchUpPageIds: writeOutcome.catchUpPageIds,
+              failedPageIds: new Set(writeOutcome.failedPages.map((page) => page.id)),
+              behindPageIds: new Set([...writeOutcome.publishedBehindPageIds, ...writeOutcome.catchUpPageIds]),
+            });
+          },
+        }),
+        checkPageFailureBudget: () => checkPageFailureBudgetStep({
+          step,
+          name: `check ${checkpointScope} page failure budget`,
+          config: boundedStepConfig(event.timestamp, overallTimeoutMs, 60_000),
+          budgeted: writeOutcome.budgeted,
+        }),
+        recordNotices: (exhaustedPageIds) => this.recordNoticesStep(step, input.jobId, {
+          name: `record ${checkpointScope} page notices`,
+          config: bestEffortStepConfig(event.timestamp, overallTimeoutMs, 2 * 60_000),
+          noticesKey: writeOutcome.noticesKey,
+          exhaustedPageIds,
+        }),
+      });
       const pageKeys = writeOutcome.keys;
       /** The plan without the failed pages, which the site keeps or leaves out. */
       const withFailedPages = (
@@ -1547,8 +1771,20 @@ export class GenerationWorkflowRunner {
               analysisResult.analysisState.documentationBriefFingerprint,
             previousPages: reusableState?.pages ?? [],
           });
+          const instructionsOf = pageInstructionsFingerprints({
+            plan,
+            runFingerprint:
+              analysisResult.analysisState.projectInstructionsFingerprint,
+            previousPages: reusableState?.pages ?? [],
+            // A state from before the field had no instructions.
+            previousRunFingerprint: reusableState
+              ? reusableState.analysis.projectInstructionsFingerprint ??
+                NO_PROJECT_INSTRUCTIONS_FINGERPRINT
+              : undefined,
+          });
           const pageStates = pages.map((page) => {
             const briefFingerprint = briefOf(page.id);
+            const projectInstructionsFingerprint = instructionsOf(page.id);
             return generationPageStateSchema.parse({
               schemaVersion: GENERATION_STATE_SCHEMA_VERSION,
               pageId: page.id,
@@ -1561,6 +1797,9 @@ export class GenerationWorkflowRunner {
               pageInputHash: page.pageInputHash,
               dependencies: page.dependencies,
               ...(briefFingerprint ? { briefFingerprint } : {}),
+              ...(projectInstructionsFingerprint
+                ? { projectInstructionsFingerprint }
+                : {}),
             });
           });
           const finalizationKey =
@@ -1632,6 +1871,12 @@ export class GenerationWorkflowRunner {
             structure: structureResult.structureState,
             pages: finalization.pageStates,
             createdAt: event.timestamp.toISOString(),
+            ...behindInstructionsField(
+              finalization.pageStates,
+              analysisResult.analysisState.projectInstructionsFingerprint,
+              lockedHrefsOf(context),
+              new Set(exhaustedCatchUpPageIds),
+            ),
           });
           return {
             generationStatePrefix: generationStatePrefix(
@@ -1984,6 +2229,7 @@ function withPageLocks<T extends { plan: IncrementalGenerationPlan }>(
   context: GenerationExecutionContext,
   reusableState: ReusableGenerationState | undefined,
   changes: readonly SourceChange[] | undefined,
+  runInstructionsFingerprint: string | undefined,
 ): T {
   return {
     ...result,
@@ -1992,8 +2238,53 @@ function withPageLocks<T extends { plan: IncrementalGenerationPlan }>(
       statePages: reusableState?.pages ?? [],
       lockedHrefs: lockedHrefsOf(context),
       changedPaths: changedSourcePaths(changes ?? []),
+      instructionsChanged: instructionsChangedSincePublished(
+        reusableState,
+        runInstructionsFingerprint,
+      ),
     }),
   };
+}
+
+/**
+ * The manifest list of pages behind the instructions. Written only when
+ * some are, so most manifests keep the shape that older releases read.
+ */
+function behindInstructionsField(
+  pageStates: readonly GenerationPageState[],
+  runFingerprint: string | undefined,
+  lockedHrefs: ReadonlySet<string>,
+  exhaustedPageIds: ReadonlySet<string>,
+): { behindInstructionPageIds?: string[] } {
+  if (runFingerprint === undefined) return {};
+  const pageIds = behindInstructionPageIds({ pageStates, runFingerprint, lockedHrefs, exhaustedPageIds });
+  return pageIds.length > 0 ? { behindInstructionPageIds: pageIds } : {};
+}
+
+/** A best-effort step failed; the run goes on without what it would add. */
+function logBestEffortStepError(jobId: string, step: string, error: unknown): void {
+  console.warn(JSON.stringify({
+    service: "doxa-agent-worker",
+    eventType: "best_effort_step_failed",
+    jobId,
+    step,
+    message: error instanceof Error ? error.message.slice(0, 500) : "unknown error",
+  }));
+}
+
+/**
+ * True when this run's project instructions differ from the published
+ * run's. Unknown, with no baseline or no fingerprint from the stage, is no
+ * change, so a lock never flags a page without a reason.
+ */
+function instructionsChangedSincePublished(
+  reusableState: ReusableGenerationState | undefined,
+  runInstructionsFingerprint: string | undefined,
+): boolean {
+  if (!reusableState || runInstructionsFingerprint === undefined) return false;
+  const published = reusableState.analysis.projectInstructionsFingerprint ??
+    NO_PROJECT_INSTRUCTIONS_FINGERPRINT;
+  return published !== runInstructionsFingerprint;
 }
 
 async function loadReusableState(
@@ -2023,10 +2314,14 @@ async function loadReusableState(
   if (loaded.outcome !== "available") {
     return undefined;
   }
-  return syncStateWithLiveVersion(bucket, context, loaded.state, {
-    liveVersionId: baseline.id,
-    generatedVersionId: stateVersionId,
-  });
+  const [synced, instructionCatchUp] = await Promise.all([
+    syncStateWithLiveVersion(bucket, context, loaded.state, {
+      liveVersionId: baseline.id,
+      generatedVersionId: stateVersionId,
+    }),
+    readInstructionCatchUpLedger(bucket, context.project.siteId),
+  ]);
+  return instructionCatchUp ? { ...synced, instructionCatchUp } : synced;
 }
 
 /**
@@ -2095,6 +2390,14 @@ async function createPageBatchCacheContext(input: {
         file.contentHash,
       ]),
     );
+    // A state without the field comes from a run without instructions.
+    const instructionsFingerprint =
+      input.analysisResult.analysisState.projectInstructionsFingerprint ??
+      NO_PROJECT_INSTRUCTIONS_FINGERPRINT;
+    const pageEdits = input.structureResult.plan?.pageEdits ?? {};
+    // An edit is keyed by the live text it starts from; see PageCacheKeyInput.
+    const editBaseContentHash = (pageId: string): string | null =>
+      pageEdits[pageId] ? baselinePages.get(pageId)?.contentHash ?? null : null;
     const descriptors = await Promise.all(input.pageIds.map(
       async (pageId) => {
         const pageInputHash =
@@ -2110,6 +2413,8 @@ async function createPageBatchCacheContext(input: {
             routeRegistryHash,
             documentationPolicyVersion:
               PUBLIC_DOCUMENTATION_POLICY_VERSION,
+            instructionsFingerprint,
+            editBaseContentHash: editBaseContentHash(pageId),
           },
           paths: pageDependencyPaths({
             declaredSourceEvidence:
@@ -2172,6 +2477,22 @@ async function createPageBatchCacheContext(input: {
     return undefined;
   }
 }
+
+/**
+ * The run-log line that names the instructions version the run follows. The
+ * run loads its instructions once, so the line covers every stage and a plan
+ * cache hit too. A failed write never stops the run.
+ */
+export async function recordProjectInstructions(env: Pick<Env, "API">, jobId: string, version: number): Promise<void> {
+  await env.API.addJobEvent(jobId, {
+    type: PROJECT_INSTRUCTIONS_EVENT_TYPE,
+    message: `Following your Doxabot instructions (version ${version}).`,
+    source: "worker",
+    data: { version },
+  }).catch(() => undefined);
+}
+
+export const PROJECT_INSTRUCTIONS_EVENT_TYPE = "project_instructions_applied";
 
 export function isPageCacheEnabled(value: string | undefined): boolean {
   return value?.trim() !== "0";
@@ -2768,6 +3089,11 @@ function assertWritingStageFeasible(input: {
     `Generation cannot fit ${feasibility.batchCount} write batches and finalization ` +
       `inside the remaining ${feasibility.remainingMs}ms overall budget.`,
   );
+}
+
+/** The config of a best-effort step: bounded like any step, but never retried. */
+function bestEffortStepConfig(startedAt: Date, overallTimeoutMs: number, stageTimeoutMs: number) {
+  return { ...boundedStepConfig(startedAt, overallTimeoutMs, stageTimeoutMs), retries: NO_STEP_RETRIES };
 }
 
 function boundedStepConfig(startedAt: Date, overallTimeoutMs: number, stageTimeoutMs: number) {

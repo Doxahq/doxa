@@ -26,9 +26,11 @@ import {
   type AgentSpanCallback,
   type AgentUsageRecord,
   type AgentProgressEvent,
+  type DocumentationGenerationBrief,
   type DocumentationStructure,
   type GeneratedPageContent,
   type PageGenerationFailure,
+  type PlanRemoval,
   type ProjectAnalysis,
   type Provider,
   type SpecReaderClient,
@@ -96,6 +98,7 @@ import { patchPublishedStructure } from "./structure-patch";
 import { resolveSpecReaderClient } from "./utility/spec-reader-client";
 import { assertWriteGroupSize } from "./write-group-size";
 import { referenceSourceLogEvent } from "./reference-source-event";
+import { planRemovalsLogEvent } from "./plan-removals-event";
 
 export type StageEventEmitter = (
   type: string,
@@ -535,6 +538,8 @@ async function executeStructureStage(
   const regenerationAnchor = structurePlan?.structureMode === "regenerate"
     ? (baselineStructure ?? seedStructure(input.seedSite))
     : null;
+  // The planner may then revise published pages to follow the new instructions.
+  const instructionsChanged = structurePlan?.editReason === "instructions_changed";
   const snapshotWithDelta =
     preparedSnapshot?.outcome === "prepared" && sourceState
       ? resolveSnapshotSourceDelta({
@@ -578,14 +583,23 @@ async function executeStructureStage(
       "structure_started",
       "Creating documentation structure.",
     );
+    let removedByInstructions: readonly PlanRemoval[] = [];
     const proposedStructure = await suggestStructure(config, {
       analysis,
       answers: {},
       documentationBrief: config.documentationBrief,
       publishedStructure: regenerationAnchor ?? undefined,
       changedSourcePaths,
+      instructionsChanged,
       maxPages: editorialPageBudget,
+      onPlanRemovals: (removed) => {
+        removedByInstructions = removed;
+      },
     }, onProgress);
+    const removalsEvent = planRemovalsLogEvent(removedByInstructions);
+    if (removalsEvent) {
+      await emitEvent(removalsEvent.type, removalsEvent.message, { ...removalsEvent.data });
+    }
     await emitEvent(
       "structure_review_started",
       "Reviewing documentation structure for public readers.",
@@ -601,6 +615,7 @@ async function executeStructureStage(
       documentationBrief: config.documentationBrief,
       publishedStructure: regenerationAnchor ?? undefined,
       changedSourcePaths,
+      instructionsChanged,
       onDegraded: (unresolvedErrors) => {
         reviewDegraded = true;
         return emitEvent(
@@ -698,7 +713,7 @@ async function executeStructureStage(
     pageIds: targets.map(stablePageId),
     pageInputHashes: buildPageInputHashMap(structure),
     routeRegistryHash,
-    navigation: await buildDeterministicNavigation(structure, analysis),
+    navigation: await buildDeterministicNavigation(structure, analysis, config.documentationBrief),
     runtimeFeatures: resolveRestApiRuntimeFeatures(analysis),
     writerHandoff,
     ...(incremental
@@ -730,6 +745,7 @@ async function prepareWorkspace(
     documentationTarget: documentationBrief.target.kind,
     documentationPolicyVersion: PUBLIC_DOCUMENTATION_POLICY_VERSION,
     documentationBriefFingerprint: documentationBriefFingerprint(documentationBrief),
+    projectInstructionsVersion: documentationBrief.projectInstructions?.version ?? null,
   });
   await rm(workspace.stageRoot, { recursive: true, force: true });
   await mkdir(workspace.artifactRoot, { recursive: true });
@@ -1019,8 +1035,9 @@ function toUsdDecimal(value: number | undefined): string | null {
 export async function buildDeterministicNavigation(
   structure: DocumentationStructure,
   analysis?: ProjectAnalysis,
+  documentationBrief?: DocumentationGenerationBrief,
 ): Promise<RuntimeDocsNavigation> {
-  return buildDeterministicNavOrderManifest(structure, analysis);
+  return buildDeterministicNavOrderManifest(structure, analysis, documentationBrief);
 }
 
 function assertUniqueStructurePageIds(
@@ -1111,5 +1128,6 @@ export function toStagedRuntimePage(
     dependencies: page.dependencies,
     contentHash: createHash("sha256").update(content).digest("hex"),
     pageInputHash: page.pageInputHash,
+    ...(page.openIssues?.length ? { openIssues: page.openIssues } : {}),
   };
 }

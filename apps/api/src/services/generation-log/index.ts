@@ -179,6 +179,10 @@ const EVENT_RULES: Record<string, EventRule> = {
   },
   api_reference_source: (_, message) =>
     line("analyze", message),
+  project_instructions_applied: (_, message) =>
+    line("analyze", message),
+  // The worker writes this message from a fixed list, so it holds no internal detail.
+  generation_context_unavailable: (_, message) => line("setup", message, "error"),
 
   // Plan
   plan_cache_hit: () => line("plan", "Reused the plan of an earlier run of the same code and settings."),
@@ -209,6 +213,7 @@ const EVENT_RULES: Record<string, EventRule> = {
         : `Reviewing the plan of ${pageCount(pages)} for readers.`,
     );
   },
+  structure_pages_removed_by_instructions: (_, message) => line("plan", message, "warning"),
   structure_review_degraded: () =>
     line("plan", "The plan review did not finish. Using the best plan so far.", "warning"),
   structure_review_decided: (data) => line("plan", reviewDecisionText(data)),
@@ -261,6 +266,7 @@ const EVENT_RULES: Record<string, EventRule> = {
     );
   },
   generation_page_flagged: (_, message) => line("write", message, "warning"),
+  generation_page_notice: (_, message) => line("write", message, "warning"),
 
   // Publication
   artifact_link_warning: (data) => {

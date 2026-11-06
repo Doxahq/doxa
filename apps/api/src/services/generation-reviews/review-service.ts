@@ -1,8 +1,9 @@
 import { classifyBranchPath } from "@doxahq/contracts/docs-branches";
 import {
-  ownedPageFlagSchema,
+  storedOwnedPageFlagSchema,
   type DecideGenerationReviewPagesInput,
   type FlaggedPage,
+  type PageNotice,
   type GenerationReview,
   type GenerationReviewDecisionInput,
   type GenerationReviewPageSources,
@@ -110,6 +111,8 @@ export class GenerationReviewService {
       previewUrl: (version: { projectSlug: string; docsVersionId: string }) => string | null;
       /** The pages that a run could not write, which the review flags. */
       flaggedPages: (jobId: string) => Promise<FlaggedPage[]>;
+      /** The pages the run wrote or kept that a person should look at. */
+      pageNotices: (jobId: string) => Promise<PageNotice[]>;
     },
   ) {}
 
@@ -121,6 +124,7 @@ export class GenerationReviewService {
       collectStorage: createCollectStorageNow(env),
       previewUrl: (version) => createGenerationPreviewUrl(version, env),
       flaggedPages: (jobId) => new JobsRepository(env).listFlaggedPages(jobId),
+      pageNotices: (jobId) => new JobsRepository(env).listPageNotices(jobId),
     });
   }
 
@@ -240,6 +244,7 @@ export class GenerationReviewService {
         docsVersionId: open.review.generatedVersionId,
       }),
       await this.deps.flaggedPages(open.review.jobId),
+      await this.deps.pageNotices(open.review.jobId),
     );
   }
 
@@ -531,6 +536,7 @@ function toReviewDto(
   open: OpenReviewSnapshot,
   previewUrl: string | null,
   flaggedPages: FlaggedPage[],
+  pageNotices: PageNotice[],
 ): GenerationReview {
   return {
     id: open.review.id,
@@ -550,12 +556,13 @@ function toReviewDto(
     pages: open.pages.map(toReviewPageDto),
     ownedPageFlags: ownedPageFlagListSchema.parse(open.review.ownedPageFlags),
     flaggedPages,
+    pageNotices,
     createdAt: open.review.createdAt.toISOString(),
     updatedAt: open.review.updatedAt.toISOString(),
   };
 }
 
-const ownedPageFlagListSchema = z.array(ownedPageFlagSchema);
+const ownedPageFlagListSchema = z.array(storedOwnedPageFlagSchema);
 
 
 function noOpenReview(): DocsContentError {

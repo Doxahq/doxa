@@ -48,6 +48,8 @@ describe("R2 lifecycle rules", () => {
       dependencyDigest: "b".repeat(64),
       routeRegistryHash: "e".repeat(64),
       documentationPolicyVersion: "public-v1",
+      instructionsFingerprint: "none",
+      editBaseContentHash: null,
       writingContract: "writing-v1",
     });
 

@@ -1,3 +1,7 @@
+import {
+  REPOSITORY_INSTRUCTIONS_REFUSED_MESSAGE,
+  REPOSITORY_INSTRUCTIONS_UNAVAILABLE_MESSAGE,
+} from "@doxahq/contracts";
 import { describe, expect, test, vi } from "vitest";
 import {
   dispatchWorkflowBatches,
@@ -394,6 +398,105 @@ describe("generation workflow runtime", () => {
       expect.objectContaining({
         type: "database_schema_incompatible",
       }),
+    );
+  });
+
+  test.each([
+    [
+      "names the repository instructions file when GitHub did not give it",
+      new Error(REPOSITORY_INSTRUCTIONS_UNAVAILABLE_MESSAGE),
+      REPOSITORY_INSTRUCTIONS_UNAVAILABLE_MESSAGE,
+    ],
+    [
+      "hides any other error detail",
+      new Error("password authentication failed for user doxa at 10.0.0.4"),
+      "Doxa could not load the settings for this generation. Try again later.",
+    ],
+  ])("marks the job failed when its context cannot be loaded: %s", async (_name, failure, shown) => {
+    const markJobFailed = vi.fn(async () => undefined);
+    const addJobEvent = vi.fn(async () => undefined);
+    const runner = new GenerationWorkflowRunner({
+      API: {
+        getGenerationDatabaseCompatibility: async () => ({ ready: true, missingColumns: [] }),
+        getGenerationExecutionContext: async () => {
+          throw failure;
+        },
+        markJobFailed,
+        addJobEvent,
+      },
+    } as never);
+
+    await expect(
+      runner.run(
+        {
+          payload: {
+            jobId: "11111111-1111-4111-8111-111111111111",
+            projectId: "22222222-2222-4222-8222-222222222222",
+            userId: "33333333-3333-4333-8333-333333333333",
+          },
+          timestamp: new Date(),
+        },
+        {
+          do: async <T>(
+            _name: string,
+            _config: unknown,
+            callback: () => Promise<T>,
+          ) => callback(),
+        },
+      ),
+    ).rejects.toBe(failure);
+
+    expect(markJobFailed).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", shown);
+    expect(addJobEvent).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+      { type: "generation_context_unavailable", message: shown, source: "worker" },
+    );
+  });
+
+  test("stops without step retries when GitHub refused the repository instructions file", async () => {
+    const markJobFailed = vi.fn(async () => undefined);
+    const addJobEvent = vi.fn(async () => undefined);
+    const stepErrors: unknown[] = [];
+    const runner = new GenerationWorkflowRunner({
+      API: {
+        getGenerationDatabaseCompatibility: async () => ({ ready: true, missingColumns: [] }),
+        getGenerationExecutionContext: async () => {
+          // The service binding keeps the message, not the class.
+          throw new Error(REPOSITORY_INSTRUCTIONS_REFUSED_MESSAGE);
+        },
+        markJobFailed,
+        addJobEvent,
+      },
+    } as never);
+
+    await expect(
+      runner.run(
+        {
+          payload: {
+            jobId: "11111111-1111-4111-8111-111111111111",
+            projectId: "22222222-2222-4222-8222-222222222222",
+            userId: "33333333-3333-4333-8333-333333333333",
+          },
+          timestamp: new Date(),
+        },
+        {
+          do: async <T>(_name: string, _config: unknown, callback: () => Promise<T>) => {
+            try {
+              return await callback();
+            } catch (error) {
+              stepErrors.push(error);
+              throw error;
+            }
+          },
+        },
+      ),
+    ).rejects.toThrow(REPOSITORY_INSTRUCTIONS_REFUSED_MESSAGE);
+
+    // The adapter turns this error into the Workflows NonRetryableError.
+    expect(stepErrors[0]).toBeInstanceOf(GenerationNonRetryableError);
+    expect(markJobFailed).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+      REPOSITORY_INSTRUCTIONS_REFUSED_MESSAGE,
     );
   });
 

@@ -64,6 +64,8 @@ export interface StructureReviewInput {
   documentationBrief?: DocumentationGenerationBrief;
   publishedStructure?: DocumentationStructure;
   changedSourcePaths?: string[];
+  /** The project instructions changed since the published structure. */
+  instructionsChanged?: boolean;
   onDegraded?: (unresolvedErrors: string[]) => void | Promise<void>;
 }
 
@@ -374,6 +376,7 @@ export async function reviewStructureWithRetry(
       documentationBrief: input.documentationBrief,
       publishedStructure: input.publishedStructure,
       changedFiles: input.changedSourcePaths,
+      instructionsChanged: input.instructionsChanged,
       maxPages: input.maxPages,
       attempt,
       validationErrors,

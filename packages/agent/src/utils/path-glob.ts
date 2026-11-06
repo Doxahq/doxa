@@ -1,5 +1,4 @@
-/** Nested brace lists multiply, so a short glob can name millions of patterns. */
-const MAX_GLOB_ALTERNATIVES = 256;
+import { expandBracePattern, MAX_GLOB_ALTERNATIVES } from "@doxahq/contracts/path-glob";
 
 /**
  * Repository path globs, relative to the repository root. `*` and `?` match
@@ -15,23 +14,12 @@ export function compilePathGlob(pattern: string): (path: string) => boolean {
   return (path) => matchers.some((matcher) => matcher.test(path));
 }
 
-/** Forward slashes and no leading slash, as the globs expect. */
+/**
+ * Forward slashes, and no leading `/` or `./`, as the globs expect. A model
+ * can write `./internal/a.ts` for `internal/a.ts`.
+ */
 export function normalizePath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/^\/+/, "");
-}
-
-/** Stops one past the limit, so that the caller can reject the glob. */
-function expandBracePattern(pattern: string): string[] {
-  const match = pattern.match(/\{([^{}]+)\}/);
-  if (!match) return [pattern];
-
-  const [token, body] = match;
-  const expanded: string[] = [];
-  for (const value of body.split(",")) {
-    expanded.push(...expandBracePattern(pattern.replace(token, value)));
-    if (expanded.length > MAX_GLOB_ALTERNATIVES) break;
-  }
-  return expanded;
+  return path.replace(/\\/g, "/").replace(/^(?:\.?\/)+/, "");
 }
 
 function globToRegExp(pattern: string): RegExp {

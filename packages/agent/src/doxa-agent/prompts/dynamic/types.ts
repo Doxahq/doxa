@@ -74,6 +74,8 @@ export interface PromptRenderContext {
   restReference?: RestReferencePromptMode;
   previousAnalysis?: ProjectAnalysis;
   changedFiles?: string[];
+  /** The project instructions changed since the published structure, which then may change to follow them. */
+  instructionsChanged?: boolean;
   addedFiles?: string[];
   deletedFiles?: string[];
   fileContents?: string[];

@@ -89,6 +89,8 @@ export interface RevisionAwareGenerationPlan {
   causes?: RegenerationCauses;
   /** Set when every page is rewritten because the project instructions changed: existing pages are edited, not written again. */
   editReason?: "instructions_changed";
+  /** Regenerated pages written only to follow the current instructions; see `catchUpInstructionPages`. */
+  catchUpPageIds?: string[];
 }
 
 export interface RegenerationCauses {

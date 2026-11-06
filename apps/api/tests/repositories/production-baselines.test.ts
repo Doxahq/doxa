@@ -21,6 +21,8 @@ describe("production baseline compatibility", () => {
       sourceRevision,
       sourceTreeHash,
       generatorFingerprint,
+      siteId,
+      generationStatePrefix: `sites/${siteId}/generation-state/${versionId}`,
     });
   });
 
@@ -39,6 +41,8 @@ describe("production baseline compatibility", () => {
       sourceRevision,
       sourceTreeHash,
       generatorFingerprint,
+      siteId,
+      generationStatePrefix: `sites/${siteId}/generation-state/${versionId}`,
     });
   });
 
@@ -53,6 +57,8 @@ describe("production baseline compatibility", () => {
       sourceRevision,
       sourceTreeHash,
       generatorFingerprint: "another-generator",
+      siteId,
+      generationStatePrefix: `sites/${siteId}/generation-state/${versionId}`,
     });
   });
 
@@ -71,6 +77,8 @@ describe("production baseline compatibility", () => {
       sourceRevision,
       sourceTreeHash,
       generatorFingerprint,
+      siteId,
+      generationStatePrefix: `sites/${siteId}/generation-state/${stagedVersionId}`,
     });
   });
 

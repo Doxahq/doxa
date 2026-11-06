@@ -1,8 +1,11 @@
 import { formatSeedConflicts } from "@doxahq/contracts/generation-reviews";
 import type { DocumentationStructure, PreviousPage, ProjectAnalysis } from "../../../types";
 import { parseFrontmatter } from "../../../utils/frontmatter";
-import { MIN_DOCUMENTATION_COLLECTION_ITEMS } from "../../../utils/documentation-collection-policy";
+import { collectionsWithPages } from "../../../utils/documentation-collection-policy";
 import { isTemplateRenderedPage } from "../../page-renderer-kind";
+import { isReferenceEnabled } from "../../reference-instructions";
+import { turnedOffPageTypes } from "../../project-instructions/stage-guidance";
+import { turnedOffTypeOfPage } from "../../../utils/planned-page-types";
 import { composePrompt } from "./composer";
 import {
   formatAnalysisSummary,
@@ -10,6 +13,7 @@ import {
   formatDetectedSurfaces,
   formatPublicEditorialBrief,
 } from "./formatters";
+import { lineForReaders } from "./readers";
 import type { BuiltPrompt, PromptModule, PromptRenderContext } from "./types";
 
 function projectContextBlock(context: PromptRenderContext): string {
@@ -31,12 +35,11 @@ ${rawContext}
 function structurePagesForPrompt(
   structure: NonNullable<PromptRenderContext["structure"]>,
   analysis: ProjectAnalysis,
+  documentationBrief: PromptRenderContext["documentationBrief"],
 ) {
-  const mandatoryCollectionIds = new Set(
-    (analysis.documentationCollections ?? [])
-      .filter((collection) => collection.items.length >= MIN_DOCUMENTATION_COLLECTION_ITEMS)
-      .map((collection) => collection.id),
-  );
+  const instructions = documentationBrief?.projectInstructions?.instructions;
+  const turnedOff = new Set(instructions ? turnedOffPageTypes(instructions) : []);
+  const mandatoryCollectionIds = new Set(collectionsWithPages(analysis).map((collection) => collection.id));
   const mandatoryRestGroupIds = new Set(
     analysis.referenceSurfaces?.rest?.groups.map((group) => group.id) ?? [],
   );
@@ -51,9 +54,15 @@ function structurePagesForPrompt(
         : page.reference?.kind === "sdk"
           ? { kind: "sdk", moduleId: page.reference.moduleId }
           : undefined;
-      const mandatory = (page.collectionId !== undefined && mandatoryCollectionIds.has(page.collectionId)) ||
+      const inventoryPage = (page.collectionId !== undefined && mandatoryCollectionIds.has(page.collectionId)) ||
         (page.reference?.kind === "rest" && page.reference.groupId !== undefined && mandatoryRestGroupIds.has(page.reference.groupId)) ||
         (page.reference?.kind === "sdk" && page.reference.moduleId !== undefined && mandatorySdkModuleIds.has(page.reference.moduleId));
+      // The review drops a collection page of a turned-off type, so no
+      // inventory keeps it. A reference page is judged by its reference: its
+      // title names an API module, such as "Core concepts", and the coverage
+      // check requires the page while the API reference is on.
+      const turnedOffCollectionPage = page.collectionId !== undefined && turnedOffTypeOfPage(page, turnedOff) !== undefined;
+      const mandatory = inventoryPage && !turnedOffCollectionPage;
 
       return {
         pageId: `${section.id}/${page.id}`,
@@ -64,11 +73,20 @@ function structurePagesForPrompt(
         group: page.group,
         sourceEvidence: page.sourceEvidence?.map((evidence) => evidence.path) ?? [],
         collectionId: page.collectionId,
+        pageType: page.pageType,
         reference,
         ...(mandatory ? { mandatory: true } : {}),
       };
     })
   );
+}
+
+/** Only with page types turned off, so a run without them keeps its prompt byte for byte. */
+function turnedOffMandatoryNote(context: PromptRenderContext): string {
+  const instructions = context.documentationBrief?.projectInstructions?.instructions;
+  return instructions && turnedOffPageTypes(instructions).length > 0
+    ? "\n   Doxa never marks a page of a page type that the project instructions turn off as mandatory."
+    : "";
 }
 
 /**
@@ -97,19 +115,7 @@ function fixedReferencePagesBlock(structure: DocumentationStructure, heading: st
   return lines ? `\n\n${heading}:\n${lines}` : "";
 }
 
-function publishedStructureAnchor(
-  context: PromptRenderContext,
-  review: boolean = false,
-): string {
-  if (!context.publishedStructure) return "";
-
-  const changedFiles = context.changedFiles?.length
-    ? context.changedFiles.map((path) => `- ${path}`).join("\n")
-    : "- None";
-  const continuityRules = review
-    ? `- A page that exists in the published structure and whose subject still exists must be keep.
-- A drop, merge, or move on a published page requires a reason citing a changed file or a removed source surface.`
-    : `- Reuse the exact id and title of every published page whose subject still exists in the source. Do not rename for style, clarity, or consistency.
+const SOURCE_CONTINUITY_RULES = `- Reuse the exact id and title of every published page whose subject still exists in the source. Do not rename for style, clarity, or consistency.
 - Reuse the exact description verbatim unless a changed file materially alters what that page documents.
 - Reuse each page's group when its subject still exists.
 - Keep each page in its published section, in its published order.
@@ -117,16 +123,54 @@ function publishedStructureAnchor(
 - Drop a published page only when its subject no longer exists in the source.
 - The changed-file list is the only justification for revising a published page.`;
 
+const SOURCE_REVIEW_CONTINUITY_RULES = `- A page that exists in the published structure and whose subject still exists must be keep.
+- A drop, merge, or move on a published page requires a reason citing a changed file or a removed source surface.`;
+
+/**
+ * The owner changed the project instructions since the published structure,
+ * so the instructions are a reason to revise a published page, next to the
+ * changed files. The ids stay where a subject stays, so routes do not move.
+ */
+const INSTRUCTIONS_CONTINUITY_RULES = `- The project instructions changed since this structure was published. Revise the published pages to follow them.
+- Reuse the exact id of every published page whose subject still exists in the source and still fits the instructions.
+- Rename a page whose title uses a term that the instructions avoid, or that does not fit the readers that they name.
+- Rewrite a description for the readers, the tone, and the terminology of the instructions. Keep a description verbatim when it already follows them.
+- Drop or merge a published page whose page type the instructions turn off, that documents only "Do not document" paths, or that does not serve the readers that they name.
+- Add a page when the readers that the instructions name need a subject that no published page covers.
+- Keep each kept page in its published section and order unless the instructions call for a move.
+- A changed file is also a reason to revise a published page.`;
+
+const INSTRUCTIONS_REVIEW_CONTINUITY_RULES = `- The project instructions changed since this structure was published.
+- A published page whose subject still exists and that still fits the instructions must be keep.
+- A drop, merge, or move on a published page requires a reason citing an instruction, a changed file, or a removed source surface.`;
+
+function continuityRulesFor(context: PromptRenderContext, review: boolean): string {
+  if (context.instructionsChanged) {
+    return review ? INSTRUCTIONS_REVIEW_CONTINUITY_RULES : INSTRUCTIONS_CONTINUITY_RULES;
+  }
+  return review ? SOURCE_REVIEW_CONTINUITY_RULES : SOURCE_CONTINUITY_RULES;
+}
+
+function publishedStructureAnchor(
+  context: PromptRenderContext,
+  review: boolean = false,
+): string {
+  if (!context.publishedStructure || !context.analysis) return "";
+
+  const changedFiles = context.changedFiles?.length
+    ? context.changedFiles.map((path) => `- ${path}`).join("\n")
+    : "- None";
+
   return `
 
 PUBLISHED STRUCTURE ANCHOR:
-${JSON.stringify(structurePagesForPrompt(context.publishedStructure, context.analysis!), null, 2)}${fixedReferencePagesBlock(context.publishedStructure, "PUBLISHED FIXED REFERENCE PAGES")}
+${JSON.stringify(structurePagesForPrompt(context.publishedStructure, context.analysis, context.documentationBrief), null, 2)}${fixedReferencePagesBlock(context.publishedStructure, "PUBLISHED FIXED REFERENCE PAGES")}
 
 CHANGED FILES SINCE THE PUBLISHED STRUCTURE:
 ${changedFiles}
 
 CONTINUITY RULES:
-${continuityRules}
+${continuityRulesFor(context, review)}
 `;
 }
 
@@ -178,6 +222,17 @@ function restSurfaceRules(context: PromptRenderContext): string {
 - Titles must be unique within their group. Disambiguate REST endpoint collisions by behavior, such as "Get a user by ID" and "Get a user by email".`;
 }
 
+/** The reference surface rules of the analysis prompt. An owner can turn the whole reference off. */
+function referenceSurfaceRules(context: PromptRenderContext): string {
+  if (!isReferenceEnabled(context.documentationBrief)) {
+    return "- Leave referenceSurfaces out: the project owner turned the API reference off. Describe the API only in summary, keyFeatures and documentationIntent.";
+  }
+  return `${restSurfaceRules(context)}
+- referenceSurfaces.sdk must contain public SDK/library/framework exports only. Use label "API Reference" and slug "api-reference" by default.
+- referenceSurfaces.sdk modules must list only actual exports from the public module boundary. Do not list class methods or properties as separate exports; keep them subordinate to the exported class.
+- If both REST endpoints and SDK exports exist, populate both reference surfaces separately.`;
+}
+
 export function buildAnalysisPrompt(
   context: PromptRenderContext,
   modules?: PromptModule[],
@@ -199,17 +254,24 @@ Additional requirements:
 - projectDescription must be a thorough 4-8 sentence description.
 - profileEvidence must cite concrete discovered facts such as files, metadata, routes, commands, or README usage.
 - publicInterfaces must contain user-facing commands, endpoints, exports, or routes.
-${restSurfaceRules(context)}
-- referenceSurfaces.sdk must contain public SDK/library/framework exports only. Use label "API Reference" and slug "api-reference" by default.
+${referenceSurfaceRules(context)}
 - documentationCollections must NOT restate reference surfaces. HTTP/RPC endpoints belong in referenceSurfaces.rest and SDK exports belong in referenceSurfaces.sdk. Collections are for repeated non-reference surfaces such as providers, adapters, integrations, plugins, or command families.
-- referenceSurfaces.sdk modules must list only actual exports from the public module boundary. Do not list class methods or properties as separate exports; keep them subordinate to the exported class.
-- If both REST endpoints and SDK exports exist, populate both reference surfaces separately.
 - internalTooling must contain package scripts and build/test/dev tooling that should not become individual docs pages.
-- documentationIntent.audience should default to "consumer" for open-source libraries/frameworks, even when the source repo is a monorepo.
+- ${lineForReaders(context, {
+    public: 'documentationIntent.audience should default to "consumer" for open-source libraries/frameworks, even when the source repo is a monorepo.',
+    team: 'documentationIntent.audience must be "maintainer": the documentation is for the team that builds and runs the product.',
+  })}
 - documentationIntent.canonicalWorkflows must capture copy-paste user setup paths from README/examples/package exports, including install commands, config files, imports, env vars, routes, and verification steps.
-- documentationIntent.internalOnlyPaths must list repo-only demo, test, workspace, and contributor paths that should not appear as consumer setup instructions.
-- publicEditorialBrief must normalize only public-safe positioning, intended readers, reader goals, focus areas, deprioritized areas, tone, and terminology. Omit internal-team or confidential guidance.
-- documentationCollections must capture repeated user-facing surfaces with 4+ items, such as providers, adapters, integrations, plugins, SDK targets, or command families. Each item should include exact source evidence.`,
+- ${lineForReaders(context, {
+    public: "documentationIntent.internalOnlyPaths must list repo-only demo, test, workspace, and contributor paths that should not appear as consumer setup instructions.",
+    team: "documentationIntent.internalOnlyPaths must list only generated or vendored paths that the team does not need documented. Tests, demos, and contributor tooling are documentation for the team.",
+  })}
+- ${lineForReaders(context, {
+    public: "publicEditorialBrief must normalize only public-safe positioning, intended readers, reader goals, focus areas, deprioritized areas, tone, and terminology. Omit internal-team or confidential guidance.",
+    team: "publicEditorialBrief must normalize positioning, intended readers, reader goals, focus areas, deprioritized areas, tone, and terminology for the team. Omit secret values.",
+  })}
+- documentationCollections must capture repeated user-facing surfaces with 4+ items, such as providers, adapters, integrations, plugins, SDK targets, or command families. Each item should include exact source evidence.
+- A folder of repository documents is not a collection: never list the files under docs/ as items only because they sit together. Package scripts are not a collection either: they belong in internalTooling.`,
   });
 }
 
@@ -259,7 +321,7 @@ export function buildStructureReviewPrompt(
     throw new Error("Cannot build structure review prompt without analysis, structure, and maxPages");
   }
 
-  const pages = structurePagesForPrompt(context.structure, context.analysis);
+  const pages = structurePagesForPrompt(context.structure, context.analysis, context.documentationBrief);
   const validationSection = context.validationErrors?.length
     ? `\n\nPREVIOUS REVIEW WAS REJECTED. Correct every issue:\n${context.validationErrors.map((error) => `- ${error}`).join("\n")}`
     : "";
@@ -269,7 +331,10 @@ export function buildStructureReviewPrompt(
     stage: "structure-review",
     context,
     modules,
-    systemIntro: "You are Doxa's final public documentation information architect. Make the smallest evidence-backed structure that fully serves public users.",
+    systemIntro: lineForReaders(context, {
+      public: "You are Doxa's final public documentation information architect. Make the smallest evidence-backed structure that fully serves public users.",
+      team: "You are Doxa's final documentation information architect. Make the smallest evidence-backed structure that fully serves the team that builds and runs the product.",
+    }),
     userBody: `Review the enriched documentation structure before any pages are written.${publishedAnchor}
 
 PROJECT:
@@ -288,20 +353,26 @@ PAGES:
 ${JSON.stringify(pages, null, 2)}${fixedReferencePagesBlock(context.structure, "FIXED REFERENCE PAGES (no decision; a template renders them from the API surface)")}
 
 Choose exactly one action for every page in PAGES:
-- keep: the page directly advances a public reader goal.
+- keep: the page directly advances a ${lineForReaders(context, { public: "public reader", team: "team reader" })} goal.
 - merge: combine a duplicate or overly narrow page into targetPageId.
 - move: keep the page but place it under targetSectionId.
-- drop: remove internal, diagnostic, contributor-only, redundant, or low-value material.
+- drop: ${lineForReaders(context, {
+    public: "remove internal, diagnostic, contributor-only, redundant, or low-value material.",
+    team: "remove redundant, low-value, or secret material.",
+  })}
 
 Rules:
 1. Prefer a concise reader journey: overview, quickstart/setup, core use, task guides, troubleshooting, then public reference.
 2. Keep public SDK/API reference separate from main guides when the product exposes those surfaces.
-3. Never retain internal local endpoints, implementation decomposition, tests, status files, or repository process as public guides.
+3. ${lineForReaders(context, {
+    public: "Never retain internal local endpoints, implementation decomposition, tests, status files, or repository process as public guides.",
+    team: "Keep architecture, tests, and team workflows when they help the team. Never retain status files or secret values.",
+  })}
 4. Merge pages that serve the same reader goal, even when their names differ slightly.
 5. Preserve evidence-backed pages needed to use the actual product. Do not drop reference pages to satisfy the editorial budget; merge related prose pages first.
 6. The resulting structure must contain at most ${context.maxPages} guide, concept, and workflow pages. Reference pages generated from the project's API surface do not count toward this budget.
 7. Pages marked "mandatory" are derived from the project's own inventory.
-   You may \`move\` them. You may not \`drop\` or \`merge\` them.
+   You may \`move\` them. You may not \`drop\` or \`merge\` them.${turnedOffMandatoryNote(context)}
    Reduce page count by acting on unmarked pages only.
 8. Return no decision for a fixed reference page. Those pages stay as they are.
 

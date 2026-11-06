@@ -42,6 +42,37 @@ review and the backup branch. The confirmation uses the same `force=true`
 request as the `unchanged_source` confirmation. The two reasons never apply
 to the same start, because a site without a baseline cannot be unchanged.
 
+## Offer Before the First Generation
+
+The dashboard offers the instructions page before a project's first generation.
+The offer shows when the project has no generations and no saved instructions,
+and the person can change instructions (`instructions.configure`). The check is
+in `apps/web/src/lib/dashboard/instructions-offer.ts`. If the check fails, the
+generation starts.
+
+- Project pages use `useGenerationStartFlow`. A re-run does not use it, because
+  a re-run always has an earlier generation.
+- The repository dialog on `/dashboard/projects/new` shows the offer before it
+  creates the project.
+- "Add instructions" opens `/doxabot/instructions?then=generate`. Only this
+  value shows "Save and start generation".
+
+The API does not know about the offer, so an MCP agent starts as before.
+
+## Warning When Nothing Changed
+
+Admission returns `confirmation_required` with the reason `unchanged_source`
+only when all of these values match the published version:
+
+- The source tree hash.
+- The generator fingerprint.
+- The Doxabot instructions fingerprint.
+
+The instructions fingerprint of the published version comes from the
+generation state that the version names. The run planner reads the same value,
+so a start that skips the warning also plans the instruction edits. If admission
+cannot read that state, it keeps the warning.
+
 ## Storage Model
 
 A review is a named branch with `purpose = 'generation_review'`, plus one

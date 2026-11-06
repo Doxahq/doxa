@@ -8,7 +8,9 @@ import {
 } from "@doxahq/contracts";
 import {
   flaggedPageSchema,
+  pageNoticeSchema,
   type FlaggedPage,
+  type PageNotice,
 } from "@doxahq/contracts/generation-reviews";
 
 type JobEventTransaction = Parameters<Parameters<DoxaDb["transaction"]>[0]>[0];
@@ -39,6 +41,22 @@ export function flaggedPagesFromEvents(
     if (parsed.success) byPageId.set(parsed.data.pageId, parsed.data);
   }
   return [...byPageId.values()];
+}
+
+/**
+ * The page notices of a run from its `generation_page_notice` events, in
+ * event order. A notice that a retried step recorded again keeps its last
+ * version; an event with unreadable data is left out.
+ */
+export function pageNoticesFromEvents(
+  events: readonly { data: unknown }[],
+): PageNotice[] {
+  const byPage = new Map<string, PageNotice>();
+  for (const event of events) {
+    const parsed = pageNoticeSchema.safeParse(event.data);
+    if (parsed.success) byPage.set(`${parsed.data.kind}:${parsed.data.pageId}`, parsed.data);
+  }
+  return [...byPage.values()];
 }
 
 /** The event of the analysis stage. Its `data.referenceSource` holds the REST reference report. */

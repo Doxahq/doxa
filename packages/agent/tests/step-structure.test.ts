@@ -12,7 +12,6 @@ import { describe, expect, test } from "vitest";
 import { cleanWriterBody } from "../src/doxa-agent/writer-pipeline";
 import { parseFrontmatter } from "../src/utils/frontmatter";
 import {
-  applyAutoFixes,
   checkContentQuality,
   runPageValidation,
 } from "../src/utils/page-validator";
@@ -192,7 +191,7 @@ describe("findStepProblems", () => {
 });
 
 describe("validator stepStructure check", () => {
-  test("reports <Step title> as a soft issue whose autoFix produces valid steps", async () => {
+  test("reports <Step title> as a soft issue, and the writer cleanup rewrites that shape", async () => {
     const { body } = parseFrontmatter(await titledStepsPage());
     const quality = checkContentQuality(body);
     const issue = quality.issues.find((candidate) => candidate.check === "stepStructure");
@@ -200,8 +199,7 @@ describe("validator stepStructure check", () => {
     expect(issue).toMatchObject({ severity: "soft", location: { line: 27 } });
     expect(issue?.fixInstruction).toContain('`<StepItem title="…">`');
 
-    const { body: fixed, applied } = applyAutoFixes(body, quality.issues);
-    expect(applied.map((candidate) => candidate.check)).toContain("stepStructure");
+    const fixed = normalizeStepBlocks(body);
     expect(checkContentQuality(fixed).issues.map((candidate) => candidate.check)).not.toContain(
       "stepStructure",
     );

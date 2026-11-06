@@ -4,6 +4,7 @@ import { ArchiveRestore, FileCheck2, FileX2, GitCompareArrows, Loader2, PenLine 
 
 import { EmptyState } from "~/components/dashboard/dashboard-header"
 import { Button } from "~/components/ui/button"
+import { ownedPageFlagNotice } from "~/lib/dashboard/owned-page-flag-text"
 
 /** The main area of review mode when the open view cannot show the page. */
 function ReviewNotice(props: { icon: ReactNode; title: string; description: string; action: ReactNode }) {
@@ -17,7 +18,7 @@ function ReviewNotice(props: { icon: ReactNode; title: string; description: stri
 /** The Diff view of a page that the generation left alone. */
 export function ReviewUnchangedPageNotice(props: { flag: OwnedPageFlag | null; onEdit: () => void }) {
   const description = props.flag
-    ? `You own this page, so the generation kept it. Its code changed: ${props.flag.changedPaths.join(", ")}. Check that it is still right.`
+    ? ownedPageFlagNotice(props.flag)
     : "The generation left this page as it is. Open it in the editor to read or change it."
 
   return (

@@ -8,6 +8,7 @@ import type {
 } from "../types";
 import { parseFrontmatter, stripAllFrontmatter } from "./frontmatter";
 import { normalizeProjectAnalysis } from "./analysis-normalizer";
+import { collectionsWithPages } from "./documentation-collection-policy";
 import { flattenStructure } from "../doxa-agent/structure-utils";
 import {
   buildRouteRegistry,
@@ -306,9 +307,7 @@ interface CollectionCoverageContext {
 
 function validateCollectionCoverage(context: CollectionCoverageContext): void {
   const targets = flattenStructure(context.structure);
-  for (const collection of context.analysis.documentationCollections ?? []) {
-    if (collection.items.length < 4) continue;
-
+  for (const collection of collectionsWithPages(context.analysis)) {
     const collectionTargets = targets.filter(
       (target) => target.page.collectionId === collection.id,
     );

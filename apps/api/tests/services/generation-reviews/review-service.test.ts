@@ -22,6 +22,7 @@ import type {
 } from "../../../src/repositories/generation-reviews";
 import type {
   FlaggedPage,
+  PageNotice,
   OwnedPageFlag,
   PageLock,
 } from "@doxahq/contracts/generation-reviews";
@@ -414,6 +415,7 @@ function setup(generated: SiteFiles = GENERATED) {
   });
   const published: unknown[] = [];
   const flagged = new Map<string, FlaggedPage[]>();
+  const notices = new Map<string, PageNotice[]>();
   const store = createInMemoryDocsContentStore(objects);
   const service = new GenerationReviewService({
     reviews,
@@ -436,13 +438,14 @@ function setup(generated: SiteFiles = GENERATED) {
     previewUrl: ({ projectSlug, docsVersionId }) =>
       `https://${projectSlug}--${docsVersionId.slice(0, 4)}.doxa.page`,
     flaggedPages: async (jobId) => flagged.get(jobId) ?? [],
+    pageNotices: async (jobId) => notices.get(jobId) ?? [],
   });
   const scope = {
     projectId: PROJECT_ID,
     ownerUserId: OWNER_ID,
     actorUserId: "member-1",
   };
-  return { reviews, service, published, scope, store, flagged };
+  return { reviews, service, published, scope, store, flagged, notices };
 }
 
 describe("GenerationReviewService", () => {
@@ -460,6 +463,29 @@ describe("GenerationReviewService", () => {
     await service.openForRun("job-1");
 
     expect((await service.get(scope))?.flaggedPages).toEqual([page]);
+  });
+
+  test("lists the pages that the run kept with open issues or behind the instructions", async () => {
+    const { service, scope, notices } = setup();
+    const kept: PageNotice = {
+      pageId: "documentation/guide",
+      title: "Guide",
+      href: "/guide",
+      kind: "open_issues",
+      issues: [{ check: "instructionTerminology", message: 'Say "repository", not "repo".', instructions: true }],
+    };
+    const behind: PageNotice = {
+      pageId: "documentation/locked",
+      title: "Locked",
+      href: "/locked",
+      kind: "behind_instructions",
+      issues: [],
+    };
+    notices.set("job-1", [kept, behind]);
+
+    await service.openForRun("job-1");
+
+    expect((await service.get(scope))?.pageNotices).toEqual([kept, behind]);
   });
 
   test("opens a review with page decisions and branch changes", async () => {

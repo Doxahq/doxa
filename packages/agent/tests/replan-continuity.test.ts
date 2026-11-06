@@ -79,7 +79,7 @@ describe("applyInstructionEdits", () => {
   };
   const currentPageIds = ["default/overview02", "default/quickstart", "default/flagforge-alternatives", "default/endpoint"];
 
-  test("every kept page moves from reuse to an edit of its published text", () => {
+  test("every kept page moves from reuse to an edit of its published text, and template pages render again", () => {
     const result = applyInstructionEdits({
       plan,
       currentPageIds,
@@ -88,8 +88,15 @@ describe("applyInstructionEdits", () => {
       templatePageIds: new Set(["default/endpoint"]),
     });
 
-    expect(result.regeneratePageIds).toEqual(["default/overview02", "default/quickstart", "default/flagforge-alternatives"]);
-    expect(result.reusePageIds).toEqual(["default/endpoint"]);
+    // Code renders the endpoint page, so it gets no edit, but it is written
+    // again: the instructions steer it too, such as the order of samples.
+    expect(result.regeneratePageIds).toEqual([
+      "default/overview02",
+      "default/quickstart",
+      "default/flagforge-alternatives",
+      "default/endpoint",
+    ]);
+    expect(result.reusePageIds).toEqual([]);
     expect(result.pageEdits).toEqual({
       "default/overview02": { artifactKey: "v1/overview02.mdx", changedSources: [], instructionsChanged: true },
       "default/quickstart": { artifactKey: "v1/quickstart.mdx", changedSources: [], instructionsChanged: true },

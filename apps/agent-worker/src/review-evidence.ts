@@ -48,3 +48,25 @@ export function pageBriefFingerprints(input: {
   return (pageId) =>
     written.has(pageId) ? input.runBriefFingerprint : previous.get(pageId);
 }
+
+/**
+ * The project instructions that each page was written with: this run's for a
+ * page that the run wrote, and the earlier value for a page that it kept. A
+ * kept page stored before pages had the field follows its run's value, so a
+ * later run can tell a page that an instructions change kept.
+ */
+export function pageInstructionsFingerprints(input: {
+  plan: IncrementalGenerationPlan;
+  runFingerprint: string | undefined;
+  previousPages: readonly GenerationPageState[];
+  previousRunFingerprint: string | undefined;
+}): (pageId: string) => string | undefined {
+  const written = new Set(input.plan.regeneratePageIds);
+  const previous = new Map(
+    input.previousPages.map((page) => [page.pageId, page.projectInstructionsFingerprint]),
+  );
+  return (pageId) =>
+    written.has(pageId)
+      ? input.runFingerprint
+      : previous.get(pageId) ?? input.previousRunFingerprint;
+}

@@ -24,10 +24,10 @@ import { compilePathGlob, normalizePath } from "../utils/path-glob";
 
 type ReferenceBrief = Pick<DocumentationGenerationBrief, "projectInstructions">;
 
-type PathMatcher = (path: string) => boolean;
+export type PathMatcher = (path: string) => boolean;
 
 /** Without saved instructions, the defaults apply: the API reference is on. */
-function isReferenceEnabled(brief: ReferenceBrief | undefined): boolean {
+export function isReferenceEnabled(brief: ReferenceBrief | undefined): boolean {
   return brief?.projectInstructions?.instructions.pageTypes.includes("reference") ?? true;
 }
 
@@ -71,17 +71,24 @@ export function applyReferenceInstructionsToStructure(
   };
 }
 
+/**
+ * An item goes when its nearest evidence is all excluded. The items that stay
+ * then lose the excluded paths at every level, so no later step reads them:
+ * the decision reads the evidence before it changes.
+ */
 function restSurfaceWithout(
   surface: RestApiReferenceSurface,
   isExcluded: PathMatcher,
 ): RestApiReferenceSurface | undefined {
   const groups = surface.groups.flatMap((group) => {
-    const endpoints = group.endpoints.filter((endpoint) =>
-      !isOnlyUnder(isExcluded, endpoint.sourceEvidence, group.sourceEvidence, surface.sourceEvidence)
-    );
-    return endpoints.length > 0 ? [{ ...group, endpoints }] : [];
+    const endpoints = group.endpoints
+      .filter((endpoint) =>
+        !isOnlyUnder(isExcluded, endpoint.sourceEvidence, group.sourceEvidence, surface.sourceEvidence)
+      )
+      .map((endpoint) => withKeptEvidence(endpoint, isExcluded));
+    return endpoints.length > 0 ? [{ ...withKeptEvidence(group, isExcluded), endpoints }] : [];
   });
-  return groups.length > 0 ? { ...surface, groups } : undefined;
+  return groups.length > 0 ? { ...withKeptEvidence(surface, isExcluded), groups } : undefined;
 }
 
 function sdkSurfaceWithout(
@@ -89,12 +96,23 @@ function sdkSurfaceWithout(
   isExcluded: PathMatcher,
 ): SdkApiReferenceSurface | undefined {
   const modules = surface.modules.flatMap((module) => {
-    const exports = module.exports.filter((entry) =>
-      !isOnlyUnder(isExcluded, entry.sourceEvidence, module.sourceEvidence, surface.sourceEvidence)
-    );
-    return exports.length > 0 ? [{ ...module, exports }] : [];
+    const exports = module.exports
+      .filter((entry) =>
+        !isOnlyUnder(isExcluded, entry.sourceEvidence, module.sourceEvidence, surface.sourceEvidence)
+      )
+      .map((entry) => withKeptEvidence(entry, isExcluded));
+    return exports.length > 0 ? [{ ...withKeptEvidence(module, isExcluded), exports }] : [];
   });
-  return modules.length > 0 ? { ...surface, modules } : undefined;
+  return modules.length > 0 ? { ...withKeptEvidence(surface, isExcluded), modules } : undefined;
+}
+
+/** The value without the evidence under a "Do not document" path. */
+export function withKeptEvidence<T extends { sourceEvidence: SourceEvidence[] }>(
+  value: T,
+  isExcluded: PathMatcher,
+): T {
+  const kept = value.sourceEvidence.filter((item) => !isExcluded(item.path));
+  return kept.length === value.sourceEvidence.length ? value : { ...value, sourceEvidence: kept };
 }
 
 /**
@@ -102,21 +120,40 @@ function sdkSurfaceWithout(
  * evidence of its own takes the evidence of its group or module, then of
  * the surface. An item without any evidence stays.
  */
-function isOnlyUnder(isExcluded: PathMatcher, ...evidenceLevels: SourceEvidence[][]): boolean {
+export function isOnlyUnder(isExcluded: PathMatcher, ...evidenceLevels: SourceEvidence[][]): boolean {
   const evidence = evidenceLevels.find((level) => level.length > 0);
   return evidence !== undefined && evidence.every((item) => isExcluded(item.path));
 }
 
 /** A path is excluded when a glob matches the path or one of its folders. */
-function excludedPathMatcher(globs: readonly string[]): PathMatcher | undefined {
+export function excludedPathMatcher(globs: readonly string[]): PathMatcher | undefined {
   if (globs.length === 0) return undefined;
-  const matchers = globs.map((glob) => compilePathGlob(glob.replace(/\/+$/, "")));
+  const matchers = globs.flatMap(compileExcludedGlob);
+  if (matchers.length === 0) return undefined;
   return (path) => pathAndFolders(normalizePath(path)).some((candidate) =>
     matchers.some((matches) => matches(candidate))
   );
 }
 
 /** `a/b/c.ts` gives `a`, `a/b` and `a/b/c.ts`. */
+/**
+ * The matcher of one owner glob, or none when it cannot compile. The schema
+ * refuses such a glob, so only instructions saved before a schema rule reach
+ * here: one bad glob must not stop every run.
+ */
+function compileExcludedGlob(glob: string): PathMatcher[] {
+  try {
+    return [compilePathGlob(glob.replace(/\/+$/, ""))];
+  } catch (error) {
+    console.warn(`Doxabot skipped the "Do not document" path ${JSON.stringify(glob)}: ${errorMessage(error)}`);
+    return [];
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function pathAndFolders(path: string): string[] {
   const segments = path.split("/");
   return segments.map((_, index) => segments.slice(0, index + 1).join("/"));

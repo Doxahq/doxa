@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
   GENERATION_DIAGNOSTIC_DRAFT_MAX_CHARS,
+  stagedRuntimePageSchema,
   toJsonValue,
   type ContainerGenerationStageRequest,
   type GenerationSourceState,
@@ -78,6 +79,36 @@ import { FlagForgeClient } from "@flagforge/sdk";
     expect(runtimePage.contentHash).toBe(
       createHash("sha256").update(runtimePage.content).digest("hex"),
     );
+  });
+
+  test("carries the open issues of a kept page, and leaves the field out without them", () => {
+    const page: GeneratedPageContent = {
+      id: "guide",
+      path: "/tmp/doxa-output/guide/index.mdx",
+      title: "Guide",
+      content: "---\ntitle: Guide\n---\n\nUse the repo.\n",
+      dependencies: {
+        sourceFilesRead: [],
+        sourceFilesDiscovered: [],
+        sourceEvidenceFiles: [],
+        referencedSymbols: [],
+        referencedRoutes: [],
+      },
+      contentHash: "hash",
+      pageInputHash: "b".repeat(64),
+    };
+    const openIssues = [{
+      check: "instructionTerminology",
+      message: 'Say "repository", not "repo".',
+      instructions: true,
+    }];
+
+    const withIssues = toStagedRuntimePage({ ...page, openIssues }, "/tmp/doxa-output");
+    const clean = toStagedRuntimePage(page, "/tmp/doxa-output");
+
+    expect(stagedRuntimePageSchema.parse(withIssues).openIssues).toEqual(openIssues);
+    expect(clean).not.toHaveProperty("openIssues");
+    expect(stagedRuntimePageSchema.parse(clean).openIssues).toBeUndefined();
   });
 });
 

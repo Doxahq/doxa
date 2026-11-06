@@ -3,13 +3,14 @@ import { LockOpen } from "lucide-react"
 
 import { SECTION_LABEL_CLASS } from "~/components/dashboard/content/content-row-classes"
 import { Button } from "~/components/ui/button"
+import { ownedPageFlagSummary } from "~/lib/dashboard/owned-page-flag-text"
 import { usePageLocks } from "~/lib/dashboard/use-page-locks"
 import { cn } from "~/lib/utils"
 
 /**
- * Pages that a person locked whose code changed in the run. The generation
- * kept them as published; the person checks each one, or unlocks it so the
- * next run can update it.
+ * Pages that a person locked that the run did not update although their code
+ * or the instructions changed, or that the new plan left out. The person
+ * checks each one, or unlocks it so the next run can update it.
  */
 export function ReviewOwnedPages(props: {
   projectId: string
@@ -22,9 +23,9 @@ export function ReviewOwnedPages(props: {
   if (props.flags.length === 0) return null
 
   return (
-    <section aria-label="Locked pages with code changes" className="border-t border-divider pt-1 pb-2">
+    <section aria-label="Locked pages that need a check" className="border-t border-divider pt-1 pb-2">
       <h3 className={cn(SECTION_LABEL_CLASS, "px-4 text-label")}>
-        Locked pages, code changed
+        Locked pages to check
         <span className="text-faint">{props.flags.length}</span>
       </h3>
       <ul>
@@ -43,7 +44,7 @@ export function ReviewOwnedPages(props: {
                 type="button"
                 onClick={() => props.onSelect(flag.href)}
                 aria-current={isSelected ? "page" : undefined}
-                title={`Changed: ${flag.changedPaths.join(", ")}`}
+                title={flag.changedPaths.length > 0 ? `Changed: ${flag.changedPaths.join(", ")}` : ownedPageFlagSummary(flag)}
                 className={cn(
                   "flex min-w-0 flex-1 flex-col py-1.5 pl-4 text-left",
                   isSelected ? "text-primary-text" : "text-muted-foreground hover:text-foreground",
@@ -51,7 +52,7 @@ export function ReviewOwnedPages(props: {
               >
                 <span className="truncate text-[13.5px]">{flag.title}</span>
                 <span className="truncate font-mono text-[10.5px] text-faint">
-                  {flag.changedPaths.length === 1 ? "1 source file changed" : `${flag.changedPaths.length} source files changed`}
+                  {ownedPageFlagSummary(flag)}
                 </span>
               </button>
               {props.canWrite && isLocked ? (

@@ -5,6 +5,7 @@ import type { ReviewGroupDecisions } from "~/components/dashboard/content/review
 import { ReviewFlaggedPages } from "~/components/dashboard/content/review/review-flagged-pages"
 import { ReviewDecisionMark } from "~/components/dashboard/content/review/review-marks"
 import { ReviewOwnedPages } from "~/components/dashboard/content/review/review-owned-pages"
+import { ReviewPageNotices } from "~/components/dashboard/content/review/review-page-notices"
 import {
   REVIEW_STATE_LABEL,
   type ReviewFilter,
@@ -12,6 +13,7 @@ import {
   type ReviewState,
 } from "~/lib/dashboard/generation-review-model"
 import { readFlaggedPages } from "~/lib/dashboard/flagged-pages"
+import { readPageNotices } from "~/lib/dashboard/page-notices"
 import type { ContentReviewSession } from "~/lib/dashboard/use-content-review"
 import { cn } from "~/lib/utils"
 
@@ -69,6 +71,11 @@ export function ReviewSidebarPanel(props: {
           />
           <ReviewFlaggedPages
             pages={readFlaggedPages(review)}
+            focusHref={focusHref}
+            onSelect={props.onSelect}
+          />
+          <ReviewPageNotices
+            notices={readPageNotices(review)}
             focusHref={focusHref}
             onSelect={props.onSelect}
           />

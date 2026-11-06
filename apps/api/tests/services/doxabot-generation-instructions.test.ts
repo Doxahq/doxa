@@ -1,11 +1,21 @@
-import { DEFAULT_DOXABOT_INSTRUCTIONS, generationInstructionsSchema } from "@doxahq/contracts";
+import {
+  DEFAULT_DOXABOT_INSTRUCTIONS,
+  REPOSITORY_INSTRUCTIONS_REFUSED_MESSAGE,
+  REPOSITORY_INSTRUCTIONS_UNAVAILABLE_MESSAGE,
+  generationInstructionsSchema,
+} from "@doxahq/contracts";
 import { describe, expect, test, vi } from "vitest";
 import {
   loadGenerationInstructions,
+  repositoryAccessForInstructions,
   type GenerationInstructionsSources,
 } from "../../src/services/doxabot/generation-instructions";
+import { InstallationTokenRequestError } from "../../src/services/github-app";
+import { NoConnectedRepositoryError } from "../../src/services/repository-read-access";
 import {
   readRepositoryInstructionsFile,
+  RepositoryInstructionsRefusedError,
+  RepositoryInstructionsUnavailableError,
   toInstructionsFile,
 } from "../../src/services/doxabot/repository-instructions-file";
 import type { ProjectInstructionVersion } from "../../src/repositories/project-instructions";
@@ -60,11 +70,15 @@ describe("loadGenerationInstructions", () => {
   });
 });
 
+function readFile(fetchRequest: typeof fetch) {
+  return readRepositoryInstructionsFile(ACCESS, { fetchRequest, wait: async () => {} });
+}
+
 describe("readRepositoryInstructionsFile", () => {
   test("reads the file from the default branch, never a pull request", async () => {
     const fetchRequest = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => new Response("Prefer TypeScript examples."));
 
-    const file = await readRepositoryInstructionsFile(ACCESS, fetchRequest);
+    const file = await readFile(fetchRequest);
 
     expect(file).toEqual({ status: "found", text: "Prefer TypeScript examples.", flagged: false });
     const [url, init] = fetchRequest.mock.calls[0]!;
@@ -72,17 +86,168 @@ describe("readRepositoryInstructionsFile", () => {
     expect(init).toMatchObject({ method: "GET" });
   });
 
-  test("a missing file and a failed request never stop the run", async () => {
-    await expect(readRepositoryInstructionsFile(ACCESS, async () => new Response("", { status: 404 })))
+  test("a missing file is a stable answer", async () => {
+    await expect(readFile(async () => new Response("", { status: 404 })))
       .resolves.toEqual({ status: "missing" });
-    await expect(readRepositoryInstructionsFile(ACCESS, async () => new Response("", { status: 502 })))
-      .resolves.toEqual({ status: "unreadable", reason: "request_failed" });
-    await expect(readRepositoryInstructionsFile(ACCESS, async () => { throw new Error("offline"); }))
-      .resolves.toEqual({ status: "unreadable", reason: "request_failed" });
+  });
+
+  test.each([401, 403, 400, 451])(
+    "a %i refusal stops the run at once, so it never reads as another file",
+    async (status) => {
+      const fetchRequest = vi.fn(async () => new Response("", { status }));
+
+      const failure = readFile(fetchRequest);
+
+      await expect(failure).rejects.toBeInstanceOf(RepositoryInstructionsRefusedError);
+      // A refusal is also unavailable, so admission reads it as "unknown".
+      await expect(failure).rejects.toBeInstanceOf(RepositoryInstructionsUnavailableError);
+      await expect(failure).rejects.toThrow(REPOSITORY_INSTRUCTIONS_REFUSED_MESSAGE);
+      expect(fetchRequest).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  test.each([
+    ["retry-after", { "retry-after": "30" }],
+    ["no requests left", { "x-ratelimit-remaining": "0" }],
+  ])("a 403 rate limit (%s) is retried, then the run is unavailable, not refused", async (_name, headers) => {
+    const limited = () => new Response("", { status: 403, headers });
+    const recovers = vi.fn()
+      .mockResolvedValueOnce(limited())
+      .mockResolvedValueOnce(new Response("Use short sentences."));
+
+    await expect(readFile(recovers)).resolves.toMatchObject({ status: "found" });
+
+    const alwaysLimited = vi.fn(async () => limited());
+    const failure = readFile(alwaysLimited);
+    await expect(failure).rejects.toThrow(REPOSITORY_INSTRUCTIONS_UNAVAILABLE_MESSAGE);
+    await expect(failure).rejects.not.toBeInstanceOf(RepositoryInstructionsRefusedError);
+    expect(alwaysLimited).toHaveBeenCalledTimes(3);
+  });
+
+  test("a secondary rate limit without its headers is retried when its message says so", async () => {
+    const limited = () => new Response(
+      JSON.stringify({ message: "You have exceeded a secondary rate limit. Please wait a few minutes." }),
+      { status: 403, headers: { "x-ratelimit-remaining": "4000" } },
+    );
+    const recovers = vi.fn()
+      .mockResolvedValueOnce(limited())
+      .mockResolvedValueOnce(new Response("Use short sentences."));
+
+    await expect(readFile(recovers)).resolves.toMatchObject({ status: "found" });
+    expect(recovers).toHaveBeenCalledTimes(2);
+  });
+
+  test("a 403 whose message names no rate limit stays a refusal", async () => {
+    const fetchRequest = vi.fn(async () =>
+      new Response(JSON.stringify({ message: "Resource not accessible by integration" }), { status: 403 })
+    );
+
+    await expect(readFile(fetchRequest)).rejects.toBeInstanceOf(RepositoryInstructionsRefusedError);
+    expect(fetchRequest).toHaveBeenCalledTimes(1);
+  });
+
+  const noWait = async () => undefined;
+
+  test.each([401, 403, 404, 422])(
+    "a lost GitHub installation (token request %i) is a refusal after one more ask",
+    async (status) => {
+      const createAccess = vi.fn(async (): Promise<typeof ACCESS> => {
+        throw new InstallationTokenRequestError(status);
+      });
+      const failure = repositoryAccessForInstructions(createAccess, { wait: noWait });
+
+      await expect(failure).rejects.toBeInstanceOf(RepositoryInstructionsRefusedError);
+      await expect(failure).rejects.toThrow(REPOSITORY_INSTRUCTIONS_REFUSED_MESSAGE);
+      expect(createAccess).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  test("a lost installation that answers on the second ask gives access", async () => {
+    const createAccess = vi.fn<() => Promise<typeof ACCESS>>()
+      .mockRejectedValueOnce(new InstallationTokenRequestError(404))
+      .mockResolvedValueOnce(ACCESS);
+
+    await expect(repositoryAccessForInstructions(createAccess, { wait: noWait })).resolves.toBe(ACCESS);
+  });
+
+  test("a rate-limited 403 on the token request is retried as unavailable, not refused", async () => {
+    const createAccess = vi.fn(async (): Promise<typeof ACCESS> => {
+      throw new InstallationTokenRequestError(403, true);
+    });
+    const failure = repositoryAccessForInstructions(createAccess, { wait: noWait });
+
+    await expect(failure).rejects.toThrow(REPOSITORY_INSTRUCTIONS_UNAVAILABLE_MESSAGE);
+    await expect(failure).rejects.not.toBeInstanceOf(RepositoryInstructionsRefusedError);
+    expect(createAccess).toHaveBeenCalledTimes(1);
+  });
+
+  test("a project with no connected repository is a refusal", async () => {
+    await expect(repositoryAccessForInstructions(async () => {
+      throw new NoConnectedRepositoryError();
+    })).rejects.toBeInstanceOf(RepositoryInstructionsRefusedError);
+  });
+
+  test.each([
+    ["a GitHub outage", new InstallationTokenRequestError(502)],
+    ["an unknown error", new Error("socket hang up")],
+  ])("%s while asking for access is retried as unavailable", async (_name, error) => {
+    const failure = repositoryAccessForInstructions(async () => {
+      throw error;
+    }, { wait: noWait });
+
+    await expect(failure).rejects.toThrow(REPOSITORY_INSTRUCTIONS_UNAVAILABLE_MESSAGE);
+    await expect(failure).rejects.not.toBeInstanceOf(RepositoryInstructionsRefusedError);
+  });
+
+  test("each request has a time limit", async () => {
+    const fetchRequest = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => new Response("Use short sentences."));
+
+    await readFile(fetchRequest);
+
+    expect(fetchRequest.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  test("a body that does not arrive is retried, then stops the run", async () => {
+    const brokenBody = () => {
+      const response = new Response("Use short sentences.");
+      vi.spyOn(response, "arrayBuffer").mockRejectedValue(new Error("connection reset"));
+      return response;
+    };
+    const recovers = vi.fn()
+      .mockResolvedValueOnce(brokenBody())
+      .mockResolvedValueOnce(new Response("Use short sentences."));
+
+    await expect(readFile(recovers)).resolves.toMatchObject({ status: "found" });
+    await expect(readFile(async () => brokenBody())).rejects.toBeInstanceOf(RepositoryInstructionsUnavailableError);
+  });
+
+  test("a server error is retried, then the file is read", async () => {
+    const fetchRequest = vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 502 }))
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(new Response("Prefer TypeScript examples."));
+
+    await expect(readFile(fetchRequest)).resolves.toEqual({
+      status: "found",
+      text: "Prefer TypeScript examples.",
+      flagged: false,
+    });
+    expect(fetchRequest).toHaveBeenCalledTimes(3);
+  });
+
+  test("a read that keeps failing stops the run instead of going on without the file", async () => {
+    const fetchRequest = vi.fn(async () => new Response("", { status: 503 }));
+
+    await expect(readFile(fetchRequest)).rejects.toBeInstanceOf(RepositoryInstructionsUnavailableError);
+    await expect(readFile(async () => new Response("", { status: 429 })))
+      .rejects.toBeInstanceOf(RepositoryInstructionsUnavailableError);
+    await expect(readFile(async () => { throw new Error("offline"); }))
+      .rejects.toThrow(/could not read \.doxa\/instructions\.md/);
+    expect(fetchRequest).toHaveBeenCalledTimes(3);
   });
 
   test("a large or binary file is skipped", async () => {
-    await expect(readRepositoryInstructionsFile(ACCESS, async () => new Response("x".repeat(70_000))))
+    await expect(readFile(async () => new Response("x".repeat(70_000))))
       .resolves.toEqual({ status: "unreadable", reason: "too_long" });
     expect(toInstructionsFile(new Uint8Array([0xff, 0xfe, 0x00]))).toEqual({ status: "unreadable", reason: "not_text" });
     expect(toInstructionsFile(new TextEncoder().encode("x".repeat(4_001)))).toEqual({ status: "unreadable", reason: "too_long" });

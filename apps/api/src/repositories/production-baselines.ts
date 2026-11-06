@@ -9,6 +9,9 @@ export interface ProductionGenerationBaseline {
   sourceRevision: string;
   sourceTreeHash: string;
   generatorFingerprint: string | null;
+  siteId: string;
+  /** Where the state of the run that wrote this version lives. */
+  generationStatePrefix: string;
 }
 
 export interface ProductionBaselineCandidate {
@@ -133,5 +136,7 @@ export function resolveCompatibleProductionBaseline(
     sourceRevision: candidate.sourceRevision,
     sourceTreeHash: candidate.sourceTreeHash,
     generatorFingerprint: candidate.generatorFingerprint,
+    siteId: candidate.siteId,
+    generationStatePrefix: candidate.generationStatePrefix,
   };
 }

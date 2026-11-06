@@ -1,6 +1,7 @@
 import {
   doxabotInstructionScreeningSchema,
   doxabotInstructionsSchema,
+  storedDoxabotInstructionsSchema,
   type DoxabotInstructionScreening,
   type DoxabotInstructions,
 } from "@doxahq/contracts";
@@ -150,7 +151,7 @@ function toSummary(row: SummaryRow): ProjectInstructionVersionSummary {
 function toVersion(row: VersionRow): ProjectInstructionVersion {
   return {
     ...toSummary(row),
-    instructions: doxabotInstructionsSchema.parse(row.body),
+    instructions: storedDoxabotInstructionsSchema.parse(row.body),
     screening: doxabotInstructionScreeningSchema.parse(row.screening),
   };
 }

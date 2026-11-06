@@ -54,6 +54,7 @@ export {
 } from "./documentation-policy";
 export type { PublicDocumentationPolicy } from "./documentation-policy";
 export { applyReferenceInstructions } from "./reference-instructions";
+export { applyProjectInstructions, applyProjectInstructionsToPlan, listPlanRemovals } from "./project-instructions";
 export { keepPublishedRoutes } from "./published-routes";
 export { PageValidationExhaustedError, runWriterAttempts } from "./writer-pipeline";
 export { DEFAULT_WRITER_MAX_STEPS } from "./constants";

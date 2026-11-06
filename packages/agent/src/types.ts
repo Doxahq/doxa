@@ -14,8 +14,10 @@
  *     UI component.
  */
 
-import type { GenerationInstructions, ModelProvider, ReferenceSourceReport } from "@doxahq/contracts";
+import type { PlannedPageType } from "./utils/planned-page-types";
+import type { DoxabotPageType, GenerationInstructions, ModelProvider, ReferenceSourceReport } from "@doxahq/contracts";
 import type { SpecReaderInput } from "@doxahq/contracts/spec-reader";
+import type { PageOpenIssue } from "@doxahq/contracts/generation-reviews";
 import type {
   AgentLoopTermination,
   AgentSpanCallback,
@@ -84,6 +86,8 @@ export interface DocPage {
   allowedInternalTerms?: string[];
   /** Structured reference metadata used by writers and reference navigation. */
   reference?: PageReferenceMetadata;
+  /** What the planner calls this page. A page of a type that the owner turned off is removed. */
+  pageType?: PlannedPageType;
 }
 
 /** A documentation section (groups pages). */
@@ -261,6 +265,12 @@ export interface DocumentationCollectionItem {
   sourceEvidence: SourceEvidence[];
 }
 
+/** A file under `docs/` in the repository. */
+export interface RepositoryDocument {
+  path: string;
+  title: string;
+}
+
 export interface DocumentationCollection {
   id: string;
   title: string;
@@ -268,6 +278,13 @@ export interface DocumentationCollection {
   kind: "docs" | "package" | "manifest" | "mixed";
   sourceEvidence: SourceEvidence[];
   items: DocumentationCollectionItem[];
+  /**
+   * How many items the project instructions removed because their page type
+   * is off. They still count toward the collection minimum, so removing one
+   * item never takes away the pages of the others. Code sets it; the
+   * analysis model cannot (the instructions step overwrites it).
+   */
+  turnedOffItemCount?: number;
 }
 
 /**
@@ -393,6 +410,8 @@ export interface ProjectAnalysis {
   externalIntegrations: string[];
   /** Repeated user-facing docs/product surfaces that need coverage. */
   documentationCollections?: DocumentationCollection[];
+  /** The repository's own docs files: evidence for the planner, not a list of pages. */
+  repositoryDocuments?: RepositoryDocument[];
   /** Structured public API surfaces that deserve dedicated reference sections. */
   referenceSurfaces?: ProjectReferenceSurfaces;
   /** Where the REST reference came from, and why when it did not come from a spec. */
@@ -447,10 +466,25 @@ export interface StructureSuggestionInput {
   publishedStructure?: DocumentationStructure;
   /** Source paths changed since the baseline, so the model only revises what moved. */
   changedSourcePaths?: string[];
+  /** The project instructions changed since the baseline, so published pages may change to follow them. */
+  instructionsChanged?: boolean;
   /** Editorial budget for guide, concept, and workflow pages. */
   maxPages?: number;
   /** Validation feedback from a previous exhausted structure run, used for manual retries. */
   initialValidationErrors?: string[];
+  /** Receives the planned pages that the project instructions removed from the accepted plan. */
+  onPlanRemovals?: (removed: readonly PlanRemoval[]) => void;
+}
+
+/** Why the project instructions removed a page that the planner proposed. */
+export type PlanRemovalReason =
+  | { kind: "page_type"; pageType: DoxabotPageType }
+  | { kind: "excluded_evidence" };
+
+/** A planned page that the project instructions removed. */
+export interface PlanRemoval {
+  title: string;
+  reason: PlanRemovalReason;
 }
 
 /** Progress event emitted by the agent during long-running operations. */
@@ -575,6 +609,13 @@ export type WriterDiagnosticEvent =
       issueCodes: string[];
       hardIssueCount: number;
       willRetry: boolean;
+    })
+  | (WriterDiagnosticBase & {
+      /** The page was kept with soft issues after its last attempt. */
+      eventType: "writer_accepted_with_issues";
+      issueCodes: string[];
+      /** The issues that break the project owner's instructions. */
+      instructionIssueCodes: string[];
     });
 
 export type WriterDiagnosticCallback = (event: WriterDiagnosticEvent) => void;
@@ -807,6 +848,8 @@ export interface GeneratedPageContent {
   dependencies: PageDependencyState;
   contentHash: string;
   pageInputHash: string;
+  /** Issues the writer could not fix before it kept the page. */
+  openIssues?: PageOpenIssue[];
 }
 
 /** Final result of documentation generation. */

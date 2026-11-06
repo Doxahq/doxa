@@ -1,3 +1,4 @@
+import { pageInstructionRules } from "../utils/page-instruction-checks";
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { run, readOnlyTools, validatePageTool } from "../core";
@@ -24,6 +25,8 @@ import { sanitizeValue } from "../utils/frontmatter";
 import { normalizeProjectAnalysis } from "../utils/analysis-normalizer";
 import { runPageValidation } from "../utils/page-validator";
 import { runWriterAttempts } from "./writer-pipeline";
+import { openIssuesOfShippedPage } from "../utils/page-open-issues";
+import type { PageOpenIssue } from "@doxahq/contracts/generation-reviews";
 import type { ValidationHistoryEntry } from "../utils/retry-hint";
 import {
   DEFAULT_WRITER_MAX_STEPS,
@@ -125,6 +128,10 @@ async function appendDeterministicRestReference(
 ): Promise<string> {
   const resolved = resolveRestEndpoint(page, writerContext?.analysis);
   if (!resolved) return content;
+
+  // The block skips the owner's page checks: code renders it from the API
+  // spec, so its names are the API's own. Its request samples follow the
+  // owner's code language order (`restEndpointReferenceOptions`).
 
   const block = renderRestEndpointReferenceBlock(
     resolved.endpoint,
@@ -687,6 +694,8 @@ export async function writeDocPage(
         pageId,
       )
     : undefined;
+  const instructions = writerContext?.documentationBrief?.projectInstructions?.instructions;
+  const instructionRules = instructions ? pageInstructionRules(instructions) : undefined;
   const writerPromptContext = writerContext
     ? {
         analysis: writerContext.analysis,
@@ -721,6 +730,7 @@ export async function writeDocPage(
     validation: {
       mdxCompile: writerValidation.mdxCompile,
       forbiddenValues: writerValidation.forbiddenValues,
+      instructionRules,
       timeoutMs: writerValidation.timeoutMs,
       restEndpointPage,
       onSpan,
@@ -750,6 +760,7 @@ export async function writeDocPage(
             ? [validatePageTool({
               mdxCompile: writerValidation.mdxCompile,
               forbiddenValues: writerValidation.forbiddenValues,
+              instructionRules,
               timeoutMs: writerValidation.timeoutMs,
               preserveTitle,
               restEndpointPage,
@@ -760,6 +771,7 @@ export async function writeDocPage(
               validatePageTool({
                 mdxCompile: writerValidation.mdxCompile,
                 forbiddenValues: writerValidation.forbiddenValues,
+                instructionRules,
                 timeoutMs: writerValidation.timeoutMs,
                 preserveTitle,
                 restEndpointPage,
@@ -811,6 +823,7 @@ export async function writeDocPage(
     }) =>
       repairMdxWithModel({
         provider,
+        documentationBrief: writerContext?.documentationBrief,
         draft,
         issue: {
           rule: issue.rule,
@@ -849,6 +862,12 @@ export async function writeDocPage(
   );
 }
 
+/** A written page and the issues that the writer kept it with. */
+export interface WrittenPageText {
+  content: string;
+  openIssues: PageOpenIssue[];
+}
+
 export async function writeDocPageTracked(
   provider: Provider,
   cwd: string,
@@ -874,7 +893,7 @@ export async function writeDocPageTracked(
   modelCallTimeoutMs?: number,
   modelCallMaxDurationMs?: number,
   writerMaxSteps: number = DEFAULT_WRITER_MAX_STEPS,
-): Promise<string> {
+): Promise<WrittenPageText> {
   const title = page.title;
   const description = page.description;
   const preserveTitle = shouldPreserveFrontmatterTitle(page);
@@ -909,6 +928,8 @@ export async function writeDocPageTracked(
         pageId,
       )
     : undefined;
+  const instructions = writerContext?.documentationBrief?.projectInstructions?.instructions;
+  const instructionRules = instructions ? pageInstructionRules(instructions) : undefined;
   const writerPromptContext = writerContext
     ? {
         analysis: writerContext.analysis,
@@ -943,6 +964,7 @@ export async function writeDocPageTracked(
     validation: {
       mdxCompile: writerValidation.mdxCompile,
       forbiddenValues: writerValidation.forbiddenValues,
+      instructionRules,
       timeoutMs: writerValidation.timeoutMs,
       restEndpointPage,
       onSpan,
@@ -972,6 +994,7 @@ export async function writeDocPageTracked(
             ? [validatePageTool({
               mdxCompile: writerValidation.mdxCompile,
               forbiddenValues: writerValidation.forbiddenValues,
+              instructionRules,
               timeoutMs: writerValidation.timeoutMs,
               preserveTitle,
               restEndpointPage,
@@ -982,6 +1005,7 @@ export async function writeDocPageTracked(
               validatePageTool({
                 mdxCompile: writerValidation.mdxCompile,
                 forbiddenValues: writerValidation.forbiddenValues,
+                instructionRules,
                 timeoutMs: writerValidation.timeoutMs,
                 preserveTitle,
                 restEndpointPage,
@@ -1033,6 +1057,7 @@ export async function writeDocPageTracked(
     }) =>
       repairMdxWithModel({
         provider,
+        documentationBrief: writerContext?.documentationBrief,
         draft,
         issue: {
           rule: issue.rule,
@@ -1063,12 +1088,19 @@ export async function writeDocPageTracked(
       composePageDescription(promptRegistry, agentDescription || description),
   });
 
-  return appendDeterministicRestReference(
-    result.content,
-    page,
-    writerContext,
-    onSpan,
-  );
+  return {
+    content: await appendDeterministicRestReference(
+      result.content,
+      page,
+      writerContext,
+      onSpan,
+    ),
+    openIssues: openIssuesOfShippedPage({
+      content: result.content,
+      rules: instructionRules,
+      otherIssues: result.remainingIssues,
+    }),
+  };
 }
 
 /** The forced final turn needs at least one turn before it. */

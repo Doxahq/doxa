@@ -14,6 +14,7 @@ import {
 } from "@doxahq/agent";
 import {
   GENERATION_STATE_SCHEMA_VERSION,
+  MAX_INSTRUCTION_CATCH_UP_ATTEMPTS,
   toJsonValue,
   type GenerationSourceState,
   type RepositorySnapshot,
@@ -361,6 +362,152 @@ describe("incremental generation checkpoints", () => {
 
     expect(result.plan.editReason).toBeUndefined();
     expect(Object.values(result.plan.pageEdits ?? {}).some((edit) => edit.instructionsChanged)).toBe(false);
+  });
+
+  test("an instructions change with a new writer contract writes every page fresh", async () => {
+    const published = structureWithPages(2);
+    const reusableState = reusableStateWithPages(published);
+    const pageIds = Object.keys(buildPageInputHashMap(published));
+
+    const result = await finalizeIncrementalPlan({
+      analysis: flagForgeAnalysisWithUndefinedFields(),
+      documentationBrief: undefined,
+      planningFingerprint: "planning-v1",
+      writingFingerprint: "writing-v2",
+      reusableState,
+      snapshot,
+      structuralFingerprint: reusableState.structure.structuralFingerprint,
+      structure: published,
+      preliminaryPlan: { ...preliminaryRegenerationPlan(pageIds), editReason: "instructions_changed" },
+    });
+
+    expect(result.plan.regeneratePageIds).toEqual(pageIds);
+    expect(result.plan.pageEdits).toBeUndefined();
+    expect(result.plan.editReason).toBeUndefined();
+    expect(incrementalGenerationPlanSchema.parse(result.plan)).toEqual(result.plan);
+  });
+
+  test("an instructions change with a new planning contract writes every page fresh", async () => {
+    const published = structureWithPages(2);
+    const reusableState = reusableStateWithPages(published);
+    const pageIds = Object.keys(buildPageInputHashMap(published));
+
+    const result = await finalizeIncrementalPlan({
+      analysis: flagForgeAnalysisWithUndefinedFields(),
+      documentationBrief: undefined,
+      planningFingerprint: "planning-v2",
+      writingFingerprint: "writing-v1",
+      reusableState,
+      snapshot,
+      structuralFingerprint: reusableState.structure.structuralFingerprint,
+      structure: published,
+      // The analysis stage sets the reason in this case too, so the
+      // structure prompt uses the instructions-change continuity rules.
+      preliminaryPlan: { ...preliminaryRegenerationPlan(pageIds), editReason: "instructions_changed" },
+    });
+
+    expect(result.plan.regeneratePageIds).toEqual(pageIds);
+    expect(result.plan.pageEdits).toBeUndefined();
+    expect(result.plan.editReason).toBeUndefined();
+    expect(incrementalGenerationPlanSchema.parse(result.plan)).toEqual(result.plan);
+  });
+
+  test("the run where the instructions change has no catch-up pages", async () => {
+    const published = structureWithPages(4);
+    const reusableState = reusableStateWithPages(published);
+    // Every published page was written with the old instructions; this run has none.
+    reusableState.analysis.projectInstructionsFingerprint = "instructions-old";
+    const pageIds = Object.keys(buildPageInputHashMap(published));
+
+    const result = await finalizeIncrementalPlan({
+      analysis: flagForgeAnalysisWithUndefinedFields(),
+      documentationBrief: undefined,
+      planningFingerprint: "planning-v1",
+      writingFingerprint: "writing-v1",
+      reusableState,
+      snapshot,
+      structuralFingerprint: reusableState.structure.structuralFingerprint,
+      structure: published,
+      preliminaryPlan: { ...preliminaryRegenerationPlan(pageIds), editReason: "instructions_changed" },
+    });
+
+    expect(result.plan.regeneratePageIds).toEqual(pageIds);
+    // Every failure of this run counts toward the page failure budget.
+    expect(result.plan.catchUpPageIds).toBeUndefined();
+    expect(incrementalGenerationPlanSchema.parse(result.plan)).toEqual(result.plan);
+  });
+
+  test("a page that an instructions change kept is edited in the next run", async () => {
+    const published = structureWithPages(3);
+    const reusableState = reusableStateWithPages(published, false);
+    reusableState.analysis.projectInstructionsFingerprint = "none";
+    // A person locked page 2 during the change, so it kept older instructions.
+    reusableState.pages[1] = { ...reusableState.pages[1]!, projectInstructionsFingerprint: "instructions-old" };
+
+    const result = await finalizeIncrementalPlan({
+      analysis: flagForgeAnalysisWithUndefinedFields(),
+      documentationBrief: undefined,
+      planningFingerprint: "planning-v1",
+      writingFingerprint: "writing-v1",
+      reusableState,
+      snapshot,
+      structuralFingerprint: reusableState.structure.structuralFingerprint,
+      structure: published,
+      preliminaryPlan: {
+        analysisMode: "reuse",
+        structureMode: "reuse",
+        regeneratePageIds: [],
+        reusePageIds: Object.keys(buildPageInputHashMap(published)),
+        removedPageIds: [],
+        modelCallsRequired: false,
+        reasons: ["Source changes do not affect published documentation."],
+      },
+    });
+
+    expect(result.plan.regeneratePageIds).toEqual(["guide/page-2"]);
+    expect(result.plan.reusePageIds).toEqual(["guide/page-1", "guide/page-3"]);
+    expect(result.plan.pageEdits).toEqual({
+      "guide/page-2": { artifactKey: "sites/site-1/pages/page-2.mdx", changedSources: [], instructionsChanged: true },
+    });
+    expect(result.plan.catchUpPageIds).toEqual(["guide/page-2"]);
+    expect(incrementalGenerationPlanSchema.parse(result.plan)).toEqual(result.plan);
+  });
+
+  test("a page that failed to catch up too many runs in a row is left alone", async () => {
+    const published = structureWithPages(3);
+    const reusableState = reusableStateWithPages(published, false);
+    reusableState.analysis.projectInstructionsFingerprint = "none";
+    reusableState.pages[1] = { ...reusableState.pages[1]!, projectInstructionsFingerprint: "instructions-old" };
+    // The site's catch-up ledger, not the published state, counts the failed runs.
+    reusableState.instructionCatchUp = {
+      schemaVersion: 1,
+      instructionsFingerprint: "none",
+      lastJobId: "job-3",
+      attempts: { "guide/page-2": MAX_INSTRUCTION_CATCH_UP_ATTEMPTS },
+    };
+
+    const result = await finalizeIncrementalPlan({
+      analysis: flagForgeAnalysisWithUndefinedFields(),
+      documentationBrief: undefined,
+      planningFingerprint: "planning-v1",
+      writingFingerprint: "writing-v1",
+      reusableState,
+      snapshot,
+      structuralFingerprint: reusableState.structure.structuralFingerprint,
+      structure: published,
+      preliminaryPlan: {
+        analysisMode: "reuse",
+        structureMode: "reuse",
+        regeneratePageIds: [],
+        reusePageIds: Object.keys(buildPageInputHashMap(published)),
+        removedPageIds: [],
+        modelCallsRequired: false,
+        reasons: ["Source changes do not affect published documentation."],
+      },
+    });
+
+    expect(result.plan.regeneratePageIds).toEqual([]);
+    expect(result.plan.modelCallsRequired).toBe(false);
   });
 
   test("canonicalizes optional structure fields before validating persistent state", async () => {

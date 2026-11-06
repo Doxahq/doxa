@@ -7,6 +7,7 @@ import type {
   DocumentationCollectionItem,
   DocumentationStructure,
   ProjectAnalysis,
+  RepositoryDocument,
   SourceEvidence,
 } from "../types";
 import { slugify } from "../doxa-agent/structure-utils";
@@ -15,10 +16,16 @@ import {
   resolveProjectPath,
 } from "../core/tools/project-path";
 import { resolveReadableProjectPath } from "../core/tools/file-access-rules";
-import { MIN_DOCUMENTATION_COLLECTION_ITEMS } from "./documentation-collection-policy";
+import {
+  collectionsWithPages,
+  MIN_DOCUMENTATION_COLLECTION_ITEMS,
+  removeOverlappingCollections,
+} from "./documentation-collection-policy";
 
 const INDEX_NAMES = new Set(["index", "readme", "overview"]);
 const MIN_PAGE_DESCRIPTION_LENGTH = 40;
+/** Enough for the planner to see a docs folder, and small enough for its prompt. */
+const MAX_REPOSITORY_DOCUMENTS = 60;
 
 interface ClaimedCollectionPages {
   itemPages: Map<string, DocPage>;
@@ -129,53 +136,25 @@ function extractDocDescription(content: string): string | undefined {
   return paragraph?.slice(0, 180);
 }
 
-async function discoverDocsCollections(cwd: string): Promise<Map<string, DocumentationCollection>> {
-  const byDir = new Map<string, string[]>();
+/**
+ * The files under `docs/`, as evidence for the model. A docs folder holds what
+ * a repository's team wrote for itself as often as what its readers need, so
+ * no file becomes a page by itself: the planner chooses what serves the reader.
+ */
+export async function discoverRepositoryDocuments(cwd: string): Promise<RepositoryDocument[]> {
+  const documents: RepositoryDocument[] = [];
 
-  for (const match of await scanGlob("docs/**/*.{md,mdx}", cwd)) {
-    const name = basename(match).replace(/\.(md|mdx)$/i, "");
+  for (const file of (await scanGlob("docs/**/*.{md,mdx}", cwd)).sort()) {
+    if (documents.length === MAX_REPOSITORY_DOCUMENTS) break;
+    const name = basename(file).replace(/\.(md|mdx)$/i, "");
     if (INDEX_NAMES.has(name.toLowerCase())) continue;
-    const dir = dirname(match);
-    const existing = byDir.get(dir) ?? [];
-    existing.push(match);
-    byDir.set(dir, existing);
+    // A docs file can be a symlink to a secret file.
+    const absolute = await resolveReadableProjectPath(cwd, file);
+    if (absolute === null) continue;
+    documents.push({ path: file, title: extractDocTitle(await readTextFile(absolute), file) });
   }
 
-  const collections = new Map<string, DocumentationCollection>();
-  for (const [dir, files] of byDir.entries()) {
-    if (files.length < MIN_DOCUMENTATION_COLLECTION_ITEMS) continue;
-
-    const dirName = basename(dir);
-    const collectionId = slugify(pluralize(dirName));
-    const items: DocumentationCollectionItem[] = [];
-
-    for (const file of files.sort()) {
-      // A docs file can be a symlink to a secret file.
-      const absolute = await resolveReadableProjectPath(cwd, file);
-      if (absolute === null) continue;
-      const content = await readTextFile(absolute);
-      const slug = slugify(basename(file).replace(/\.(md|mdx)$/i, ""));
-      const rawTitle = extractDocTitle(content, file);
-      items.push({
-        id: `${collectionId}/${slug}`,
-        title: cleanItemTitle(rawTitle, titleize(dirName)),
-        slug,
-        description: extractDocDescription(content),
-        sourceEvidence: [source(file, "docs", "Source documentation")],
-      });
-    }
-
-    collections.set(collectionId, {
-      id: collectionId,
-      title: titleize(dirName),
-      description: `User-facing ${titleize(dirName).toLowerCase()} documented in the source project.`,
-      kind: "docs",
-      sourceEvidence: [source(dir, "docs", "Collection directory")],
-      items,
-    });
-  }
-
-  return collections;
+  return documents;
 }
 
 function packageCandidateFromDir(packageDir: string, packageName?: string): {
@@ -238,10 +217,9 @@ async function discoverPackageCollections(cwd: string): Promise<PackageCollectio
   return candidates;
 }
 
-function mergePackageCandidates(
-  collections: Map<string, DocumentationCollection>,
+function collectionsFromPackages(
   packageCandidates: PackageCollectionCandidate[],
-): void {
+): DocumentationCollection[] {
   const packageGroups = new Map<string, PackageCollectionCandidate[]>();
   for (const candidate of packageCandidates) {
     const group = packageGroups.get(candidate.collectionId) ?? [];
@@ -249,136 +227,34 @@ function mergePackageCandidates(
     packageGroups.set(candidate.collectionId, group);
   }
 
+  const collections: DocumentationCollection[] = [];
   for (const [collectionId, candidates] of packageGroups.entries()) {
-    if (
-      candidates.length < MIN_DOCUMENTATION_COLLECTION_ITEMS &&
-      !collections.has(collectionId)
-    ) continue;
+    if (candidates.length < MIN_DOCUMENTATION_COLLECTION_ITEMS) continue;
 
-    const collection = collections.get(collectionId) ?? {
-      id: collectionId,
-      title: candidates[0]?.collectionTitle ?? titleize(collectionId),
-      description: `Published ${titleize(collectionId).toLowerCase()} packages detected in the project.`,
-      kind: "package" as const,
-      sourceEvidence: [],
-      items: [],
-    };
-
-    const bySlug = new Map(collection.items.map((item) => [item.slug, item]));
+    const bySlug = new Map<string, DocumentationCollectionItem>();
     for (const candidate of candidates) {
       bySlug.set(candidate.item.slug, mergeItems(bySlug.get(candidate.item.slug), candidate.item));
     }
 
-    collections.set(collectionId, {
-      ...collection,
-      kind: collection.kind === "docs" ? "mixed" : collection.kind,
+    collections.push({
+      id: collectionId,
+      title: candidates[0]?.collectionTitle ?? titleize(collectionId),
+      description: `Published ${titleize(collectionId).toLowerCase()} packages detected in the project.`,
+      kind: "package",
+      sourceEvidence: [],
       items: Array.from(bySlug.values()).sort((a, b) => a.title.localeCompare(b.title)),
     });
   }
+
+  return collections;
 }
 
-/**
- * One item per slug and per title, each with its own id. Injection gives every
- * item a page, so two items for one thing would give two pages with one title.
- * The model sometimes repeats an item id (or copies the template's); the later
- * item then gets the canonical `collection/slug` id.
- */
-function withUniqueItems(collection: DocumentationCollection): DocumentationCollection {
-  const ids = new Set<string>();
-  const slugs = new Set<string>();
-  const titles = new Set<string>();
-  const items: DocumentationCollectionItem[] = [];
-  let changed = false;
-
-  for (const item of collection.items) {
-    const titleKey = slugify(item.title);
-    const id = ids.has(item.id) ? `${collection.id}/${item.slug}` : item.id;
-    if (slugs.has(item.slug) || titles.has(titleKey) || ids.has(id)) {
-      changed = true;
-      continue;
-    }
-    ids.add(id);
-    slugs.add(item.slug);
-    titles.add(titleKey);
-    changed ||= id !== item.id;
-    items.push(id === item.id ? item : { ...item, id });
-  }
-
-  return changed ? { ...collection, items } : collection;
-}
-
-function collectionItemKeys(collection: DocumentationCollection): Set<string> {
-  return new Set(collection.items.flatMap((item) => [
-    item.slug,
-    slugify(item.title),
-    item.packageName ? slugify(item.packageName) : "",
-  ].filter(Boolean)));
-}
-
-function collectionEvidencePaths(collection: DocumentationCollection): Set<string> {
-  return new Set(collection.items.flatMap((item) =>
-    item.sourceEvidence.map((evidence) => evidence.path)
-  ));
-}
-
-function overlapRatio(a: Set<string>, b: Set<string>): number {
-  const smallerSize = Math.min(a.size, b.size);
-  if (smallerSize === 0) return 0;
-  return Array.from(a).filter((key) => b.has(key)).length / smallerSize;
-}
-
-/**
- * Evidence paths identify items only when the items come from many files, as
- * in a docs folder. Two collections that the model reads from one source file
- * (two enums in types.ts) share their paths and still list different items.
- */
-function evidencePathOverlap(a: Set<string>, b: Set<string>): number {
-  if (Math.min(a.size, b.size) < MIN_DOCUMENTATION_COLLECTION_ITEMS) return 0;
-  return overlapRatio(a, b);
-}
-
-/**
- * Keeps one collection per group of overlapping collections, the largest. A
- * collection that overlaps less still loses the items whose titles an accepted
- * collection already has: injection gives every item a page, and two pages
- * with one title fail structure validation.
- */
-function removeOverlappingCollections(
-  collections: DocumentationCollection[],
-): DocumentationCollection[] {
-  const sorted = collections.map(withUniqueItems).sort((a, b) => b.items.length - a.items.length);
-  const accepted: DocumentationCollection[] = [];
-  const acceptedItemTitles = new Set<string>();
-
-  for (const collection of sorted) {
-    const paths = collectionEvidencePaths(collection);
-    const itemKeys = collectionItemKeys(collection);
-    const overlapsAccepted = accepted.some((existing) =>
-      evidencePathOverlap(paths, collectionEvidencePaths(existing)) >= 0.6 ||
-      overlapRatio(itemKeys, collectionItemKeys(existing)) >= 0.6
-    );
-    if (overlapsAccepted) continue;
-
-    const items = collection.items.filter((item) => !acceptedItemTitles.has(slugify(item.title)));
-    if (items.length === 0) continue;
-    for (const item of items) acceptedItemTitles.add(slugify(item.title));
-    accepted.push(items.length === collection.items.length ? collection : { ...collection, items });
-  }
-
-  return accepted.sort((a, b) => a.title.localeCompare(b.title));
-}
-
+/** The collections that code finds: published packages of one family. */
 export async function discoverDocumentationCollections(
   cwd: string,
 ): Promise<DocumentationCollection[]> {
-  const collections = await discoverDocsCollections(cwd);
-  mergePackageCandidates(collections, await discoverPackageCollections(cwd));
-
   return removeOverlappingCollections(
-    Array.from(collections.values())
-      .filter((collection) =>
-        collection.items.length >= MIN_DOCUMENTATION_COLLECTION_ITEMS
-      )
+    collectionsFromPackages(await discoverPackageCollections(cwd)),
   );
 }
 
@@ -555,7 +431,6 @@ function collectionPages(
       navVisibility: existing?.navVisibility,
       canonicalRoute: existing?.canonicalRoute,
       allowedInternalTerms: existing?.allowedInternalTerms,
-      reference: existing?.reference,
     };
   });
 }
@@ -602,12 +477,7 @@ export function applyCollectionsToStructure(
   structure: DocumentationStructure,
   analysis: ProjectAnalysis,
 ): DocumentationStructure {
-  // A reused analysis from an earlier run never went through the merge, so
-  // the overlap and item checks run here too.
-  const collections = removeOverlappingCollections(analysis.documentationCollections ?? [])
-    .filter((collection) =>
-      collection.items.length >= MIN_DOCUMENTATION_COLLECTION_ITEMS
-    );
+  const collections = collectionsWithPages(analysis);
   if (collections.length === 0) return structure;
 
   const collectionIds = new Set((analysis.documentationCollections ?? []).map((collection) => collection.id));

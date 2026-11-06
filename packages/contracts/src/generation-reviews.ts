@@ -138,16 +138,85 @@ export const setPageLockInputSchema = z
   .strict();
 
 /**
- * A page that a person owns whose source files changed in the run. The
- * generation kept the page; the person decides whether to hand it back.
+ * A page that a person owns that the run did not update although it had a
+ * reason to: its source files changed, the project instructions changed, or
+ * the new plan has no page for it (`removed`). The person decides whether to
+ * hand it back.
  */
-export const ownedPageFlagSchema = z
-  .object({
-    href: pageHrefSchema,
-    title: z.string(),
-    changedPaths: z.array(z.string().min(1)).max(20),
-  })
-  .strict();
+const ownedPageFlagShape = {
+  href: pageHrefSchema,
+  title: z.string(),
+  changedPaths: z.array(z.string().min(1)).max(20),
+  instructionsChanged: z.literal(true).optional(),
+  removed: z.literal(true).optional(),
+};
+
+export const ownedPageFlagSchema = z.object(ownedPageFlagShape).strict();
+
+/**
+ * Reads a flag that a review stored. A worker of a newer release can store
+ * a field that this release does not know; the read drops it instead of
+ * failing the whole review.
+ */
+export const storedOwnedPageFlagSchema = z.object(ownedPageFlagShape);
+
+/** The bounds of the open issues that one page carries to the review. */
+export const PAGE_OPEN_ISSUE_LIMITS = {
+  issues: 10,
+  checkLength: 64,
+  messageLength: 240,
+} as const;
+
+/**
+ * An issue that a written page still has: the writer kept the page after
+ * its last attempt. Reads drop unknown keys, so a newer writer cannot break
+ * an older reader.
+ */
+export const pageOpenIssueSchema = z.object({
+  check: z.string().min(1).max(PAGE_OPEN_ISSUE_LIMITS.checkLength),
+  message: z.string().min(1).max(PAGE_OPEN_ISSUE_LIMITS.messageLength),
+  /** True when the issue breaks the owner's Doxabot instructions. */
+  instructions: z.boolean(),
+});
+
+export const pageOpenIssuesSchema = z
+  .array(pageOpenIssueSchema)
+  .max(PAGE_OPEN_ISSUE_LIMITS.issues);
+
+/** The job event that tells the review about a page the run wrote or kept. */
+export const GENERATION_PAGE_NOTICE_EVENT_TYPE = "generation_page_notice";
+
+/**
+ * Why the review shows a notice for a page:
+ * - `open_issues`: the run wrote the page, and it still has the issues listed.
+ * - `behind_instructions`: runs stopped trying to bring the page up to the
+ *   current instructions after `MAX_INSTRUCTION_CATCH_UP_ATTEMPTS` failures.
+ */
+export const pageNoticeKindSchema = z.enum(["open_issues", "behind_instructions"]);
+
+/** Bounds a notice, so one long page title cannot bloat the run log or the review. */
+export const PAGE_NOTICE_LIMITS = {
+  pageIdLength: 512,
+  titleLength: 200,
+} as const;
+
+/**
+ * Text for a notice field: one line without control characters, cut to
+ * `maxLength` with an ellipsis. The worker applies it when it builds a
+ * notice, so a stored notice always passes {@link pageNoticeSchema}.
+ */
+export function boundedNoticeText(text: string, maxLength: number): string {
+  const line = text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").replace(/\s+/g, " ").trim();
+  return line.length <= maxLength ? line : `${line.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+export const pageNoticeSchema = z.object({
+  pageId: z.string().min(1).max(PAGE_NOTICE_LIMITS.pageIdLength),
+  title: z.string().min(1).max(PAGE_NOTICE_LIMITS.titleLength),
+  href: pageHrefSchema.nullable(),
+  kind: pageNoticeKindSchema,
+  issues: pageOpenIssuesSchema,
+});
 
 /** The job event that marks one page the run could not write. */
 export const GENERATION_PAGE_FLAGGED_EVENT_TYPE = "generation_page_flagged";
@@ -233,6 +302,8 @@ export const generationReviewSchema = z
     pages: z.array(generationReviewPageSchema),
     ownedPageFlags: z.array(ownedPageFlagSchema),
     flaggedPages: z.array(flaggedPageSchema).default([]),
+    /** Pages the run wrote or kept that a person should look at. */
+    pageNotices: z.array(pageNoticeSchema).default([]),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
   })
@@ -311,6 +382,9 @@ export type GenerationReviewReason = z.infer<
 >;
 export type GenerationReviewPage = z.infer<typeof generationReviewPageSchema>;
 export type FlaggedPage = z.infer<typeof flaggedPageSchema>;
+export type PageOpenIssue = z.infer<typeof pageOpenIssueSchema>;
+export type PageNotice = z.infer<typeof pageNoticeSchema>;
+export type PageNoticeKind = z.infer<typeof pageNoticeKindSchema>;
 export type FlaggedPageOutcome = z.infer<typeof flaggedPageOutcomeSchema>;
 export type PageLock = z.infer<typeof pageLockSchema>;
 export type PageLockList = z.infer<typeof pageLockListSchema>;

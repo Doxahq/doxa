@@ -105,7 +105,9 @@ import {
   repairQualitySections,
   type SectionRepairOutcome,
 } from "./section-quality-repair";
-import { runPageValidation } from "../utils/page-validator";
+import { splicedPageInstructions, validateSplicedPage } from "./spliced-page-gate";
+import { openIssuesOfShippedPage, softContentIssuesOfPage } from "../utils/page-open-issues";
+import type { PageOpenIssue } from "@doxahq/contracts/generation-reviews";
 import { deterministicPageRendererFor } from "./deterministic-pages";
 
 export type PageWriteTarget = FlattenedStructurePage;
@@ -119,6 +121,8 @@ interface WrittenPage {
 interface AuthoredPage {
   content: string;
   recorded: RecordedPageSources;
+  /** Issues the page still has when its author kept it. */
+  openIssues?: PageOpenIssue[];
 }
 
 interface FailedPageWrite {
@@ -386,24 +390,6 @@ function qualityIssuesForTarget(
     const issueTarget = findTargetForQualityIssue(issue, targets);
     return issueTarget ? pageId(issueTarget) === targetId : false;
   });
-}
-
-/** The writer page gate for a spliced page: no hard issue may remain. */
-async function validateSplicedPage(
-  content: string,
-  writerValidation: WriterValidationConfig,
-  onSpan: AgentConfig["onSpan"],
-): Promise<{ ok: boolean; issueCodes: string[] }> {
-  const report = await runPageValidation(content, {
-    mdxCompile: writerValidation.mdxCompile,
-    forbiddenValues: writerValidation.forbiddenValues,
-    timeoutMs: writerValidation.timeoutMs,
-    onSpan,
-  });
-  return {
-    ok: report.ok,
-    issueCodes: report.issues.map((issue) => issue.rule),
-  };
 }
 
 function replaceGeneratedPage(
@@ -695,7 +681,7 @@ export async function generateDocumentation(
     const trackedTools = createTrackedTools(config.cwd, "read_only", {
       resultCache: toolResultCache,
     });
-    const content = await writeDocPageTracked(
+    const written = await writeDocPageTracked(
       retryContext.provider ?? provider,
       config.cwd,
       target.sectionTitle,
@@ -722,7 +708,8 @@ export async function generateDocumentation(
       writerMaxSteps,
     );
     return {
-      content,
+      content: written.content,
+      openIssues: written.openIssues,
       recorded: {
         sourceFilesRead: trackedTools.getAccessedFiles(),
         sourceFilesDiscovered: trackedTools.getDiscoveredFiles(),
@@ -815,6 +802,7 @@ export async function generateDocumentation(
         dependencies,
         contentHash,
         pageInputHash,
+        ...(authored.openIssues?.length ? { openIssues: authored.openIssues } : {}),
       },
       cacheEntry: {
         pageId: targetPageId,
@@ -1177,10 +1165,12 @@ export async function generateDocumentation(
     }
     const writerValidation = config.writerValidation ?? DEFAULT_WRITER_VALIDATION;
     const targetPageId = pageId(job.target);
+    const instructions = splicedPageInstructions(normalizedWriterContext, job.currentPage.content);
     let outcome: SectionRepairOutcome;
     try {
       outcome = await withWriterSlot(() => repairQualitySections({
         provider,
+        documentationBrief: normalizedWriterContext?.documentationBrief,
         content: job.currentPage.content,
         issues: job.currentIssues,
         resolvedRules: job.repairState.resolvedRules,
@@ -1195,7 +1185,7 @@ export async function generateDocumentation(
         onUsage: config.onModelUsage,
         onSpan: config.onSpan,
         validate: (content) =>
-          validateSplicedPage(content, writerValidation, config.onSpan),
+          validateSplicedPage(content, writerValidation, config.onSpan, instructions),
       }));
     } catch (error) {
       config.abortController?.signal.throwIfAborted();
@@ -1214,6 +1204,13 @@ export async function generateDocumentation(
 
     const candidate = await toWrittenPage(job.target, {
       content: outcome.content,
+      // The splice keeps the rest of the page, so its open issues are found
+      // again on the spliced page: instruction breaks and soft content issues.
+      openIssues: openIssuesOfShippedPage({
+        content: outcome.content,
+        rules: instructions?.rules,
+        otherIssues: softContentIssuesOfPage(outcome.content),
+      }),
       recorded: {
         sourceFilesRead: job.currentPage.dependencies.sourceFilesRead,
         sourceFilesDiscovered: job.currentPage.dependencies.sourceFilesDiscovered,

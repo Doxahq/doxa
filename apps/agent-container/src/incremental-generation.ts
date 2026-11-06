@@ -1,5 +1,7 @@
 import {
   GENERATION_STATE_SCHEMA_VERSION,
+  NO_PROJECT_INSTRUCTIONS_FINGERPRINT,
+  exhaustedCatchUpPageIds,
   generationAnalysisStateSchema,
   generationStructureStateSchema,
   toJsonValue,
@@ -17,8 +19,11 @@ import {
   buildPageInputHashMap,
   buildStructuralFingerprint,
   documentationBriefFingerprint,
-  projectInstructionsFingerprint,
   applyInstructionEdits,
+  catchUpInstructionPages,
+  instructionCatchUpEdits,
+  pagesBehindInstructions,
+  runInstructionsFingerprint,
   evidencePaths,
   flattenStructure,
   hashObject,
@@ -64,7 +69,7 @@ export async function analyzeIncrementalGeneration(input: {
   );
   const brief = resolveDocumentationBrief(input.config.documentationBrief);
   const briefFingerprint = documentationBriefFingerprint(brief);
-  const instructionsFingerprint = projectInstructionsFingerprint(brief);
+  const instructionsFingerprint = runInstructionsFingerprint(brief);
   const previous = previousPlanningState(input.reusableState);
   const previousStructure = reusableStructure(input.reusableState);
   // The published page state is keyed by the stable page ID and by the page
@@ -150,7 +155,10 @@ export async function finalizeIncrementalPlan(input: {
   const currentPageInputHashes = buildPageInputHashMap(input.structure);
   const templatePageIds = new Set(templateRenderedPageIds(input.structure));
   const previous = previousPlanningState(input.reusableState);
-  const plan = input.preliminaryPlan.structureMode === "reuse"
+  const instructionsFingerprint = runInstructionsFingerprint(
+    resolveDocumentationBrief(input.documentationBrief),
+  );
+  const plannedPages = input.preliminaryPlan.structureMode === "reuse"
     ? planRevisionAwareGeneration({
         currentPageIds,
         currentPageInputHashes,
@@ -158,9 +166,7 @@ export async function finalizeIncrementalPlan(input: {
         planningFingerprint: input.planningFingerprint,
         writingFingerprint: input.writingFingerprint,
         structuralFingerprint: input.structuralFingerprint,
-        projectInstructionsFingerprint: projectInstructionsFingerprint(
-          resolveDocumentationBrief(input.documentationBrief),
-        ),
+        projectInstructionsFingerprint: instructionsFingerprint,
         previous,
         templatePageIds,
       })
@@ -174,19 +180,24 @@ export async function finalizeIncrementalPlan(input: {
         previous,
         templatePageIds,
       });
+  const behindPageIds = pagesBehindInstructions(previous, instructionsFingerprint);
+  const plan = catchUpInstructionPages({
+    plan: plannedPages,
+    currentPageIds,
+    behindPageIds,
+    templatePageIds,
+  });
   const sourceEdits = editsForPlan(plan, input);
-  const finalPlan = input.preliminaryPlan.editReason === "instructions_changed"
-    // After an instructions change every page the baseline has is edited
-    // from its published text, so it follows the instructions and keeps its
-    // wording where they ask nothing.
-    ? applyInstructionEdits({
-        plan,
-        currentPageIds,
-        previousPages: input.reusableState?.pages ?? [],
-        edits: sourceEdits,
-        templatePageIds,
-      })
-    : withPageEdits(plan, sourceEdits);
+  const finalPlan = planWithEdits({
+    plan,
+    sourceEdits,
+    instructionsChanged: input.preliminaryPlan.editReason === "instructions_changed",
+    contractChanged: writerContractChanged(previous, input),
+    behindPageIds,
+    currentPageIds,
+    previousPages: input.reusableState?.pages ?? [],
+    templatePageIds,
+  });
   const persistentStructure = toJsonValue(input.structure);
   return {
     plan: finalPlan,
@@ -197,6 +208,53 @@ export async function finalizeIncrementalPlan(input: {
       structuralFingerprint: input.structuralFingerprint,
     }),
   };
+}
+
+/**
+ * The plan with the pages that the writer edits from their published text:
+ * - after an instructions change, every baseline page, so each one follows
+ *   the instructions and keeps its wording where they ask nothing;
+ * - otherwise the pages with source edits, and the pages that an earlier
+ *   instructions change kept (see `pagesBehindInstructions`).
+ * A planning or writer contract change writes every page fresh, so the new
+ * contract applies to all of them: no page is edited then.
+ */
+function planWithEdits(input: {
+  plan: IncrementalGenerationPlan;
+  sourceEdits: Record<string, PageEdit>;
+  instructionsChanged: boolean;
+  contractChanged: boolean;
+  behindPageIds: ReadonlySet<string>;
+  currentPageIds: readonly string[];
+  previousPages: ReusableGenerationState["pages"];
+  templatePageIds: ReadonlySet<string>;
+}): IncrementalGenerationPlan {
+  if (input.contractChanged) return withPageEdits(input.plan, input.sourceEdits);
+  if (input.instructionsChanged) {
+    return applyInstructionEdits({
+      plan: input.plan,
+      currentPageIds: input.currentPageIds,
+      previousPages: input.previousPages,
+      edits: input.sourceEdits,
+      templatePageIds: input.templatePageIds,
+    });
+  }
+  return withPageEdits(input.plan, instructionCatchUpEdits({
+    pageIds: input.plan.regeneratePageIds.filter((pageId) => input.behindPageIds.has(pageId)),
+    previousPages: input.previousPages,
+    edits: input.sourceEdits,
+    templatePageIds: input.templatePageIds,
+  }));
+}
+
+/** True when the published pages were planned or written under another contract. */
+function writerContractChanged(
+  previous: ReturnType<typeof previousPlanningState>,
+  current: { planningFingerprint: string; writingFingerprint: string },
+): boolean {
+  if (!previous) return false;
+  return (previous.planningFingerprint !== undefined && previous.planningFingerprint !== current.planningFingerprint)
+    || (previous.writingFingerprint !== undefined && previous.writingFingerprint !== current.writingFingerprint);
 }
 
 function withPageEdits(plan: IncrementalGenerationPlan, pageEdits: Record<string, PageEdit>): IncrementalGenerationPlan {
@@ -527,7 +585,14 @@ function previousPlanningState(
       pageId: page.pageId,
       pageInputHash: comparableHashes[page.pageId] ?? page.pageInputHash,
       dependencies: page.dependencies,
+      ...(page.projectInstructionsFingerprint
+        ? { projectInstructionsFingerprint: page.projectInstructionsFingerprint }
+        : {}),
     })),
+    exhaustedCatchUpPageIds: [...exhaustedCatchUpPageIds(
+      reusableState.instructionCatchUp,
+      reusableState.analysis.projectInstructionsFingerprint ?? NO_PROJECT_INSTRUCTIONS_FINGERPRINT,
+    )],
   };
 }
 

@@ -1,5 +1,6 @@
 import type { DocumentationStructure, ProjectAnalysis } from "../../../types";
 import { normalizeProjectAnalysis } from "../../../utils/analysis-normalizer";
+import { collectionsWithPages } from "../../../utils/documentation-collection-policy";
 
 export function formatAnswers(answers: Record<string, unknown>): string {
   const entries = Object.entries(answers);
@@ -100,6 +101,11 @@ ${normalized.referenceSurfaces.sdk.modules.map((module) => [
 ].filter((line): line is string => Boolean(line)).join("\n")).join("\n")}`);
   }
 
+  if (normalized.repositoryDocuments?.length) {
+    sections.push(`REPOSITORY DOCUMENTS (evidence only, not a list of pages. The repository's team wrote them, often for itself. Plan a page from one only when it serves the reader, cite it in sourceEvidence, and leave out internal notes, runbooks, and design documents):
+${normalized.repositoryDocuments.map((document) => `- ${JSON.stringify(document.path)}: ${JSON.stringify(document.title)}`).join("\n")}`);
+  }
+
   if (normalized.keyFeatures.length > 0) {
     sections.push(`KEY FEATURES:
 ${normalized.keyFeatures.map((feature) => `- ${feature}`).join("\n")}`);
@@ -110,9 +116,10 @@ ${normalized.keyFeatures.map((feature) => `- ${feature}`).join("\n")}`);
 ${normalized.externalIntegrations.map((integration) => `- ${integration}`).join("\n")}`);
   }
 
-  if (normalized.documentationCollections?.length) {
+  const collections = collectionsWithPages(normalized);
+  if (collections.length > 0) {
     sections.push(`DOCUMENTATION COLLECTIONS (a page about a collection or one of its items uses the collection id below as its collectionId, never another value):
-${normalized.documentationCollections.map((collection) => [
+${collections.map((collection) => [
   `- ${collection.title} [collectionId: ${collection.id}] (${collection.items.length} items)`,
   collection.description ? `  Description: ${collection.description}` : undefined,
   `  Items: ${collection.items.map((item) => item.title).join(", ")}`,

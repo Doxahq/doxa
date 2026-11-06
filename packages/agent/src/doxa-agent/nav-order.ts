@@ -9,7 +9,10 @@ import type {
   GeneratedPageContent,
   ProjectAnalysis,
 } from "../types";
+import type { DoxabotPageType } from "@doxahq/contracts";
 import { sanitizeNavTitle } from "../utils/frontmatter";
+import { headingNamesTurnedOffType } from "../utils/planned-page-types";
+import { turnedOffPageTypes } from "./project-instructions/stage-guidance";
 import {
   chooseFallbackIcon,
   iconCandidates,
@@ -70,6 +73,7 @@ export interface NavOrderManifest {
 export async function buildDeterministicNavOrderManifest(
   structure: DocumentationStructure,
   analysis?: ProjectAnalysis,
+  documentationBrief?: DocumentationGenerationBrief,
 ): Promise<NavOrderManifest> {
   const sections = buildOrderingSections(structure);
   const docs = structure.sections.flatMap((section) => {
@@ -104,6 +108,7 @@ export async function buildDeterministicNavOrderManifest(
     docs,
     await loadIconCatalog(),
     navBadges,
+    turnedOffTypesOf(documentationBrief),
   );
 }
 
@@ -146,7 +151,10 @@ export async function orderAndPersistNav(options: OrderAndPersistNavOptions): Pr
   // Nothing to reorder if there is a single section with a single page.
   const totalSections = new Set(docs.map((doc) => doc.section)).size;
   if (totalSections === 1 && docs.length === 1) {
-    await writeNavOrderManifest(fullOutputDir, fallbackManifest(sections, docs, iconCatalog, navBadges));
+    await writeNavOrderManifest(
+      fullOutputDir,
+      fallbackManifest(sections, docs, iconCatalog, navBadges, turnedOffTypesOf(options.documentationBrief)),
+    );
     return;
   }
 
@@ -182,7 +190,10 @@ export async function orderAndPersistNav(options: OrderAndPersistNavOptions): Pr
       message: "Ordering pass failed after retries — keeping input order",
       progress: 95,
     });
-    await writeNavOrderManifest(fullOutputDir, fallbackManifest(sections, docs, iconCatalog, navBadges));
+    await writeNavOrderManifest(
+      fullOutputDir,
+      fallbackManifest(sections, docs, iconCatalog, navBadges, turnedOffTypesOf(options.documentationBrief)),
+    );
     return;
   }
 
@@ -391,7 +402,14 @@ async function runOrderingWithRetry(
       continue;
     }
 
-    const validation = validateOrderingManifest(parsed, sections, docs, iconCatalog, navBadges);
+    const validation = validateOrderingManifest(
+      parsed,
+      sections,
+      docs,
+      iconCatalog,
+      navBadges,
+      turnedOffTypesOf(guidance.documentationBrief),
+    );
     if (validation.ok) {
       return validation.manifest;
     }
@@ -417,6 +435,7 @@ function validateOrderingManifest(
   docs: OrderingDocInput[],
   iconCatalog: IconCatalog,
   navBadges: Record<string, string>,
+  turnedOff: ReadonlySet<DoxabotPageType>,
 ): { ok: true; manifest: NavOrderManifest } | { ok: false; error: string } {
   if (!parsed || typeof parsed !== "object") return { ok: false, error: "Response was not an object." };
   const sectionsField = (parsed as Record<string, unknown>).sections;
@@ -520,9 +539,12 @@ function validateOrderingManifest(
             isDefault: false,
           },
           sectionDocs,
+          turnedOff,
         )
-      : orderedGroups;
-    const deterministicItems = sectionDocs.some(isRestReferenceDoc)
+      : withPermittedHeadings(orderedGroups, sectionLabelOf(sections, slug), turnedOff);
+    // A renamed heading can merge two groups and move items, so then the
+    // item order follows the groups; otherwise the model's order stays.
+    const deterministicItems = sectionDocs.some(isRestReferenceDoc) || deterministicGroups !== orderedGroups
       ? deterministicGroups.flatMap((group) => group.items)
       : orderedItems;
     manifest.sections.push({
@@ -651,6 +673,7 @@ function fallbackManifest(
   docs: OrderingDocInput[],
   iconCatalog: IconCatalog,
   navBadges: Record<string, string> = {},
+  turnedOff: ReadonlySet<DoxabotPageType> = new Set(),
 ): NavOrderManifest {
   const byDefaultFirst = [...sections].sort((a, b) => {
     if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
@@ -671,7 +694,7 @@ function fallbackManifest(
   return {
     sections: byDefaultFirst.map((section) => {
       const sectionDocs = docs.filter((doc) => doc.section === section.slug);
-      const groups = fallbackGroupsForSection(section, sectionDocs);
+      const groups = fallbackGroupsForSection(section, sectionDocs, turnedOff);
       return {
         slug: section.slug,
         items: groups.flatMap((group) => group.items),
@@ -715,12 +738,13 @@ function sectionKindAndLayout(
 function fallbackGroupsForSection(
   section: OrderingSectionInput,
   docs: OrderingDocInput[],
+  turnedOff: ReadonlySet<DoxabotPageType>,
 ): NavOrderGroup[] {
   if (docs.length === 0) return [];
 
   const groups = new Map<string, string[]>();
   for (const doc of orderReferenceDocs(docs)) {
-    const heading = fallbackGroupHeading(section, doc);
+    const heading = fallbackGroupHeading(section, doc, turnedOff);
     const list = groups.get(heading) ?? [];
     list.push(doc.filename);
     groups.set(heading, list);
@@ -732,9 +756,16 @@ function fallbackGroupsForSection(
   }));
 }
 
+/** The page types that the owner turned off, which no fallback group heading names. */
+function turnedOffTypesOf(brief: DocumentationGenerationBrief | undefined): ReadonlySet<DoxabotPageType> {
+  const instructions = brief?.projectInstructions?.instructions;
+  return new Set(instructions ? turnedOffPageTypes(instructions) : []);
+}
+
 function fallbackGroupHeading(
   section: OrderingSectionInput,
   doc: OrderingDocInput,
+  turnedOff: ReadonlySet<DoxabotPageType>,
 ): string {
   if (
     doc.reference?.kind === "rest" &&
@@ -745,7 +776,7 @@ function fallbackGroupHeading(
   if (doc.reference?.kind === "rest" && doc.reference.groupId) {
     return doc.referenceGroupHeading ?? titleizeReferenceGroupId(doc.reference.groupId);
   }
-  if (doc.group?.trim()) return doc.group.trim();
+  if (doc.group?.trim()) return permittedHeading(doc.group.trim(), section.label, turnedOff);
   const text = `${doc.title} ${doc.filename}`.toLowerCase();
   if (/(overview|intro|getting-started|quickstart|install|setup)/.test(text)) {
     return "Start Here";
@@ -759,10 +790,42 @@ function fallbackGroupHeading(
   if (/(deploy|release|build|production|cloudflare|vercel|docker)/.test(text)) {
     return "Operations";
   }
-  if (/(troubleshoot|debug|error|faq)/.test(text)) {
+  if (/(troubleshoot|debug|error|faq)/.test(text) && !turnedOff.has("troubleshooting")) {
     return "Troubleshooting";
   }
-  return section.isDefault ? "Guides" : section.label;
+  return section.isDefault && !turnedOff.has("guides") ? "Guides" : section.label;
+}
+
+/**
+ * A group heading that names no page type that the owner turned off. A
+ * heading such as "Guides" with guides off takes the section label instead;
+ * the pages stay, only their heading changes.
+ */
+function permittedHeading(heading: string, sectionLabel: string, turnedOff: ReadonlySet<DoxabotPageType>): string {
+  return headingNamesTurnedOffType(heading, turnedOff) ? sectionLabel : heading;
+}
+
+/**
+ * The groups with permitted headings, merged where two now share one, in
+ * their order. The same array when no heading names a type that is off, so a
+ * run without instructions keeps the model's groups exactly.
+ */
+function withPermittedHeadings(
+  groups: NavOrderGroup[],
+  sectionLabel: string,
+  turnedOff: ReadonlySet<DoxabotPageType>,
+): NavOrderGroup[] {
+  if (!groups.some((group) => headingNamesTurnedOffType(group.heading, turnedOff))) return groups;
+  const merged = new Map<string, string[]>();
+  for (const group of groups) {
+    const heading = permittedHeading(group.heading, sectionLabel, turnedOff);
+    merged.set(heading, [...(merged.get(heading) ?? []), ...group.items]);
+  }
+  return Array.from(merged, ([heading, items]) => ({ heading, items }));
+}
+
+function sectionLabelOf(sections: readonly OrderingSectionInput[], slug: string): string {
+  return sections.find((section) => section.slug === slug)?.label ?? slug;
 }
 
 function orderReferenceDocs(docs: OrderingDocInput[]): OrderingDocInput[] {

@@ -12,6 +12,7 @@ import {
   preparePageBatchCacheContexts,
   runPageBatchWithCache,
   structureSourceEvidenceByPageId,
+  type GenerationPageCache,
   type PageBatchCacheContext,
   type PageCacheEntry,
   type PageCacheKeyInput,
@@ -27,6 +28,8 @@ const baseKeyInput: PageCacheKeyInput = {
   dependencyDigest: "b".repeat(64),
   routeRegistryHash: "e".repeat(64),
   documentationPolicyVersion: "public-v1",
+  instructionsFingerprint: "none",
+  editBaseContentHash: null,
   writingContract: "writing-v1:model-a:handoff-v1",
 };
 
@@ -40,6 +43,8 @@ describe("generation page cache keys", () => {
       { ...baseKeyInput, dependencyDigest: "e".repeat(64) },
       { ...baseKeyInput, routeRegistryHash: "2".repeat(64) },
       { ...baseKeyInput, documentationPolicyVersion: "public-v2" },
+      { ...baseKeyInput, instructionsFingerprint: "f".repeat(64) },
+      { ...baseKeyInput, editBaseContentHash: "c".repeat(64) },
       { ...baseKeyInput, writingContract: "writing-v1:model-b:handoff-v1" },
     ];
 
@@ -203,6 +208,23 @@ describe("R2 generation page cache", () => {
     ])).resolves.toEqual(new Map([
       ["cache/pages/valid.json", cacheEntry()],
     ]));
+  });
+
+  test("keeps the open issues of a cached page, so a cache hit still reports them", async () => {
+    const bucket = new MemoryBucket();
+    const cache = createR2GenerationPageCache(bucket);
+    const withIssues: PageCacheEntry = {
+      ...cacheEntry(),
+      page: {
+        ...page("overview"),
+        openIssues: [{ check: "instructionTerminology", message: 'Say "repository", not "repo".', instructions: true }],
+      },
+    };
+
+    await cache.putMany([{ key: "cache/pages/issues.json", entry: withIssues }]);
+    const read = await cache.getMany(["cache/pages/issues.json"]);
+
+    expect(read.get("cache/pages/issues.json")?.page.openIssues).toEqual(withIssues.page.openIssues);
   });
 
   test("writes valid JSON with the cache content type idempotently", async () => {
@@ -401,6 +423,66 @@ describe("cached page batches", () => {
     expect(result.generated).toBe(1);
   });
 
+  test("writes a page again when only the project instructions changed", async () => {
+    const cache = createR2GenerationPageCache(new MemoryBucket());
+    const published = await descriptorFor("overview", "b".repeat(64), {
+      instructionsFingerprint: "instructions-old",
+    });
+    const current = await descriptorFor("overview", "b".repeat(64), {
+      instructionsFingerprint: "instructions-new",
+    });
+    await cache.putMany([{ key: published.exactKey, entry: cacheEntry() }]);
+    const generated: string[][] = [];
+
+    const result = await runPageBatchWithCache({
+      pageIds: ["overview"],
+      store: new MemoryCheckpointStore(),
+      cacheContext: cacheContext(cache, [current]),
+      generate: async (pageIds) => {
+        generated.push([...pageIds]);
+        return { pages: pageIds.map((pageId) => page(pageId)), failedPages: [] };
+      },
+    });
+
+    expect(published.dependencyDigest).toBe(current.dependencyDigest);
+    expect(published.exactKey).not.toBe(current.exactKey);
+    expect(generated).toEqual([["overview"]]);
+    expect(result.exactHits).toBe(0);
+  });
+
+  test("serves an edited page only for the same live text it started from", async () => {
+    const cache = createR2GenerationPageCache(new MemoryBucket());
+    const editedBefore = await descriptorFor("overview", "b".repeat(64), {
+      editBaseContentHash: "1".repeat(64),
+    });
+    const sameLiveText = await descriptorFor("overview", "b".repeat(64), {
+      editBaseContentHash: "1".repeat(64),
+    });
+    const personChangedLiveText = await descriptorFor("overview", "b".repeat(64), {
+      editBaseContentHash: "2".repeat(64),
+    });
+    const freshWrite = await descriptorFor("overview", "b".repeat(64));
+    await cache.putMany([{ key: editedBefore.exactKey, entry: cacheEntry() }]);
+
+    const runWith = async (descriptor: Awaited<ReturnType<typeof descriptorFor>>) => {
+      const generated: string[][] = [];
+      const result = await runPageBatchWithCache({
+        pageIds: ["overview"],
+        store: new MemoryCheckpointStore(),
+        cacheContext: { ...cacheContext(cache, [descriptor]), allowCrossModel: true },
+        generate: async (pageIds) => {
+          generated.push([...pageIds]);
+          return { pages: pageIds.map((pageId) => page(pageId)), failedPages: [] };
+        },
+      });
+      return { generated, result };
+    };
+
+    expect((await runWith(sameLiveText)).result.exactHits).toBe(1);
+    expect((await runWith(personChangedLiveText)).generated).toEqual([["overview"]]);
+    expect(freshWrite.exactKey).not.toBe(editedBefore.exactKey);
+  });
+
   test("caches a page when it checkpoints, before the batch ends", async () => {
     const bucket = new MemoryBucket();
     const cache = createR2GenerationPageCache(bucket);
@@ -508,6 +590,7 @@ class MemoryCheckpointStore implements GenerationPageCheckpointStore {
 async function descriptorFor(
   pageId: string,
   sourceContentHash = "b".repeat(64),
+  options: { instructionsFingerprint?: string; editBaseContentHash?: string } = {},
 ) {
   return buildPageCacheDescriptor({
     key: {
@@ -516,6 +599,8 @@ async function descriptorFor(
       pageInputHash: "a".repeat(64),
       routeRegistryHash: "e".repeat(64),
       documentationPolicyVersion: "public-v1",
+      instructionsFingerprint: options.instructionsFingerprint ?? "none",
+      editBaseContentHash: options.editBaseContentHash ?? null,
     },
     paths: ["src/index.ts"],
     sourceFiles: new Map([["src/index.ts", sourceContentHash]]),
@@ -525,7 +610,7 @@ async function descriptorFor(
 }
 
 function cacheContext(
-  cache: ReturnType<typeof createR2GenerationPageCache>,
+  cache: GenerationPageCache,
   descriptors: Awaited<ReturnType<typeof descriptorFor>>[],
 ): PageBatchCacheContext {
   return {

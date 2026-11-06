@@ -1,6 +1,7 @@
 import {
   EDITOR_CONTENT_GENERATION_MESSAGE,
   UNCHANGED_GENERATION_MESSAGE,
+  UNCHANGED_SOURCE_INSTRUCTIONS_UNKNOWN_MESSAGE,
   type GenerationConfirmationReason,
   type GenerationExecutionConfig,
 } from "@doxahq/contracts";
@@ -20,6 +21,10 @@ import {
   JobsRepository,
 } from "../repositories/jobs";
 import type { Env } from "../env";
+import {
+  instructionsChangeCheckFromEnv,
+  type InstructionsChangeCheck,
+} from "./doxabot/instructions-change";
 import {
   resolveGenerationExecutionConfig,
 } from "./generation-execution-config";
@@ -56,6 +61,7 @@ export interface ProductionGenerationAdmissionDependencies {
   source: ProductionGenerationSource;
   baselines: ProductionBaselinesStore;
   jobs: ProductionGenerationJobsStore;
+  instructions: InstructionsChangeCheck;
   executionConfig: GenerationExecutionConfig;
 }
 
@@ -74,6 +80,7 @@ export class ProductionGenerationAdmissionService {
       source: GitHubProductionGenerationSource.fromEnv(env),
       baselines: new ProductionBaselinesRepository(env),
       jobs,
+      instructions: instructionsChangeCheckFromEnv(env),
       executionConfig:
         resolveGenerationExecutionConfig(env),
     });
@@ -119,11 +126,20 @@ export class ProductionGenerationAdmissionService {
       baseline.generatorFingerprint ===
         this.dependencies.executionConfig.generatorFingerprint
     ) {
-      return {
-        outcome: "confirmation_required",
-        reason: "unchanged_source",
-        message: UNCHANGED_GENERATION_MESSAGE,
-      };
+      // New instructions change the docs with no change in the source.
+      const instructions = await this.dependencies.instructions.changedSincePublished({
+        projectId: input.projectId,
+        baseline,
+      });
+      if (instructions !== "changed") {
+        return {
+          outcome: "confirmation_required",
+          reason: "unchanged_source",
+          message: instructions === "unchanged"
+            ? UNCHANGED_GENERATION_MESSAGE
+            : UNCHANGED_SOURCE_INSTRUCTIONS_UNKNOWN_MESSAGE,
+        };
+      }
     }
 
     return this.dependencies.jobs.create({

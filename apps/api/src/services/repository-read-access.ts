@@ -10,6 +10,14 @@ import {
   type InstallationAccessTokenScope,
 } from "./github-app";
 
+/** The project has no connected repository, so no read can ever succeed. */
+export class NoConnectedRepositoryError extends Error {
+  constructor() {
+    super("The project has no connected repository.");
+    this.name = "NoConnectedRepositoryError";
+  }
+}
+
 /** The repository a project generates from, with what a read token needs. */
 export type RepositoryReadTarget = ProductionGenerationSourceContext;
 
@@ -36,7 +44,7 @@ export async function createRepositoryReadAccess(
   projectId: string,
 ): Promise<RepositoryReadAccess> {
   const target = await new GitHubRepository(env).getProductionSource(projectId);
-  if (!target) throw new Error("The project has no connected repository.");
+  if (!target) throw new NoConnectedRepositoryError();
 
   // A local installation uses one developer token, which cannot be scoped.
   const scope = isLocalInstallation(target.installationId)

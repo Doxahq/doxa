@@ -2,6 +2,7 @@ import type {
   DocumentationCollection,
   DocumentationCollectionItem,
   ProjectAnalysis,
+  RepositoryDocument,
   ProjectReferenceSurfaces,
   ReferenceSourceReport,
   RestApiReferenceEndpoint,
@@ -215,6 +216,13 @@ function normalizeDocumentationCollectionItem(
   };
 }
 
+function normalizeRepositoryDocument(value: unknown): RepositoryDocument | undefined {
+  const record = asRecord(value);
+  const path = stringValue(record?.path);
+  const title = stringValue(record?.title);
+  return path && title ? { path, title } : undefined;
+}
+
 function normalizeDocumentationCollection(value: unknown): DocumentationCollection | undefined {
   const record = asRecord(value);
   if (!record) return undefined;
@@ -235,7 +243,13 @@ function normalizeDocumentationCollection(value: unknown): DocumentationCollecti
     kind,
     sourceEvidence: normalizeArray(record.sourceEvidence, normalizeEvidence),
     items,
+    ...turnedOffItemCountOf(record.turnedOffItemCount),
   };
+}
+
+/** Kept through a checkpoint; the instructions step is the only writer. */
+function turnedOffItemCountOf(value: unknown): Pick<DocumentationCollection, "turnedOffItemCount"> {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? { turnedOffItemCount: value } : {};
 }
 
 function normalizeSlug(value: string): string {
@@ -865,6 +879,7 @@ export function normalizeProjectAnalysis(input: unknown): ProjectAnalysis {
     documentationCollections: hasReferenceSurfaces
       ? removeReferenceDuplicateCollections(documentationCollections, mergedReferenceSurfaces)
       : documentationCollections,
+    repositoryDocuments: normalizeArray(record.repositoryDocuments, normalizeRepositoryDocument),
     referenceSurfaces: hasReferenceSurfaces ? mergedReferenceSurfaces : undefined,
     referenceSourceReport: normalizeReferenceSourceReport(record.referenceSourceReport),
   };

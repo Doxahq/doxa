@@ -30,7 +30,9 @@ import type {
 import type { Env } from "../env";
 import {
   GENERATION_PAGE_FLAGGED_EVENT_TYPE,
+  GENERATION_PAGE_NOTICE_EVENT_TYPE,
   type FlaggedPage,
+  type PageNotice,
 } from "@doxahq/contracts/generation-reviews";
 import {
   WORKFLOW_STEP_FAILED_EVENT_TYPE,
@@ -41,6 +43,7 @@ import {
   ANALYSIS_COMPLETE_EVENT_TYPE,
   appendJobEvent,
   flaggedPagesFromEvents,
+  pageNoticesFromEvents,
   referenceSourceFromEvents,
   RERUN_EVENT_TYPES,
   toJobEventDto,
@@ -1133,6 +1136,20 @@ export class JobsRepository
       )
       .orderBy(asc(schema.jobEvents.sequence));
     return flaggedPagesFromEvents(events);
+  }
+
+  async listPageNotices(jobId: string): Promise<PageNotice[]> {
+    const events = await this.db
+      .select({ data: schema.jobEvents.data })
+      .from(schema.jobEvents)
+      .where(
+        and(
+          eq(schema.jobEvents.jobId, jobId),
+          eq(schema.jobEvents.type, GENERATION_PAGE_NOTICE_EVENT_TYPE),
+        ),
+      )
+      .orderBy(asc(schema.jobEvents.sequence));
+    return pageNoticesFromEvents(events);
   }
 
   /** The REST reference report of the run, from its analysis events. */

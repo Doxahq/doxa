@@ -23,10 +23,10 @@
  * for project-specific description validation.
  */
 
+import { isPageInstructionCheck, type PageInstructionRules } from "../utils/page-instruction-checks";
 import { formatMdx } from "@doxahq/mdx-runtime/format";
 
 import {
-  applyAutoFixes,
   runPageValidation,
   validatePage,
   type ContentQualityIssue,
@@ -132,6 +132,8 @@ export interface WriterAttemptOptions {
     onSpan?: AgentSpanCallback;
     /** Exact values that no page may contain, such as the run's credentials. */
     forbiddenValues?: readonly string[];
+    /** The project owner's instructions that a finished page must respect. */
+    instructionRules?: PageInstructionRules;
   };
 }
 
@@ -144,6 +146,8 @@ export interface WriterAttemptResult {
   appliedFixes: ContentQualityIssue[];
   /** Human-readable warnings, one per applied fix. */
   warnings: string[];
+  /** Soft issues that the accepted page still has, such as a break of the owner's instructions. */
+  remainingIssues: ContentQualityIssue[];
 }
 
 interface AttemptCandidate {
@@ -189,7 +193,7 @@ const TOKEN_LIMIT_FIX_INSTRUCTION =
 export async function runWriterAttempts(
   opts: WriterAttemptOptions,
 ): Promise<WriterAttemptResult> {
-  const max = opts.maxAttempts ?? 3;
+  const max = maxAttemptsOf(opts);
   const minBodyLength = opts.minBodyLength ?? 200;
   const targetedRepairClasses =
     opts.targetedRepairClasses ?? ["mdx"];
@@ -297,13 +301,13 @@ export async function runWriterAttempts(
         );
         continue;
       }
-      throw new PageValidationExhaustedError({
+      return acceptInstructionOnlyBestOrThrow(opts, bestCandidate, attempt, validationHistory, new PageValidationExhaustedError({
         title: opts.title,
         attempts: max,
         issues: [tokenIssue],
         failedContent: rawContent,
         validationHistory,
-      });
+      }));
     }
 
     if (loop?.termination === "agent_loop_exhausted") {
@@ -352,13 +356,13 @@ export async function runWriterAttempts(
         continue;
       }
 
-      throw new PageValidationExhaustedError({
+      return acceptInstructionOnlyBestOrThrow(opts, bestCandidate, attempt, validationHistory, new PageValidationExhaustedError({
         title: opts.title,
         attempts: max,
         issues: [issue],
         failedContent: rawContent,
         validationHistory,
-      });
+      }));
     }
 
     // Hard server-side gate: rebuild the full page (frontmatter + body) and
@@ -431,12 +435,38 @@ export async function runWriterAttempts(
         });
       }
       if (repairResult.ok) {
-        return {
-          content: repairResult.content,
-          attempts: attempt,
-          appliedFixes: [],
-          warnings: [],
-        };
+        const repaired = repairedCandidate(repairResult.content);
+        repaired.issues = await instructionIssuesOf(opts, repairResult.content);
+        if (repaired.issues.length === 0) {
+          return {
+            content: repairResult.content,
+            attempts: attempt,
+            appliedFixes: [],
+            warnings: [],
+            remainingIssues: [],
+          };
+        }
+        // The repair fixed the MDX, but the page still breaks the owner's
+        // instructions: it competes with the other attempts like any draft.
+        bestCandidate = mergeBest(bestCandidate, repaired);
+        const repairedReasons = repaired.issues.map((issue) => issue.check).join(", ");
+        validationHistory.push({
+          pageRetry,
+          attempt,
+          maxAttempts: max,
+          issues: repaired.issues,
+          rawContent: repairResult.content,
+          debugPath: await opts.saveDebug(attempt, repairResult.content, repairedReasons),
+          finishReason,
+        });
+        retryHint = renderValidationHistory(validationHistory);
+        if (attempt < max) {
+          opts.onWarn?.(
+            `Page "${opts.title}" repaired, but it breaks the project instructions (attempt ${attempt}/${max}): ${repairedReasons}, retrying...`,
+          );
+          continue;
+        }
+        return finalizeWithDegradation(opts, bestCandidate, attempt, validationHistory);
       }
 
       if (targetedIssue.repairClass === "mdx") {
@@ -454,13 +484,13 @@ export async function runWriterAttempts(
           debugPath,
           finishReason,
         });
-        throw new PageValidationExhaustedError({
+        return acceptInstructionOnlyBestOrThrow(opts, bestCandidate, attempt, validationHistory, new PageValidationExhaustedError({
           title: opts.title,
           attempts: repairResult.attempts.length,
           issues: allIssues,
           failedContent: validationPage,
           validationHistory,
-        });
+        }));
       }
     }
 
@@ -558,14 +588,14 @@ function countSeverity(
 }
 
 /**
- * Final-attempt fallback: if the best candidate has only soft issues, run
- * the registered auto-fixes and accept it. Hard issues mean regeneration
- * is the only correct answer — throw.
+ * Final-attempt fallback: if the best candidate has only soft issues, accept
+ * it as it is. Hard issues mean regeneration is the only correct answer —
+ * throw.
  */
 function finalizeWithDegradation(
   opts: WriterAttemptOptions,
   best: AttemptCandidate,
-  max: number,
+  attempts: number,
   validationHistory: readonly ValidationHistoryEntry[],
 ): WriterAttemptResult {
   const hardIssues = best.issues.filter((i) => i.severity === "hard");
@@ -574,24 +604,99 @@ function finalizeWithDegradation(
     const latestHardIssues = latest?.issues.filter((issue) => issue.severity === "hard") ?? [];
     throw new PageValidationExhaustedError({
       title: opts.title,
-      attempts: max,
+      attempts,
       issues: latestHardIssues.length > 0 ? latestHardIssues : hardIssues,
       failedContent: latest?.rawContent ?? best.rawContent,
       validationHistory,
     });
   }
 
-  const { body: patched, applied } = applyAutoFixes(best.body, best.issues);
-  const fixedCandidate: AttemptCandidate = { ...best, body: patched };
+  // Kept as validated: a page-text fix without the model can cut a version
+  // number or a code example, so the kept page ships with its open issues.
+  reportAcceptedWithIssues(opts, attempts, best.issues);
+  return { ...composeFinal(opts, best, attempts, []), remainingIssues: best.issues };
+}
 
-  if (applied.length > 0) {
-    const summary = applied.map((i) => i.check).join(", ");
-    opts.onWarn?.(
-      `Page "${opts.title}" accepted after ${max} attempts with auto-fixes: ${summary}`,
-    );
+/**
+ * A run that ends on a failure keeps an earlier draft when its only issues
+ * break the owner's instructions: a page never drops because of a word. Any
+ * other soft issue, such as a page cut off mid-sentence, keeps the failure,
+ * so the page gets its page-level retry.
+ */
+function acceptInstructionOnlyBestOrThrow(
+  opts: WriterAttemptOptions,
+  best: AttemptCandidate | null,
+  attempts: number,
+  validationHistory: readonly ValidationHistoryEntry[],
+  failure: PageValidationExhaustedError,
+): WriterAttemptResult {
+  if (best && hasOnlyInstructionIssues(best)) {
+    return finalizeWithDegradation(opts, best, attempts, validationHistory);
   }
+  throw failure;
+}
 
-  return composeFinal(opts, fixedCandidate, max, applied);
+function hasOnlyInstructionIssues(candidate: AttemptCandidate): boolean {
+  return candidate.issues.every((issue) => issue.severity === "soft" && isPageInstructionCheck(issue.check));
+}
+
+/**
+ * A page that a targeted repair returned. The repair validated it with an MDX
+ * compile, so the body is kept as it is: cleaning it again would escape its
+ * braces, and an expression such as `{"<"}` would show as text.
+ */
+function repairedCandidate(content: string): AttemptCandidate {
+  const { frontmatter, body } = parseFrontmatter(content);
+  return {
+    rawContent: content,
+    body,
+    agentDescription: typeof frontmatter?.description === "string" ? frontmatter.description : null,
+    issues: [],
+  };
+}
+
+function maxAttemptsOf(opts: WriterAttemptOptions): number {
+  return opts.maxAttempts ?? 3;
+}
+
+/** Leaves a trace of the soft issues that an accepted page keeps. */
+function reportAcceptedWithIssues(
+  opts: WriterAttemptOptions,
+  attempts: number,
+  remainingIssues: readonly ContentQualityIssue[],
+): void {
+  if (remainingIssues.length === 0) return;
+  const issueCodes = remainingIssues.map((issue) => issue.check);
+  opts.onWarn?.(
+    `Page "${opts.title}" accepted after ${attempts} attempts with open issues: ${issueCodes.join(", ")}`,
+  );
+  opts.onDiagnostic?.({
+    eventType: "writer_accepted_with_issues",
+    pageTitle: opts.title,
+    pageRetry: opts.pageRetry ?? 0,
+    attempt: attempts,
+    maxAttempts: maxAttemptsOf(opts),
+    issueCodes,
+    instructionIssueCodes: issueCodes.filter(isPageInstructionCheck),
+  });
+}
+
+/** The owner's instruction checks on a whole page, in the pipeline's issue shape. */
+async function instructionIssuesOf(
+  opts: WriterAttemptOptions,
+  page: string,
+): Promise<ContentQualityIssue[]> {
+  const instructionRules = opts.validation?.instructionRules;
+  if (!instructionRules) return [];
+  const report = await runPageValidation(page, {
+    instructionRules,
+    mdxCompile: false,
+    minBodyLength: 0,
+    preserveTitle: opts.preserveTitle,
+  });
+  return report.issues
+    .filter((issue) => isPageInstructionCheck(issue.rule))
+    .map(toContentQualityIssue);
 }
 
 function cloneValidationHistory(
@@ -702,6 +807,7 @@ function composeFinal(
     attempts,
     appliedFixes,
     warnings: appliedFixes.map((i) => `auto-fixed: ${i.check} — ${i.message}`),
+    remainingIssues: [],
   };
 }
 

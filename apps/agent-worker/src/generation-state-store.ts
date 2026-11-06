@@ -46,6 +46,8 @@ export interface WritePermanentGenerationStateInput {
   structure: GenerationStructureState;
   pages: GenerationPageState[];
   createdAt: string;
+  /** See `GenerationStateManifest.behindInstructionPageIds`. */
+  behindInstructionPageIds?: string[];
 }
 
 export type GenerationStateUnavailableReason =
@@ -134,6 +136,9 @@ export class GenerationStateStore {
       structure: structureReference,
       pages: manifestPages,
       createdAt: input.createdAt,
+      ...(input.behindInstructionPageIds === undefined
+        ? {}
+        : { behindInstructionPageIds: input.behindInstructionPageIds }),
     });
     await this.writeStateObject(
       generationStateManifestKey(input.siteId, input.versionId),

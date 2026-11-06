@@ -1,5 +1,6 @@
 import {
   EDITOR_CONTENT_GENERATION_MESSAGE,
+  UNCHANGED_SOURCE_INSTRUCTIONS_UNKNOWN_MESSAGE,
   type GenerationExecutionConfig,
   type GenerationJobDto,
 } from "@doxahq/contracts";
@@ -19,6 +20,11 @@ const executionConfig: GenerationExecutionConfig = {
     "doxabot-v1:x-ai/grok-4.5:full-prod:100",
 };
 
+const baselineState = {
+  siteId: "site-1",
+  generationStatePrefix: "sites/site-1/generation-state/11111111-1111-4111-8111-111111111111",
+};
+
 describe("production generation admission", () => {
   test("captures the exact default-branch revision and compatible baseline", async () => {
     const targetRevision = "b".repeat(40);
@@ -28,6 +34,7 @@ describe("production generation admission", () => {
       sourceRevision: "a".repeat(40),
       sourceTreeHash: "d".repeat(40),
       generatorFingerprint: executionConfig.generatorFingerprint,
+      ...baselineState,
     };
     const resolveTarget = vi.fn(async () => ({
       revision: targetRevision,
@@ -45,6 +52,7 @@ describe("production generation admission", () => {
         handWrittenVersion: noHandWrittenVersion,
       },
       jobs: { create },
+      instructions: instructionsUnchanged(),
       executionConfig,
     });
 
@@ -88,6 +96,7 @@ describe("production generation admission", () => {
         handWrittenVersion: noHandWrittenVersion,
       },
       jobs: { create },
+      instructions: instructionsUnchanged(),
       executionConfig,
     });
 
@@ -120,10 +129,12 @@ describe("production generation admission", () => {
           sourceRevision: revision,
           sourceTreeHash: treeHash,
           generatorFingerprint: executionConfig.generatorFingerprint,
+          ...baselineState,
         })),
         handWrittenVersion: noHandWrittenVersion,
       },
       jobs: { create },
+      instructions: instructionsUnchanged(),
       executionConfig,
     });
 
@@ -135,7 +146,7 @@ describe("production generation admission", () => {
       outcome: "confirmation_required",
       reason: "unchanged_source",
       message:
-        "The repository content and generation configuration have not changed since the current production deployment. A new generation will likely produce the same documentation.",
+        "The repository content, Doxabot instructions, and generation configuration have not changed since the current production deployment. A new generation will likely produce the same documentation.",
     });
     expect(create).not.toHaveBeenCalled();
   });
@@ -157,10 +168,12 @@ describe("production generation admission", () => {
           sourceRevision: revision,
           sourceTreeHash: treeHash,
           generatorFingerprint: executionConfig.generatorFingerprint,
+          ...baselineState,
         })),
         handWrittenVersion: noHandWrittenVersion,
       },
       jobs: { create },
+      instructions: instructionsUnchanged(),
       executionConfig,
     });
 
@@ -189,10 +202,12 @@ describe("production generation admission", () => {
           sourceRevision: revision,
           sourceTreeHash: treeHash,
           generatorFingerprint: "older-generator",
+          ...baselineState,
         })),
         handWrittenVersion: noHandWrittenVersion,
       },
       jobs: { create },
+      instructions: instructionsUnchanged(),
       executionConfig,
     });
 
@@ -203,6 +218,120 @@ describe("production generation admission", () => {
     })).resolves.toMatchObject({ outcome: "created" });
     expect(create).toHaveBeenCalledOnce();
   });
+
+  test("starts without asking when only the instructions changed", async () => {
+    const revision = "a".repeat(40);
+    const treeHash = "b".repeat(40);
+    const baseline = {
+      versionId: "11111111-1111-4111-8111-111111111111",
+      sourceRevision: revision,
+      sourceTreeHash: treeHash,
+      generatorFingerprint: executionConfig.generatorFingerprint,
+      ...baselineState,
+    };
+    const create = vi.fn(async () => ({
+      outcome: "created" as const,
+      job: queuedJob(),
+    }));
+    const changedSincePublished = vi.fn(async () => "changed" as const);
+    const service = new ProductionGenerationAdmissionService({
+      source: {
+        resolveTarget: vi.fn(async () => ({ revision, treeHash })),
+      },
+      baselines: {
+        findCompatiblePublished: vi.fn(async () => baseline),
+        handWrittenVersion: noHandWrittenVersion,
+      },
+      jobs: { create },
+      instructions: { changedSincePublished },
+      executionConfig,
+    });
+
+    await expect(service.admit({
+      projectId: "project-1",
+      userId: "user-1",
+      force: false,
+    })).resolves.toMatchObject({ outcome: "created" });
+    expect(changedSincePublished).toHaveBeenCalledWith({
+      projectId: "project-1",
+      baseline,
+    });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baselineVersionId: baseline.versionId,
+        baselineRevision: revision,
+        targetRevision: revision,
+      }),
+    );
+  });
+
+  test("asks first with a neutral message when the instructions cannot be checked", async () => {
+    const create = vi.fn(async () => ({
+      outcome: "created" as const,
+      job: queuedJob(),
+    }));
+    const service = new ProductionGenerationAdmissionService({
+      source: {
+        resolveTarget: vi.fn(async () => ({ revision: "a".repeat(40), treeHash: "b".repeat(40) })),
+      },
+      baselines: {
+        findCompatiblePublished: vi.fn(async () => ({
+          versionId: "11111111-1111-4111-8111-111111111111",
+          sourceRevision: "a".repeat(40),
+          sourceTreeHash: "b".repeat(40),
+          generatorFingerprint: executionConfig.generatorFingerprint,
+          ...baselineState,
+        })),
+        handWrittenVersion: noHandWrittenVersion,
+      },
+      jobs: { create },
+      instructions: { changedSincePublished: vi.fn(async () => "unknown" as const) },
+      executionConfig,
+    });
+
+    await expect(service.admit({ projectId: "project-1", userId: "user-1" })).resolves.toEqual({
+      outcome: "confirmation_required",
+      reason: "unchanged_source",
+      message: UNCHANGED_SOURCE_INSTRUCTIONS_UNKNOWN_MESSAGE,
+    });
+    expect(UNCHANGED_SOURCE_INSTRUCTIONS_UNKNOWN_MESSAGE).not.toMatch(/instructions[^.]*have not changed/);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test("does not read the instructions when the source changed", async () => {
+    const changedSincePublished = vi.fn(async () => "unchanged" as const);
+    const service = new ProductionGenerationAdmissionService({
+      source: {
+        resolveTarget: vi.fn(async () => ({
+          revision: "c".repeat(40),
+          treeHash: "d".repeat(40),
+        })),
+      },
+      baselines: {
+        findCompatiblePublished: vi.fn(async () => ({
+          versionId: "11111111-1111-4111-8111-111111111111",
+          sourceRevision: "a".repeat(40),
+          sourceTreeHash: "b".repeat(40),
+          generatorFingerprint: executionConfig.generatorFingerprint,
+          ...baselineState,
+        })),
+        handWrittenVersion: noHandWrittenVersion,
+      },
+      jobs: {
+        create: vi.fn(async () => ({
+          outcome: "created" as const,
+          job: queuedJob(),
+        })),
+      },
+      instructions: { changedSincePublished },
+      executionConfig,
+    });
+
+    await service.admit({ projectId: "project-1", userId: "user-1" });
+
+    expect(changedSincePublished).not.toHaveBeenCalled();
+  });
+
   test("asks before the first generation replaces hand-written pages", async () => {
     const create = vi.fn();
     const service = new ProductionGenerationAdmissionService({
@@ -217,6 +346,7 @@ describe("production generation admission", () => {
         handWrittenVersion: vi.fn(async () => "editor-version-1"),
       },
       jobs: { create },
+      instructions: instructionsUnchanged(),
       executionConfig,
     });
 
@@ -247,6 +377,7 @@ describe("production generation admission", () => {
         handWrittenVersion: vi.fn(async () => "editor-version-1"),
       },
       jobs: { create },
+      instructions: instructionsUnchanged(),
       executionConfig,
     });
 
@@ -282,6 +413,7 @@ describe("production generation admission", () => {
         handWrittenVersion: vi.fn(async () => "editor-version-1"),
       },
       jobs: { create },
+      instructions: instructionsUnchanged(),
       executionConfig,
     });
 
@@ -307,6 +439,10 @@ function queuedJob(): GenerationJobDto {
     createdAt: "2026-07-25T12:00:00.000Z",
     updatedAt: "2026-07-25T12:00:00.000Z",
   };
+}
+
+function instructionsUnchanged() {
+  return { changedSincePublished: vi.fn(async () => "unchanged" as const) };
 }
 
 async function noHandWrittenVersion(): Promise<string | null> {

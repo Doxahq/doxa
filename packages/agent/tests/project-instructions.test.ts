@@ -1,4 +1,9 @@
-import { DEFAULT_DOXABOT_INSTRUCTIONS, type GenerationInstructions } from "@doxahq/contracts";
+import {
+  DEFAULT_DOXABOT_INSTRUCTIONS,
+  generationInstructionsFingerprint,
+  generationInstructionsSchema,
+  type GenerationInstructions,
+} from "@doxahq/contracts";
 import { describe, expect, test } from "vitest";
 import {
   NO_PROJECT_INSTRUCTIONS_FINGERPRINT,
@@ -165,6 +170,23 @@ describe("project instructions fingerprint", () => {
       analysisMode: "reuse",
       reusePageIds: ["overview", "guide"],
     });
+  });
+
+  // The API compares this value with the published state before a start. If
+  // the two differ, every start reports an instructions change.
+  test("the API fingerprint equals the fingerprint that a run stores", async () => {
+    const instructions = generationInstructions();
+    const brief = resolveDocumentationBrief({
+      target: { kind: "public" },
+      projectInstructions: generationInstructionsSchema.parse(JSON.parse(JSON.stringify(instructions))),
+    });
+
+    await expect(generationInstructionsFingerprint(instructions)).resolves.toBe(
+      projectInstructionsFingerprint(brief),
+    );
+    await expect(generationInstructionsFingerprint(null)).resolves.toBe(
+      NO_PROJECT_INSTRUCTIONS_FINGERPRINT,
+    );
   });
 
   test("a policy version change does not count as an instructions change", () => {

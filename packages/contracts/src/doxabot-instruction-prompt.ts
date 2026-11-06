@@ -64,10 +64,20 @@ export function renderDoxabotInstructionLines(input: DoxabotInstructionPromptInp
   return [...structuredLines(input.instructions), ...ownerTextLines(input)];
 }
 
+/** The owner's readers, for example "end users of the product, beginner level". */
+export function describeDoxabotReaders(audience: DoxabotInstructions["audience"]): string {
+  return `${READER_TEXT[audience.reader]}, ${audience.level} level`;
+}
+
+/** The owner's voice, for example "friendly. Address the reader as "you"". */
+export function describeDoxabotVoice(voice: DoxabotInstructions["voice"]): string {
+  return `${voice.tone}. Address the reader as ${ADDRESS_TEXT[voice.address]}`;
+}
+
 function structuredLines(instructions: DoxabotInstructions): string[] {
   const lines = [
-    `Readers: ${READER_TEXT[instructions.audience.reader]}, ${instructions.audience.level} level.`,
-    `Tone: ${instructions.voice.tone}. Address the reader as ${ADDRESS_TEXT[instructions.voice.address]}.`,
+    `Readers: ${describeDoxabotReaders(instructions.audience)}.`,
+    `Tone: ${describeDoxabotVoice(instructions.voice)}.`,
   ];
 
   const [firstLanguage, ...otherLanguages] = instructions.codeLanguages.map(

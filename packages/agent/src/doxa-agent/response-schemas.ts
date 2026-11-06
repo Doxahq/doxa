@@ -1,3 +1,4 @@
+import { PLANNED_PAGE_TYPES } from "../utils/planned-page-types";
 import { z } from "zod";
 import type { ResponseSchema } from "../core";
 
@@ -32,6 +33,7 @@ const structurePageSchema = z.object({
   collectionId: z.string().optional(),
   collectionItemId: z.string().optional(),
   reference: pageReferenceSchema.optional(),
+  pageType: z.enum(PLANNED_PAGE_TYPES).optional(),
 });
 
 const structureSectionSchema = z.object({

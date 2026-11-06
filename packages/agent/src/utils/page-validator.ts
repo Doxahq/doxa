@@ -11,19 +11,19 @@
  *     failure modes (skeleton pages, cutoff content, unbalanced fences,
  *     misused `<Step>` blocks, trailing or empty headings). Each detect* function returns an enriched
  *     {@link ContentQualityIssue} carrying:
- *       - `severity`: hard issues require regeneration; soft issues can be
- *         auto-fixed via {@link applyAutoFixes} when retries are exhausted.
+ *       - `severity`: hard issues require regeneration; soft issues get a
+ *         retry, and a page that keeps one after the last attempt ships as
+ *         written: code never edits page text to fix it.
  *       - `fixInstruction`: a model-facing description of what to change on
  *         the next attempt — used by {@link buildRetryHint}.
  *       - `fixExample`: optional inline bad/good snippet for high-leverage
  *         gotchas (outer fence wrapping, preambles).
- *       - `autoFix`: best-effort transform applied during graceful
- *         degradation — only invoked for soft issues.
  *
  * Commentary stripping lives in {@link ../commentary-patterns}; we re-export
  * {@link stripAgentCommentary} here for backwards-compatible imports.
  */
 
+import { checkPageInstructions, type PageInstructionRules } from "./page-instruction-checks";
 import {
   FrontmatterSchema,
   fileNameTitle,
@@ -43,15 +43,8 @@ import {
   loadAllowedComponents,
 } from "./component-allowlist";
 import { findEmbeddedFrontmatterArtifact } from "./frontmatter-artifacts";
-import {
-  findRestEndpointDuplicateSection,
-  removeRestEndpointDuplicateSection,
-} from "./rest-endpoint-sections";
-import {
-  findStepProblems,
-  normalizeStepBlocks,
-  type StepProblemKind,
-} from "./step-blocks";
+import { findRestEndpointDuplicateSection } from "./rest-endpoint-sections";
+import { findStepProblems, type StepProblemKind } from "./step-blocks";
 import { REDACTED, SecretRedactor, findSecret } from "../reference-specs/secrets";
 import { findUnsafeMarkup } from "./generated-markup";
 
@@ -243,8 +236,6 @@ export interface ContentQualityIssue {
   fixInstruction: string;
   /** Optional bad/good snippet rendered inline in the retry prompt. */
   fixExample?: { bad: string; good: string };
-  /** Recovery transform applied during graceful degradation. */
-  autoFix?: (body: string) => string;
 }
 
 export interface ContentQualityResult {
@@ -318,7 +309,6 @@ export function detectRestEndpointDuplicateSection(
     fixInstruction:
       `Remove the heading "${duplicate.heading}" and its section. ` +
       "The REST endpoint renderer already shows this content.",
-    autoFix: (candidate) => removeRestEndpointDuplicateSection(candidate, duplicate),
   };
 }
 
@@ -398,7 +388,6 @@ function detectCutoffContent(body: string): ContentQualityIssue | null {
     fixInstruction:
       "Your previous output ended mid-sentence. Make sure every paragraph ends with " +
       "complete punctuation (`.`, `?`, `!`) and the page ends on a fully closed thought.",
-    autoFix: (body) => trimToLastCompleteSentence(body),
   };
 }
 
@@ -422,7 +411,6 @@ function detectUnclosedCodeBlocks(body: string): ContentQualityIssue | null {
       bad: 'Here is the page:\n\n```markdown\n---\ntitle: ...\n---\n\n## Section\n```',
       good: '---\ntitle: ...\ndescription: ...\n---\n\n## Section\n\nProse paragraph here.',
     },
-    autoFix: (body) => `${body.replace(/\s+$/, "")}\n\`\`\`\n`,
   };
 }
 
@@ -450,7 +438,6 @@ function detectTrailingHeadings(body: string): ContentQualityIssue | null {
     fixInstruction:
       `Your previous output ended with a heading "${lastNonEmpty}" with no body content. ` +
       "Either write a complete section under that heading, or remove the heading entirely.",
-    autoFix: (body) => removeTrailingHeading(body),
   };
 }
 
@@ -595,15 +582,8 @@ function collectJsxTagOccurrences(body: string): JsxTagOccurrence[] {
 
 /**
  * Detect MDX-JSX tags whose openers and closers don't balance per
- * component. Self-closing tags are balanced by definition. The returned
- * issue carries an autoFix that resolves the most common failure modes:
- *
- *   - Extra trailing closer (model writes `</Tabs></Tabs>`): drop the
- *     duplicate at its original line.
- *   - Missing closer at end of body: append the matching `</Tag>` line.
- *
- * When the imbalance is interior or ambiguous, autoFix is omitted so the
- * page is forced into a regeneration retry instead of risking a wrong fix.
+ * component. Self-closing tags are balanced by definition. The writer gets a
+ * retry that names the component; code never adds or drops a tag itself.
  */
 function detectUnbalancedJsxTags(body: string): ContentQualityIssue | null {
   const occurrences = collectJsxTagOccurrences(body);
@@ -627,9 +607,8 @@ function detectUnbalancedJsxTags(body: string): ContentQualityIssue | null {
 
   if (imbalances.length === 0) return null;
 
-  // Pick the first imbalance for the message; all imbalances are addressed
-  // by the auto-fix below, but the retry hint reads more naturally if it
-  // names a concrete component.
+  // The message names the first imbalance; the retry hint reads more
+  // naturally with a concrete component.
   const primary = imbalances[0];
   const sign = primary.delta > 0 ? "missing" : "extra";
   const offenders = occurrences.filter((o) => o.name === primary.name);
@@ -658,14 +637,13 @@ function detectUnbalancedJsxTags(body: string): ContentQualityIssue | null {
       bad: "<Tabs>\n  <TabsContent>x</TabsContent>\n</Tabs>\n</Tabs>",
       good: "<Tabs>\n  <TabsContent>x</TabsContent>\n</Tabs>",
     },
-    autoFix: (body) => repairUnbalancedJsxTags(body, imbalances),
   };
 }
 
 /**
  * Locate a duplicate consecutive closer (the deployment-page failure mode):
  * `</Tag>` immediately followed by another `</Tag>` on the next non-blank
- * line. Returns the second occurrence — the one we'd drop on auto-fix.
+ * line. Returns the second occurrence, which the issue location points at.
  */
 function findDuplicateClose(occurrences: JsxTagOccurrence[]): JsxTagOccurrence | null {
   const closes = occurrences.filter((o) => o.kind === "close");
@@ -675,46 +653,6 @@ function findDuplicateClose(occurrences: JsxTagOccurrence[]): JsxTagOccurrence |
     }
   }
   return null;
-}
-
-/**
- * Best-effort repair: strip duplicate trailing closers, append missing ones.
- * Conservative — only acts on unambiguous patterns. When the fix wouldn't
- * obviously help, it returns the body unchanged so the writer pipeline
- * surfaces the issue as a warning rather than corrupting the page.
- */
-function repairUnbalancedJsxTags(
-  body: string,
-  imbalances: Array<{ name: string; delta: number }>,
-): string {
-  let result = body;
-
-  for (const { name, delta } of imbalances) {
-    if (delta < 0) {
-      // Extra closer(s). Drop duplicate consecutive `</Name>` lines.
-      const lines = result.split("\n");
-      let dropsRemaining = -delta;
-      const closeLineRegex = new RegExp(`^\\s*<\\s*/\\s*${name}\\s*>\\s*$`);
-      for (let i = lines.length - 1; i > 0 && dropsRemaining > 0; i--) {
-        if (!closeLineRegex.test(lines[i])) continue;
-        // Walk back to find the previous non-blank line.
-        let prev = i - 1;
-        while (prev >= 0 && lines[prev].trim() === "") prev--;
-        if (prev >= 0 && closeLineRegex.test(lines[prev])) {
-          lines.splice(i, 1);
-          dropsRemaining--;
-        }
-      }
-      result = lines.join("\n");
-    } else if (delta > 0) {
-      // Missing closer(s). Append at end (best-effort — interior closers
-      // can't be reliably inserted without a real parser).
-      const trailing = `</${name}>\n`.repeat(delta);
-      result = result.replace(/\s+$/, "") + "\n" + trailing;
-    }
-  }
-
-  return result;
 }
 
 /**
@@ -777,9 +715,9 @@ const STEP_PROBLEM_MESSAGES: Record<Exclude<StepProblemKind, "titledStep">, stri
 /**
  * Detect `<Step>` blocks the renderer cannot draw as numbered steps. The
  * renderer numbers every child element of `<Step>`, so a title on `<Step>` is
- * dropped and each paragraph or code block becomes its own step. The
- * `<Step title="…">` shape alone is rewritten by the autoFix; any other misuse
- * needs a rewrite by the model.
+ * dropped and each paragraph or code block becomes its own step. The writer
+ * cleanup rewrites the `<Step title="…">` shape before validation
+ * (`normalizeStepBlocks`); any other misuse needs a rewrite by the model.
  */
 function detectStepStructure(body: string): ContentQualityIssue | null {
   const problems = findStepProblems(body);
@@ -804,7 +742,6 @@ function detectStepStructure(body: string): ContentQualityIssue | null {
       location: { line: first.line, snippet: first.snippet },
       fixInstruction,
       fixExample: STEP_FIX_EXAMPLE,
-      autoFix: normalizeStepBlocks,
     };
   }
 
@@ -820,24 +757,6 @@ function detectStepStructure(body: string): ContentQualityIssue | null {
     fixInstruction,
     fixExample: STEP_FIX_EXAMPLE,
   };
-}
-
-// ─── Auto-fix Helpers ──────────────────────────────────────────────────
-
-function removeTrailingHeading(body: string): string {
-  const lines = body.split("\n");
-  while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
-  if (lines.length > 0 && lines[lines.length - 1].trim().startsWith("#")) {
-    lines.pop();
-  }
-  return lines.join("\n").replace(/\s+$/, "") + "\n";
-}
-
-function trimToLastCompleteSentence(body: string): string {
-  const trimmed = body.replace(/\s+$/, "");
-  const match = trimmed.match(/^([\s\S]*?[.!?:])\s*[^.!?:]*$/);
-  if (!match) return body;
-  return match[1] + "\n";
 }
 
 // ─── Public Entry Points ───────────────────────────────────────────────
@@ -879,25 +798,6 @@ export function checkContentQuality(body: string): ContentQualityResult {
   return { acceptable: false, issues, retryHint };
 }
 
-/**
- * Apply registered `autoFix` transforms for soft issues. Hard issues are
- * skipped — they require regeneration. Returns the patched body and the
- * subset of issues whose fixes were applied.
- */
-export function applyAutoFixes(
-  body: string,
-  issues: ContentQualityIssue[],
-): { body: string; applied: ContentQualityIssue[] } {
-  let patched = body;
-  const applied: ContentQualityIssue[] = [];
-  for (const issue of issues) {
-    if (issue.severity !== "soft" || !issue.autoFix) continue;
-    patched = issue.autoFix(patched);
-    applied.push(issue);
-  }
-  return { body: patched, applied };
-}
-
 // ─── Unified Validation Surface ───────────────────────────────────────
 
 /**
@@ -927,6 +827,8 @@ export interface ToolValidationReport {
 }
 
 export interface RunPageValidationOptions extends PageValidationOptions {
+  /** The project owner's instructions that a finished page must respect. */
+  instructionRules?: PageInstructionRules;
   /** Reject renderer-owned sections on deterministic REST endpoint pages. */
   restEndpointPage?: boolean;
   /** Run the MDX parse pass via subprocess. Default true. */
@@ -1020,7 +922,7 @@ export async function runPageValidation(
 
   // checkContentQuality runs over the body only — strip frontmatter first so
   // detectors don't trip on `--- title: …` blocks.
-  const { body } = parseFrontmatter(frontmatterResult.cleaned);
+  const { frontmatter, body } = parseFrontmatter(frontmatterResult.cleaned);
   const bodyOffset = frontmatterResult.cleaned.indexOf(body);
   const bodyStartLine = bodyOffset > 0
     ? frontmatterResult.cleaned.slice(0, bodyOffset).split("\n").length
@@ -1044,6 +946,13 @@ export async function runPageValidation(
     const duplicateSection = detectRestEndpointDuplicateSection(body);
     if (duplicateSection) {
       issues.push(fromContentQualityIssue(duplicateSection, bodyStartLine));
+    }
+  }
+
+  if (opts.instructionRules) {
+    const description = typeof frontmatter?.description === "string" ? frontmatter.description : undefined;
+    for (const issue of checkPageInstructions(body, opts.instructionRules, description ? { description } : {})) {
+      issues.push(fromContentQualityIssue(issue, bodyStartLine));
     }
   }
 

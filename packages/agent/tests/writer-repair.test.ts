@@ -560,7 +560,7 @@ describe("writer repair feedback", () => {
     )).toBe(false);
   });
 
-  test("provides a bounded removal for a duplicate REST endpoint section", () => {
+  test("reports a duplicate REST endpoint section as a hard issue at its heading, with no fix by code", () => {
     const body = [
       "Introductory endpoint behavior.",
       "",
@@ -578,13 +578,12 @@ describe("writer repair feedback", () => {
     ].join("\n");
     const issue = detectRestEndpointDuplicateSection(body);
 
-    expect(issue?.autoFix?.(body)).toBe([
-      "Introductory endpoint behavior.",
-      "",
-      "## Behavior",
-      "",
-      "Source-grounded behavior remains.",
-    ].join("\n"));
+    expect(issue).toMatchObject({
+      check: "restEndpointDuplicateSection",
+      severity: "hard",
+      location: { line: 2, snippet: "## Request" },
+    });
+    expect(issue).not.toHaveProperty("autoFix");
   });
 
   test("retries a REST endpoint draft that duplicates a renderer-owned section", async () => {

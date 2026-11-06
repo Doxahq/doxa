@@ -1,7 +1,8 @@
-import type { DocumentationGenerationBrief, DocumentationStructure, ProjectAnalysis } from "../types";
+import type { DocumentationGenerationBrief, DocumentationStructure, ProjectAnalysis, ResolvedDocumentationGenerationBrief } from "../types";
 import {
   documentationBriefFingerprint,
   NO_PROJECT_INSTRUCTIONS_FINGERPRINT,
+  projectInstructionsFingerprint,
   resolveDocumentationBrief,
 } from "../doxa-agent/documentation-policy";
 import { hashValue } from "../utils/hash";
@@ -164,14 +165,118 @@ export async function createDocsPlanningContext(input: {
 export interface PriorRevisionGenerationState {
   planningFingerprint?: string;
   writingFingerprint?: string;
-  /** The project instructions that the published docs were written with. */
+  /** The project instructions of the published run. */
   projectInstructionsFingerprint?: string;
   structuralFingerprint: string;
   pages: Array<{
     pageId: string;
     pageInputHash: string;
     dependencies: PageDependencyState;
+    /**
+     * The project instructions that this page was written with. A page that
+     * a run kept, for example a locked or failed page, keeps an older value.
+     * Absent on pages stored before the field: they follow the published run.
+     */
+    projectInstructionsFingerprint?: string;
   }>;
+  /**
+   * Pages that runs no longer try to bring up to the published run's
+   * instructions, from the site's catch-up ledger.
+   */
+  exhaustedCatchUpPageIds?: readonly string[];
+}
+
+/**
+ * The project instructions fingerprint of a run. Instructions that ask for
+ * nothing beyond a run without them count as none, the same value that the
+ * API computes with `generationInstructionsFingerprint`.
+ */
+export function runInstructionsFingerprint(
+  brief: ResolvedDocumentationGenerationBrief,
+): string {
+  return projectInstructionsFingerprint(brief);
+}
+
+/**
+ * The published pages that an earlier run kept behind its own instructions,
+ * because a person locked them or their rewrite failed. Only a run with the
+ * published run's instructions catches them up: when the instructions change,
+ * every page is written as part of the change, and none is a catch-up page.
+ * A page that ran out of catch-up attempts is left out, so a page that always
+ * fails cannot keep costing runs.
+ */
+export function pagesBehindInstructions(
+  previous: PriorRevisionGenerationState | null,
+  currentFingerprint: string | undefined,
+): Set<string> {
+  if (!previous || currentFingerprint === undefined) return new Set();
+  if (runInstructionsChanged(previous, currentFingerprint)) return new Set();
+  const runFingerprint = previous.projectInstructionsFingerprint ?? NO_PROJECT_INSTRUCTIONS_FINGERPRINT;
+  const exhausted = new Set(previous.exhaustedCatchUpPageIds ?? []);
+  return new Set(previous.pages
+    .filter((page) =>
+      (page.projectInstructionsFingerprint ?? runFingerprint) !== runFingerprint
+      && !exhausted.has(page.pageId)
+    )
+    .map((page) => page.pageId));
+}
+
+/**
+ * Moves the reused pages that are behind the instructions to the pages the
+ * run writes, so a page kept through an instructions change catches up in a
+ * later run. Template pages, which follow their inputs alone, stay reused.
+ */
+export function catchUpInstructionPages<TPlan extends RevisionAwareGenerationPlan>(input: {
+  plan: TPlan;
+  currentPageIds: readonly string[];
+  behindPageIds: ReadonlySet<string>;
+  templatePageIds?: ReadonlySet<string>;
+}): TPlan {
+  const caughtUp = new Set(input.plan.reusePageIds.filter((pageId) =>
+    input.behindPageIds.has(pageId) && !input.templatePageIds?.has(pageId)
+  ));
+  if (caughtUp.size === 0) return input.plan;
+
+  const regenerate = new Set([...input.plan.regeneratePageIds, ...caughtUp]);
+  const catchUpPageIds = new Set([...(input.plan.catchUpPageIds ?? []), ...caughtUp]);
+  return {
+    ...input.plan,
+    catchUpPageIds: input.currentPageIds.filter((pageId) => catchUpPageIds.has(pageId)),
+    ...(input.plan.causes
+      ? { causes: { ...input.plan.causes, instructionsChanged: (input.plan.causes.instructionsChanged ?? 0) + caughtUp.size } }
+      : {}),
+    regeneratePageIds: input.currentPageIds.filter((pageId) => regenerate.has(pageId)),
+    reusePageIds: input.plan.reusePageIds.filter((pageId) => !caughtUp.has(pageId)),
+    modelCallsRequired: true,
+    reasons: [
+      ...input.plan.reasons,
+      `${caughtUp.size} page(s) were kept through an instructions change and now follow the current instructions.`,
+    ],
+  };
+}
+
+/**
+ * The page edits that bring the given baseline pages up to the current
+ * instructions, merged into the source edits of the plan.
+ */
+export function instructionCatchUpEdits(input: {
+  pageIds: Iterable<string>;
+  previousPages: readonly { pageId: string; artifactKey: string }[];
+  edits: Readonly<Record<string, PageEdit>>;
+  templatePageIds?: ReadonlySet<string>;
+}): Record<string, PageEdit> {
+  const previousById = new Map(input.previousPages.map((page) => [page.pageId, page]));
+  const edits: Record<string, PageEdit> = { ...input.edits };
+  for (const pageId of input.pageIds) {
+    const previous = previousById.get(pageId);
+    if (!previous || input.templatePageIds?.has(pageId)) continue;
+    edits[pageId] = {
+      artifactKey: previous.artifactKey,
+      changedSources: input.edits[pageId]?.changedSources ?? [],
+      instructionsChanged: true,
+    };
+  }
+  return edits;
 }
 
 export function planPagesAgainstBaseline(input: {
@@ -252,7 +357,7 @@ export function planPagesAgainstBaseline(input: {
   };
 }
 
-export function planRevisionAwareGeneration(input: {
+export interface RevisionAwarePlanInput {
   currentPageIds: readonly string[];
   currentPageInputHashes: Readonly<Record<string, string>>;
   changes: readonly RevisionSourceChange[];
@@ -272,7 +377,23 @@ export function planRevisionAwareGeneration(input: {
    * rules, such as the spec files that its REST reference came from.
    */
   structuralPaths?: ReadonlySet<string>;
-}): RevisionAwareGenerationPlan {
+}
+
+/**
+ * The plan of a run against the published state. After the run-wide checks,
+ * a page that an instructions change kept is written again (see
+ * {@link catchUpInstructionPages}).
+ */
+export function planRevisionAwareGeneration(input: RevisionAwarePlanInput): RevisionAwareGenerationPlan {
+  return catchUpInstructionPages({
+    plan: planAgainstPublishedState(input),
+    currentPageIds: uniqueInOrder(input.currentPageIds),
+    behindPageIds: pagesBehindInstructions(input.previous, input.projectInstructionsFingerprint),
+    templatePageIds: input.templatePageIds,
+  });
+}
+
+function planAgainstPublishedState(input: RevisionAwarePlanInput): RevisionAwareGenerationPlan {
   const currentPageIds = uniqueInOrder(input.currentPageIds);
   const previous = input.previous;
   if (!previous) {
@@ -287,21 +408,22 @@ export function planRevisionAwareGeneration(input: {
   const removedPageIds = previousPageIds.filter(
     (pageId) => !currentPageIdSet.has(pageId),
   );
+  const instructionsChanged = runInstructionsChanged(previous, input.projectInstructionsFingerprint);
   if (
     previous.planningFingerprint !== undefined &&
     previous.planningFingerprint !== input.planningFingerprint
   ) {
-    return fullPlan(
+    const plan = fullPlan(
       currentPageIds,
       removedPageIds,
       "The documentation planning contract changed.",
     );
+    // The structure is planned again either way, and its prompt must still
+    // know that the instructions changed. The pages are written fresh: the
+    // final plan edits nothing after a contract change.
+    return instructionsChanged ? { ...plan, editReason: "instructions_changed" } : plan;
   }
-  if (
-    input.projectInstructionsFingerprint !== undefined &&
-    (previous.projectInstructionsFingerprint ?? NO_PROJECT_INSTRUCTIONS_FINGERPRINT) !==
-      input.projectInstructionsFingerprint
-  ) {
+  if (instructionsChanged) {
     // The instructions steer analysis, structure and writing, so every page
     // is planned again. The pages the baseline has are edited, not written
     // again, so they keep their text where the instructions ask nothing.
@@ -416,6 +538,18 @@ export function planRevisionAwareGeneration(input: {
     ...pagePlan,
     modelCallsRequired: true,
   };
+}
+
+/**
+ * True when this run's project instructions differ from the published run's.
+ * A state without the field had none.
+ */
+export function runInstructionsChanged(
+  previous: Pick<PriorRevisionGenerationState, "projectInstructionsFingerprint"> | null,
+  currentFingerprint: string | undefined,
+): boolean {
+  if (!previous || currentFingerprint === undefined) return false;
+  return (previous.projectInstructionsFingerprint ?? NO_PROJECT_INSTRUCTIONS_FINGERPRINT) !== currentFingerprint;
 }
 
 /** The most structural files that one patch covers. A larger change plans the structure again. */
@@ -534,8 +668,9 @@ export function planPageEdits(input: {
  * baseline has is edited from its published version, marked so the writer
  * updates it to follow the instructions: a page the plan would reuse moves
  * to the pages it writes. A page with source edits keeps its changed files.
- * New pages are written from the source, and template pages, which no
- * writer edits, keep their plan.
+ * New pages are written from the source. Template pages, which code renders
+ * and no writer edits, are rendered again, because the instructions steer
+ * them too, for example the order of request samples.
  */
 export function applyInstructionEdits<TPlan extends RevisionAwareGenerationPlan>(input: {
   plan: TPlan;
@@ -546,10 +681,11 @@ export function applyInstructionEdits<TPlan extends RevisionAwareGenerationPlan>
   templatePageIds?: ReadonlySet<string>;
 }): TPlan & { pageEdits: Record<string, PageEdit>; editReason: "instructions_changed" } {
   const previousById = new Map(input.previousPages.map((page) => [page.pageId, page]));
-  const isEditable = (pageId: string) => previousById.has(pageId) && !input.templatePageIds?.has(pageId);
+  const isTemplate = (pageId: string) => input.templatePageIds?.has(pageId) === true;
+  const isEditable = (pageId: string) => previousById.has(pageId) && !isTemplate(pageId);
   const regenerate = new Set([
     ...input.plan.regeneratePageIds,
-    ...input.plan.reusePageIds.filter(isEditable),
+    ...input.plan.reusePageIds.filter((pageId) => isEditable(pageId) || isTemplate(pageId)),
   ]);
 
   const pageEdits: Record<string, PageEdit> = { ...input.edits };

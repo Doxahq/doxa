@@ -5,9 +5,18 @@ import type {
 } from "@doxahq/contracts";
 import type { Env } from "../../env";
 import type { ProjectInstructionVersion } from "../../repositories/project-instructions";
-import { createRepositoryReadAccess } from "../repository-read-access";
+import { isLostInstallationAccess } from "../github-app";
+import {
+  createRepositoryReadAccess,
+  NoConnectedRepositoryError,
+  type RepositoryReadAccess,
+} from "../repository-read-access";
 import { DoxabotInstructionsService } from "./instructions";
-import { readRepositoryInstructionsFile } from "./repository-instructions-file";
+import {
+  readRepositoryInstructionsFile,
+  RepositoryInstructionsRefusedError,
+  RepositoryInstructionsUnavailableError,
+} from "./repository-instructions-file";
 
 export interface GenerationInstructionsSources {
   getCurrent(projectId: string): Promise<ProjectInstructionVersion | null>;
@@ -18,15 +27,51 @@ export function generationInstructionsSourcesFromEnv(env: Env): GenerationInstru
   const service = DoxabotInstructionsService.fromEnv(env);
   return {
     getCurrent: (projectId) => service.getCurrent(projectId),
-    readRepositoryFile: async (projectId) => {
-      try {
-        return await readRepositoryInstructionsFile(await createRepositoryReadAccess(env, projectId));
-      } catch {
-        // A token or lookup failure must not stop the run.
-        return { status: "unreadable", reason: "request_failed" };
-      }
-    },
+    readRepositoryFile: async (projectId) =>
+      readRepositoryInstructionsFile(await repositoryAccessForInstructions(() => createRepositoryReadAccess(env, projectId))),
   };
+}
+
+/** How long to wait before asking once more for access that GitHub refused. */
+const REFUSAL_RECHECK_DELAY_MS = 2_000;
+
+export interface RepositoryAccessOptions {
+  /** Waits between the two asks; tests pass a stub. */
+  wait?: (ms: number) => Promise<void>;
+}
+
+/**
+ * Read access for the instructions file. Without it the run cannot read the
+ * code either. A project with no connected repository is a refusal at once.
+ * A lost installation is a refusal only when a second ask, after a short
+ * wait, gets the same answer, so a short GitHub incident is not taken for an
+ * uninstall. Any other failure may pass, so it is retried as unavailable.
+ */
+export async function repositoryAccessForInstructions(
+  createAccess: () => Promise<RepositoryReadAccess>,
+  options: RepositoryAccessOptions = {},
+): Promise<RepositoryReadAccess> {
+  try {
+    return await createAccess();
+  } catch (error) {
+    if (!isLostInstallationAccess(error)) throw classifyAccessFailure(error);
+  }
+  await (options.wait ?? delay)(REFUSAL_RECHECK_DELAY_MS);
+  try {
+    return await createAccess();
+  } catch (error) {
+    throw classifyAccessFailure(error);
+  }
+}
+
+function classifyAccessFailure(error: unknown): Error {
+  return isLostInstallationAccess(error) || error instanceof NoConnectedRepositoryError
+    ? new RepositoryInstructionsRefusedError(error)
+    : new RepositoryInstructionsUnavailableError(error);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** The instructions one run follows, or null when the project has none. */

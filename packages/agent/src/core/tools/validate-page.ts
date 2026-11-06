@@ -10,6 +10,7 @@
  * self-correct in-loop instead of burning a full retry attempt.
  */
 
+import type { PageInstructionRules } from "../../utils/page-instruction-checks";
 import { z } from "zod/v4";
 import { defineTool } from "../tool";
 import { runPageValidation } from "../../utils/page-validator";
@@ -30,6 +31,8 @@ export interface ValidatePageToolOptions {
   onSpan?: AgentSpanCallback;
   /** Exact values that no page may contain, such as the run's credentials. */
   forbiddenValues?: readonly string[];
+  /** The project owner's instructions that a finished page must respect. */
+  instructionRules?: PageInstructionRules;
 }
 
 export const VALIDATE_PAGE_TOOL_DESCRIPTION =
@@ -55,6 +58,7 @@ export function validatePageTool(opts: ValidatePageToolOptions = {}) {
         restEndpointPage: opts.restEndpointPage,
         onSpan: opts.onSpan,
         forbiddenValues: opts.forbiddenValues,
+        instructionRules: opts.instructionRules,
       });
       return JSON.stringify(report);
     },

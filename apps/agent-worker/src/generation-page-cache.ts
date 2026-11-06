@@ -36,12 +36,24 @@ export interface PageCacheKeyInput {
   /** The routes that the page may link to. */
   routeRegistryHash: string;
   documentationPolicyVersion: string;
+  /**
+   * The project instructions fingerprint of the run. A page written under
+   * other instructions is never served, even when its plan did not change.
+   */
+  instructionsFingerprint: string;
+  /**
+   * The content hash of the published page that the writer edits, or null
+   * for a page written from the source. An edit starts from the live text,
+   * which a person can change between runs, so an edit is only served for
+   * the same live text.
+   */
+  editBaseContentHash: string | null;
   /** The writer model and prompt contract, or the contract alone across models. */
   writingContract: string;
 }
 
 /** Bumped when the key inputs change, so old entries are never misread. */
-export const PAGE_CACHE_KEY_VERSION = 2;
+export const PAGE_CACHE_KEY_VERSION = 4;
 
 export interface PageDependencyDigestInput {
   paths: readonly string[];
@@ -143,6 +155,8 @@ export async function pageCacheKey(
     input.dependencyDigest,
     input.routeRegistryHash,
     input.documentationPolicyVersion,
+    input.instructionsFingerprint,
+    input.editBaseContentHash,
     input.writingContract,
   ]));
   return `${PAGE_CACHE_PREFIX}${digest}.json`;

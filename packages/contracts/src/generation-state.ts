@@ -138,7 +138,107 @@ export const generationPageStateSchema = versionedStateSchema.extend({
    * pages written before the field existed.
    */
   briefFingerprint: z.string().trim().min(1).optional(),
+  /**
+   * The project instructions fingerprint that the page was written with. A
+   * page that a run kept keeps its older value, so a later run edits it to
+   * follow the current instructions. Absent on pages written before the
+   * field: they follow the run-level fingerprint of their state.
+   */
+  projectInstructionsFingerprint: z.string().trim().min(1).optional(),
 }).strict();
+
+/** The failed catch-up runs after which a page stays behind the instructions. */
+export const MAX_INSTRUCTION_CATCH_UP_ATTEMPTS = 3;
+
+/** Bounds the manifest list; a site with more behind pages lists the first ones. */
+export const MAX_BEHIND_INSTRUCTION_PAGE_IDS = 1_000;
+
+/**
+ * How many runs in a row failed to bring each page up to one instructions
+ * fingerprint. One object per site, outside the published state, because a
+ * run whose only work is a failed catch-up publishes nothing and must still
+ * count. A ledger for another fingerprint counts as empty, so new
+ * instructions give every page new attempts.
+ */
+export const instructionCatchUpLedgerSchema = z.object({
+  schemaVersion: z.literal(1),
+  instructionsFingerprint: z.string().trim().min(1),
+  /** The job that wrote the ledger last, so a retried step does not count twice. */
+  lastJobId: z.string().trim().min(1),
+  attempts: z.record(
+    z.string().trim().min(1),
+    z.number().int().min(1).max(MAX_INSTRUCTION_CATCH_UP_ATTEMPTS),
+  ),
+}).strict();
+
+export type InstructionCatchUpLedger = z.infer<typeof instructionCatchUpLedgerSchema>;
+
+/** Where a site keeps its catch-up ledger; the deleted-site collector removes it with the site. */
+export function instructionCatchUpLedgerKey(siteId: string): string {
+  return `sites/${siteId}/generation-state/instruction-catch-up.json`;
+}
+
+/** The ledger in a stored object, or null when it is missing or malformed. */
+export function parseInstructionCatchUpLedger(value: unknown): InstructionCatchUpLedger | null {
+  const parsed = instructionCatchUpLedgerSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+/** The pages that runs no longer try to bring up to these instructions. */
+export function exhaustedCatchUpPageIds(
+  ledger: InstructionCatchUpLedger | null | undefined,
+  instructionsFingerprint: string,
+): Set<string> {
+  if (!ledger || ledger.instructionsFingerprint !== instructionsFingerprint) return new Set();
+  return new Set(Object.entries(ledger.attempts)
+    .filter(([, attempts]) => attempts >= MAX_INSTRUCTION_CATCH_UP_ATTEMPTS)
+    .map(([pageId]) => pageId));
+}
+
+/**
+ * The ledger after one run. Each failed catch-up page counts one more.
+ * Entries for pages that are no longer behind the instructions in the
+ * published state, or no longer in the structure, leave the ledger: a page
+ * that a run wrote is still behind until its version is published, so a
+ * write neither counts nor resets. A ledger for other instructions starts
+ * again from empty. Null when nothing changes, including a second write by
+ * the same job.
+ */
+export function nextInstructionCatchUpLedger(input: {
+  ledger: InstructionCatchUpLedger | null | undefined;
+  instructionsFingerprint: string;
+  jobId: string;
+  catchUpPageIds: readonly string[];
+  failedPageIds: ReadonlySet<string>;
+  /** The pages still behind the instructions in the published state and in this run's structure. */
+  behindPageIds: ReadonlySet<string>;
+}): InstructionCatchUpLedger | null {
+  const forOtherInstructions = input.ledger !== null && input.ledger !== undefined
+    && input.ledger.instructionsFingerprint !== input.instructionsFingerprint;
+  const current = forOtherInstructions ? null : input.ledger ?? null;
+  if (current?.lastJobId === input.jobId) return null;
+
+  const attempts: Record<string, number> = Object.fromEntries(
+    Object.entries(current?.attempts ?? {}).filter(([pageId]) => input.behindPageIds.has(pageId)),
+  );
+  for (const pageId of input.catchUpPageIds) {
+    if (!input.failedPageIds.has(pageId)) continue;
+    attempts[pageId] = Math.min((attempts[pageId] ?? 0) + 1, MAX_INSTRUCTION_CATCH_UP_ATTEMPTS);
+  }
+  const sorted = sortedRecord(attempts);
+  const unchanged = JSON.stringify(sorted) === JSON.stringify(sortedRecord(current?.attempts ?? {}));
+  if (unchanged && !forOtherInstructions) return null;
+  return {
+    schemaVersion: 1,
+    instructionsFingerprint: input.instructionsFingerprint,
+    lastJobId: input.jobId,
+    attempts: sorted,
+  };
+}
+
+function sortedRecord(record: Readonly<Record<string, number>>): Record<string, number> {
+  return Object.fromEntries(Object.entries(record).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
 
 export const generationStateObjectReferenceSchema = z.object({
   key: normalizedSourcePathSchema,
@@ -175,6 +275,14 @@ export const generationStateManifestSchema = versionedStateSchema.extend({
     },
   ),
   createdAt: z.string().datetime(),
+  /**
+   * The pages that this state keeps behind its project instructions and that
+   * a later run writes again, so the admission check knows that a run has
+   * work although nothing else changed. Locked pages are left out. Pages that
+   * ran out of catch-up attempts are left out when the admission check reads
+   * the catch-up ledger. Absent on older states and when no page is behind.
+   */
+  behindInstructionPageIds: z.array(z.string().trim().min(1)).max(MAX_BEHIND_INSTRUCTION_PAGE_IDS).optional(),
 }).strict();
 
 const orderedUniqueStringsSchema = z.array(z.string().trim().min(1))
@@ -203,12 +311,17 @@ export const incrementalGenerationPlanSchema = z.object({
     instructionsChanged: z.number().int().nonnegative().optional(),
   }).strict().optional(),
   /**
-   * Owned pages that the run kept although their sources changed. Each one
-   * is in `reusePageIds`.
+   * Owned pages for the review: kept although their sources or the project
+   * instructions changed (each one in `reusePageIds`), or left out because
+   * the new plan has no page for them (each one in `removedPageIds`).
    */
   ownedPageFlags: z.array(z.object({
     pageId: z.string().trim().min(1),
     changedPaths: z.array(z.string().min(1)),
+    /** The page may not follow the current project instructions. */
+    instructionsChanged: z.literal(true).optional(),
+    /** The new plan has no page for it, so the run left it out. */
+    removed: z.literal(true).optional(),
   }).strict()).optional(),
   /**
    * Regenerated pages that the baseline already has, by page ID: where the
@@ -228,6 +341,12 @@ export const incrementalGenerationPlanSchema = z.object({
    * changes only where the instructions ask.
    */
   editReason: z.literal("instructions_changed").optional(),
+  /**
+   * Regenerated pages that the run writes only to bring them up to the
+   * current instructions, after an earlier run kept them. A failure among
+   * them never counts toward the page failure budget of the run.
+   */
+  catchUpPageIds: orderedUniqueStringsSchema.optional(),
 }).strict().superRefine((plan, context) => {
   const activeIds = [
     ...plan.regeneratePageIds,
@@ -240,10 +359,13 @@ export const incrementalGenerationPlanSchema = z.object({
     });
   }
   const reused = new Set(plan.reusePageIds);
-  if (plan.ownedPageFlags?.some((flag) => !reused.has(flag.pageId))) {
+  const removed = new Set(plan.removedPageIds);
+  if (plan.ownedPageFlags?.some((flag) =>
+    flag.removed ? !removed.has(flag.pageId) : !reused.has(flag.pageId)
+  )) {
     context.addIssue({
       code: "custom",
-      message: "A flagged owned page must be reused.",
+      message: "A flagged owned page must be reused, or removed when the flag says so.",
       path: ["ownedPageFlags"],
     });
   }
@@ -276,6 +398,11 @@ export const reusableGenerationStateSchema = z.object({
   analysis: generationAnalysisStateSchema,
   structure: generationStructureStateSchema,
   pages: z.array(generationPageStateSchema),
+  /**
+   * The site's catch-up ledger, read with the published state. It is not
+   * part of the published state: unpublished runs update it too.
+   */
+  instructionCatchUp: instructionCatchUpLedgerSchema.optional(),
 }).strict();
 
 export type SourceFileHash = z.infer<typeof sourceFileHashSchema>;

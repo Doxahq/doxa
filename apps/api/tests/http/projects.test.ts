@@ -464,7 +464,7 @@ describe("project routes docs URLs", () => {
       outcome: "confirmation_required",
       reason: "unchanged_source",
       message:
-        "The repository content and generation configuration have not changed since the current production deployment. A new generation will likely produce the same documentation.",
+        "The repository content, Doxabot instructions, and generation configuration have not changed since the current production deployment. A new generation will likely produce the same documentation.",
     });
 
     const response = await worker.fetch(
@@ -482,7 +482,7 @@ describe("project routes docs URLs", () => {
       outcome: "confirmation_required",
       reason: "unchanged_source",
       message:
-        "The repository content and generation configuration have not changed since the current production deployment. A new generation will likely produce the same documentation.",
+        "The repository content, Doxabot instructions, and generation configuration have not changed since the current production deployment. A new generation will likely produce the same documentation.",
     });
     expect(send).not.toHaveBeenCalled();
   });

@@ -7,6 +7,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./stable-hash": "./src/stable-hash.ts",
+    "./path-glob": "./src/path-glob.ts",
+    "./generation-state": "./src/generation-state.ts",
     "./validation": "./src/validation.ts",
     "./validation-messages": "./src/validation-messages.ts",
     "./docs-branches": "./src/docs-branches.ts",

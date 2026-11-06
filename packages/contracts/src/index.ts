@@ -3,6 +3,7 @@ import { referenceSourceReportSchema } from "./reference-source";
 import {
   flaggedPageSchema,
   ownedPageFlagSchema,
+  pageOpenIssuesSchema,
   pageSourcesSchema,
 } from "./generation-reviews";
 import { siteConfigSchema } from "@doxahq/site-config";
@@ -60,7 +61,7 @@ export * from "./generation-resume";
 export * from "./model-providers";
 export * from "./reference-source";
 
-export const WRITING_FINGERPRINT_VERSION = "doxabot-writing-v1";
+export const WRITING_FINGERPRINT_VERSION = "doxabot-writing-v2";
 /**
  * The version of the planning contract. A run whose baseline has another
  * version analyzes the repository again and plans every page again. Bump it
@@ -70,15 +71,18 @@ export const WRITING_FINGERPRINT_VERSION = "doxabot-writing-v1";
  * endpoints without their facts, from the removed file-by-file extraction.
  * And for v8: v7 analyses lost every endpoint and export that a filter on
  * the project category judged internal. The project instructions decide now.
+ * And for v9: v8 analyses list a docs folder as a collection, so each file
+ * became a public page. The planner chooses from those files now, and pages
+ * can declare a page type that the project instructions can turn off.
  */
-export const PLANNING_FINGERPRINT_VERSION = "doxabot-planning-v8";
+export const PLANNING_FINGERPRINT_VERSION = "doxabot-planning-v9";
 /**
  * The hash of the structure and structure review response schemas that
  * PLANNING_FINGERPRINT_VERSION was set for. A test in @doxahq/agent fails
  * when the schemas change, so the planning version cannot stay the same.
  */
 export const PLANNER_OUTPUT_SCHEMA_HASH =
-  "6d6ce0464bda23d6f05f906a43b37822676ba97f523bbc3e3ceb0558c132e73b";
+  "7a2712b19d2a479772e9f6eca69b587a72d2cb01bd8ccbcc6741bf5131436acc";
 export const WRITER_HANDOFF_CONTRACT_VERSION = "writer-handoff-v1";
 /** The default models call the Anthropic API (DEFAULT_MODEL_PROVIDER). */
 export const DEFAULT_DOXA_PLANNER_MODEL = "claude-sonnet-5-5";
@@ -87,6 +91,7 @@ export const PUBLIC_DOCUMENTATION_POLICY_VERSION = "public-v1" as const;
 /** The model-independent part of the hosted writer contract. */
 export const WRITING_CONTRACT_VERSION = `${WRITING_FINGERPRINT_VERSION}:${WRITER_HANDOFF_CONTRACT_VERSION}`;
 export * from "./generation-state";
+export * from "./stable-hash";
 export * from "./review-runs";
 export * from "./source-checkout";
 export * from "./source-control";
@@ -204,7 +209,10 @@ export const generationJobSchema = z.object({
 export const ACTIVE_GENERATION_MESSAGE =
   "A generation is already in progress for this project. No new generation was started.";
 export const UNCHANGED_GENERATION_MESSAGE =
-  "The repository content and generation configuration have not changed since the current production deployment. A new generation will likely produce the same documentation.";
+  "The repository content, Doxabot instructions, and generation configuration have not changed since the current production deployment. A new generation will likely produce the same documentation.";
+/** The source did not change, and Doxa could not check the instructions of the published docs. */
+export const UNCHANGED_SOURCE_INSTRUCTIONS_UNKNOWN_MESSAGE =
+  "The repository content and generation configuration have not changed since the current production deployment. Doxa could not check whether the Doxabot instructions changed. If you changed them, start the generation to apply them.";
 
 export const EDITOR_CONTENT_GENERATION_MESSAGE =
   "This site has pages that were written in the editor. A generation reads your repository and writes docs for it, so it can rename, merge, or remove those pages. The result goes to a review, and your live site does not change until you publish it.";
@@ -957,6 +965,8 @@ export const stagedRuntimePageSchema = z.object({
   dependencies: pageDependencyStateSchema,
   contentHash: sha256Schema,
   pageInputHash: sha256Schema,
+  /** Issues that the writer could not fix; absent on older checkpoints. */
+  openIssues: pageOpenIssuesSchema.optional(),
 });
 
 /** A page that a write stage could not write after its retries. */

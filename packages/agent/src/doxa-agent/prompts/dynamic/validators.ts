@@ -1,6 +1,11 @@
 import type { DocumentationStructure, ProjectAnalysis } from "../../../types";
 import { normalizeProjectAnalysis } from "../../../utils/analysis-normalizer";
-import { MIN_DOCUMENTATION_COLLECTION_ITEMS } from "../../../utils/documentation-collection-policy";
+import {
+  collectionsWithPages,
+  isInternalScriptTitle,
+  isPackageScriptTitle,
+  looksLikeScriptTitle,
+} from "../../../utils/documentation-collection-policy";
 import { hasUnbalancedPunctuation } from "../../../utils/title-validation";
 import { detectProjectProfile } from "./profiles";
 
@@ -14,38 +19,7 @@ export interface StructureCoverageValidationContext {
   inputStructure?: DocumentationStructure;
 }
 
-const INTERNAL_SCRIPT_TITLES = new Set([
-  "dev",
-  "build",
-  "start",
-  "lint",
-  "lint:fix",
-  "format",
-  "format:check",
-  "typecheck",
-  "quality",
-  "clean",
-  "prepare",
-  "precommit",
-  "deploy",
-  "deploy:vercel",
-  "deploy:cloudflare",
-  "build:vercel",
-  "build:cloudflare",
-  "build:docker",
-  "start:docker",
-  "generate:docs",
-  "generate:docs:watch",
-  "generate-content-json",
-  "generate-content-json:ide",
-]);
-
-const PACKAGE_SCRIPT_TITLE_PATTERN =
-  /^[a-z0-9][a-z0-9.-]*(?::[a-z0-9][a-z0-9.-]*)+$/;
-
-export function isPackageScriptTitle(titleKey: string): boolean {
-  return PACKAGE_SCRIPT_TITLE_PATTERN.test(titleKey);
-}
+export { isPackageScriptTitle };
 
 /**
  * Topical names that must live as PAGES inside Documentation, never as
@@ -147,7 +121,7 @@ export function validateDocumentationStructureForProfile(
 
       if (
         !isReferencePage &&
-        (INTERNAL_SCRIPT_TITLES.has(titleKey) || isPackageScriptTitle(titleKey))
+        looksLikeScriptTitle(titleKey)
       ) {
         scriptLikePages++;
       }
@@ -179,7 +153,7 @@ export function validateDocumentationStructureForProfile(
       .flatMap((section) => section.pages)
       .filter((page) => {
         const title = normalizeTitle(page.title).toLowerCase();
-        return INTERNAL_SCRIPT_TITLES.has(title) && !publicCommandNames.has(title);
+        return isInternalScriptTitle(title) && !publicCommandNames.has(title);
       });
 
     if (unknownCommandPages.length > 0) {
@@ -300,11 +274,7 @@ function validateCollectionCoverage(
   errors: string[],
   coverageContext: StructureCoverageValidationContext,
 ): void {
-  const collections = analysis.documentationCollections ?? [];
-  if (collections.length === 0) return;
-
-  for (const collection of collections) {
-    if (collection.items.length < MIN_DOCUMENTATION_COLLECTION_ITEMS) continue;
+  for (const collection of collectionsWithPages(analysis)) {
     const pages = structure.sections.flatMap((section) => section.pages);
     const collectionPages = pages.filter((page) => page.collectionId === collection.id);
     if (collectionPages.length === 0) {

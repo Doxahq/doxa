@@ -1,3 +1,5 @@
+import type { DocumentationGenerationBrief } from "../types";
+import { renderProjectInstructionsBlock } from "./project-instructions";
 import { z } from "zod/v4";
 import { run } from "../core";
 import type {
@@ -30,6 +32,7 @@ export const TARGETED_MDX_REPAIR_MAX_ATTEMPTS = 3;
 
 export interface RequestMdxRepairPatchInput {
   provider: Provider;
+  documentationBrief?: Pick<DocumentationGenerationBrief, "projectInstructions">;
   draft: string;
   issue: LocatedMdxIssue;
   repairClass?: TargetedRepairClass;
@@ -167,6 +170,12 @@ export async function repairMdxWithModel(
   };
 }
 
+function instructionsSuffix(brief: RequestMdxRepairPatchInput["documentationBrief"]): string {
+  return brief?.projectInstructions
+    ? `\n\n${renderProjectInstructionsBlock(brief.projectInstructions, "repair")}`
+    : "";
+}
+
 async function requestPatchOnce(
   input: RequestMdxRepairPatchInput & {
     repairAttempt: number;
@@ -196,7 +205,8 @@ async function requestPatchOnce(
       targetedRepairSystemPrompt(repairClass) +
       " Return JSON only. " +
       "Never rewrite the page. The patch must stay within 64 characters of " +
-      "the parser offset and replace at most 512 source characters.",
+      "the parser offset and replace at most 512 source characters." +
+      instructionsSuffix(input.documentationBrief),
     responseFormat: "json",
     maxTokens: 1_500,
     abortController: input.abortController,

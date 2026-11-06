@@ -315,3 +315,19 @@ describe("generation log", () => {
     });
   });
 });
+
+describe("generation log lines for the Doxabot instructions", () => {
+  test("shows removed planned pages, page notices and an unloadable context", () => {
+    expect(lines([
+      event("generation_context_unavailable", "Doxa could not read .doxa/instructions.md.", null, "worker"),
+      event("structure_pages_removed_by_instructions", "Left out 1 planned page that the project instructions rule out: \"FAQ\".", {
+        removedPageCount: 1,
+      }),
+      event("generation_page_notice", "Guide may not follow the Doxabot instructions: Say \"repository\".", null, "worker"),
+    ])).toEqual([
+      "setup error Doxa could not read .doxa/instructions.md.",
+      "plan warning Left out 1 planned page that the project instructions rule out: \"FAQ\".",
+      "write warning Guide may not follow the Doxabot instructions: Say \"repository\".",
+    ]);
+  });
+});

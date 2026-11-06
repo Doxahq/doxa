@@ -9,6 +9,7 @@ import type {
 import { normalizeProjectAnalysis } from "../utils/analysis-normalizer";
 import {
   discoverDocumentationCollections,
+  discoverRepositoryDocuments,
   mergeDocumentationCollections,
 } from "../utils/documentation-collections";
 import type { AgentCacheManager, SourceChangeSet } from "../cache";
@@ -18,7 +19,8 @@ import { generateStructureWithRetry } from "./structure-runner";
 import { prompts } from "./prompts";
 import type { PromptRegistry } from "./prompts";
 import { documentationBriefFingerprint, resolveDocumentationBrief } from "./documentation-policy";
-import { applyReferenceInstructions } from "./reference-instructions";
+import { applyProjectInstructions } from "./project-instructions";
+import { isReferenceEnabled } from "./reference-instructions";
 import { resolvePlanningRepoMap } from "./planning-repo-map";
 import { loadRepositoryAgentNotes, renderRepositoryAgentNotesBlock } from "./repository-agent-notes";
 import { readRepositorySpecs, type RepositorySpecRead } from "../reference-specs/reader";
@@ -71,29 +73,53 @@ function sourceChangesFromCacheCheck(cacheCheck: {
   };
 }
 
+/** Empty when the API reference is off: no spec is read, and the run log reports none. */
+type AnalysisSpecRead = Partial<RepositorySpecRead>;
+
+async function readSpecsForAnalysis(
+  config: AgentConfig,
+  documentationBrief: ResolvedDocumentationGenerationBrief,
+  onProgress: AgentProgressCallback | undefined,
+): Promise<AnalysisSpecRead> {
+  if (!isReferenceEnabled(documentationBrief)) return {};
+  onProgress?.({ stage: "analyzing", message: "Reading API spec files...", progress: 2 });
+  return readRepositorySpecs({
+    checkoutRoot: config.cwd,
+    client: config.specReader,
+    configuredPaths: config.restApiSpecPaths,
+  });
+}
+
 /**
  * Adds what code finds to an analysis: the REST surface of the spec files,
  * which replaces the REST surface of the model, the source report, and the
  * documentation collections. It runs on every analysis path, cached or not.
  * Without a usable spec, the REST surface of the analysis answer stays as
  * the model wrote it: no later step rebuilds or replaces it. Only the
- * project instructions leave out reference surfaces, endpoints or exports.
+ * project instructions leave out reference surfaces, endpoints or exports,
+ * and they enter the analysis here, so every later step reads them as facts.
  */
 async function enrichAnalysis(
   config: AgentConfig,
   analysis: ProjectAnalysis,
-  specRead: RepositorySpecRead,
+  specRead: AnalysisSpecRead,
   documentationBrief: ResolvedDocumentationGenerationBrief,
 ): Promise<ProjectAnalysis> {
-  const discovered = await discoverDocumentationCollections(config.cwd);
-  return applyReferenceInstructions(
-    mergeDocumentationCollections(normalizeProjectAnalysis(withRestReference(analysis, specRead)), discovered),
+  const [discovered, repositoryDocuments] = await Promise.all([
+    discoverDocumentationCollections(config.cwd),
+    discoverRepositoryDocuments(config.cwd),
+  ]);
+  return applyProjectInstructions(
+    {
+      ...mergeDocumentationCollections(normalizeProjectAnalysis(withRestReference(analysis, specRead)), discovered),
+      repositoryDocuments,
+    },
     documentationBrief,
   );
 }
 
 /** The analysis with the REST surface of the spec files, when they gave one, and the source report. */
-function withRestReference(analysis: ProjectAnalysis, specRead: RepositorySpecRead): ProjectAnalysis {
+function withRestReference(analysis: ProjectAnalysis, specRead: AnalysisSpecRead): ProjectAnalysis {
   const withSurface = specRead.surface ? withRestSurface(analysis, specRead.surface) : analysis;
   return { ...withSurface, referenceSourceReport: specRead.report };
 }
@@ -103,7 +129,7 @@ function withRestReference(analysis: ProjectAnalysis, specRead: RepositorySpecRe
  * endpoints and the model leaves them out. Without them, the model route
  * runs: the analysis answer gives every endpoint with all its facts.
  */
-function restReferencePromptMode(specRead: RepositorySpecRead): RestReferencePromptMode {
+function restReferencePromptMode(specRead: AnalysisSpecRead): RestReferencePromptMode {
   const specFiles = specRead.surface?.source?.files;
   return specFiles?.length ? { specFiles } : {};
 }
@@ -147,12 +173,7 @@ export async function analyzeProjectWithCacheState(
   };
 
   try {
-    onProgress?.({ stage: "analyzing", message: "Reading API spec files...", progress: 2 });
-    const specRead = await readRepositorySpecs({
-      checkoutRoot: config.cwd,
-      client: config.specReader,
-      configuredPaths: config.restApiSpecPaths,
-    });
+    const specRead = await readSpecsForAnalysis(config, documentationBrief, onProgress);
 
     // Check cache if available
     if (cacheManager) {

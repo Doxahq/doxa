@@ -1,3 +1,4 @@
+import { isPlannedPageType } from "../utils/planned-page-types";
 import type { DocumentationStructure, PageReferenceMetadata, ProjectAnalysis, SdkReferenceExportKind } from "../types";
 import type { SourceEvidence } from "../types";
 import { normalizeProjectAnalysis } from "../utils/analysis-normalizer";
@@ -146,6 +147,7 @@ function validateStructure(structure: unknown): DocumentationStructure {
         collectionItemId: sanitizeString(typeof page.collectionItemId === "string" ? page.collectionItemId : "") || undefined,
         group: sanitizeString(typeof page.group === "string" ? page.group : "") || undefined,
         reference: sanitizeReference(page.reference),
+        pageType: isPlannedPageType(page.pageType) ? page.pageType : undefined,
       };
       const parent = {
         id: pageId,

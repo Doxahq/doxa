@@ -61,6 +61,7 @@ describe("applyPageLocks", () => {
       statePages,
       lockedHrefs: lockedHrefsOf({ pageLocks: { locked: ["/auth"] } }),
       changedPaths: new Set(["src/auth.ts", "src/billing.ts"]),
+      instructionsChanged: false,
     });
 
     expect(result.regeneratePageIds).toEqual(["billing"]);
@@ -84,6 +85,7 @@ describe("applyPageLocks", () => {
       statePages,
       lockedHrefs: lockedHrefsOf({ pageLocks: { locked: ["/auth"] } }),
       changedPaths: new Set(["src/auth.ts", "src/billing.ts"]),
+      instructionsChanged: false,
     });
 
     expect(result.pageEdits).toEqual({
@@ -101,6 +103,7 @@ describe("applyPageLocks", () => {
         statePages,
         lockedHrefs: lockedHrefsOf({ pageLocks: { locked: ["/auth"] } }),
         changedPaths: new Set(),
+        instructionsChanged: false,
       }),
     ).toBe(original);
   });
@@ -111,6 +114,7 @@ describe("applyPageLocks", () => {
       statePages,
       lockedHrefs: lockedHrefsOf({ pageLocks: { locked: ["/auth/"] } }),
       changedPaths: new Set(["src/other.ts"]),
+      instructionsChanged: false,
     });
 
     expect(result.reusePageIds).toEqual(["auth"]);
@@ -126,10 +130,82 @@ describe("applyPageLocks", () => {
       changedPaths: changedSourcePaths([
         { path: "src/auth.ts", status: "modified" },
       ]),
+      instructionsChanged: false,
     });
 
     expect(lockedPageFlagsOf(result, statePages)).toEqual([
       { href: "/auth", title: "auth", changedPaths: ["src/auth.ts"] },
     ]);
+  });
+
+  test("flags a locked page that an instructions change would edit", () => {
+    const result = applyPageLocks({
+      plan: incrementalGenerationPlanSchema.parse({
+        ...plan(["auth", "billing"], []),
+        causes: undefined,
+        reasons: ["The project instructions changed."],
+        editReason: "instructions_changed",
+        pageEdits: {
+          auth: { artifactKey: "v1/auth.mdx", changedSources: [], instructionsChanged: true },
+          billing: { artifactKey: "v1/billing.mdx", changedSources: [], instructionsChanged: true },
+        },
+      }),
+      statePages,
+      lockedHrefs: lockedHrefsOf({ pageLocks: { locked: ["/auth"] } }),
+      changedPaths: new Set(),
+      instructionsChanged: true,
+    });
+
+    expect(result.reusePageIds).toEqual(["auth"]);
+    expect(result.ownedPageFlags).toEqual([
+      { pageId: "auth", changedPaths: [], instructionsChanged: true },
+    ]);
+    expect(lockedPageFlagsOf(result, statePages)).toEqual([
+      { href: "/auth", title: "auth", changedPaths: [], instructionsChanged: true },
+    ]);
+    expect(incrementalGenerationPlanSchema.safeParse(result).success).toBe(true);
+  });
+
+  test("keeps a locked page that only catches up with older instructions, without a flag", () => {
+    const result = applyPageLocks({
+      plan: incrementalGenerationPlanSchema.parse({
+        ...plan(["auth"], ["billing"]),
+        causes: { newPages: 0, inputChanged: 0, dependencyChanged: 0, instructionsChanged: 1 },
+        pageEdits: { auth: { artifactKey: "v1/auth.mdx", changedSources: [], instructionsChanged: true } },
+        catchUpPageIds: ["auth"],
+      }),
+      statePages,
+      lockedHrefs: lockedHrefsOf({ pageLocks: { locked: ["/auth"] } }),
+      changedPaths: new Set(),
+      instructionsChanged: false,
+    });
+
+    expect(result.reusePageIds).toEqual(["billing", "auth"]);
+    expect(result.ownedPageFlags).toBeUndefined();
+    expect(result.pageEdits).toBeUndefined();
+    expect(result.catchUpPageIds).toBeUndefined();
+    expect(result.modelCallsRequired).toBe(false);
+    expect(incrementalGenerationPlanSchema.safeParse(result).success).toBe(true);
+  });
+
+  test("flags a locked page that the new plan removes", () => {
+    const result = applyPageLocks({
+      plan: incrementalGenerationPlanSchema.parse({
+        ...plan(["billing"], []),
+        removedPageIds: ["auth"],
+      }),
+      statePages,
+      lockedHrefs: lockedHrefsOf({ pageLocks: { locked: ["/auth"] } }),
+      changedPaths: new Set(),
+      instructionsChanged: false,
+    });
+
+    expect(result.regeneratePageIds).toEqual(["billing"]);
+    expect(result.removedPageIds).toEqual(["auth"]);
+    expect(result.ownedPageFlags).toEqual([{ pageId: "auth", changedPaths: [], removed: true }]);
+    expect(lockedPageFlagsOf(result, statePages)).toEqual([
+      { href: "/auth", title: "auth", changedPaths: [], removed: true },
+    ]);
+    expect(incrementalGenerationPlanSchema.safeParse(result).success).toBe(true);
   });
 });

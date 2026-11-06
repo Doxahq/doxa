@@ -50,32 +50,6 @@ export function findRestEndpointDuplicateSection(
   return null;
 }
 
-export function removeRestEndpointDuplicateSection(
-  body: string,
-  duplicate: RestEndpointDuplicateSection,
-): string {
-  const lines = body.split("\n");
-  let endLine = lines.length;
-  let fence: FenceState | undefined;
-
-  for (let line = duplicate.line + 1; line < lines.length; line += 1) {
-    const source = lines[line] ?? "";
-    fence = nextFenceState(source, fence);
-    if (fence) continue;
-
-    const heading = parseHeading(source);
-    if (heading && heading.level <= duplicate.level) {
-      endLine = line;
-      break;
-    }
-  }
-
-  return [
-    ...lines.slice(0, duplicate.line),
-    ...lines.slice(endLine),
-  ].join("\n").replace(/\n{3,}/g, "\n\n").trim();
-}
-
 interface ParsedHeading {
   readonly level: 2 | 3;
   readonly text: string;

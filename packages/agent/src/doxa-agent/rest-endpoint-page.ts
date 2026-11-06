@@ -25,7 +25,9 @@ import {
 import {
   buildRestRequestModel,
   buildRestRequestSample,
+  type RestRequestClientId,
 } from "./rest-request-samples";
+import type { DoxabotCodeLanguage } from "@doxahq/contracts/doxabot-instructions";
 import { exampleFromFields } from "./rest-json-example";
 
 const DEFAULT_API_BASE_URL = "https://api.example.com";
@@ -117,12 +119,52 @@ export function resolveRestEndpoint(
 export function restEndpointReferenceOptions(
   writerContext: WriterContext | undefined,
 ): RestEndpointReferenceOptions {
+  const policy = resolveRestApiDocsPolicy(writerContext?.answers ?? {});
+  const codeLanguages = writerContext?.documentationBrief?.projectInstructions?.instructions.codeLanguages ?? [];
   return {
-    policy: resolveRestApiDocsPolicy(writerContext?.answers ?? {}),
+    policy: {
+      ...policy,
+      requestClients: Object.freeze(orderRequestClientsByLanguage(policy.requestClients, codeLanguages)),
+    },
     authenticationRoute: writerContext?.structure
       ? restAuthenticationRoute(writerContext.structure)
       : undefined,
   };
+}
+
+const REQUEST_CLIENT_LANGUAGES: Readonly<Record<RestRequestClientId, DoxabotCodeLanguage>> = {
+  curl: "curl",
+  "node-fetch": "javascript",
+  "node-xhr": "javascript",
+  "python-requests": "python",
+  "python-httpx": "python",
+  go: "go",
+};
+
+/** A request client's place in the owner's language order. TypeScript readers get the JavaScript clients. */
+function ownerLanguageRank(client: RestRequestClientId, codeLanguages: readonly DoxabotCodeLanguage[]): number {
+  const language = REQUEST_CLIENT_LANGUAGES[client];
+  const readers: readonly DoxabotCodeLanguage[] = language === "javascript" ? ["javascript", "typescript"] : [language];
+  const ranks = readers
+    .map((candidate) => codeLanguages.indexOf(candidate))
+    .filter((rank) => rank >= 0);
+  return ranks.length > 0 ? Math.min(...ranks) : codeLanguages.length;
+}
+
+/**
+ * The request samples in the owner's code language order. The project's own
+ * client list decides which samples exist; the owner's languages only order
+ * them, and clients in a language the owner did not name follow in their order.
+ */
+export function orderRequestClientsByLanguage(
+  clients: readonly RestRequestClientId[],
+  codeLanguages: readonly DoxabotCodeLanguage[],
+): RestRequestClientId[] {
+  if (codeLanguages.length === 0) return [...clients];
+  return clients
+    .map((client, position) => ({ client, position, rank: ownerLanguageRank(client, codeLanguages) }))
+    .sort((a, b) => a.rank - b.rank || a.position - b.position)
+    .map(({ client }) => client);
 }
 
 /** Places the deterministic block after the page prose, as the last block. */

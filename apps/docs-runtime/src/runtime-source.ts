@@ -3,6 +3,7 @@ import {
   type DocsHostResolution,
   type InternalApiRpc,
 } from "@doxahq/contracts";
+import type { PublicDocsFeatureConfig } from "@doxahq/contracts/docs-prerender";
 import {
   SUPPORTED_DOCS_ARTIFACT_SCHEMA_VERSIONS,
   buildArtifactPrefix,
@@ -219,29 +220,7 @@ interface RuntimeSiteConfig {
   url: string;
 }
 
-interface RuntimeFeatureConfig {
-  branding: boolean;
-  rightSidebar: boolean;
-  feedbackEdit: boolean;
-  tableOfContents: boolean;
-  scrollToTop: boolean;
-  ai: {
-    chat: boolean;
-    chatWithPage: boolean;
-    floatingInput: boolean;
-  };
-  copyPage: {
-    markdown: boolean;
-    rawText: boolean;
-  };
-  apiPlayground: boolean;
-  /** The owner's "Try it" target (SEC-010); unset turns Try it off. */
-  apiPlaygroundBaseUrl?: string;
-  /** Who sends "Try it" requests. Unset means the proxy, when it can. */
-  apiPlaygroundTransport?: "proxy" | "browser";
-  rawMarkdown: boolean;
-  loadFromGithub: boolean;
-}
+type RuntimeFeatureConfig = PublicDocsFeatureConfig;
 
 interface Frontmatter {
   title: string;

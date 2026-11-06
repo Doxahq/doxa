@@ -169,23 +169,27 @@ const parsedDocumentSchema = z.discriminatedUnion("ok", [
     .strict(),
 ]);
 
-const featureConfigSchema = z
+const aiFeatureFields = {
+  chat: z.boolean(),
+  chatWithPage: z.boolean(),
+  floatingInput: z.boolean(),
+};
+
+const copyPageFeatureFields = { markdown: z.boolean(), rawText: z.boolean() };
+
+/**
+ * The feature flags that public route data carries to the browser. The key
+ * order is the order of the route-data golden files: keep it.
+ */
+export const publicDocsFeatureConfigSchema = z
   .object({
     branding: z.boolean(),
     rightSidebar: z.boolean(),
     feedbackEdit: z.boolean(),
     tableOfContents: z.boolean(),
     scrollToTop: z.boolean(),
-    ai: z
-      .object({
-        chat: z.boolean(),
-        chatWithPage: z.boolean(),
-        floatingInput: z.boolean(),
-      })
-      .strict(),
-    copyPage: z
-      .object({ markdown: z.boolean(), rawText: z.boolean() })
-      .strict(),
+    ai: z.object(aiFeatureFields).strict(),
+    copyPage: z.object(copyPageFeatureFields).strict(),
     apiPlayground: z.boolean(),
     apiPlaygroundBaseUrl: z.string().optional(),
     apiPlaygroundTransport: z.enum(["proxy", "browser"]).optional(),
@@ -193,6 +197,34 @@ const featureConfigSchema = z
     loadFromGithub: z.boolean(),
   })
   .strict();
+
+export type PublicDocsFeatureConfig = z.infer<
+  typeof publicDocsFeatureConfigSchema
+>;
+
+/**
+ * The same fields in the same order, without `.strict()`: parsing drops
+ * every key that the public contract does not name, at every level.
+ */
+const featureConfigProjectionSchema = z.object({
+  ...publicDocsFeatureConfigSchema.shape,
+  ai: z.object(aiFeatureFields),
+  copyPage: z.object(copyPageFeatureFields),
+});
+
+/**
+ * Projects resolved site-config features onto the public route-data shape.
+ * Site config gains keys that only the platform reads (for example
+ * `searchProvider`). Such a key must never reach route data, because the
+ * strict route-data parser rejects it and every client navigation fails.
+ * To send a new flag to the browser, add it to
+ * `publicDocsFeatureConfigSchema` first.
+ */
+export function toPublicDocsFeatureConfig(
+  features: unknown,
+): PublicDocsFeatureConfig {
+  return featureConfigProjectionSchema.parse(features);
+}
 
 const sectionSchema = z
   .object({
@@ -345,7 +377,7 @@ const pageDataFields = {
       url: publicUrlSchema,
     })
     .strict(),
-  features: featureConfigSchema,
+  features: publicDocsFeatureConfigSchema,
   sections: z.array(sectionSchema),
   visibleSections: z.array(sectionSchema),
   currentSection: sectionSchema.nullable(),

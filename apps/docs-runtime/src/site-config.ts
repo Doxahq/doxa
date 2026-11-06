@@ -1,3 +1,7 @@
+import {
+  toPublicDocsFeatureConfig,
+  type PublicDocsFeatureConfig,
+} from "@doxahq/contracts/docs-prerender";
 import { readSiteConfig as readArtifactSiteConfig } from "@doxahq/docs-engine";
 import type { ResolvedSiteConfig } from "@doxahq/site-config";
 import {
@@ -57,8 +61,14 @@ export function readSiteConfig(
   return pending;
 }
 
-/** Keep the legacy RPC feature shape stable; the resolved config carries all flags. */
-export function runtimeFeatures(config: ResolvedSiteConfig) {
-  const { AgressiveNavPrefetch: _prefetch, ...features } = config.features;
-  return features;
+/**
+ * The feature flags that the renderer receives. Only the keys of the public
+ * route-data contract pass: site config also holds flags that only the
+ * platform reads (`AgressiveNavPrefetch`, `searchProvider`), and the
+ * renderer's strict route-data parser rejects any key it does not know.
+ */
+export function runtimeFeatures(
+  config: ResolvedSiteConfig,
+): PublicDocsFeatureConfig {
+  return toPublicDocsFeatureConfig(config.features);
 }

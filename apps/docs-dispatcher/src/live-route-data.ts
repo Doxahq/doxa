@@ -13,6 +13,7 @@ export async function createLiveRouteDataResponse(
   renderer: Pick<PrerenderRendererRpc, "prepare">,
   resolution: DocsDomainResolution,
   pathname: string,
+  warn: (message: string) => void = console.warn,
 ): Promise<Response> {
   try {
     const routeData = parsePublicDocsRouteDataV1(
@@ -27,7 +28,21 @@ export async function createLiveRouteDataResponse(
         "x-doxa-representation-source": "dynamic",
       },
     });
-  } catch {
+  } catch (error) {
+    warn(
+      `[doxa-docs-dispatcher] Live route data failed for site ${resolution.siteId} path ${JSON.stringify(pathname)}: ${describeError(error)}`,
+    );
     return new Response("Live route data unavailable", { status: 503 });
   }
+}
+
+/** A Zod error message lists every issue, so the log keeps only its start. */
+const MAX_ERROR_LENGTH = 500;
+
+function describeError(error: unknown): string {
+  const text =
+    error instanceof Error ? `${error.name}: ${error.message}` : "Unknown error";
+  return text.length > MAX_ERROR_LENGTH
+    ? `${text.slice(0, MAX_ERROR_LENGTH)}…`
+    : text;
 }

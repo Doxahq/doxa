@@ -1,6 +1,8 @@
 import { useState } from "react"
 import type { RepositoryBranchesDto } from "@doxahq/contracts"
-import { Check, ChevronDown, GitBranch, Loader2 } from "lucide-react"
+import { Check, ChevronDown, GitBranch } from "lucide-react"
+
+import { Bar } from "~/components/dashboard/skeletons/skeleton-kit"
 
 import {
   Command,
@@ -11,6 +13,9 @@ import {
   CommandList,
 } from "~/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover"
+
+/** The widths of the placeholder rows while the branches load. */
+const LOADING_ROW_WIDTHS = ["5.5rem", "9rem", "7rem", "11rem"] as const
 
 /** The value of the "use the typed name" item. cmdk needs a value that no branch has. */
 const TYPED_VALUE_PREFIX = "__typed__:"
@@ -95,14 +100,10 @@ export function ProductionBranchPicker({
             className="h-10 text-[13px]"
           />
           <CommandList className="scrollbar-subtle max-h-72 p-1">
-            {isLoading ? (
-              <p className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
-                <Loader2 aria-hidden="true" className="size-3.5 animate-spin motion-reduce:animate-none" />
-                Loading branches…
-              </p>
-            ) : null}
+            {isLoading ? <LoadingRows /> : null}
             {error ? <p className="px-2 py-3 text-xs text-muted-foreground">{error} You can type a branch name.</p> : null}
-            {offerTyped ? null : (
+            {/* An empty list while it loads is not "no match". */}
+            {offerTyped || isLoading ? null : (
               <CommandEmpty className="py-6 text-center text-xs text-muted-foreground">No branch matches.</CommandEmpty>
             )}
             <CommandGroup className="p-0">
@@ -144,6 +145,23 @@ export function ProductionBranchPicker({
         </Command>
       </PopoverContent>
     </Popover>
+  )
+}
+
+/**
+ * Rows with the shape of branch items, so the list does not jump when the
+ * names arrive. They need no motion to read as loading.
+ */
+function LoadingRows() {
+  return (
+    <div role="status" aria-label="Loading branches" className="flex flex-col">
+      {LOADING_ROW_WIDTHS.map((width) => (
+        <div key={width} className="flex items-center gap-2 px-2 py-1.5 text-[13px]">
+          <span aria-hidden="true" className="size-3.5 shrink-0" />
+          <Bar width={width} height="0.8em" className="my-[0.35em]" />
+        </div>
+      ))}
+    </div>
   )
 }
 

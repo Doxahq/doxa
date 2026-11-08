@@ -82,9 +82,10 @@ export class PendingMergesRepository implements PendingMergesStore {
       .innerJoin(schema.projects, eq(schema.projects.id, merges.projectId))
       .innerJoin(settings, eq(settings.projectId, merges.projectId))
       .where(
+        // The merge trigger does not depend on the pull request previews
+        // setting (`enabled`): each one is turned on or off on its own.
         and(
           isNull(merges.attemptedAt),
-          eq(settings.enabled, true),
           ne(settings.mergeTrigger, "manual"),
         ),
       )

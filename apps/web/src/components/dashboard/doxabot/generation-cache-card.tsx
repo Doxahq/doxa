@@ -108,8 +108,9 @@ function ClearCacheDialog({
         </Button>
       </DialogTrigger>
 
-      <DialogContent>
-        <DialogHeader>
+      {/* The card's warning tint, layered over the solid dialog background. */}
+      <DialogContent className="border-warning/35 bg-linear-to-b from-warning/8 to-warning/8">
+        <DialogHeader className="border-warning/20">
           <DialogTitle>Clear generation cache?</DialogTitle>
           <DialogDescription>
             The next generation will analyze the repository from scratch and rebuild every page.
@@ -128,13 +129,17 @@ function ClearCacheDialog({
           </p>
         </DialogBody>
 
-        <DialogFooter>
+        <DialogFooter className="border-warning/20">
           <DialogClose asChild>
             <Button variant="ghost" disabled={isClearing}>
               Cancel
             </Button>
           </DialogClose>
-          <Button onClick={() => void clear()} disabled={isClearing}>
+          <Button
+            onClick={() => void clear()}
+            disabled={isClearing}
+            className="bg-warning text-warning-foreground hover:bg-warning/90"
+          >
             {isClearing ? <Loader2 aria-hidden="true" className="mr-2 size-4 animate-spin" /> : null}
             Clear cache
           </Button>

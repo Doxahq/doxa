@@ -999,6 +999,47 @@ describe("Doxabot webhook orchestrator", () => {
     expect(harness.queue.send).not.toHaveBeenCalled();
   });
 
+  test("feeds a merge to the merge trigger also while pull request previews are off", async () => {
+    // Previews and merge updates are separate settings.
+    const harness = createHarness(createAutomationContext({ storedEnabled: false }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-merged-previews-off",
+      action: "closed",
+      merged: true,
+    }))).resolves.toEqual({ outcome: "ignored", reason: "project_disabled" });
+
+    expect(harness.mergeTriggers.recordMerge).toHaveBeenCalledWith({
+      projectId,
+      mergeTrigger: "batched",
+      changeExternalId: "987654",
+      changeNumber: 42,
+      mergedAt: new Date(firstUpdatedAt),
+    });
+    expect(harness.jobs.admitDoxabotJob).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    {
+      name: "Doxabot is not available for the project",
+      context: { hasPublishedVersion: false, publishedBaseline: null },
+    },
+    {
+      name: "the pull request merged into another branch",
+      context: { storedEnabled: false, productionBranch: "release" },
+    },
+  ])("does not feed a merge to the merge trigger when $name", async ({ context }) => {
+    const harness = createHarness(createAutomationContext(context));
+
+    await harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-merged-not-fed",
+      action: "closed",
+      merged: true,
+    }));
+
+    expect(harness.mergeTriggers.recordMerge).not.toHaveBeenCalled();
+  });
+
   test("does not feed a closed, unmerged pull request to the merge trigger", async () => {
     const harness = createHarness();
 

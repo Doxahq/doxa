@@ -471,7 +471,11 @@ their behavior. SQL reads it through `productionBranchSql()`
 ## Merge Triggers
 
 Doxabot settings choose what a pull request merged into the production branch
-starts (`doxabot_automation_settings.merge_trigger`):
+starts (`doxabot_automation_settings.merge_trigger`). The merge trigger does not
+depend on the pull request previews setting (`enabled`): a merge feeds it also
+while previews are off. It needs Doxabot to be available for the project (a
+connected private repository and a first publish). The dashboard shows it as
+its own card, "When a pull request merges".
 
 | Value | Result |
 | --- | --- |

@@ -1,7 +1,14 @@
 import type { DoxabotSettingsDto, UpdateDoxabotSettingsInput } from "@doxahq/contracts"
+import { GitMerge } from "lucide-react"
 import { toast } from "sonner"
 
-import { SectionLabel } from "~/components/dashboard/dashboard-header"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "~/components/ui/card"
 import {
   Select,
   SelectContent,
@@ -15,7 +22,52 @@ import {
   parseQuietMinutes,
 } from "~/lib/dashboard/doxabot-merge-model"
 import { getErrorMessage } from "~/lib/errors"
+import { useProjectCapabilities } from "~/lib/dashboard/use-project-capabilities"
+import { useProjectDoxabot } from "~/lib/dashboard/use-project-doxabot"
 import { cn } from "~/lib/utils"
+
+/**
+ * The merge setting of the Doxabot page. It is set on its own: merge updates
+ * run with pull request previews on or off.
+ */
+export function DoxabotMergeUpdatesCard({ projectId }: { projectId: string }) {
+  const state = useProjectDoxabot(projectId)
+  // A merge update starts a generation, so the choice needs `generation.run`.
+  const canChange = useProjectCapabilities(projectId).can("generation.run")
+  const settings = state.settings
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex min-w-0 items-start gap-3">
+          <GitMerge aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <CardTitle>
+              <h3 id="doxabot-merge-updates">When a pull request merges</h3>
+            </CardTitle>
+            <CardDescription>
+              Choose when Doxa updates your docs after code merges into the production branch. Updates always go
+              to a review before they go live.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 border-t border-border pt-4">
+        {settings?.available ? (
+          <DoxabotMergeTrigger
+            settings={settings}
+            disabled={!canChange || state.isSaving}
+            onUpdate={state.update}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Merge updates need the same setup as pull request previews. The previews card shows what is missing.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 
 /**
  * When a merge into the production branch updates the docs. Every update goes
@@ -37,13 +89,7 @@ export function DoxabotMergeTrigger(props: {
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <SectionLabel>When a pull request merges</SectionLabel>
-        <p className="text-sm text-muted-foreground">
-          Choose when Doxa updates your docs after code merges. Updates always go to a review before they go live.
-        </p>
-      </div>
-      <div role="radiogroup" aria-label="When a pull request merges" className="flex flex-col border border-border">
+      <div role="radiogroup" aria-labelledby="doxabot-merge-updates" className="flex flex-col border border-border">
         {MERGE_TRIGGER_OPTIONS.map((option) => {
           const selected = props.settings.mergeTrigger === option.value
           return (
@@ -102,7 +148,9 @@ export function DoxabotMergeTrigger(props: {
           )
         })}
       </div>
-      <p className="text-xs text-muted-foreground">Previews for open pull requests are not affected by this setting.</p>
+      <p className="text-xs text-muted-foreground">
+        This setting does not depend on pull request previews. Each one is turned on or off on its own.
+      </p>
     </section>
   )
 }

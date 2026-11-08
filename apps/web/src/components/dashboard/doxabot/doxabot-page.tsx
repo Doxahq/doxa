@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { usePrefetchQuery, useQuery } from "@tanstack/react-query"
 
 import { PageBody, PageHeading } from "~/components/dashboard/dashboard-header"
 import { DoxabotPageActions } from "~/components/dashboard/doxabot/doxabot-page-actions"
@@ -6,6 +6,7 @@ import { DoxabotStatusRow } from "~/components/dashboard/doxabot/doxabot-status-
 import { GenerationCacheCard } from "~/components/dashboard/doxabot/generation-cache-card"
 import { InstructionsCard } from "~/components/dashboard/doxabot/instructions-card"
 import { ProductionBranchCard } from "~/components/dashboard/doxabot/production-branch-card"
+import { DoxabotMergeUpdatesCard } from "~/components/dashboard/doxabot-merge-trigger"
 import { DoxabotSettingsCard } from "~/components/dashboard/project-doxabot-page"
 import {
   DOXABOT_PAGE_DESCRIPTION,
@@ -18,6 +19,7 @@ import {
   projectDetailQueryOptions,
   projectDoxabotQueryOptions,
   projectGenerationCacheQueryOptions,
+  projectRepositoryBranchesQueryOptions,
 } from "~/lib/queries/dashboard"
 import { doxabotInstructionsQueryOptions } from "~/lib/queries/doxabot-instructions"
 
@@ -29,6 +31,9 @@ export function ProjectDoxabotPage({ projectId }: { projectId: string }) {
   const doxabotQuery = useQuery(projectDoxabotQueryOptions(projectId))
   const cacheQuery = useQuery(projectGenerationCacheQueryOptions(projectId))
   const instructionsQuery = useQuery(doxabotInstructionsQueryOptions(projectId))
+  // GitHub answers the branch list slowly, so it starts with the page. The
+  // page does not wait for it: only the branch picker uses it.
+  usePrefetchQuery(projectRepositoryBranchesQueryOptions(projectId))
   const { can } = useProjectCapabilities(projectId)
 
   const isFirstLoad = useIsFirstLoad([detailQuery, doxabotQuery, cacheQuery, instructionsQuery])
@@ -53,6 +58,7 @@ export function ProjectDoxabotPage({ projectId }: { projectId: string }) {
         <InstructionsCard projectId={projectId} current={instructions} />
         <ProductionBranchCard projectId={projectId} />
         <DoxabotSettingsCard projectId={projectId} />
+        <DoxabotMergeUpdatesCard projectId={projectId} />
         <GenerationCacheCard projectId={projectId} />
       </section>
     </PageBody>

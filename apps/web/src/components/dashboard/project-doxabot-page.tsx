@@ -15,11 +15,11 @@ import {
   CardTitle,
 } from "~/components/ui/card"
 import { Switch } from "~/components/dashboard/content/site-settings/fields/controls"
-import { DoxabotMergeTrigger } from "~/components/dashboard/doxabot-merge-trigger"
 import { getDoxabotViewModel } from "~/lib/dashboard/doxabot-model"
 import { useProjectCapabilities } from "~/lib/dashboard/use-project-capabilities"
 import { useProjectDoxabot } from "~/lib/dashboard/use-project-doxabot"
 import { getErrorMessage } from "~/lib/errors"
+import { cn } from "~/lib/utils"
 
 /**
  * Doxabot on pull requests: it prepares documentation previews. Shown as a
@@ -64,15 +64,20 @@ export function DoxabotSettingsCard({ projectId }: { projectId: string }) {
               Generates review-only documentation previews for pull requests
               that target the production branch. Doxabot
               analyzes eligible code changes without changing published docs.
-              Each preview uses credits.
+              Each preview uses credits. Merge updates have their own setting below.
             </CardDescription>
           </div>
         </div>
         {canChange ? (
           <span className="mt-0.5 flex shrink-0 items-center gap-2">
-            {state.isSaving ? (
-              <Loader2 aria-hidden="true" className="size-4 animate-spin text-muted-foreground motion-reduce:animate-none" />
-            ) : null}
+            {/* The slot keeps its width while hidden, so the description never rewraps. */}
+            <Loader2
+              aria-hidden="true"
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground",
+                state.isSaving ? "animate-spin motion-reduce:animate-none" : "invisible",
+              )}
+            />
             <Switch
               aria-labelledby="doxabot-pull-request-previews"
               aria-describedby={showAlert ? "doxabot-availability" : "doxabot-pull-request-status"}
@@ -98,14 +103,6 @@ export function DoxabotSettingsCard({ projectId }: { projectId: string }) {
             <AlertTitle>{view.title}</AlertTitle>
             <AlertDescription>{view.description}</AlertDescription>
           </Alert>
-        ) : null}
-
-        {state.settings?.enabled && state.settings.available ? (
-          <DoxabotMergeTrigger
-            settings={state.settings}
-            disabled={!canChange || state.isSaving}
-            onUpdate={state.update}
-          />
         ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3" aria-live="polite">

@@ -162,7 +162,8 @@ export function pendingMergesQueryOptions(projectId: string) {
 }
 
 /** Branches change on GitHub, not here, so a short stale time keeps the picker current. */
-const BRANCHES_STALE_TIME_MS = 30_000
+/** Branches change rarely. An older list still shows at once and loads again behind it. */
+const BRANCHES_STALE_TIME_MS = 5 * 60_000
 
 /** The branches of a repository that has no project yet. */
 export function githubRepositoryBranchesQueryOptions(githubRepositoryId: string) {

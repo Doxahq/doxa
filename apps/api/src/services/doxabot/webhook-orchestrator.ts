@@ -294,10 +294,18 @@ export class DoxabotWebhookOrchestrator {
         ? null
         : "project_disabled";
     if (ignoredReason) {
-      // Previews made before Doxabot was turned off still end with their
-      // pull request.
       if (event.kind === "change_proposal") {
-        await this.stopRecordedPreviews(context, event);
+        await runEach([
+          // The merge trigger has its own setting: a merge feeds it also
+          // while previews are off. It needs Doxabot to be available.
+          () =>
+            eligibility.available
+              ? this.recordProductionMerge(context, event)
+              : Promise.resolve(),
+          // Previews made before they were turned off still end with their
+          // pull request.
+          () => this.stopRecordedPreviews(context, event),
+        ]);
       }
       return this.ignore(identity, ignoredReason);
     }
@@ -359,16 +367,7 @@ export class DoxabotWebhookOrchestrator {
       // preview cleanup do not depend on each other, so each runs even when
       // the other fails.
       await runEach([
-        async () => {
-          if (lifecycleState !== "merged") return;
-          await this.dependencies.mergeTriggers.recordMerge({
-            projectId: context.projectId,
-            mergeTrigger: context.mergeTrigger,
-            changeExternalId: event.change.externalId,
-            changeNumber: event.change.number,
-            mergedAt: new Date(event.change.sourceUpdatedAt),
-          });
-        },
+        () => this.recordProductionMerge(context, event),
         () => this.stopPreviews(context, event, lifecycleState),
       ]);
       return this.ignore(
@@ -381,6 +380,27 @@ export class DoxabotWebhookOrchestrator {
     }
 
     return this.enqueuePreview(identity, context, event, proposal);
+  }
+
+  /**
+   * Feeds a pull request that merged into the production branch to the
+   * merge trigger. The trigger setting decides if a production run starts.
+   * A merge is final, so this needs no record and no staleness check, and
+   * the pending merge of a pull request is recorded once.
+   */
+  private async recordProductionMerge(
+    context: DoxabotAutomationContext,
+    event: NormalizedChangeProposalEvent,
+  ): Promise<void> {
+    if (lifecycleStateFor(event) !== "merged") return;
+    if (event.change.baseRef !== context.productionBranch) return;
+    await this.dependencies.mergeTriggers.recordMerge({
+      projectId: context.projectId,
+      mergeTrigger: context.mergeTrigger,
+      changeExternalId: event.change.externalId,
+      changeNumber: event.change.number,
+      mergedAt: new Date(event.change.sourceUpdatedAt),
+    });
   }
 
   private async applyChangeProposalEvent(

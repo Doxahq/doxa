@@ -10,8 +10,11 @@ import type {
   DoxabotSettingsStore,
 } from "../../src/repositories/doxabot-settings";
 import type {
+  DoxabotGenerationJobAdmission,
   DoxabotGenerationJobsStore,
+  DoxabotJobAdmissionInput,
 } from "../../src/repositories/jobs";
+import { previewAdmissionStop } from "../../src/repositories/preview-admission-guard";
 import type {
   ClaimWebhookDeliveryInput,
   WebhookDeliveriesStore,
@@ -23,6 +26,7 @@ import {
   type ProcessGitHubWebhookInput,
 } from "../../src/services/doxabot/webhook-orchestrator";
 import type { ChangeProposalSnapshot } from "../../src/services/doxabot/change-proposal-state";
+import type { GenerationCancellationInput } from "../../src/services/generation-cancellation";
 import { describe, expect, test, vi } from "vitest";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -32,6 +36,11 @@ const baseSha = "a".repeat(40);
 const firstHeadSha = "b".repeat(40);
 const secondHeadSha = "c".repeat(40);
 const firstUpdatedAt = "2026-07-23T10:00:00.000Z";
+const closedAt = "2026-07-23T12:00:00.000Z";
+const supersededCheck = {
+  title: "Documentation preview superseded",
+  summary: "A newer pull request revision is available, so this preview was cancelled.",
+};
 
 function createAutomationContext(
   overrides: Partial<DoxabotAutomationContext> = {},
@@ -44,11 +53,11 @@ function createAutomationContext(
     repositoryOwner: "doxahq",
     repositoryName: "doxa",
     repositoryVisibility: "private",
-    defaultBranch: "main",
+    productionBranch: "main",
     storedEnabled: true,
     mergeTrigger: "batched",
-    publishedVersionId: baselineVersionId,
-    publishedSourceRevision: baseSha,
+    hasPublishedVersion: true,
+    publishedBaseline: { versionId: baselineVersionId, sourceRevision: baseSha },
     ...overrides,
   };
 }
@@ -63,12 +72,15 @@ function pullRequestDelivery(input: {
   isPrivate?: boolean;
   installationId?: number;
   sourceUpdatedAt?: string;
+  /** For an "edited" action: the base that the pull request moved from. */
+  baseChangedFrom?: string;
 }): ProcessGitHubWebhookInput {
   return {
     deliveryId: input.deliveryId,
     eventName: "pull_request",
     rawBody: JSON.stringify({
       action: input.action ?? "opened",
+      ...(input.baseChangedFrom ? { changes: { base: { ref: { from: input.baseChangedFrom } } } } : {}),
       number: 42,
       installation: { id: input.installationId ?? 789 },
       repository: {
@@ -202,18 +214,27 @@ function createHarness(
     recordSourceTreeHash: vi.fn(async () => true),
   };
 
+  // The admission of the repository, over this harness's record: the guard,
+  // then a replay, then the cancel of the active run that a new head replaces.
   const jobs: DoxabotGenerationJobsStore = {
-    admitDoxabotJob: vi.fn(async (input) => {
+    admitDoxabotJob: vi.fn(async (input: DoxabotJobAdmissionInput): Promise<DoxabotGenerationJobAdmission> => {
+      if (!proposal) throw new Error("The pull request was not recorded.");
+      const stop = previewAdmissionStop(proposal, input.guard, input.targetRevision);
+      if (stop) return { outcome: "stale_change", reason: stop };
+
       const replayed = jobsByIdempotency.get(input.idempotencyKey);
       if (replayed) {
         return {
-          outcome: "replayed" as const,
+          outcome: "replayed",
           job: replayed,
           queuePublished: publishedJobs.has(replayed.id),
+          supersededJobId: null,
         };
       }
-      if (activeJobs.has(input.concurrencyKey)) {
-        return { outcome: "concurrency_conflict" as const };
+      const active = activeJobs.get(input.concurrencyKey) ?? null;
+      if (active) {
+        const { message, eventType, data, check } = input.supersede;
+        await jobs.markCancelled(active.id, message, eventType, data, check);
       }
 
       const job = createJob(`job-${nextJobNumber}`);
@@ -221,9 +242,10 @@ function createHarness(
       jobsByIdempotency.set(input.idempotencyKey, job);
       activeJobs.set(input.concurrencyKey, job);
       return {
-        outcome: "created" as const,
+        outcome: "created",
         job,
         queuePublished: false,
+        supersededJobId: active?.id ?? null,
       };
     }),
     activeForConcurrencyKey: vi.fn(
@@ -236,7 +258,6 @@ function createHarness(
       }
       return true;
     }),
-    linkSupersededJob: vi.fn(async () => {}),
     addEvent: vi.fn(async (jobId, type, message, data, source) => ({
       id: "event-1",
       jobId,
@@ -287,6 +308,15 @@ function createHarness(
     ),
   };
   const mergeTriggers = { recordMerge: vi.fn(async () => undefined) };
+  // The real canceller closes the check too; the job side is what the
+  // concurrency bookkeeping of this harness needs.
+  const previewJobs = {
+    cancel: vi.fn(async (input: GenerationCancellationInput) =>
+      jobs.markCancelled(input.jobId, input.message, input.eventType, input.data, input.check),
+    ),
+    finishCancel: vi.fn(async (_input: GenerationCancellationInput) => undefined),
+  };
+  const previewChannels = { closeForChange: vi.fn(async () => 1) };
   const dependencies = {
     deliveries,
     settings,
@@ -309,11 +339,16 @@ function createHarness(
       generatorFingerprint: "generator-v1",
     },
     mergeTriggers,
+    previewJobs,
+    previewChannels,
+    now: () => new Date(closedAt),
   } satisfies DoxabotWebhookDependencies;
 
   return {
     orchestrator: new DoxabotWebhookOrchestrator(dependencies),
     mergeTriggers,
+    previewJobs,
+    previewChannels,
     deliveries,
     settings,
     changeProposals,
@@ -510,10 +545,300 @@ describe("Doxabot webhook orchestrator", () => {
       baseRef: "release",
     }))).resolves.toEqual({
       outcome: "ignored",
-      reason: "non_default_base",
+      reason: "non_production_base",
     });
     expect(harness.changeProposals.ensure).not.toHaveBeenCalled();
     expect(harness.queue.send).not.toHaveBeenCalled();
+  });
+
+  test("previews pull requests that target the project's production branch", async () => {
+    // GitHub's default branch stays `main`; the project chose `release`.
+    const harness = createHarness(createAutomationContext({ productionBranch: "release" }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-production-branch",
+      baseRef: "release",
+    }))).resolves.toEqual({ outcome: "enqueued", jobId: "job-1" });
+    expect(harness.changeProposals.ensure).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultBranch: "release", baseRef: "release" }),
+    );
+  });
+
+  test("ignores pull requests against GitHub's default branch when the production branch differs", async () => {
+    const harness = createHarness(createAutomationContext({ productionBranch: "release" }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-default-branch",
+      baseRef: "main",
+    }))).resolves.toEqual({
+      outcome: "ignored",
+      reason: "non_production_base",
+    });
+    expect(harness.changeProposals.ensure).not.toHaveBeenCalled();
+  });
+
+  test("feeds a merge into the production branch to the merge trigger", async () => {
+    const harness = createHarness(createAutomationContext({ productionBranch: "release" }));
+
+    await harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-production-merge",
+      action: "closed",
+      merged: true,
+      baseRef: "release",
+    }));
+
+    expect(harness.mergeTriggers.recordMerge).toHaveBeenCalledOnce();
+  });
+
+  test("keeps previews on after the generation cache was cleared, and starts them without a baseline", async () => {
+    // The site still serves its version; only the version stopped being a baseline.
+    const harness = createHarness(createAutomationContext({ publishedBaseline: null }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-cleared-cache",
+    }))).resolves.toEqual({ outcome: "enqueued", jobId: "job-1" });
+    expect(harness.jobs.admitDoxabotJob).toHaveBeenCalledWith(
+      expect.objectContaining({ baselineVersionId: null, baselineRevision: null }),
+    );
+  });
+
+  test("still waits for the first publish before any preview", async () => {
+    const harness = createHarness(createAutomationContext({ hasPublishedVersion: false, publishedBaseline: null }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-unpublished",
+    }))).resolves.toEqual({ outcome: "ignored", reason: "initial_generation_required" });
+    expect(harness.jobs.admitDoxabotJob).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { merged: false, state: "closed", reason: "change_closed" },
+    { merged: true, state: "merged", reason: "change_merged" },
+  ])("a $state pull request stops its preview and takes its preview site offline", async ({ merged, state, reason }) => {
+    const harness = createHarness();
+    await harness.orchestrator.process(pullRequestDelivery({ deliveryId: `delivery-open-${state}` }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: `delivery-${state}`,
+      action: "closed",
+      merged,
+      sourceUpdatedAt: "2026-07-23T10:05:00.000Z",
+    }))).resolves.toEqual({ outcome: "ignored", reason });
+
+    expect(harness.previewJobs.cancel).toHaveBeenCalledWith({
+      jobId: "job-1",
+      message: `The pull request was ${state}.`,
+      eventType: "doxabot_change_ended",
+      data: { reason: state },
+      check: {
+        title: "Documentation preview stopped",
+        summary: `The pull request was ${state}, so Doxa stopped this preview.`,
+      },
+    });
+    expect(harness.previewChannels.closeForChange).toHaveBeenCalledWith({
+      projectId,
+      provider: "github",
+      changeExternalId: "987654",
+      closedAt: new Date(closedAt),
+    });
+  });
+
+  test("closes the preview site of an ended pull request with no preview running", async () => {
+    const harness = createHarness();
+
+    await harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-closed-idle",
+      action: "closed",
+    }));
+
+    expect(harness.previewJobs.cancel).not.toHaveBeenCalled();
+    expect(harness.previewChannels.closeForChange).toHaveBeenCalledOnce();
+  });
+
+  test("an older closed event does not take a reopened pull request offline", async () => {
+    const harness = createHarness();
+    await harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-reopened",
+      action: "reopened",
+      sourceUpdatedAt: "2026-07-23T10:05:00.000Z",
+    }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-late-close",
+      action: "closed",
+      sourceUpdatedAt: firstUpdatedAt,
+    }))).resolves.toMatchObject({ outcome: "ignored" });
+
+    expect(harness.previewChannels.closeForChange).not.toHaveBeenCalled();
+    expect(harness.previewJobs.cancel).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    {
+      name: "Doxabot was turned off",
+      change: (context: DoxabotAutomationContext) => {
+        context.storedEnabled = false;
+      },
+      reason: "project_disabled",
+    },
+    {
+      name: "the production branch moved",
+      change: (context: DoxabotAutomationContext) => {
+        context.productionBranch = "release";
+      },
+      reason: "non_production_base",
+    },
+  ])("an ended pull request still stops its recorded preview when $name", async ({ change, reason }) => {
+    const context = createAutomationContext();
+    const harness = createHarness(context);
+    await harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-recorded" }));
+    change(context);
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-ended-ignored",
+      action: "closed",
+      sourceUpdatedAt: "2026-07-23T10:05:00.000Z",
+    }))).resolves.toEqual({ outcome: "ignored", reason });
+
+    expect(harness.previewJobs.cancel).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: "job-1",
+      check: expect.objectContaining({ title: "Documentation preview stopped" }),
+    }));
+    expect(harness.previewChannels.closeForChange).toHaveBeenCalledOnce();
+    expect(harness.getProposal()).toMatchObject({ state: "closed" });
+  });
+
+  test("a pull request that moves off the production branch stops its preview", async () => {
+    const harness = createHarness();
+    await harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-on-main" }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-retargeted",
+      action: "synchronize",
+      baseRef: "release",
+      headRevision: secondHeadSha,
+      sourceUpdatedAt: "2026-07-23T10:05:00.000Z",
+    }))).resolves.toEqual({ outcome: "ignored", reason: "non_production_base" });
+
+    expect(harness.previewJobs.cancel).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: "job-1",
+      data: { reason: "retargeted" },
+      check: {
+        title: "Documentation preview stopped",
+        summary: "The pull request no longer targets the production branch, so Doxa stopped this preview.",
+      },
+    }));
+    expect(harness.previewChannels.closeForChange).toHaveBeenCalledOnce();
+    // The record follows the pull request, so a re-run sees the new base.
+    expect(harness.getProposal()).toMatchObject({ baseRef: "release" });
+  });
+
+  test("a base change off the production branch stops the preview at once, without a push", async () => {
+    const harness = createHarness();
+    await harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-before-base-change" }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-base-changed",
+      action: "edited",
+      baseRef: "release",
+      baseChangedFrom: "main",
+      sourceUpdatedAt: "2026-07-23T10:05:00.000Z",
+    }))).resolves.toEqual({ outcome: "ignored", reason: "non_production_base" });
+
+    expect(harness.previewJobs.cancel).toHaveBeenCalledWith(expect.objectContaining({ data: { reason: "retargeted" } }));
+    expect(harness.previewChannels.closeForChange).toHaveBeenCalledOnce();
+  });
+
+  test("a push while Doxabot is off cancels the run on the old head but keeps the last preview online", async () => {
+    const context = createAutomationContext();
+    const harness = createHarness(context);
+    await harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-before-disable" }));
+    context.storedEnabled = false;
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-push-disabled",
+      action: "synchronize",
+      headRevision: secondHeadSha,
+      sourceUpdatedAt: "2026-07-23T10:05:00.000Z",
+    }))).resolves.toEqual({ outcome: "ignored", reason: "project_disabled" });
+
+    expect(harness.previewJobs.cancel).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: "job-1",
+      eventType: "doxabot_superseded",
+      check: expect.objectContaining({ title: "Documentation preview superseded" }),
+    }));
+    expect(harness.previewChannels.closeForChange).not.toHaveBeenCalled();
+    expect(harness.jobs.admitDoxabotJob).toHaveBeenCalledOnce();
+  });
+
+  test("a pull request that Doxa never recorded has no preview to stop", async () => {
+    const harness = createHarness(createAutomationContext({ storedEnabled: false }));
+
+    await harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-unrecorded-close",
+      action: "closed",
+    }));
+
+    expect(harness.previewChannels.closeForChange).not.toHaveBeenCalled();
+    expect(harness.changeProposals.ensure).not.toHaveBeenCalled();
+  });
+
+  test("a late closed event does not stop a reopened pull request while Doxabot is off", async () => {
+    const context = createAutomationContext();
+    const harness = createHarness(context);
+    await harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-reopened-recorded",
+      action: "reopened",
+      sourceUpdatedAt: "2026-07-23T10:05:00.000Z",
+    }));
+    context.storedEnabled = false;
+
+    await harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-late-close-disabled",
+      action: "closed",
+      sourceUpdatedAt: firstUpdatedAt,
+    }));
+
+    expect(harness.previewChannels.closeForChange).not.toHaveBeenCalled();
+    expect(harness.previewJobs.cancel).not.toHaveBeenCalled();
+  });
+
+  test("the preview site goes offline even when the job cancel fails", async () => {
+    const harness = createHarness();
+    await harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-open-cancel-fails" }));
+    harness.previewJobs.cancel.mockRejectedValueOnce(new Error("database unavailable"));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-close-cancel-fails",
+      action: "closed",
+      sourceUpdatedAt: "2026-07-23T10:05:00.000Z",
+    }))).rejects.toThrow("database unavailable");
+
+    expect(harness.previewChannels.closeForChange).toHaveBeenCalledOnce();
+  });
+
+  test("a failed merge record does not keep the preview online", async () => {
+    const harness = createHarness();
+    harness.mergeTriggers.recordMerge.mockRejectedValueOnce(new Error("merge store unavailable"));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-merge-record-fails",
+      action: "closed",
+      merged: true,
+    }))).rejects.toThrow("merge store unavailable");
+
+    expect(harness.previewChannels.closeForChange).toHaveBeenCalledOnce();
+  });
+
+  test("an open pull request on another base leaves preview sites alone", async () => {
+    const harness = createHarness();
+
+    await harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-open-other-base",
+      baseRef: "release",
+    }));
+
+    expect(harness.previewChannels.closeForChange).not.toHaveBeenCalled();
   });
 
   test("records drafts and enqueues when the same head becomes ready", async () => {
@@ -784,17 +1109,90 @@ describe("Doxabot webhook orchestrator", () => {
 
     expect(first).toEqual({ outcome: "enqueued", jobId: "job-1" });
     expect(second).toEqual({ outcome: "enqueued", jobId: "job-2" });
+    // The admission cancels the old run, with the check text of the cancel.
     expect(harness.jobs.markCancelled).toHaveBeenCalledWith(
       "job-1",
       "Superseded by a newer pull request head.",
       "doxabot_superseded",
       { targetRevision: secondHeadSha },
+      supersededCheck,
     );
-    expect(harness.jobs.linkSupersededJob).toHaveBeenCalledWith({
-      supersededJobId: "job-1",
-      supersedingJobId: "job-2",
-    });
     expect(harness.queue.send).toHaveBeenCalledTimes(2);
+    // The old commit's check closes with the job, not when a worker gets to it.
+    expect(harness.previewJobs.finishCancel).toHaveBeenCalledWith({
+      jobId: "job-1",
+      message: "Superseded by a newer pull request head.",
+      eventType: "doxabot_superseded",
+      data: { targetRevision: secondHeadSha },
+      check: supersededCheck,
+    });
+    expect(harness.previewJobs.cancel).not.toHaveBeenCalled();
+  });
+
+  test("a close that lands before the admission of a push refuses its preview", async () => {
+    const harness = createHarness();
+    await harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-race-open" }));
+    // The push writes its record, then the close runs before its admission.
+    const admit = vi.mocked(harness.jobs.admitDoxabotJob).getMockImplementation();
+    vi.mocked(harness.jobs.admitDoxabotJob).mockImplementationOnce(async (input) => {
+      await harness.orchestrator.process(pullRequestDelivery({
+        deliveryId: "delivery-race-close",
+        action: "closed",
+        headRevision: secondHeadSha,
+        sourceUpdatedAt: "2026-07-23T10:01:30.000Z",
+      }));
+      if (!admit) throw new Error("The harness has no admission.");
+      return admit(input);
+    });
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-race-push",
+      action: "synchronize",
+      headRevision: secondHeadSha,
+      sourceUpdatedAt: "2026-07-23T10:01:00.000Z",
+    }))).resolves.toEqual({ outcome: "ignored", reason: "stale_change_event" });
+
+    // The close stopped the run of the old head; no run of the new head exists.
+    expect(harness.previewJobs.cancel).toHaveBeenCalledOnce();
+    expect(harness.previewJobs.cancel).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: "job-1",
+      check: expect.objectContaining({ title: "Documentation preview stopped" }),
+    }));
+    expect(harness.previewChannels.closeForChange).toHaveBeenCalledOnce();
+    expect(harness.queue.send).toHaveBeenCalledOnce();
+    expect(harness.reviewRuns.create).toHaveBeenCalledOnce();
+  });
+
+  test("an older push that is admitted late does not cancel the run of a newer push", async () => {
+    const harness = createHarness();
+    const thirdHeadSha = "d".repeat(40);
+    await harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-order-open" }));
+    const admit = vi.mocked(harness.jobs.admitDoxabotJob).getMockImplementation();
+    vi.mocked(harness.jobs.admitDoxabotJob).mockImplementationOnce(async (input) => {
+      await harness.orchestrator.process(pullRequestDelivery({
+        deliveryId: "delivery-order-newer",
+        action: "synchronize",
+        headRevision: thirdHeadSha,
+        sourceUpdatedAt: "2026-07-23T10:02:00.000Z",
+      }));
+      if (!admit) throw new Error("The harness has no admission.");
+      return admit(input);
+    });
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-order-older",
+      action: "synchronize",
+      headRevision: secondHeadSha,
+      sourceUpdatedAt: "2026-07-23T10:01:00.000Z",
+    }))).resolves.toEqual({ outcome: "ignored", reason: "stale_change_event" });
+
+    // Only job-1 was replaced, by job-2 of the newest head, which still runs.
+    expect(harness.previewJobs.finishCancel).toHaveBeenCalledOnce();
+    expect(harness.previewJobs.finishCancel).toHaveBeenCalledWith(expect.objectContaining({ jobId: "job-1" }));
+    expect(harness.jobs.markCancelled).not.toHaveBeenCalledWith("job-2", expect.anything(), expect.anything(), expect.anything(), expect.anything());
+    expect(harness.queue.send).toHaveBeenCalledTimes(2);
+    expect(harness.queue.send).toHaveBeenLastCalledWith(expect.objectContaining({ jobId: "job-2" }));
+    expect(harness.getProposal()).toMatchObject({ headRevision: thirdHeadSha });
   });
 
   test("keeps generation recoverable when GitHub check creation fails", async () => {

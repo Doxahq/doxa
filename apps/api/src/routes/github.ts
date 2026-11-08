@@ -7,7 +7,7 @@ import type { Env } from "../env";
 import { getWebOrigin } from "../http/access";
 import { withUser } from "../http/auth";
 import { error, json } from "../http/response";
-import { GitHubRepository } from "../repositories/github";
+import { GitHubRepository, type RepositoryBranchTarget } from "../repositories/github";
 import {
   GitHubAuthorizationError,
   exchangeUserAuthorizationCode,
@@ -25,6 +25,10 @@ import {
   sameNonce,
 } from "../services/github-install-state";
 import { verifyGitHubWebhook } from "../services/github-webhook";
+import {
+  RepositoryBranchesService,
+  RepositoryBranchesUnavailableError,
+} from "../services/repository-branches";
 import { DoxabotWebhookOrchestrator } from "../services/doxabot/webhook-orchestrator";
 import { MergeGenerationScheduler } from "../services/doxabot/merge-generations";
 
@@ -234,8 +238,38 @@ export function createGitHubRoutes(): ApiApp {
     }),
   );
 
+  // The production branch picker of a new project. Only a repository of the
+  // user's own installations answers.
+  app.get("/repos/:repositoryId/branches", (context) =>
+    withUser(context, async (userId) => {
+      const repositoryId = context.req.param("repositoryId");
+      if (!UUID_PATTERN.test(repositoryId)) return error("Repository not found.", 404);
+      const target = await new GitHubRepository(context.env).getBranchTargetForUser(userId, repositoryId);
+      if (!target) return error("Repository not found.", 404);
+      return repositoryBranchesResponse(context.env, target);
+    }),
+  );
+
   return app;
 }
+
+/** `{ defaultBranch, branches, complete }`, or 502 when GitHub cannot answer. */
+export async function repositoryBranchesResponse(
+  env: Env,
+  target: RepositoryBranchTarget,
+): Promise<Response> {
+  try {
+    return json(await RepositoryBranchesService.fromEnv(env).list(target));
+  } catch (caught) {
+    if (caught instanceof RepositoryBranchesUnavailableError) {
+      console.error("GitHub branch listing failed.", caught.message);
+      return error("GitHub could not list the branches. Try again.", 502);
+    }
+    throw caught;
+  }
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** GitHub caps webhook payloads at 25 MB. */
 const GITHUB_WEBHOOK_MAX_BYTES = 25 * 1024 * 1024;

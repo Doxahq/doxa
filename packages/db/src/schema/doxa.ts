@@ -382,6 +382,9 @@ export const projects = pgTable(
     ),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    // The branch that production generations read and that merges go into.
+    // Null follows the repository's default branch on GitHub.
+    productionBranch: text("production_branch"),
     // The default of the erase checkbox when a person approves an agent publish.
     eraseBranchAfterPublish: boolean("erase_branch_after_publish")
       .notNull()

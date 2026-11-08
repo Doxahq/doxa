@@ -62,6 +62,8 @@ const settings = {
   mergeTrigger: "manual",
   batchQuietMinutes: 15,
   repositoryVisibility: null,
+  productionBranch: null,
+  repositoryDefaultBranch: null,
   updatedAt: null,
   available: true,
   unavailableReason: null,

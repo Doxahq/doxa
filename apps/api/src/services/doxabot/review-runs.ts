@@ -3,6 +3,7 @@ import {
   updateReviewRunInputSchema,
   type CreateReviewRunInput,
   type DoxabotReviewRunState,
+  type GenerationJobDto,
   type ReviewRunConclusion,
   type ReviewRunResult,
   type ReviewRunStatus,
@@ -10,6 +11,7 @@ import {
   type UpdateReviewRunInput,
 } from "@doxahq/contracts";
 import type { Env } from "../../env";
+import type { CancelledReviewRunPresentation } from "../../repositories/cancelled-review-run";
 import {
   JobsRepository,
   type ReviewRunJobContext,
@@ -28,6 +30,17 @@ export interface ReviewRunReporter {
     jobId: string,
     input: UpdateReviewRunInput,
   ): Promise<ReviewRunResult>;
+}
+
+export interface ReviewRunCanceller {
+  /**
+   * Completes the check of a preview job as cancelled. False when the job has
+   * no check to close: not a preview, or its check was never created.
+   */
+  cancel(
+    jobId: string,
+    presentation: CancelledReviewRunPresentation,
+  ): Promise<boolean>;
 }
 
 export interface ReviewRunProviderAdapter {
@@ -51,7 +64,7 @@ export interface ReviewRunsDependencies {
   now(): Date;
 }
 
-export class ReviewRunsService implements ReviewRunReporter {
+export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller {
   constructor(private readonly dependencies: ReviewRunsDependencies) {}
 
   static fromEnv(env: Env): ReviewRunsService {
@@ -69,10 +82,10 @@ export class ReviewRunsService implements ReviewRunReporter {
     jobId: string,
     rawInput: CreateReviewRunInput,
   ): Promise<ReviewRunResult> {
-    const input = withDisplaySummary(
-      createReviewRunInputSchema.parse(rawInput),
-    );
-    const context = await this.requireContext(jobId, input.sourceRevision);
+    const parsed = createReviewRunInputSchema.parse(rawInput);
+    const context = await this.requireContext(jobId, parsed.sourceRevision);
+    // The caller read the job before this call; the check shows it as it is now.
+    const input = withDisplaySummary(agreeWithJob(context, parsed));
 
     if (
       context.externalReviewRunId !== null &&
@@ -114,6 +127,7 @@ export class ReviewRunsService implements ReviewRunReporter {
           ...input,
           externalRunId: reconciled.externalRunId,
         });
+        await this.settleWithJob(jobId, reconciled.externalRunId, input);
         return { ...updated, outcome: "updated" };
       }
     }
@@ -125,7 +139,33 @@ export class ReviewRunsService implements ReviewRunReporter {
       claimedAt,
       externalRunId: created.externalRunId,
     });
+    await this.settleWithJob(jobId, created.externalRunId, input);
     return { ...created, outcome: "created" };
+  }
+
+  /**
+   * A cancel that runs while the check is being created finds no run ID and
+   * leaves the check alone (`cancel`). Once the ID is stored, the creator
+   * reads the job again and closes the check if the job ended meanwhile,
+   * with the text that the cancel stored.
+   */
+  private async settleWithJob(
+    jobId: string,
+    externalRunId: string,
+    written: CreateReviewRunInput,
+  ): Promise<void> {
+    try {
+      const context = await this.dependencies.jobs.getReviewRunContext(jobId);
+      if (!context || checkAgreesWithJob(context.status, written)) return;
+      await this.adapterFor(context).update(context, {
+        ...withDisplaySummary(agreeWithJob(context, written)),
+        externalRunId,
+      });
+    } catch {
+      // The check exists and its ID is stored, so the creation succeeded. A
+      // failed correction must not report it as failed: the caller would then
+      // drop the stored ID for this delivery.
+    }
   }
 
   private async completeClaim(input: {
@@ -158,9 +198,39 @@ export class ReviewRunsService implements ReviewRunReporter {
     if (context.externalReviewRunId !== input.externalRunId) {
       throw new Error("Review run ID does not belong to this generation job.");
     }
+    // A worker step that started before a cancel must not reopen the check.
+    if (!checkAgreesWithJob(context.status, input)) {
+      return { externalRunId: input.externalRunId, outcome: "skipped" };
+    }
 
     const updated = await this.adapterFor(context).update(context, input);
     return { ...updated, outcome: "updated" };
+  }
+
+  async cancel(
+    jobId: string,
+    presentation: CancelledReviewRunPresentation,
+  ): Promise<boolean> {
+    const context = await this.dependencies.jobs.getReviewRunContext(jobId);
+    const externalRunId = context?.externalReviewRunId ?? null;
+    // A check that is still being created gets the job's state from its
+    // creator; there is no run ID to update yet.
+    if (!context || externalRunId === null || isPendingReviewRunId(externalRunId)) {
+      return false;
+    }
+
+    const input = withDisplaySummary(
+      updateReviewRunInputSchema.parse({
+        externalRunId,
+        ...mapDoxabotReviewRunState("cancelled"),
+        title: presentation.title,
+        summary: presentation.summary,
+        detailsUrl: null,
+        sourceRevision: context.targetRevision,
+      }),
+    );
+    await this.adapterFor(context).update(context, input);
+    return true;
   }
 
   private async updateExisting(
@@ -204,6 +274,92 @@ export class ReviewRunsService implements ReviewRunReporter {
   ): ReviewRunProviderAdapter {
     return this.dependencies.adapters[context.provider];
   }
+}
+
+/** How the pull request check reads for a preview run in this state. */
+export function reviewRunPresentationFor(
+  status: GenerationJobDto["status"],
+): Pick<
+  CreateReviewRunInput,
+  "status" | "conclusion" | "title" | "summary"
+> {
+  switch (status) {
+    case "queued":
+      return {
+        ...mapDoxabotReviewRunState("queued"),
+        title: "Documentation preview queued",
+        summary:
+          "Doxa is preparing a documentation preview for this pull request.",
+      };
+    case "running":
+      return {
+        ...mapDoxabotReviewRunState("in_progress"),
+        title: "Documentation preview in progress",
+        summary:
+          "Doxa is generating a documentation preview for this pull request.",
+      };
+    case "succeeded":
+      return {
+        ...mapDoxabotReviewRunState("success"),
+        title: "Documentation preview ready",
+        summary:
+          "Doxa generated a documentation preview for this pull request.",
+      };
+    case "failed":
+      return {
+        ...mapDoxabotReviewRunState("failure"),
+        title: "Documentation preview failed",
+        summary:
+          "Doxa could not generate a documentation preview for this pull request.",
+      };
+    case "cancelled":
+      return {
+        ...mapDoxabotReviewRunState("cancelled"),
+        title: "Documentation preview cancelled",
+        summary:
+          "Doxa cancelled documentation preview generation for this pull request.",
+      };
+  }
+}
+
+/**
+ * Whether a check state fits the job. An active job takes any state: the
+ * worker writes progress, and a queue failure completes the check while the
+ * job waits. An ended job takes only the conclusion of its own end.
+ */
+export function checkAgreesWithJob(
+  status: GenerationJobDto["status"],
+  check: { status: ReviewRunStatus; conclusion?: ReviewRunConclusion },
+): boolean {
+  switch (status) {
+    case "queued":
+    case "running":
+      return true;
+    case "succeeded":
+      return check.conclusion === "success";
+    case "failed":
+      return check.conclusion === "failure" || check.conclusion === "action_required";
+    case "cancelled":
+      return check.conclusion === "cancelled";
+  }
+}
+
+/**
+ * The input as written, or the job's own state when the input contradicts it.
+ * Only an ended job can disagree, and its state always names a conclusion.
+ * A cancelled job reads as its cancel says, for example "stopped" for a
+ * closed pull request, when the cancel stored a text.
+ */
+function agreeWithJob(
+  context: Pick<ReviewRunJobContext, "status" | "cancelledPresentation">,
+  input: CreateReviewRunInput,
+): CreateReviewRunInput {
+  if (checkAgreesWithJob(context.status, input)) return input;
+  return {
+    ...input,
+    ...reviewRunPresentationFor(context.status),
+    ...(context.status === "cancelled" ? context.cancelledPresentation : null),
+  };
 }
 
 export function mapDoxabotReviewRunState(state: DoxabotReviewRunState): {

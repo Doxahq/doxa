@@ -56,7 +56,8 @@ export const updateReviewRunInputSchema = z
 export const reviewRunResultSchema = z
   .object({
     externalRunId: z.string().min(1),
-    outcome: z.enum(["created", "updated"]),
+    /** `skipped`: the update contradicted the job's end, so the check kept its state. */
+    outcome: z.enum(["created", "updated", "skipped"]),
   })
   .strict();
 

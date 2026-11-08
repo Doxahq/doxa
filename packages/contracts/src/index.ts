@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { referenceSourceReportSchema } from "./reference-source";
+import { gitBranchNameSchema } from "./repository-branches";
 import {
   flaggedPageSchema,
   ownedPageFlagSchema,
@@ -60,6 +61,7 @@ export * from "./generation-observability";
 export * from "./generation-resume";
 export * from "./model-providers";
 export * from "./reference-source";
+export * from "./repository-branches";
 
 export const WRITING_FINGERPRINT_VERSION = "doxabot-writing-v2";
 /**
@@ -134,6 +136,11 @@ export const createProjectInputSchema = z.object({
   githubRepositoryId: z.string().uuid(),
   name: z.string().trim().min(1).max(120).optional(),
   slug: projectSlugInputSchema.optional(),
+  /**
+   * The branch that production generations read. Left out, the project
+   * follows the repository's default branch on GitHub.
+   */
+  productionBranch: gitBranchNameSchema.optional(),
 });
 
 /** A project with no repository that starts with the example docs site. */
@@ -149,6 +156,8 @@ export const createExampleProjectInputSchema = z.object({
 
 export const connectProjectRepositoryInputSchema = z.object({
   githubRepositoryId: z.string().uuid(),
+  /** As in `createProjectInputSchema`. */
+  productionBranch: gitBranchNameSchema.optional(),
 });
 
 export const REPOSITORY_REQUIRED_MESSAGE =
@@ -334,6 +343,8 @@ export const generationActionBlockedReasonSchema = z.enum([
   "superseded",
   /** The pull request of a preview run is closed, merged, or a draft. */
   "change_not_open",
+  /** The pull request of a preview run no longer targets the production branch. */
+  "base_not_production",
   /** Pull request previews are not available for the project. */
   "previews_unavailable",
   /**

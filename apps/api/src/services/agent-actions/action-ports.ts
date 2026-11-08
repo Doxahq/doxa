@@ -89,6 +89,7 @@ export interface ProjectsPort {
     githubRepositoryId: string;
     name?: string;
     slug?: string;
+    productionBranch?: string;
   }): Promise<ProjectDto>;
   delete(input: ProjectScopedInput): Promise<DeletedProject>;
 }

@@ -13,8 +13,10 @@ import { DocsDomainLifecycleService } from "../docs-domain-lifecycle";
 import { createExampleProject } from "../example-docs/create-project";
 import type { Defer } from "../generation-dispatch";
 import { cancelGenerationJob } from "../generation-cancellation";
+import { ReviewRunsService } from "../doxabot/review-runs";
 import { GenerationStartService } from "../generation-start";
 import { deleteProject } from "../project-deletion";
+import { createRepositoryProject } from "../project-production-branch";
 import type {
   ActionServices,
   DocsPublishPort,
@@ -123,7 +125,7 @@ function projectsPort(env: Env, projects: ProjectsRepository): ProjectsPort {
       return project ? { id: project.id, name: project.name } : null;
     },
     createExample: (input) => createExampleProject(env, input),
-    createForRepository: (input) => projects.createForRepository(input),
+    createForRepository: (input) => createRepositoryProject(env, input),
     delete: (input) => deleteProject(env, input),
   };
 }
@@ -142,7 +144,7 @@ async function cancelGeneration(
     message: "Cancelled by an agent.",
     eventType: "user_cancel_requested",
     data: { requestedByUserId: input.userId },
-  });
+  }, ReviewRunsService.fromEnv(env));
   if (!result.transitioned) return { outcome: "already_finished" };
   const cancelled = await jobs.getDetailForProject(scoped);
   return cancelled ? { outcome: "cancelled", generation: cancelled } : { outcome: "not_found" };

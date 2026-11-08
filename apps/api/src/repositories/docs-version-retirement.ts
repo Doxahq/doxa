@@ -49,14 +49,16 @@ export async function retireDocsVersion(
 }
 
 /**
- * Records that a newer push moved a pull request preview channel off a
- * version, and queues the version. The retention policy keeps the replaced
+ * Records that a pull request preview channel stopped serving a version, and
+ * queues the version. A newer push replaces it (`preview_replaced`), or the
+ * pull request ends (`preview_closed`). The retention policy keeps the
  * preview promotable for a few days from this time.
  */
 export async function retireReplacedPreview(
   tx: DocsMutationTransaction,
   resource: DocsRetiredVersionResource,
   replacedAt: Date,
+  reason: Extract<RetiredVersionReason, "preview_replaced" | "preview_closed"> = "preview_replaced",
 ): Promise<void> {
   await tx
     .update(schema.docsVersions)
@@ -67,5 +69,5 @@ export async function retireReplacedPreview(
         eq(schema.docsVersions.siteId, resource.siteId),
       ),
     );
-  await retireDocsVersion(tx, resource, "preview_replaced");
+  await retireDocsVersion(tx, resource, reason);
 }

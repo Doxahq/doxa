@@ -14,7 +14,10 @@ vi.mock("@doxahq/db", async (importOriginal) => {
 import {
   ActiveGenerationConflictError,
   JobsRepository,
+  type CreateDoxabotGenerationJobInput,
+  type DoxabotJobAdmissionInput,
 } from "../../src/repositories/jobs";
+import type { PreviewGateRecord } from "../../src/repositories/preview-admission-guard";
 
 describe("JobsRepository production admission", () => {
   beforeEach(() => {
@@ -336,84 +339,85 @@ describe("JobsRepository review-run context", () => {
     ]);
     expect(context).toMatchObject({
       provider: "github",
+      cancelledPresentation: null,
       repository: {
         externalId: "123456",
         installationExternalId: "789",
       },
     });
   });
+
+  test("gives a cancelled job the check text that its cancel stored", async () => {
+    const stopped = {
+      title: "Documentation preview stopped",
+      summary: "The pull request was closed, so Doxa stopped this preview.",
+    };
+    const query = {
+      innerJoin: vi.fn(() => query),
+      where: vi.fn(() => query),
+      limit: vi.fn(async () => [
+        {
+          jobId: "11111111-1111-4111-8111-111111111111",
+          status: "cancelled",
+          provider: "github",
+          targetRevision: "b".repeat(40),
+          externalReviewRunId: "9001",
+          repositoryExternalId: "123456",
+          repositoryOwner: "doxahq",
+          repositoryName: "doxa",
+          installationExternalId: "789",
+        },
+      ]),
+    };
+    const events = {
+      where: vi.fn(() => events),
+      orderBy: vi.fn(() => events),
+      limit: vi.fn(async () => [
+        { data: { reason: "closed", check: stopped, outcome: "cancelled", terminal: true } },
+      ]),
+    };
+    mocks.createDb.mockReturnValue({
+      select: vi.fn(() => ({
+        from: vi.fn((table: unknown) => (table === schema.jobEvents ? events : query)),
+      })),
+    });
+
+    const context = await new JobsRepository({}).getReviewRunContext(
+      "11111111-1111-4111-8111-111111111111",
+    );
+
+    expect(context?.cancelledPresentation).toEqual(stopped);
+  });
 });
 
 describe("JobsRepository Doxabot admission", () => {
-  beforeEach(() => {
-    mocks.createDb.mockReset();
-  });
+  const jobId = "11111111-1111-4111-8111-111111111111";
+  const activeJobId = "66666666-6666-4666-8666-666666666666";
+  const projectId = "22222222-2222-4222-8222-222222222222";
+  const createdAt = new Date("2026-07-23T10:00:00.000Z");
+  const seen: PreviewGateRecord = {
+    state: "open",
+    baseRef: "main",
+    headRevision: "b".repeat(40),
+    sourceUpdatedAt: new Date("2026-07-23T09:59:00.000Z"),
+  };
+  const jobRow = {
+    id: jobId,
+    projectId,
+    status: "queued" as const,
+    docsVersionId: null,
+    errorMessage: null,
+    eventSequence: 0,
+    createdAt,
+    updatedAt: createdAt,
+  };
+  const supersededCheck = {
+    title: "Documentation preview superseded",
+    summary: "A newer pull request revision is available, so this preview was cancelled.",
+  };
 
-  test("creates the job and links its delivery in one transaction", async () => {
-    const jobId = "11111111-1111-4111-8111-111111111111";
-    const projectId = "22222222-2222-4222-8222-222222222222";
-    const createdAt = new Date("2026-07-23T10:00:00.000Z");
-    const job = {
-      id: jobId,
-      projectId,
-      status: "queued" as const,
-      docsVersionId: null,
-      errorMessage: null,
-      eventSequence: 0,
-      createdAt,
-      updatedAt: createdAt,
-    };
-    const generationValues = vi.fn(() => ({
-      onConflictDoNothing: () => ({
-        returning: async () => [job],
-      }),
-    }));
-    const eventValues = vi.fn(() => ({
-      returning: async () => [
-        {
-          id: "33333333-3333-4333-8333-333333333333",
-          jobId,
-          sequence: 1,
-          source: "system",
-          type: "doxabot_queued",
-          message: "Doxabot preview generation queued.",
-          data: null,
-          createdAt,
-        },
-      ],
-    }));
-    const deliverySet = vi.fn(() => ({
-      where: () => ({
-        returning: async () => [{ id: "delivery-row" }],
-      }),
-    }));
-    const sequenceSet = vi.fn(() => ({
-      where: () => ({
-        returning: async () => [{ sequence: 1 }],
-      }),
-    }));
-    const transactionDatabase = {
-      select: vi.fn(() => ({
-        from: () => ({
-          where: () => ({
-            limit: async () => [{ userId: "user-1" }],
-          }),
-        }),
-      })),
-      insert: vi.fn((table: unknown) => ({
-        values:
-          table === schema.generationJobs ? generationValues : eventValues,
-      })),
-      update: vi.fn((table: unknown) => ({
-        set: table === schema.scmWebhookDeliveries ? deliverySet : sequenceSet,
-      })),
-    };
-    const transaction = vi.fn(async (callback) =>
-      callback(transactionDatabase),
-    );
-    mocks.createDb.mockReturnValue({ transaction });
-
-    const result = await new JobsRepository({}).admitDoxabotJob({
+  function baseInput(): CreateDoxabotGenerationJobInput {
+    return {
       projectId,
       provider: "github",
       sourceInstallationExternalId: "789",
@@ -436,12 +440,113 @@ describe("JobsRepository Doxabot admission", () => {
       generatorFingerprint: "generator-v1",
       idempotencyKey: "doxabot-idempotency",
       concurrencyKey: `preview:${projectId}:github:987654`,
-      deliveryId: "delivery-1",
-    });
+      guard: { seen, productionBranch: "main" },
+    };
+  }
+
+  function admissionInput(deliveryId = "delivery-1"): DoxabotJobAdmissionInput {
+    return {
+      ...baseInput(),
+      deliveryId,
+      supersede: {
+        message: "Superseded by a newer pull request head.",
+        eventType: "doxabot_superseded",
+        data: { targetRevision: "b".repeat(40) },
+        check: supersededCheck,
+      },
+    };
+  }
+
+  /**
+   * A transaction that answers each admission query from `rows` and records
+   * the writes. Each job insert takes the next entry of `inserted`; an empty
+   * entry is a unique-key conflict.
+   */
+  function fakeTransaction(rows: {
+    record?: PreviewGateRecord;
+    inserted?: Array<typeof jobRow | null>;
+    replayed?: Array<typeof jobRow>;
+    active?: Array<{ id: string }>;
+  } = {}) {
+    const inserted = [...(rows.inserted ?? [jobRow])];
+    const writes = {
+      locks: [] as Array<{ table: unknown; strength: unknown }>,
+      jobInserts: 0,
+      jobSets: [] as Record<string, unknown>[],
+      deliverySets: [] as Record<string, unknown>[],
+      events: [] as Record<string, unknown>[],
+    };
+    const answer = (table: unknown, terminal: "limit" | "for") => {
+      if (table === schema.scmChangeProposals) return [rows.record ?? seen];
+      if (table === schema.account) return [{ userId: "user-1" }];
+      if (table === schema.generationJobs) {
+        return terminal === "for" ? rows.active ?? [] : rows.replayed ?? [];
+      }
+      return [];
+    };
+    const database = {
+      select: vi.fn(() => ({
+        from: (table: unknown) => ({
+          where: () => ({
+            limit: async () => answer(table, "limit"),
+            for: async (strength: unknown) => {
+              writes.locks.push({ table, strength });
+              return answer(table, "for");
+            },
+          }),
+        }),
+      })),
+      insert: vi.fn((table: unknown) => ({
+        values: (values: Record<string, unknown>) => {
+          if (table === schema.jobEvents) {
+            writes.events.push(values);
+            return { returning: async () => [{ id: "event-1", ...values, createdAt }] };
+          }
+          writes.jobInserts += 1;
+          return {
+            onConflictDoNothing: () => ({
+              returning: async () => {
+                const row = inserted.shift();
+                return row ? [row] : [];
+              },
+            }),
+          };
+        },
+      })),
+      update: vi.fn((table: unknown) => ({
+        set: (values: Record<string, unknown>) => {
+          const isDelivery = table === schema.scmWebhookDeliveries;
+          (isDelivery ? writes.deliverySets : writes.jobSets).push(values);
+          const returned = isDelivery
+            ? [{ id: "delivery-row" }]
+            : "status" in values
+              ? [{ id: activeJobId }]
+              : [{ sequence: 1 }];
+          return {
+            where: () =>
+              Object.assign(Promise.resolve(), { returning: async () => returned }),
+          };
+        },
+      })),
+    };
+    const transaction = vi.fn(async (callback) => callback(database));
+    mocks.createDb.mockReturnValue({ transaction });
+    return { writes, transaction };
+  }
+
+  beforeEach(() => {
+    mocks.createDb.mockReset();
+  });
+
+  test("creates the job and links its delivery in one transaction", async () => {
+    const { writes, transaction } = fakeTransaction();
+
+    const result = await new JobsRepository({}).admitDoxabotJob(admissionInput());
 
     expect(result).toEqual({
       outcome: "created",
       queuePublished: false,
+      supersededJobId: null,
       job: {
         id: jobId,
         projectId,
@@ -453,112 +558,125 @@ describe("JobsRepository Doxabot admission", () => {
       },
     });
     expect(transaction).toHaveBeenCalledOnce();
-    expect(generationValues).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sourceInstallationExternalId: "789",
-        requestedByUserId: "user-1",
-        sourceAuthorExternalId: "1",
-        sourceAuthorHandle: "octocat",
-        sourceAuthorAvatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
-        agentModel: "moonshotai/kimi-k2.6:nitro",
-        plannerModel: "x-ai/grok-4.5:nitro",
-        writerModel: "moonshotai/kimi-k2.6:nitro",
-        planningFingerprint: "planning-v1",
-        writingFingerprint: "writing-v1",
-        generationProfile: "full-prod",
-        generatorFingerprint: "generator-v1",
-      }),
-    );
-    expect(deliverySet).toHaveBeenCalledWith(
+    // Every write to the pull request record waits until the admission ends.
+    expect(writes.locks).toEqual([{ table: schema.scmChangeProposals, strength: "update" }]);
+    expect(writes.deliverySets).toEqual([
       expect.objectContaining({ generationJobId: jobId }),
-    );
+    ]);
   });
 
   test("replays and links an idempotent job in the same transaction", async () => {
-    const jobId = "11111111-1111-4111-8111-111111111111";
-    const projectId = "22222222-2222-4222-8222-222222222222";
-    const createdAt = new Date("2026-07-23T10:00:00.000Z");
-    const existingJob = {
-      id: jobId,
-      projectId,
-      status: "queued" as const,
-      docsVersionId: null,
-      errorMessage: null,
-      eventSequence: 1,
-      createdAt,
-      updatedAt: createdAt,
-    };
-    const deliverySet = vi.fn(() => ({
-      where: () => ({
-        returning: async () => [{ id: "delivery-row" }],
-      }),
-    }));
-    let selectCall = 0;
-    const transactionDatabase = {
-      insert: vi.fn(() => ({
-        values: () => ({
-          onConflictDoNothing: () => ({
-            returning: async () => [],
-          }),
-        }),
-      })),
-      select: vi.fn(() => {
-        selectCall += 1;
-        return {
-          from: () => ({
-            where: () => ({
-              limit: async () =>
-                selectCall === 1
-                  ? [{ userId: "user-1" }]
-                  : selectCall === 2
-                    ? [existingJob]
-                    : [],
-            }),
-          }),
-        };
-      }),
-      update: vi.fn(() => ({ set: deliverySet })),
-    };
-    const transaction = vi.fn(async (callback) =>
-      callback(transactionDatabase),
-    );
-    mocks.createDb.mockReturnValue({ transaction });
-
-    const result = await new JobsRepository({}).admitDoxabotJob({
-      projectId,
-      provider: "github",
-      sourceInstallationExternalId: "789",
-      sourceAuthor: {
-        externalId: "1",
-        handle: "octocat",
-        avatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
-      },
-      changeProposalId: "44444444-4444-4444-8444-444444444444",
-      changeExternalId: "987654",
-      baselineRevision: "a".repeat(40),
-      targetRevision: "b".repeat(40),
-      sourceTreeHash: null,
-      baselineVersionId: "55555555-5555-4555-8555-555555555555",
-      plannerModel: "x-ai/grok-4.5:nitro",
-      writerModel: "moonshotai/kimi-k2.6:nitro",
-      generationProfile: "full-prod",
-      planningFingerprint: "planning-v1",
-      writingFingerprint: "writing-v1",
-      generatorFingerprint: "generator-v1",
-      idempotencyKey: "doxabot-idempotency",
-      concurrencyKey: `preview:${projectId}:github:987654`,
-      deliveryId: "delivery-2",
+    const { writes, transaction } = fakeTransaction({
+      inserted: [null],
+      replayed: [{ ...jobRow, eventSequence: 1 }],
     });
+
+    const result = await new JobsRepository({}).admitDoxabotJob(admissionInput("delivery-2"));
 
     expect(result).toMatchObject({
       outcome: "replayed",
       queuePublished: false,
+      supersededJobId: null,
       job: { id: jobId },
     });
     expect(transaction).toHaveBeenCalledOnce();
-    expect(deliverySet).toHaveBeenCalledWith(
+    expect(writes.deliverySets).toEqual([
       expect.objectContaining({ generationJobId: jobId }),
+    ]);
+  });
+
+  test.each([
+    {
+      change: "was closed",
+      record: { ...seen, state: "closed" as const },
+      reason: "closed",
+    },
+    {
+      change: "was merged",
+      record: { ...seen, state: "merged" as const },
+      reason: "merged",
+    },
+    {
+      change: "moved off the production branch",
+      record: { ...seen, baseRef: "release" },
+      reason: "retargeted",
+    },
+    {
+      change: "got a newer push",
+      record: { ...seen, headRevision: "c".repeat(40) },
+      reason: "superseded",
+    },
+  ])("refuses the preview when the pull request $change after the caller saw it", async ({ record, reason }) => {
+    const { writes } = fakeTransaction({
+      record: { ...record, sourceUpdatedAt: new Date("2026-07-23T10:00:30.000Z") },
+    });
+
+    await expect(new JobsRepository({}).admitDoxabotJob(admissionInput())).resolves.toEqual({
+      outcome: "stale_change",
+      reason,
+    });
+    expect(writes.jobInserts).toBe(0);
+    expect(writes.jobSets).toEqual([]);
+  });
+
+  test("cancels the active run of an older head in the same transaction", async () => {
+    const { writes } = fakeTransaction({
+      inserted: [null, jobRow],
+      active: [{ id: activeJobId }],
+    });
+
+    const result = await new JobsRepository({}).admitDoxabotJob(admissionInput());
+
+    expect(result).toMatchObject({ outcome: "created", job: { id: jobId }, supersededJobId: activeJobId });
+    expect(writes.jobSets).toContainEqual(
+      expect.objectContaining({ status: "cancelled", errorMessage: "Superseded by a newer pull request head." }),
     );
+    expect(writes.jobSets).toContainEqual(expect.objectContaining({ supersededByJobId: jobId }));
+    // The cancel event keeps the check text for a check that is created now.
+    expect(writes.events).toContainEqual(
+      expect.objectContaining({
+        type: "doxabot_superseded",
+        data: {
+          targetRevision: "b".repeat(40),
+          check: supersededCheck,
+          outcome: "cancelled",
+          terminal: true,
+        },
+      }),
+    );
+  });
+
+  test("admits the job when the active run ended a moment before", async () => {
+    const { writes } = fakeTransaction({ inserted: [null, jobRow], active: [] });
+
+    await expect(new JobsRepository({}).admitDoxabotJob(admissionInput())).resolves.toMatchObject({
+      outcome: "created",
+      supersededJobId: null,
+    });
+    expect(writes.jobSets).not.toContainEqual(expect.objectContaining({ status: "cancelled" }));
+  });
+
+  test("throws, so the cancel rolls back, when the replacement still conflicts", async () => {
+    fakeTransaction({ inserted: [null, null], active: [{ id: activeJobId }] });
+
+    await expect(new JobsRepository({}).admitDoxabotJob(admissionInput())).rejects.toThrow(
+      "Preview admission remained conflicted.",
+    );
+  });
+
+  test("refuses a re-run when a push landed after the re-run read the pull request", async () => {
+    const { writes } = fakeTransaction({
+      record: {
+        ...seen,
+        headRevision: "c".repeat(40),
+        sourceUpdatedAt: new Date("2026-07-23T10:00:30.000Z"),
+      },
+    });
+
+    await expect(
+      new JobsRepository({}).admitPreviewRerun({ ...baseInput(), rerunOfJobId: activeJobId }),
+    ).resolves.toEqual({ outcome: "stale_change", reason: "superseded" });
+    expect(writes.jobInserts).toBe(0);
   });
 });
 

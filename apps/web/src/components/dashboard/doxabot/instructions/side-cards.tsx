@@ -28,14 +28,14 @@ export function RepositoryFileCard({ instructions, update, disabled }: Instructi
       <SwitchRow
         id={fieldId("repository-file")}
         title={`Also read ${DOXABOT_REPOSITORY_INSTRUCTIONS_PATH}`}
-        description="From your repository's default branch."
+        description="From your production branch."
         checked={enabled}
         disabled={disabled}
         onCheckedChange={(checked) => update((current) => ({ ...current, repositoryFile: { enabled: checked } }))}
       />
       {enabled ? (
         <ul className="flex flex-col gap-1.5 border-t border-divider pt-3 text-[12.5px] leading-5 text-muted-foreground">
-          <li>Pull request previews use the file from the default branch, not the copy in the pull request.</li>
+          <li>Pull request previews use the file from the production branch, not the copy in the pull request.</li>
           <li>If the file and this page disagree, this page wins.</li>
         </ul>
       ) : null}

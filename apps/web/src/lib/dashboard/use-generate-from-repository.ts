@@ -24,10 +24,17 @@ export function useGenerateFromRepository() {
   // between the requests and the navigation.
   const [pendingChoice, setPendingChoice] = useState<InstructionsOfferChoice | null>(null)
 
-  /** Null when the create failed. The error renders in the dialog. */
-  async function createProject(repository: GitHubRepositoryDto): Promise<string | null> {
+  /**
+   * Null when the create failed. The error renders in the dialog.
+   * `productionBranch` is the branch the person chose for production runs.
+   */
+  async function createProject(repository: GitHubRepositoryDto, productionBranch: string): Promise<string | null> {
     try {
-      const project = await github.createProject({ githubRepositoryId: repository.id, name: repository.name })
+      const project = await github.createProject({
+        githubRepositoryId: repository.id,
+        name: repository.name,
+        productionBranch,
+      })
       writeLastProjectId(project.id)
       return project.id
     } catch {
@@ -36,9 +43,9 @@ export function useGenerateFromRepository() {
     }
   }
 
-  async function addInstructions(repository: GitHubRepositoryDto): Promise<void> {
+  async function addInstructions(repository: GitHubRepositoryDto, productionBranch: string): Promise<void> {
     setPendingChoice("instructions")
-    const projectId = await createProject(repository)
+    const projectId = await createProject(repository, productionBranch)
     if (projectId === null) return
     await navigate({
       to: "/dashboard/projects/$projectId/doxabot/instructions",
@@ -47,9 +54,9 @@ export function useGenerateFromRepository() {
     })
   }
 
-  async function generate(repository: GitHubRepositoryDto): Promise<void> {
+  async function generate(repository: GitHubRepositoryDto, productionBranch: string): Promise<void> {
     setPendingChoice("generation")
-    const projectId = await createProject(repository)
+    const projectId = await createProject(repository, productionBranch)
     if (projectId === null) return
 
     try {

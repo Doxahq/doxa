@@ -353,6 +353,49 @@ that review publishes the changes.
 | `GET /projects/:projectId/generations/:generationId/changes` | `generation.read` | `{ changes }` |
 | `GET /projects/:projectId/generations/:generationId/changes/page?href=` | `generation.read` | The base and generated source of one page |
 
+## Pull Request Preview Lifecycle
+
+`DoxabotWebhookOrchestrator` handles pull request events. GitHub's `edited`
+event counts only when the base changed; it is normalized as `base_changed`.
+
+- **Stop.** A pull request that closes, merges, or moves off the production
+  branch stops its previews (`stopPreviews`). Its queued or running preview is
+  cancelled, and its preview channel closes (`PreviewChannelClosureRepository`):
+  the channel keeps no version, its hostname stops resolving and is purged,
+  and the version is retired as `preview_closed`, so retention collects it
+  after the promote window. A reopened pull request takes the channel back
+  with its next preview. Each step runs even when another one fails.
+- **Side paths.** When Doxabot is off or unavailable, or the base is not the
+  production branch, only a pull request that Doxa recorded is handled. The
+  event goes through the record's staleness checks first, so a late `closed`
+  event never stops a reopened pull request. A push while Doxabot is off
+  cancels the run on the old head as superseded and keeps the last preview.
+- **Admission.** The webhook and a re-run admit a preview in one transaction
+  that locks the pull request record (`checkPreviewAdmission`). The caller
+  passes the record as it saw it. If the record changed since, and now says
+  closed, merged, another base, or a newer head, the admission answers
+  `stale_change` and no job starts. Every record write waits for the lock, so
+  a close lands either before the admission and refuses it, or after it and
+  cancels the new job. A newer head cancels the active run inside the same
+  transaction, so a late older push never cancels the run of a newer one.
+- **Cancel.** Every cancel (a newer push, an ended pull request, a person, an
+  agent, a paused worker) closes the GitHub check: `cancelGenerationJob`,
+  `finishGenerationCancellation` after an admission, or `markJobCancelled` on
+  the internal API. The cancel event keeps the check text in `data.check`.
+  `ReviewRunsService` keeps a check in agreement with its job
+  (`checkAgreesWithJob`): an ended job takes only its own conclusion, and a
+  contradicting update returns `skipped`. A check that was created during a
+  cancel is closed by its creator, with the stored text ("stopped",
+  "superseded") when there is one.
+- **Cache clear.** A cleared generation cache keeps previews on
+  (`hasPublishedVersion`). The next preview has no baseline and analyzes from
+  scratch; the worker accepts a preview without one.
+- **Re-run and resume.** A re-run reads the pull request from GitHub and
+  refuses `change_not_open`, `base_not_production`, or `superseded` (GitHub has
+  a head that Doxa has not recorded). A change that Doxa records during the
+  re-run gives the same answers, from `stale_change`. Resume and the page
+  buttons use the record with the same rules.
+
 ## Page Lock Routes
 
 All routes are under `/projects/:projectId/page-locks`.
@@ -399,9 +442,35 @@ The worker sends the source files behind each page that it wrote
 (`pageSources`: the files the writer read, then the evidence files, at most
 12). The review shows them as the reason `based_on_sources`.
 
+## Production Branch
+
+Each project has a production branch (`projects.production_branch`). Production
+runs read it, merges into it feed the merge trigger, pull requests must target
+it for a preview, and `.doxa/instructions.md` is read from it. Null follows the
+repository's default branch on GitHub, so projects made before the column keep
+their behavior. SQL reads it through `productionBranchSql()`
+(`apps/api/src/repositories/production-branch.ts`).
+
+- A new project (`POST /projects`) and a repository connect
+  (`PUT /projects/:projectId/repository`) take an optional `productionBranch`.
+  The dashboard asks for it and starts on the default branch. A connect always
+  replaces the branch of an earlier repository.
+- `PUT /projects/:projectId/doxabot` with `{ productionBranch }` changes it.
+  The settings DTO returns `productionBranch` and `repositoryDefaultBranch`.
+- Before the API stores a branch other than the default branch, it asks GitHub
+  that the branch exists (`RepositoryBranchesService.exists`). A missing branch
+  answers 422 `branch_not_found`. A GitHub failure answers 502
+  `branch_check_unavailable`.
+- The pickers list branches with `GET /github/repos/:repositoryId/branches`
+  (new project, the user's own installation) and
+  `GET /projects/:projectId/doxabot/branches` (`generation.run`). Each answers
+  `{ defaultBranch, branches, complete }`, with at most 1,000 branches.
+- A change does not touch the live site. The next production run reads the
+  new branch and compares it with the published version.
+
 ## Merge Triggers
 
-Doxabot settings choose what a pull request merged into the default branch
+Doxabot settings choose what a pull request merged into the production branch
 starts (`doxabot_automation_settings.merge_trigger`):
 
 | Value | Result |
@@ -426,7 +495,7 @@ The flow:
 4. A production run that completes removes the merges before its start.
 
 A `merge` run uses the revision-aware production pipeline, like a manual
-run. Its author shows as Doxabot. Direct pushes to the default branch are
+run. Its author shows as Doxabot. Direct pushes to the production branch are
 not recorded.
 
 | Route | Capability | Result |

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import type { CreateExampleProjectInput, ProjectDto } from "@doxahq/contracts"
+import type { ConnectProjectRepositoryInput, CreateExampleProjectInput, ProjectDto } from "@doxahq/contracts"
 
 import { mergeProjectIntoList } from "~/lib/dashboard/cache"
 import { getErrorMessage } from "~/lib/errors"
@@ -43,7 +43,7 @@ export function useCreateExampleProject() {
 export function useConnectProjectRepository(projectId: string) {
   const queryClient = useQueryClient()
   const mutation = useMutation({
-    mutationFn: (githubRepositoryId: string) => connectProjectRepository(projectId, githubRepositoryId),
+    mutationFn: (input: ConnectProjectRepositoryInput) => connectProjectRepository(projectId, input),
     onSuccess: (project) => cacheProject(queryClient, project),
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.project(projectId) })
@@ -52,7 +52,9 @@ export function useConnectProjectRepository(projectId: string) {
   })
 
   return {
-    connectRepository: (githubRepositoryId: string) => mutation.mutateAsync(githubRepositoryId),
+    /** `productionBranch` is the branch the person chose for production runs. */
+    connectRepository: (githubRepositoryId: string, productionBranch: string) =>
+      mutation.mutateAsync({ githubRepositoryId, productionBranch }),
     isConnecting: mutation.isPending,
     error: mutation.error ? getErrorMessage(mutation.error, "Failed to connect the repository.") : null,
     reset: mutation.reset,

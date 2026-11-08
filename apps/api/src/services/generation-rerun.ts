@@ -70,6 +70,8 @@ export class GenerationRerunService {
     const previous = await this.deps.jobs.getRerunSource(input);
     if (!previous) return { outcome: "not_found" };
 
+    // The pull request's state and base are left to the preview service,
+    // which reads them live from GitHub; the record can be behind.
     const blocked = getRerunBlockedReason({
       status: previous.status,
       publicationMode: previous.publicationMode,

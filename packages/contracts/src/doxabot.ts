@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gitBranchNameSchema } from "./repository-branches";
 import { repositoryVisibilitySchema } from "./source-control";
 
 export const doxabotUnavailableReasonSchema = z.enum([
@@ -26,7 +27,7 @@ export const doxabotEligibilitySchema = z.discriminatedUnion("available", [
 ]);
 
 /**
- * What a merge into the default branch starts: `manual` lists the merged
+ * What a merge into the production branch starts: `manual` lists the merged
  * pull requests, `batched` runs once merges stop for the quiet time, and
  * `every_merge` runs after each merge. Every run goes to a review.
  */
@@ -51,6 +52,13 @@ const doxabotSettingsBaseSchema = z.object({
   mergeTrigger: doxabotMergeTriggerSchema,
   batchQuietMinutes: doxabotBatchQuietMinutesSchema,
   repositoryVisibility: repositoryVisibilitySchema.nullable(),
+  /**
+   * The branch that production generations read, that merges go into, and
+   * that pull requests must target for a preview. Null without a repository.
+   */
+  productionBranch: z.string().min(1).nullable(),
+  /** The repository's default branch on GitHub. Null without a repository. */
+  repositoryDefaultBranch: z.string().min(1).nullable(),
   updatedAt: z.string().datetime().nullable(),
 });
 
@@ -74,6 +82,8 @@ export const updateDoxabotSettingsInputSchema = z
     enabled: z.boolean().optional(),
     mergeTrigger: doxabotMergeTriggerSchema.optional(),
     batchQuietMinutes: doxabotBatchQuietMinutesSchema.optional(),
+    /** The API checks on GitHub that the branch exists before it saves it. */
+    productionBranch: gitBranchNameSchema.optional(),
   })
   .strict()
   .refine((input) => Object.keys(input).length > 0, {

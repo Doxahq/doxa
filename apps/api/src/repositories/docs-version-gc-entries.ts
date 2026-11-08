@@ -57,6 +57,7 @@ type StorageGcWriter = Parameters<typeof enqueueStorageCollection>[0];
 export type RetiredVersionReason =
   | "production_replaced"
   | "preview_replaced"
+  | "preview_closed"
   | "review_discarded"
   | "generation_deleted";
 

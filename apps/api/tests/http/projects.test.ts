@@ -792,6 +792,8 @@ describe("project routes docs URLs", () => {
         mergeTrigger: "batched",
         batchQuietMinutes: 30,
         repositoryVisibility: "private",
+        productionBranch: "main",
+        repositoryDefaultBranch: "main",
         available: true,
         unavailableReason: null,
         updatedAt: null,
@@ -805,6 +807,8 @@ describe("project routes docs URLs", () => {
         repository: {
           connected: true,
           visibility: "public",
+          defaultBranch: "main",
+          productionBranch: "main",
         },
       }),
     );
@@ -1248,6 +1252,8 @@ describe("project routes docs URLs", () => {
         "Cancelled by user.",
         "user_cancel_requested",
         { requestedByUserId: "user-1" },
+        // A person's cancel stores no check text: the check uses the default.
+        undefined,
       );
       expect(destroy).toHaveBeenCalledOnce();
       await expect(response.json()).resolves.toEqual({
@@ -1638,6 +1644,8 @@ function createDoxabotProjectState(
     repository: {
       connected: true,
       visibility: "private",
+      defaultBranch: "main",
+      productionBranch: "main",
     },
     hasPublishedVersion: true,
     storedEnabled: false,

@@ -10,6 +10,8 @@ const ENABLED = {
   mergeTrigger: "batched" as const,
   batchQuietMinutes: 30 as const,
   repositoryVisibility: "private" as const,
+  productionBranch: "main",
+  repositoryDefaultBranch: "main",
   updatedAt: null,
 }
 

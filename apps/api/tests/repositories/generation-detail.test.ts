@@ -194,6 +194,21 @@ describe("generation detail assembly", () => {
     });
   });
 
+  test("shows no preview URL for the closed channel of an ended pull request", () => {
+    expect(
+      resolveDeployment({
+        publicationMode: "preview",
+        docsVersionId: "a1b2c3d4-e5f6-4789-8123-456789abcdef",
+        versionNumber: 2,
+        site: { publishedVersionId: "production-version" },
+        projectSlug: "demo",
+        productionDomains: [],
+        previewChannel: { hostname: "demo-pr-42.doxa.page", currentVersionId: null },
+        env: { DOCS_BASE_DOMAIN: "doxa.page" },
+      }),
+    ).toMatchObject({ isCurrent: false, domains: [{ role: "permanent" }] });
+  });
+
   test("says whether a run's version is live, in review, replaced, or never published", () => {
     expect(resolveDeploymentState(true, { awaitsReview: true, wentLive: true })).toBe("live");
     expect(resolveDeploymentState(false, { awaitsReview: true })).toBe("in_review");

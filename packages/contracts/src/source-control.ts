@@ -33,6 +33,8 @@ export const changeProposalActionSchema = z.enum([
   "ready_for_review",
   "converted_to_draft",
   "closed",
+  /** The change now targets another branch. Other edits are not events. */
+  "base_changed",
 ]);
 
 export const normalizedChangeProposalEventSchema = z.object({

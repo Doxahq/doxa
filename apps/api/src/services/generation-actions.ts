@@ -23,6 +23,8 @@ export interface GenerationActionFacts {
   isSuperseded?: boolean;
   /** Where the pull request of a preview run stands. */
   changeState?: "open" | "closed" | "merged" | null;
+  /** The pull request of a preview run targets a branch other than the production branch. */
+  changeOffProductionBranch?: boolean;
   /** The retention policy deleted the files of the run's version. */
   versionCollected?: boolean;
   /** A newer push replaced the preview longer ago than the policy allows. */
@@ -32,6 +34,17 @@ export interface GenerationActionFacts {
   /** When the run failed at that step. */
   failedAt?: Date | null;
   now?: Date;
+}
+
+/**
+ * Whether the pull request of a preview run targets a branch other than the
+ * project's production branch. False when either side is unknown.
+ */
+export function isOffProductionBranch(
+  change: { baseRef: string } | null,
+  productionBranch: string | null,
+): boolean {
+  return change !== null && productionBranch !== null && change.baseRef !== productionBranch;
 }
 
 /** The retention fields of a run's version that decide whether Promote works. */
@@ -132,12 +145,16 @@ export function getDeleteBlockedReason(
  * for it.
  */
 export function getRerunBlockedReason(
-  facts: Pick<GenerationActionFacts, "status" | "publicationMode" | "isSuperseded" | "changeState">,
+  facts: Pick<
+    GenerationActionFacts,
+    "status" | "publicationMode" | "isSuperseded" | "changeState" | "changeOffProductionBranch"
+  >,
 ): GenerationActionBlockedReason | null {
   if (facts.status === "queued" || facts.status === "running") return "not_finished";
   if (facts.publicationMode !== "preview") return null;
   if (facts.isSuperseded) return "superseded";
   if (facts.changeState && facts.changeState !== "open") return "change_not_open";
+  if (facts.changeOffProductionBranch) return "base_not_production";
   return null;
 }
 
@@ -151,7 +168,14 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
 export function getResumeBlockedReason(
   facts: Pick<
     GenerationActionFacts,
-    "status" | "publicationMode" | "isSuperseded" | "changeState" | "failedStep" | "failedAt" | "now"
+    | "status"
+    | "publicationMode"
+    | "isSuperseded"
+    | "changeState"
+    | "changeOffProductionBranch"
+    | "failedStep"
+    | "failedAt"
+    | "now"
   >,
 ): GenerationActionBlockedReason | null {
   if (facts.status !== "failed") return "not_resumable";

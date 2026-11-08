@@ -2,6 +2,7 @@ import { useState } from "react"
 import { AlertCircle, Github, Link2, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
+import { RepositoryProductionBranchField } from "~/components/dashboard/new-project/repository-production-branch-field"
 import { RepositoryOption } from "~/components/dashboard/repository-option"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
@@ -67,16 +68,25 @@ function ConnectRepositoryForm({
 }) {
   const github = useGitHub()
   const [selectedId, setSelectedId] = useState("")
+  // Null follows the selected repository's default branch until the person picks another.
+  const [chosenBranch, setChosenBranch] = useState<string | null>(null)
   const projectForRepository = (repositoryId: string) => {
     const project = github.projectByRepositoryId.get(repositoryId) ?? null
     return project && project.id !== projectId ? project : null
   }
   const selectedProject = selectedId ? projectForRepository(selectedId) : null
+  const selected = github.repositories.find((repo) => repo.id === selectedId) ?? null
+  const productionBranch = chosenBranch ?? selected?.defaultBranch ?? ""
+
+  function selectRepository(repositoryId: string) {
+    setSelectedId(repositoryId)
+    if (repositoryId !== selectedId) setChosenBranch(null)
+  }
 
   async function handleConnect() {
-    if (!selectedId || selectedProject) return
+    if (!selectedId || selectedProject || !productionBranch) return
     try {
-      const project = await connection.connectRepository(selectedId)
+      const project = await connection.connectRepository(selectedId, productionBranch)
       toast.success(project.repositoryFullName ? `Connected ${project.repositoryFullName}` : "Repository connected")
       onConnected()
     } catch {
@@ -105,7 +115,7 @@ function ConnectRepositoryForm({
                 existingProject={projectForRepository(repo.id)}
                 hasDivider={index > 0}
                 isSelected={repo.id === selectedId}
-                onSelect={() => setSelectedId(repo.id)}
+                onSelect={() => selectRepository(repo.id)}
               />
             ))}
           </div>
@@ -115,6 +125,15 @@ function ConnectRepositoryForm({
             install.
           </p>
         )}
+
+        {selected && !selectedProject ? (
+          <RepositoryProductionBranchField
+            githubRepositoryId={selected.id}
+            value={productionBranch}
+            onValueChange={setChosenBranch}
+            disabled={connection.isConnecting}
+          />
+        ) : null}
 
         {selectedProject ? (
           <Alert>
@@ -145,7 +164,7 @@ function ConnectRepositoryForm({
             <Button
               type="button"
               size="sm"
-              disabled={!selectedId || Boolean(selectedProject) || connection.isConnecting}
+              disabled={!selectedId || Boolean(selectedProject) || connection.isConnecting || !productionBranch}
               onClick={() => void handleConnect()}
             >
               {connection.isConnecting ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}

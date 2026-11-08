@@ -30,6 +30,11 @@ import {
   PreviewBaselinesRepository,
   type PreviewBaselinesStore,
 } from "../../repositories/preview-baselines";
+import type { PreviewStopReason } from "../../repositories/preview-admission-guard";
+import {
+  PreviewChannelClosureRepository,
+  type PreviewChannelCloser,
+} from "../../repositories/preview-channel-closure";
 import {
   WebhookDeliveriesRepository,
   type WebhookDeliveryIdentity,
@@ -48,12 +53,19 @@ import { parseGitHubEvent } from "./github-event-parser";
 import { GitHubPullRequestStateResolver } from "./github-pull-requests";
 import {
   mapDoxabotReviewRunState,
+  reviewRunPresentationFor,
   ReviewRunsService,
   type ReviewRunReporter,
 } from "./review-runs";
 import {
   resolveGenerationExecutionConfig,
 } from "../generation-execution-config";
+import {
+  cancelGenerationJob,
+  finishGenerationCancellation,
+  SUPERSEDED_PREVIEW_CHECK,
+  type GenerationCancellationInput,
+} from "../generation-cancellation";
 
 export type DoxabotWebhookResult =
   | { outcome: "duplicate" }
@@ -77,6 +89,54 @@ export interface DoxabotJobQueue {
   send(message: GenerateJobMessage): Promise<unknown>;
 }
 
+/** Cancels a preview job and closes its pull request check. */
+export interface PreviewJobCanceller {
+  /** False when the job had already ended. */
+  cancel(input: GenerationCancellationInput): Promise<boolean>;
+  /**
+   * Closes the check and stops the container of a job that the admission of
+   * a newer head already cancelled.
+   */
+  finishCancel(input: GenerationCancellationInput): Promise<void>;
+}
+
+/** How the run of an older head ends when a newer push replaces it. */
+function supersededBy(headRevision: string): Omit<GenerationCancellationInput, "jobId"> {
+  return {
+    message: "Superseded by a newer pull request head.",
+    eventType: "doxabot_superseded",
+    data: { targetRevision: headRevision },
+    check: SUPERSEDED_PREVIEW_CHECK,
+  };
+}
+
+const PREVIEW_STOP_TEXT: Record<PreviewStopReason, string> = {
+  closed: "The pull request was closed",
+  merged: "The pull request was merged",
+  retargeted: "The pull request no longer targets the production branch",
+};
+
+/** The pull request check text when a preview stops for `reason`. */
+function stoppedPreviewCheck(reason: PreviewStopReason) {
+  return {
+    title: "Documentation preview stopped",
+    summary: `${PREVIEW_STOP_TEXT[reason]}, so Doxa stopped this preview.`,
+  };
+}
+
+/** Runs every step, also after one fails, then reports the first failure. */
+async function runEach(steps: ReadonlyArray<() => Promise<unknown>>): Promise<void> {
+  const failures: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) throw failures[0];
+}
+
 export interface DoxabotWebhookDependencies {
   deliveries: WebhookDeliveriesStore;
   settings: Pick<DoxabotSettingsStore, "getAutomationContext">;
@@ -89,6 +149,9 @@ export interface DoxabotWebhookDependencies {
   deploymentPolicy: DoxabotDeploymentPolicy;
   executionConfig: GenerationExecutionConfig;
   mergeTriggers: Pick<MergeGenerationScheduler, "recordMerge">;
+  previewJobs: PreviewJobCanceller;
+  previewChannels: PreviewChannelCloser;
+  now(): Date;
 }
 
 export class DoxabotWebhookOrchestrator {
@@ -99,19 +162,30 @@ export class DoxabotWebhookOrchestrator {
     env: Env,
     options: Pick<DoxabotWebhookDependencies, "mergeTriggers">,
   ): DoxabotWebhookOrchestrator {
+    const jobs = new JobsRepository(env);
+    const reviewRuns = ReviewRunsService.fromEnv(env);
     return new DoxabotWebhookOrchestrator({
       deliveries: new WebhookDeliveriesRepository(env),
       settings: new DoxabotSettingsRepository(env),
       changeProposals: new ChangeProposalsRepository(env),
-      jobs: new JobsRepository(env),
+      jobs,
       previewBaselines: new PreviewBaselinesRepository(env),
       queue: env.GENERATION_QUEUE,
-      reviewRuns: ReviewRunsService.fromEnv(env),
+      reviewRuns,
       changeProposalState:
         GitHubPullRequestStateResolver.fromEnv(env),
       deploymentPolicy: resolveDoxabotDeploymentPolicy(env),
       executionConfig: resolveDoxabotExecutionConfig(env),
       mergeTriggers: options.mergeTriggers,
+      previewJobs: {
+        cancel: async (input) =>
+          (await cancelGenerationJob(env, jobs, input, reviewRuns)).transitioned,
+        finishCancel: async (input) => {
+          await finishGenerationCancellation(env, jobs, input, reviewRuns);
+        },
+      },
+      previewChannels: new PreviewChannelClosureRepository(env),
+      now: () => new Date(),
     });
   }
 
@@ -211,14 +285,21 @@ export class DoxabotWebhookOrchestrator {
         connected: true,
         visibility: event.repository.visibility,
       },
-      hasPublishedVersion: context.publishedVersionId !== null,
+      hasPublishedVersion: context.hasPublishedVersion,
       storedEnabled: context.storedEnabled,
     });
-    if (!eligibility.available) {
-      return this.ignore(identity, eligibility.reason);
-    }
-    if (!eligibility.enabled) {
-      return this.ignore(identity, "project_disabled");
+    const ignoredReason = !eligibility.available
+      ? eligibility.reason
+      : eligibility.enabled
+        ? null
+        : "project_disabled";
+    if (ignoredReason) {
+      // Previews made before Doxabot was turned off still end with their
+      // pull request.
+      if (event.kind === "change_proposal") {
+        await this.stopRecordedPreviews(context, event);
+      }
+      return this.ignore(identity, ignoredReason);
     }
 
     switch (event.kind) {
@@ -236,8 +317,13 @@ export class DoxabotWebhookOrchestrator {
     context: DoxabotAutomationContext,
     event: NormalizedChangeProposalEvent,
   ): Promise<DoxabotWebhookResult> {
-    if (event.change.baseRef !== event.repository.defaultBranch) {
-      return this.ignore(identity, "non_default_base");
+    // Previews and the merge trigger follow the project's production
+    // branch, which can differ from the repository's default branch.
+    if (event.change.baseRef !== context.productionBranch) {
+      // A pull request that moved off the production branch, or a preview
+      // made before the production branch changed, stops here.
+      await this.stopRecordedPreviews(context, event);
+      return this.ignore(identity, "non_production_base");
     }
 
     const lifecycleState = lifecycleStateFor(event);
@@ -251,7 +337,7 @@ export class DoxabotWebhookOrchestrator {
       displayNumber: event.change.number,
       draft: event.change.draft,
       state: lifecycleState,
-      defaultBranch: event.repository.defaultBranch,
+      defaultBranch: context.productionBranch,
       baseRef: event.change.baseRef,
       baseRevision: event.change.baseRevision.commitSha,
       headRevision: event.change.headRevision.commitSha,
@@ -267,19 +353,24 @@ export class DoxabotWebhookOrchestrator {
       return this.ignore(identity, proposal);
     }
 
-    // A merge into the default branch feeds the merge trigger, which may
-    // start a production run that goes to a review.
-    if (lifecycleState === "merged") {
-      await this.dependencies.mergeTriggers.recordMerge({
-        projectId: context.projectId,
-        mergeTrigger: context.mergeTrigger,
-        changeExternalId: event.change.externalId,
-        changeNumber: event.change.number,
-        mergedAt: new Date(event.change.sourceUpdatedAt),
-      });
-    }
-
     if (lifecycleState !== "open") {
+      // A merge into the production branch feeds the merge trigger, which may
+      // start a production run that goes to a review. The merge and the
+      // preview cleanup do not depend on each other, so each runs even when
+      // the other fails.
+      await runEach([
+        async () => {
+          if (lifecycleState !== "merged") return;
+          await this.dependencies.mergeTriggers.recordMerge({
+            projectId: context.projectId,
+            mergeTrigger: context.mergeTrigger,
+            changeExternalId: event.change.externalId,
+            changeNumber: event.change.number,
+            mergedAt: new Date(event.change.sourceUpdatedAt),
+          });
+        },
+        () => this.stopPreviews(context, event, lifecycleState),
+      ]);
       return this.ignore(
         identity,
         lifecycleState === "merged" ? "change_merged" : "change_closed",
@@ -320,7 +411,7 @@ export class DoxabotWebhookOrchestrator {
           expectedSourceUpdatedAt: current.proposal.sourceUpdatedAt,
           headRevision: resolved.change.headRevision.commitSha,
           baseRevision: resolved.change.baseRevision.commitSha,
-          defaultBranch: resolved.repository.defaultBranch,
+          defaultBranch: context.productionBranch,
           baseRef: resolved.change.baseRef,
           installationExternalId:
             resolved.repository.installationExternalId,
@@ -401,6 +492,7 @@ export class DoxabotWebhookOrchestrator {
       provider: event.repository.provider,
       changeExternalId: event.change.externalId,
     });
+    const supersede = supersededBy(event.change.headRevision.commitSha);
     const previewBaseline =
       await this.dependencies.previewBaselines
         .findSuccessfulCompatiblePreview({
@@ -416,13 +508,15 @@ export class DoxabotWebhookOrchestrator {
       sourceAuthor: event.change.author ?? null,
       changeProposalId: proposal.id,
       changeExternalId: event.change.externalId,
-      baselineRevision:
-        previewBaseline?.sourceRevision ??
-        context.publishedSourceRevision,
+      baselineRevision: previewBaseline
+        ? previewBaseline.sourceRevision
+        : context.publishedBaseline?.sourceRevision ?? null,
       targetRevision: event.change.headRevision.commitSha,
       sourceTreeHash: null,
       baselineVersionId:
-        previewBaseline?.versionId ?? context.publishedVersionId,
+        previewBaseline?.versionId ??
+        context.publishedBaseline?.versionId ??
+        null,
       plannerModel:
         this.dependencies.executionConfig.plannerModel,
       writerModel:
@@ -438,35 +532,23 @@ export class DoxabotWebhookOrchestrator {
       idempotencyKey,
       concurrencyKey,
       deliveryId: identity.deliveryId,
+      // The record as this delivery wrote it. A close, a base change or a
+      // newer push that lands before the admission refuses this preview.
+      guard: { seen: proposal, productionBranch: context.productionBranch },
+      supersede,
     };
-    let active = null;
-    let admission =
+    const admission =
       await this.dependencies.jobs.admitDoxabotJob(admissionInput);
-    if (admission.outcome === "concurrency_conflict") {
-      active = await this.dependencies.jobs.activeForConcurrencyKey(
-        concurrencyKey,
-      );
-      if (!active) {
-        throw new Error(
-          "Preview admission conflicted without an active job.",
-        );
-      }
-      await this.dependencies.jobs.markCancelled(
-        active.id,
-        "Superseded by a newer pull request head.",
-        "doxabot_superseded",
-        { targetRevision: event.change.headRevision.commitSha },
-      );
-      admission =
-        await this.dependencies.jobs.admitDoxabotJob(admissionInput);
+    if (admission.outcome === "stale_change") {
+      return this.ignore(identity, "stale_change_event");
     }
     if (admission.outcome === "concurrency_conflict") {
       throw new Error("Preview admission remained conflicted.");
     }
-    if (active) {
-      await this.dependencies.jobs.linkSupersededJob({
-        supersededJobId: active.id,
-        supersedingJobId: admission.job.id,
+    if (admission.supersededJobId) {
+      await this.dependencies.previewJobs.finishCancel({
+        ...supersede,
+        jobId: admission.supersededJobId,
       });
     }
 
@@ -567,58 +649,101 @@ export class DoxabotWebhookOrchestrator {
     }
   }
 
+  /**
+   * The cleanup of a pull request event that gets no preview: Doxabot is off
+   * or unavailable, or the base is not the production branch. Only a pull
+   * request that Doxa recorded can have a preview. Its record takes the event
+   * through the same staleness checks as the main path, so a late "closed"
+   * event never stops the preview of a reopened pull request.
+   */
+  private async stopRecordedPreviews(
+    context: DoxabotAutomationContext,
+    event: NormalizedChangeProposalEvent,
+  ): Promise<void> {
+    const recorded = await this.dependencies.changeProposals.getByIdentity({
+      projectId: context.projectId,
+      provider: event.repository.provider,
+      externalId: event.change.externalId,
+    });
+    if (!recorded) return;
+
+    const applied = await this.applyChangeProposalEvent(
+      { outcome: "existing", proposal: recorded },
+      context,
+      event,
+    );
+    if (typeof applied === "string") return;
+
+    const state = lifecycleStateFor(event);
+    if (state !== "open") {
+      await this.stopPreviews(context, event, state);
+    } else if (event.change.baseRef !== context.productionBranch) {
+      await this.stopPreviews(context, event, "retargeted");
+    } else if (applied.headRevision !== recorded.headRevision) {
+      // Doxabot is off, so no newer preview replaces a run on the old head.
+      // It stops as superseded; the last finished preview stays online.
+      await this.cancelActivePreview(
+        context,
+        event,
+        supersededBy(event.change.headRevision.commitSha),
+      );
+    }
+  }
+
+  /**
+   * A pull request that ends, or leaves the production branch, cancels its
+   * queued or running preview, so no credits go to a preview that no one can
+   * use, and takes its preview site offline. The retention policy then
+   * collects the last preview version. The cancel goes first: a preview that
+   * completes after it cannot take the channel back.
+   */
+  private async stopPreviews(
+    context: DoxabotAutomationContext,
+    event: NormalizedChangeProposalEvent,
+    reason: PreviewStopReason,
+  ): Promise<void> {
+    await runEach([
+      () =>
+        this.cancelActivePreview(context, event, {
+          message: `${PREVIEW_STOP_TEXT[reason]}.`,
+          eventType: "doxabot_change_ended",
+          data: { reason },
+          check: stoppedPreviewCheck(reason),
+        }),
+      () =>
+        this.dependencies.previewChannels.closeForChange({
+          projectId: context.projectId,
+          provider: event.repository.provider,
+          changeExternalId: event.change.externalId,
+          closedAt: this.dependencies.now(),
+        }),
+    ]);
+  }
+
+  /** Cancels the queued or running preview of the pull request, if any. */
+  private async cancelActivePreview(
+    context: DoxabotAutomationContext,
+    event: NormalizedChangeProposalEvent,
+    cancellation: Omit<GenerationCancellationInput, "jobId">,
+  ): Promise<void> {
+    const active = await this.dependencies.jobs.activeForConcurrencyKey(
+      previewConcurrencyKey({
+        projectId: context.projectId,
+        provider: event.repository.provider,
+        changeExternalId: event.change.externalId,
+      }),
+    );
+    if (active) {
+      await this.dependencies.previewJobs.cancel({ ...cancellation, jobId: active.id });
+    }
+  }
+
   private async ignore(
     identity: WebhookDeliveryIdentity,
     reason: string,
   ): Promise<DoxabotWebhookResult> {
     await this.dependencies.deliveries.markIgnored({ ...identity, reason });
     return { outcome: "ignored", reason };
-  }
-}
-
-/** How the pull request check reads for a preview run in this state. */
-export function reviewRunPresentationFor(
-  status: GenerationJobDto["status"],
-): Pick<
-  CreateReviewRunInput,
-  "status" | "conclusion" | "title" | "summary"
-> {
-  switch (status) {
-    case "queued":
-      return {
-        ...mapDoxabotReviewRunState("queued"),
-        title: "Documentation preview queued",
-        summary:
-          "Doxa is preparing a documentation preview for this pull request.",
-      };
-    case "running":
-      return {
-        ...mapDoxabotReviewRunState("in_progress"),
-        title: "Documentation preview in progress",
-        summary:
-          "Doxa is generating a documentation preview for this pull request.",
-      };
-    case "succeeded":
-      return {
-        ...mapDoxabotReviewRunState("success"),
-        title: "Documentation preview ready",
-        summary:
-          "Doxa generated a documentation preview for this pull request.",
-      };
-    case "failed":
-      return {
-        ...mapDoxabotReviewRunState("failure"),
-        title: "Documentation preview failed",
-        summary:
-          "Doxa could not generate a documentation preview for this pull request.",
-      };
-    case "cancelled":
-      return {
-        ...mapDoxabotReviewRunState("cancelled"),
-        title: "Documentation preview cancelled",
-        summary:
-          "Doxa cancelled documentation preview generation for this pull request.",
-      };
   }
 }
 

@@ -9,12 +9,20 @@ import {
 import { createDb, schema, type DbEnv } from "@doxahq/db";
 import { and, eq } from "drizzle-orm";
 import { isClearedGenerationBaseline } from "./generation-baseline-reset";
+import {
+  optionalProductionBranchSql,
+  productionBranchSql,
+} from "./production-branch";
 
 export type DoxabotProjectRepositoryState =
   | { connected: false }
   | {
       connected: true;
       visibility: RepositoryVisibility;
+      /** The repository's default branch on GitHub. */
+      defaultBranch: string;
+      /** The branch that production generations read (`productionBranchSql`). */
+      productionBranch: string;
     };
 
 export interface DoxabotProjectSettingsState {
@@ -45,16 +53,34 @@ export interface DoxabotAutomationContext {
   repositoryOwner: string;
   repositoryName: string;
   repositoryVisibility: RepositoryVisibility;
-  defaultBranch: string;
+  /**
+   * The branch that production generations read. A pull request must target
+   * it for a preview, and a merge into it feeds the merge trigger.
+   */
+  productionBranch: string;
   storedEnabled: boolean;
   mergeTrigger: DoxabotMergeTrigger;
-  publishedVersionId: string | null;
-  publishedSourceRevision: string | null;
+  /** The site serves a published version. Previews need one to exist. */
+  hasPublishedVersion: boolean;
+  /**
+   * The published version as the baseline of a preview. Null without a
+   * published version, and after the generation cache was cleared: then a
+   * preview analyzes from scratch instead of reusing pre-reset state.
+   */
+  publishedBaseline: PublishedPreviewBaseline | null;
+}
+
+export interface PublishedPreviewBaseline {
+  versionId: string;
+  sourceRevision: string | null;
 }
 
 export interface DoxabotSettingsStore {
   getProjectState(projectId: string): Promise<DoxabotProjectSettingsState | null>;
-  /** Stores the fields that the update names and keeps the others. */
+  /**
+   * Stores the fields that the update names and keeps the others. The
+   * production branch goes to the project, the rest to its settings row.
+   */
   update(input: {
     projectId: string;
     changes: UpdateDoxabotSettingsInput;
@@ -83,6 +109,9 @@ export class DoxabotSettingsRepository implements DoxabotSettingsStore {
         ownerUserId: schema.projects.userId,
         repositoryId: schema.githubRepositories.id,
         repositoryIsPrivate: schema.githubRepositories.isPrivate,
+        repositoryDefaultBranch: schema.githubRepositories.defaultBranch,
+        // A left join: null when the project has no repository.
+        productionBranch: optionalProductionBranchSql(),
         publishedVersionId: schema.docsSites.publishedVersionId,
         storedEnabled: schema.doxabotAutomationSettings.enabled,
         mergeTrigger: schema.doxabotAutomationSettings.mergeTrigger,
@@ -113,12 +142,16 @@ export class DoxabotSettingsRepository implements DoxabotSettingsStore {
     return {
       projectId: row.projectId,
       ownerUserId: row.ownerUserId,
-      repository: row.repositoryId
-        ? {
-            connected: true,
-            visibility: row.repositoryIsPrivate ? "private" : "public",
-          }
-        : { connected: false },
+      repository:
+        row.repositoryId && row.repositoryDefaultBranch
+          ? {
+              connected: true,
+              visibility: row.repositoryIsPrivate ? "private" : "public",
+              defaultBranch: row.repositoryDefaultBranch,
+              productionBranch:
+                row.productionBranch ?? row.repositoryDefaultBranch,
+            }
+          : { connected: false },
       hasPublishedVersion: row.publishedVersionId !== null,
       storedEnabled: row.storedEnabled ?? false,
       mergeTrigger: row.mergeTrigger ?? DEFAULT_MERGE_SETTINGS.mergeTrigger,
@@ -132,27 +165,39 @@ export class DoxabotSettingsRepository implements DoxabotSettingsStore {
     changes: UpdateDoxabotSettingsInput;
     updatedByUserId: string;
   }): Promise<Date> {
-    const [settings] = await this.db
-      .insert(schema.doxabotAutomationSettings)
-      .values({
-        projectId: input.projectId,
-        ...input.changes,
-        updatedByUserId: input.updatedByUserId,
-      })
-      .onConflictDoUpdate({
-        target: schema.doxabotAutomationSettings.projectId,
-        set: {
-          ...input.changes,
-          updatedByUserId: input.updatedByUserId,
-          updatedAt: new Date(),
-        },
-      })
-      .returning({ updatedAt: schema.doxabotAutomationSettings.updatedAt });
+    const { productionBranch, ...automation } = input.changes;
+    return this.db.transaction(async (tx) => {
+      if (productionBranch !== undefined) {
+        await tx
+          .update(schema.projects)
+          .set({ productionBranch, updatedAt: new Date() })
+          .where(eq(schema.projects.id, input.projectId));
+      }
 
-    if (!settings) {
-      throw new Error("Doxabot settings could not be updated.");
-    }
-    return settings.updatedAt;
+      // The row also records who changed a setting last, so a branch-only
+      // update writes it too.
+      const [settings] = await tx
+        .insert(schema.doxabotAutomationSettings)
+        .values({
+          projectId: input.projectId,
+          ...automation,
+          updatedByUserId: input.updatedByUserId,
+        })
+        .onConflictDoUpdate({
+          target: schema.doxabotAutomationSettings.projectId,
+          set: {
+            ...automation,
+            updatedByUserId: input.updatedByUserId,
+            updatedAt: new Date(),
+          },
+        })
+        .returning({ updatedAt: schema.doxabotAutomationSettings.updatedAt });
+
+      if (!settings) {
+        throw new Error("Doxabot settings could not be updated.");
+      }
+      return settings.updatedAt;
+    });
   }
 
   async getAutomationContext(input: {
@@ -171,7 +216,7 @@ export class DoxabotSettingsRepository implements DoxabotSettingsStore {
         repositoryOwner: schema.githubRepositories.owner,
         repositoryName: schema.githubRepositories.name,
         repositoryIsPrivate: schema.githubRepositories.isPrivate,
-        defaultBranch: schema.githubRepositories.defaultBranch,
+        productionBranch: productionBranchSql(),
         storedEnabled: schema.doxabotAutomationSettings.enabled,
         mergeTrigger: schema.doxabotAutomationSettings.mergeTrigger,
         publishedVersionId: schema.docsSites.publishedVersionId,
@@ -240,24 +285,41 @@ export class DoxabotSettingsRepository implements DoxabotSettingsStore {
       repositoryOwner: row.repositoryOwner,
       repositoryName: row.repositoryName,
       repositoryVisibility: row.repositoryIsPrivate ? "private" : "public",
-      defaultBranch: row.defaultBranch,
+      productionBranch: row.productionBranch,
       storedEnabled: row.storedEnabled ?? false,
       mergeTrigger: row.mergeTrigger ?? DEFAULT_MERGE_SETTINGS.mergeTrigger,
-      // A cleared generation cache also retires the published version as a
-      // preview baseline, so the next preview run analyzes from scratch
-      // instead of silently falling back to pre-reset state.
-      ...(row.publishedVersionCreatedAt &&
-          isClearedGenerationBaseline({
-            versionCreatedAt: row.publishedVersionCreatedAt,
-            generationBaselineResetAt: row.generationBaselineResetAt,
-          })
-        ? { publishedVersionId: null, publishedSourceRevision: null }
-        : {
-            publishedVersionId: row.publishedVersionId,
-            publishedSourceRevision: row.publishedSourceRevision,
-          }),
+      hasPublishedVersion: row.publishedVersionId !== null,
+      publishedBaseline: toPublishedPreviewBaseline(row),
     };
   }
+}
+
+/**
+ * A cleared generation cache retires the published version as a preview
+ * baseline, so the next preview analyzes from scratch instead of silently
+ * reusing pre-reset state. Previews stay available: the site still serves
+ * the version.
+ */
+function toPublishedPreviewBaseline(row: {
+  publishedVersionId: string | null;
+  publishedSourceRevision: string | null;
+  publishedVersionCreatedAt: Date | null;
+  generationBaselineResetAt: Date | null;
+}): PublishedPreviewBaseline | null {
+  if (row.publishedVersionId === null) return null;
+  if (
+    row.publishedVersionCreatedAt !== null &&
+    isClearedGenerationBaseline({
+      versionCreatedAt: row.publishedVersionCreatedAt,
+      generationBaselineResetAt: row.generationBaselineResetAt,
+    })
+  ) {
+    return null;
+  }
+  return {
+    versionId: row.publishedVersionId,
+    sourceRevision: row.publishedSourceRevision,
+  };
 }
 
 /** The stored quiet time, or the default when the project has no row. */

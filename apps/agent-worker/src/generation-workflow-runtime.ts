@@ -2097,7 +2097,8 @@ function assertRevisionAwareExecutionContext(
     !context.job.sourceInstallationExternalId ||
     !context.job.changeExternalId ||
     !context.job.targetRevision ||
-    !context.job.baselineVersionId ||
+    // No baseline is valid: after the generation cache was cleared, a
+    // preview analyzes from scratch, like a first production run.
     !context.job.plannerModel ||
     !context.job.writerModel ||
     !context.job.planningFingerprint ||

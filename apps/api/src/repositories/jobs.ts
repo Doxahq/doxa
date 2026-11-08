@@ -28,6 +28,21 @@ import type {
   StaleGenerationJobDto,
 } from "@doxahq/contracts";
 import type { Env } from "../env";
+import type { ChangeProposalLifecycleState } from "./change-proposals";
+import {
+  cancelledCheckFromEventData,
+  withCancelledCheck,
+  type CancelledReviewRunPresentation,
+} from "./cancelled-review-run";
+import {
+  checkPreviewAdmission,
+  type PreviewAdmissionGuard,
+  type PreviewAdmissionStop,
+} from "./preview-admission-guard";
+import {
+  optionalProductionBranchSql,
+  productionBranchSql,
+} from "./production-branch";
 import {
   GENERATION_PAGE_FLAGGED_EVENT_TYPE,
   GENERATION_PAGE_NOTICE_EVENT_TYPE,
@@ -121,7 +136,25 @@ export interface CreateDoxabotGenerationJobInput {
   generatorFingerprint: string;
   idempotencyKey: string;
   concurrencyKey: string;
+  /** The pull request as the caller saw it; a newer record can refuse the preview. */
+  guard: PreviewAdmissionGuard;
 }
+
+/** How a cancel reads in the job's events and on its pull request check. */
+export interface JobCancellation {
+  message: string;
+  eventType?: string;
+  data?: Record<string, unknown>;
+  /** The pull request check text of a preview job. Production jobs have no check. */
+  check?: CancelledReviewRunPresentation;
+}
+
+/** The preview of a head that a webhook delivered. */
+export type DoxabotJobAdmissionInput = CreateDoxabotGenerationJobInput & {
+  deliveryId: string;
+  /** How an active run of the pull request ends when this head replaces it. */
+  supersede: JobCancellation;
+};
 
 /** A production run starts from a person, or from Doxabot after merges. */
 export type ProductionGenerationTrigger = "manual" | "merge";
@@ -165,11 +198,18 @@ export interface DoxabotGenerationJobCreation {
   outcome: "created" | "replayed";
   job: GenerationJobDto;
   queuePublished: boolean;
+  /**
+   * The active run that this admission cancelled in its transaction. The
+   * caller closes its check and stops its container. Null when none.
+   */
+  supersededJobId: string | null;
 }
 
 export type DoxabotGenerationJobAdmission =
   | DoxabotGenerationJobCreation
-  | { outcome: "concurrency_conflict" };
+  | { outcome: "concurrency_conflict" }
+  /** The pull request changed after the caller saw it, and the change stops the preview. */
+  | { outcome: "stale_change"; reason: PreviewAdmissionStop };
 
 /** What an ended run needs to run again, read from the run itself. */
 export interface GenerationRerunSource {
@@ -182,6 +222,10 @@ export interface GenerationRerunSource {
   sourceInstallationExternalId: string | null;
   sourceAuthor: SourceAuthor | null;
   changeExternalId: string | null;
+  /** The recorded pull request of a preview run; null for a production run. */
+  change: { state: ChangeProposalLifecycleState; baseRef: string } | null;
+  /** The project's production branch; null when no repository is connected. */
+  productionBranch: string | null;
 }
 
 /** A preview run that a person starts again, which no webhook delivery carries. */
@@ -191,7 +235,7 @@ export type PreviewRerunJobInput = CreateDoxabotGenerationJobInput & {
 
 export interface DoxabotGenerationJobsStore {
   admitDoxabotJob(
-    input: CreateDoxabotGenerationJobInput & { deliveryId: string },
+    input: DoxabotJobAdmissionInput,
   ): Promise<DoxabotGenerationJobAdmission>;
   activeForConcurrencyKey(
     concurrencyKey: string,
@@ -201,11 +245,8 @@ export interface DoxabotGenerationJobsStore {
     message: string,
     eventType?: string,
     data?: Record<string, unknown>,
+    check?: CancelledReviewRunPresentation,
   ): Promise<boolean>;
-  linkSupersededJob(input: {
-    supersededJobId: string;
-    supersedingJobId: string;
-  }): Promise<void>;
   addEvent(
     jobId: string,
     type: string,
@@ -231,9 +272,13 @@ export interface DoxabotQueueOutboxJobsStore {
 
 export interface ReviewRunJobContext {
   jobId: string;
+  /** The job's status now; the check must not contradict it. */
+  status: GenerationJobDto["status"];
   provider: SourceProvider;
   targetRevision: string;
   externalReviewRunId: string | null;
+  /** The check text that the cancel of a cancelled job stored; null otherwise. */
+  cancelledPresentation: CancelledReviewRunPresentation | null;
   repository: {
     externalId: string;
     owner: string;
@@ -354,11 +399,24 @@ export class JobsRepository
     jobId: string;
   }): Promise<GenerationRerunSource | null> {
     const [row] = await this.db
-      .select({ job: schema.generationJobs })
+      .select({
+        job: schema.generationJobs,
+        changeState: schema.scmChangeProposals.state,
+        changeBaseRef: schema.scmChangeProposals.baseRef,
+        productionBranch: optionalProductionBranchSql(),
+      })
       .from(schema.generationJobs)
       .innerJoin(
         schema.projects,
         eq(schema.generationJobs.projectId, schema.projects.id),
+      )
+      .leftJoin(
+        schema.scmChangeProposals,
+        eq(schema.generationJobs.changeProposalId, schema.scmChangeProposals.id),
+      )
+      .leftJoin(
+        schema.githubRepositories,
+        eq(schema.projects.githubRepositoryId, schema.githubRepositories.id),
       )
       .where(
         and(
@@ -388,27 +446,35 @@ export class JobsRepository
             }
           : null,
       changeExternalId: job.changeExternalId,
+      change:
+        row.changeState && row.changeBaseRef
+          ? { state: row.changeState, baseRef: row.changeBaseRef }
+          : null,
+      productionBranch: row.productionBranch,
     };
   }
 
   /**
    * Admits a preview run that a person starts again. It has no webhook
    * delivery, so the caller publishes it to the queue. Another active run
-   * for the pull request makes it a concurrency conflict.
+   * for the pull request makes it a concurrency conflict. The pull request
+   * record stays locked to the end, as in `admitDoxabotJob`.
    */
   async admitPreviewRerun(
     input: PreviewRerunJobInput,
   ): Promise<DoxabotGenerationJobAdmission> {
     return this.db.transaction(async (transaction) => {
+      const stop = await checkPreviewAdmission(transaction, input);
+      if (stop) return { outcome: "stale_change", reason: stop };
+
       const requestedByUserId = await findSourceAuthorUserId(
         transaction,
         input,
       );
-      const [created] = await transaction
-        .insert(schema.generationJobs)
-        .values(doxabotJobValues(input, requestedByUserId))
-        .onConflictDoNothing()
-        .returning();
+      const created = await insertJob(
+        transaction,
+        doxabotJobValues(input, requestedByUserId),
+      );
       if (!created) return { outcome: "concurrency_conflict" };
 
       await appendJobEvent(transaction, {
@@ -428,80 +494,56 @@ export class JobsRepository
         outcome: "created",
         job: toJobDto(created),
         queuePublished: false,
+        supersededJobId: null,
       };
     });
   }
 
+  /**
+   * Admits the preview of a head that a webhook delivered. The pull request
+   * record stays locked to the end, so a close, a retarget or a newer push
+   * either lands first and refuses the preview, or lands after and finds the
+   * job. An active run of the pull request is cancelled in this transaction,
+   * so an older head that arrives late cannot cancel the run of a newer one.
+   */
   async admitDoxabotJob(
-    input: CreateDoxabotGenerationJobInput & { deliveryId: string },
+    input: DoxabotJobAdmissionInput,
   ): Promise<DoxabotGenerationJobAdmission> {
     return this.db.transaction(async (transaction) => {
+      const stop = await checkPreviewAdmission(transaction, input);
+      if (stop) return { outcome: "stale_change", reason: stop };
+
       const requestedByUserId = await findSourceAuthorUserId(
         transaction,
         input,
       );
-      const [created] = await transaction
-        .insert(schema.generationJobs)
-        .values(doxabotJobValues(input, requestedByUserId))
-        .onConflictDoNothing()
-        .returning();
-
-      if (!created) {
-        const [replayed] = await transaction
-          .select()
-          .from(schema.generationJobs)
-          .where(eq(schema.generationJobs.idempotencyKey, input.idempotencyKey))
-          .limit(1);
-        if (!replayed) return { outcome: "concurrency_conflict" };
-
-        const [publishedDelivery] = await transaction
-          .select({
-            queuePublishedAt: schema.scmWebhookDeliveries.queuePublishedAt,
-          })
-          .from(schema.scmWebhookDeliveries)
-          .where(
-            and(
-              eq(schema.scmWebhookDeliveries.generationJobId, replayed.id),
-              isNotNull(schema.scmWebhookDeliveries.queuePublishedAt),
-            ),
-          )
-          .limit(1);
-        await linkDoxabotDelivery(transaction, {
-          provider: input.provider,
-          deliveryId: input.deliveryId,
-          jobId: replayed.id,
-          queuePublishedAt: publishedDelivery?.queuePublishedAt ?? null,
-        });
-        return {
-          outcome: "replayed",
-          job: toJobDto(replayed),
-          queuePublished: Boolean(publishedDelivery),
-        };
+      const values = doxabotJobValues(input, requestedByUserId);
+      const created = await insertJob(transaction, values);
+      if (created) {
+        return queueDoxabotJob(transaction, input, created, null);
       }
 
-      await linkDoxabotDelivery(transaction, {
-        provider: input.provider,
-        deliveryId: input.deliveryId,
-        jobId: created.id,
-        queuePublishedAt: null,
-      });
-      await appendJobEvent(transaction, {
-        jobId: created.id,
-        type: "doxabot_queued",
-        message: "Doxabot preview generation queued.",
-        data: {
-          provider: input.provider,
-          changeExternalId: input.changeExternalId,
-          targetRevision: input.targetRevision,
-        },
-        source: "system",
-      });
+      const replayed = await replayDoxabotJob(transaction, input);
+      if (replayed) return replayed;
 
-      return {
-        outcome: "created",
-        job: toJobDto(created),
-        queuePublished: false,
-      };
+      // Another run of the pull request is active, or it ended a moment ago.
+      const supersededJobId = await cancelActiveJob(
+        transaction,
+        input.concurrencyKey,
+        input.supersede,
+      );
+      const replacing = await insertJob(transaction, values);
+      // The throw rolls the cancel back: no run stops without its replacement.
+      if (!replacing) {
+        throw new Error("Preview admission remained conflicted.");
+      }
+      if (supersededJobId) {
+        await transaction
+          .update(schema.generationJobs)
+          .set({ supersededByJobId: replacing.id, updatedAt: new Date() })
+          .where(eq(schema.generationJobs.id, supersededJobId));
+      }
+      return queueDoxabotJob(transaction, input, replacing, supersededJobId);
     });
   }
 
@@ -674,9 +716,11 @@ export class JobsRepository
         userGithubLogin: schema.user.githubLogin,
         userImage: schema.user.image,
         repositoryFullName: schema.githubRepositories.fullName,
-        repositoryDefaultBranch: schema.githubRepositories.defaultBranch,
+        // A left join: null when the project has no repository.
+        repositoryDefaultBranch: optionalProductionBranchSql(),
         changeProposalNumber: schema.scmChangeProposals.displayNumber,
         changeProposalState: schema.scmChangeProposals.state,
+        changeProposalBaseRef: schema.scmChangeProposals.baseRef,
         siteId: schema.docsSites.id,
         publishedVersionId: schema.docsSites.publishedVersionId,
         versionId: schema.docsVersions.id,
@@ -788,10 +832,13 @@ export class JobsRepository
             }
           : null,
       changeProposal:
-        row.changeProposalNumber && row.changeProposalState
+        row.changeProposalNumber &&
+        row.changeProposalState &&
+        row.changeProposalBaseRef
           ? {
               displayNumber: row.changeProposalNumber,
               state: row.changeProposalState,
+              baseRef: row.changeProposalBaseRef,
             }
           : null,
       site: row.siteId ? { publishedVersionId: row.publishedVersionId } : null,
@@ -1280,25 +1327,13 @@ export class JobsRepository
     return job ? toJobDto(job) : null;
   }
 
-  async linkSupersededJob(input: {
-    supersededJobId: string;
-    supersedingJobId: string;
-  }): Promise<void> {
-    await this.db
-      .update(schema.generationJobs)
-      .set({
-        supersededByJobId: input.supersedingJobId,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.generationJobs.id, input.supersededJobId));
-  }
-
   async getReviewRunContext(
     jobId: string,
   ): Promise<ReviewRunJobContext | null> {
     const [row] = await this.db
       .select({
         jobId: schema.generationJobs.id,
+        status: schema.generationJobs.status,
         provider: schema.generationJobs.sourceProvider,
         targetRevision: schema.generationJobs.targetRevision,
         externalReviewRunId: schema.generationJobs.externalReviewRunId,
@@ -1365,9 +1400,14 @@ export class JobsRepository
 
     return {
       jobId: row.jobId,
+      status: row.status,
       provider: row.provider,
       targetRevision: row.targetRevision,
       externalReviewRunId: row.externalReviewRunId,
+      cancelledPresentation:
+        row.status === "cancelled"
+          ? await this.findCancelledPresentation(row.jobId)
+          : null,
       repository: {
         externalId: row.repositoryExternalId,
         owner: row.repositoryOwner,
@@ -1410,7 +1450,7 @@ export class JobsRepository
         repositoryFullName: schema.githubRepositories.fullName,
         repositoryOwner: schema.githubRepositories.owner,
         repositoryName: schema.githubRepositories.name,
-        repositoryDefaultBranch: schema.githubRepositories.defaultBranch,
+        repositoryDefaultBranch: productionBranchSql(),
         repositoryExternalId: schema.githubRepositories.githubRepoId,
         repositoryIsPrivate: schema.githubRepositories.isPrivate,
         repositoryInstallationId: schema.githubInstallations.installationId,
@@ -1755,19 +1795,13 @@ export class JobsRepository
   async markCancelled(
     jobId: string,
     message: string,
-    eventType = "admin_cancel_requested",
+    eventType?: string,
     data?: Record<string, unknown>,
+    check?: CancelledReviewRunPresentation,
   ): Promise<boolean> {
-    return this.transitionActiveJob({
-      jobId,
-      status: "cancelled",
-      errorMessage: message,
-      event: {
-        type: eventType,
-        message,
-        data: { ...data, outcome: "cancelled", terminal: true },
-      },
-    });
+    return this.transitionActiveJob(
+      cancelledTransition(jobId, { message, eventType, data, check }),
+    );
   }
 
   async addEvent(
@@ -1788,41 +1822,28 @@ export class JobsRepository
     );
   }
 
-  private async transitionActiveJob(input: {
-    jobId: string;
-    status: "running" | "failed" | "cancelled";
-    errorMessage?: string;
-    event: {
-      type: string;
-      message: string;
-      data?: Record<string, unknown>;
-      source?: JobEventSource;
-    };
-  }): Promise<boolean> {
-    return this.db.transaction(async (tx) => {
-      const [job] = await tx
-        .update(schema.generationJobs)
-        .set({
-          status: input.status,
-          errorMessage: input.errorMessage,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(schema.generationJobs.id, input.jobId),
-            inArray(schema.generationJobs.status, [...ACTIVE_JOB_STATUSES]),
-          ),
-        )
-        .returning({ id: schema.generationJobs.id });
+  private async transitionActiveJob(
+    input: ActiveJobTransition,
+  ): Promise<boolean> {
+    return this.db.transaction((tx) => transitionActiveJob(tx, input));
+  }
 
-      if (!job) return false;
-
-      await appendJobEvent(tx, {
-        jobId: input.jobId,
-        ...input.event,
-      });
-      return true;
-    });
+  /** The check text that the job's cancel stored with its terminal event. */
+  private async findCancelledPresentation(
+    jobId: string,
+  ): Promise<CancelledReviewRunPresentation | null> {
+    const [event] = await this.db
+      .select({ data: schema.jobEvents.data })
+      .from(schema.jobEvents)
+      .where(
+        and(
+          eq(schema.jobEvents.jobId, jobId),
+          sql`${schema.jobEvents.data} ->> 'outcome' = 'cancelled'`,
+        ),
+      )
+      .orderBy(desc(schema.jobEvents.sequence))
+      .limit(1);
+    return cancelledCheckFromEventData(event?.data);
   }
 
   private async listJobsByStatus(
@@ -1892,6 +1913,176 @@ export class JobsRepository
 }
 
 type JobsTransaction = Parameters<Parameters<DoxaDb["transaction"]>[0]>[0];
+
+interface ActiveJobTransition {
+  jobId: string;
+  status: "running" | "failed" | "cancelled";
+  errorMessage?: string;
+  event: {
+    type: string;
+    message: string;
+    data?: Record<string, unknown>;
+    source?: JobEventSource;
+  };
+}
+
+/** Moves a queued or running job to `status`; false when it had already ended. */
+async function transitionActiveJob(
+  transaction: JobsTransaction,
+  input: ActiveJobTransition,
+): Promise<boolean> {
+  const [job] = await transaction
+    .update(schema.generationJobs)
+    .set({
+      status: input.status,
+      errorMessage: input.errorMessage,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(schema.generationJobs.id, input.jobId),
+        inArray(schema.generationJobs.status, [...ACTIVE_JOB_STATUSES]),
+      ),
+    )
+    .returning({ id: schema.generationJobs.id });
+
+  if (!job) return false;
+
+  await appendJobEvent(transaction, {
+    jobId: input.jobId,
+    ...input.event,
+  });
+  return true;
+}
+
+function cancelledTransition(
+  jobId: string,
+  cancellation: JobCancellation,
+): ActiveJobTransition {
+  return {
+    jobId,
+    status: "cancelled",
+    errorMessage: cancellation.message,
+    event: {
+      type: cancellation.eventType ?? "admin_cancel_requested",
+      message: cancellation.message,
+      data: {
+        ...withCancelledCheck(cancellation.data, cancellation.check),
+        outcome: "cancelled",
+        terminal: true,
+      },
+    },
+  };
+}
+
+/** The new job, or null when a unique key (idempotency or one active run) refused it. */
+async function insertJob(
+  transaction: JobsTransaction,
+  values: typeof schema.generationJobs.$inferInsert,
+): Promise<typeof schema.generationJobs.$inferSelect | null> {
+  const [created] = await transaction
+    .insert(schema.generationJobs)
+    .values(values)
+    .onConflictDoNothing()
+    .returning();
+  return created ?? null;
+}
+
+/** Links the delivery to the new preview job and records it as queued. */
+async function queueDoxabotJob(
+  transaction: JobsTransaction,
+  input: DoxabotJobAdmissionInput,
+  created: typeof schema.generationJobs.$inferSelect,
+  supersededJobId: string | null,
+): Promise<DoxabotGenerationJobCreation> {
+  await linkDoxabotDelivery(transaction, {
+    provider: input.provider,
+    deliveryId: input.deliveryId,
+    jobId: created.id,
+    queuePublishedAt: null,
+  });
+  await appendJobEvent(transaction, {
+    jobId: created.id,
+    type: "doxabot_queued",
+    message: "Doxabot preview generation queued.",
+    data: {
+      provider: input.provider,
+      changeExternalId: input.changeExternalId,
+      targetRevision: input.targetRevision,
+    },
+    source: "system",
+  });
+
+  return {
+    outcome: "created",
+    job: toJobDto(created),
+    queuePublished: false,
+    supersededJobId,
+  };
+}
+
+/** The job of an earlier delivery of the same head, linked to this delivery too. */
+async function replayDoxabotJob(
+  transaction: JobsTransaction,
+  input: DoxabotJobAdmissionInput,
+): Promise<DoxabotGenerationJobCreation | null> {
+  const [replayed] = await transaction
+    .select()
+    .from(schema.generationJobs)
+    .where(eq(schema.generationJobs.idempotencyKey, input.idempotencyKey))
+    .limit(1);
+  if (!replayed) return null;
+
+  const [publishedDelivery] = await transaction
+    .select({
+      queuePublishedAt: schema.scmWebhookDeliveries.queuePublishedAt,
+    })
+    .from(schema.scmWebhookDeliveries)
+    .where(
+      and(
+        eq(schema.scmWebhookDeliveries.generationJobId, replayed.id),
+        isNotNull(schema.scmWebhookDeliveries.queuePublishedAt),
+      ),
+    )
+    .limit(1);
+  await linkDoxabotDelivery(transaction, {
+    provider: input.provider,
+    deliveryId: input.deliveryId,
+    jobId: replayed.id,
+    queuePublishedAt: publishedDelivery?.queuePublishedAt ?? null,
+  });
+  return {
+    outcome: "replayed",
+    job: toJobDto(replayed),
+    queuePublished: Boolean(publishedDelivery),
+    supersededJobId: null,
+  };
+}
+
+/** Cancels the active job of the concurrency key; its ID, or null when none was active. */
+async function cancelActiveJob(
+  transaction: JobsTransaction,
+  concurrencyKey: string,
+  cancellation: JobCancellation,
+): Promise<string | null> {
+  const [active] = await transaction
+    .select({ id: schema.generationJobs.id })
+    .from(schema.generationJobs)
+    .where(
+      and(
+        eq(schema.generationJobs.concurrencyKey, concurrencyKey),
+        inArray(schema.generationJobs.status, [...ACTIVE_JOB_STATUSES]),
+      ),
+    )
+    .for("update");
+  if (!active) return null;
+
+  const cancelled = await transitionActiveJob(
+    transaction,
+    cancelledTransition(active.id, cancellation),
+  );
+  return cancelled ? active.id : null;
+}
 
 interface LockedGenerationContext {
   job: typeof schema.generationJobs.$inferSelect;

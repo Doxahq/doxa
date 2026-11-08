@@ -16,9 +16,11 @@ vi.mock("@doxahq/db", async (importOriginal) => {
 });
 
 import { WebhookDeliveriesRepository } from "../../src/repositories/webhook-deliveries";
+import { RepositoryBranchesUnavailableError } from "../../src/services/repository-branches";
 import {
   DoxabotSettingsError,
   DoxabotSettingsService,
+  type ProductionBranchCheck,
 } from "../../src/services/doxabot/settings";
 
 const enabledPolicy: DoxabotDeploymentPolicy = {
@@ -32,6 +34,8 @@ const privateProject: DoxabotProjectSettingsState = {
   repository: {
     connected: true,
     visibility: "private",
+    defaultBranch: "main",
+    productionBranch: "main",
   },
   hasPublishedVersion: true,
   storedEnabled: false,
@@ -39,6 +43,17 @@ const privateProject: DoxabotProjectSettingsState = {
   batchQuietMinutes: 30,
   updatedAt: null,
 };
+
+/** Every branch exists, unless a test says otherwise. */
+const existingBranches: ProductionBranchCheck = { exists: async () => true };
+
+function settingsService(
+  store: DoxabotSettingsStore,
+  policy: DoxabotDeploymentPolicy,
+  branchCheck: ProductionBranchCheck = existingBranches,
+): DoxabotSettingsService {
+  return new DoxabotSettingsService(store, policy, branchCheck);
+}
 
 function createSettingsStore(
   state: DoxabotProjectSettingsState | null,
@@ -63,7 +78,7 @@ describe("Doxabot settings service", () => {
       ...privateProject,
       storedEnabled: true,
     });
-    const service = new DoxabotSettingsService(store, enabledPolicy);
+    const service = settingsService(store, enabledPolicy);
 
     await expect(service.getForOwner({
       projectId: privateProject.projectId,
@@ -74,6 +89,8 @@ describe("Doxabot settings service", () => {
       mergeTrigger: "batched",
       batchQuietMinutes: 30,
       repositoryVisibility: "private",
+      productionBranch: "main",
+      repositoryDefaultBranch: "main",
       unavailableReason: null,
       updatedAt: null,
     });
@@ -81,7 +98,7 @@ describe("Doxabot settings service", () => {
 
   test("does not reveal settings to a non-owner", async () => {
     const store = createSettingsStore(privateProject);
-    const service = new DoxabotSettingsService(store, enabledPolicy);
+    const service = settingsService(store, enabledPolicy);
 
     await expect(service.getForOwner({
       projectId: privateProject.projectId,
@@ -98,7 +115,7 @@ describe("Doxabot settings service", () => {
       ...privateProject,
       hasPublishedVersion: false,
     });
-    const service = new DoxabotSettingsService(store, enabledPolicy);
+    const service = settingsService(store, enabledPolicy);
 
     await expect(service.updateForOwner({
       projectId: privateProject.projectId,
@@ -118,9 +135,11 @@ describe("Doxabot settings service", () => {
       repository: {
         connected: true,
         visibility: "public",
+        defaultBranch: "main",
+        productionBranch: "main",
       },
     });
-    const service = new DoxabotSettingsService(store, enabledPolicy);
+    const service = settingsService(store, enabledPolicy);
 
     await expect(service.updateForOwner({
       projectId: privateProject.projectId,
@@ -136,7 +155,7 @@ describe("Doxabot settings service", () => {
 
   test("rejects enablement during a global shutdown", async () => {
     const store = createSettingsStore(privateProject);
-    const service = new DoxabotSettingsService(store, {
+    const service = settingsService(store, {
       ...enabledPolicy,
       enabled: false,
     });
@@ -155,7 +174,7 @@ describe("Doxabot settings service", () => {
 
   test("enables an eligible private project", async () => {
     const store = createSettingsStore(privateProject);
-    const service = new DoxabotSettingsService(store, enabledPolicy);
+    const service = settingsService(store, enabledPolicy);
 
     await expect(service.updateForOwner({
       projectId: privateProject.projectId,
@@ -168,6 +187,8 @@ describe("Doxabot settings service", () => {
       mergeTrigger: "batched",
       batchQuietMinutes: 30,
       repositoryVisibility: "private",
+      productionBranch: "main",
+      repositoryDefaultBranch: "main",
       unavailableReason: null,
       updatedAt: "2026-07-23T09:00:00.000Z",
     });
@@ -183,7 +204,7 @@ describe("Doxabot settings service", () => {
       ...privateProject,
       storedEnabled: true,
     });
-    const service = new DoxabotSettingsService(store, {
+    const service = settingsService(store, {
       ...enabledPolicy,
       enabled: false,
     });
@@ -199,6 +220,8 @@ describe("Doxabot settings service", () => {
       mergeTrigger: "batched",
       batchQuietMinutes: 30,
       repositoryVisibility: "private",
+      productionBranch: "main",
+      repositoryDefaultBranch: "main",
       unavailableReason: "global_disabled",
       updatedAt: "2026-07-23T09:00:00.000Z",
     });
@@ -212,7 +235,7 @@ describe("Doxabot settings service", () => {
 
 test("records the member who changed the setting, not the project owner", async () => {
   const store = createSettingsStore(privateProject);
-  const service = new DoxabotSettingsService(store, {
+  const service = settingsService(store, {
     ...enabledPolicy,
     enabled: false,
   });
@@ -306,5 +329,62 @@ describe("Doxabot repository idempotency", () => {
 
     expect(error.name).toBe("DoxabotSettingsError");
     expect(error.unavailableReason).toBe("global_disabled");
+  });
+});
+
+describe("Doxabot production branch setting", () => {
+  const update = (branchCheck: ProductionBranchCheck, state: DoxabotProjectSettingsState = privateProject) => {
+    const store = createSettingsStore(state);
+    const service = settingsService(store, enabledPolicy, branchCheck);
+    return {
+      store,
+      result: service.updateForOwner({
+        projectId: state.projectId,
+        userId: state.ownerUserId,
+        updatedByUserId: state.ownerUserId,
+        changes: { productionBranch: "release/2.x" },
+      }),
+    };
+  };
+
+  test("saves a branch that exists and returns it as the production branch", async () => {
+    const exists = vi.fn(async () => true);
+    const { store, result } = update({ exists });
+
+    await expect(result).resolves.toMatchObject({
+      productionBranch: "release/2.x",
+      repositoryDefaultBranch: "main",
+    });
+    expect(exists).toHaveBeenCalledWith(privateProject.projectId, "release/2.x");
+    expect(store.update).toHaveBeenCalledWith(
+      expect.objectContaining({ changes: { productionBranch: "release/2.x" } }),
+    );
+  });
+
+  test("refuses a branch that the repository does not have and saves nothing", async () => {
+    const { store, result } = update({ exists: async () => false });
+
+    await expect(result).rejects.toMatchObject({ code: "branch_not_found" });
+    expect(store.update).not.toHaveBeenCalled();
+  });
+
+  test("refuses a branch while no repository is connected", async () => {
+    const exists = vi.fn(async () => true);
+    const { store, result } = update({ exists }, { ...privateProject, repository: { connected: false } });
+
+    await expect(result).rejects.toMatchObject({ code: "repository_not_connected" });
+    expect(exists).not.toHaveBeenCalled();
+    expect(store.update).not.toHaveBeenCalled();
+  });
+
+  test("tells a GitHub outage apart from a missing branch", async () => {
+    const { store, result } = update({
+      exists: async () => {
+        throw new RepositoryBranchesUnavailableError(503);
+      },
+    });
+
+    await expect(result).rejects.toMatchObject({ code: "branch_check_unavailable" });
+    expect(store.update).not.toHaveBeenCalled();
   });
 });

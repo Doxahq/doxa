@@ -108,7 +108,7 @@ export function getDoxabotViewModel(
           statusTone: "success",
           title: "Pull request previews are enabled",
           description:
-            "Doxabot will prepare documentation previews for eligible pull requests targeting the default branch.",
+            "Doxabot will prepare documentation previews for eligible pull requests targeting the production branch.",
           ...action,
         }
       : {

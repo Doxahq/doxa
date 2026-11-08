@@ -62,7 +62,7 @@ export function DoxabotSettingsCard({ projectId }: { projectId: string }) {
             </CardTitle>
             <CardDescription>
               Generates review-only documentation previews for pull requests
-              that target your repository&apos;s default branch. Doxabot
+              that target the production branch. Doxabot
               analyzes eligible code changes without changing published docs.
               Each preview uses credits.
             </CardDescription>

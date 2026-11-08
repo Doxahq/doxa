@@ -3,6 +3,7 @@ import type { GitHubRepositoryDto } from "@doxahq/contracts"
 import { AlertCircle, Check, Github, Link2, Search, Sparkles } from "lucide-react"
 
 import { InstructionsOfferContent } from "~/components/dashboard/instructions-offer-dialog"
+import { RepositoryProductionBranchField } from "~/components/dashboard/new-project/repository-production-branch-field"
 import { RepositoryOption } from "~/components/dashboard/repository-option"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
@@ -74,8 +75,10 @@ function GenerateFromRepositoryForm({
   const isGenerating = pendingChoice !== null
   useEffect(() => onBusyChange(isGenerating), [isGenerating, onBusyChange])
   const [selectedId, setSelectedId] = useState("")
+  // Null follows the selected repository's default branch until the person picks another.
+  const [chosenBranch, setChosenBranch] = useState<string | null>(null)
   // No project exists yet at this step, so going back leaves nothing behind.
-  const [offerRepository, setOfferRepository] = useState<GitHubRepositoryDto | null>(null)
+  const [offer, setOffer] = useState<{ repository: GitHubRepositoryDto; productionBranch: string } | null>(null)
   const [query, setQuery] = useState("")
   const repositories = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -85,17 +88,23 @@ function GenerateFromRepositoryForm({
   }, [github.repositories, query])
   const selected = github.repositories.find((repo) => repo.id === selectedId) ?? null
   const selectedProject = selectedId ? github.projectByRepositoryId.get(selectedId) ?? null : null
+  const productionBranch = chosenBranch ?? selected?.defaultBranch ?? ""
   const currentStep = github.isConnected ? 1 : 0
 
-  if (offerRepository) {
+  function selectRepository(repositoryId: string) {
+    setSelectedId(repositoryId)
+    if (repositoryId !== selectedId) setChosenBranch(null)
+  }
+
+  if (offer) {
     return (
       <InstructionsOfferContent
         isStep
         pendingChoice={pendingChoice}
         error={github.createError}
-        onCancel={() => setOfferRepository(null)}
-        onAddInstructions={() => void addInstructions(offerRepository)}
-        onGenerateWithout={() => void generate(offerRepository)}
+        onCancel={() => setOffer(null)}
+        onAddInstructions={() => void addInstructions(offer.repository, offer.productionBranch)}
+        onGenerateWithout={() => void generate(offer.repository, offer.productionBranch)}
       />
     )
   }
@@ -130,7 +139,7 @@ function GenerateFromRepositoryForm({
             <div
               role="group"
               aria-label="Repository"
-              className="flex max-h-[440px] flex-col overflow-y-auto rounded-lg border border-border scrollbar-subtle"
+              className="flex max-h-[360px] flex-col overflow-y-auto rounded-lg border border-border scrollbar-subtle"
             >
               {repositories.length === 0 ? (
                 <p className="px-4 py-8 text-center text-sm text-muted-foreground">No repository matches “{query}”.</p>
@@ -142,11 +151,19 @@ function GenerateFromRepositoryForm({
                     existingProject={github.projectByRepositoryId.get(repo.id) ?? null}
                     hasDivider={index > 0}
                     isSelected={repo.id === selectedId}
-                    onSelect={() => setSelectedId(repo.id)}
+                    onSelect={() => selectRepository(repo.id)}
                   />
                 ))
               )}
             </div>
+            {selected && !selectedProject ? (
+              <RepositoryProductionBranchField
+                githubRepositoryId={selected.id}
+                value={productionBranch}
+                onValueChange={setChosenBranch}
+                disabled={isGenerating}
+              />
+            ) : null}
             <p className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground">
               <Sparkles aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-primary-text" />
               <span>
@@ -201,8 +218,10 @@ function GenerateFromRepositoryForm({
           <Button
             type="button"
             size="sm"
-            disabled={!selected || Boolean(selectedProject) || isGenerating}
-            onClick={() => setOfferRepository(selected)}
+            disabled={!selected || Boolean(selectedProject) || isGenerating || !productionBranch}
+            onClick={() => {
+              if (selected) setOffer({ repository: selected, productionBranch })
+            }}
           >
             <Sparkles aria-hidden="true" />
             Generate docs

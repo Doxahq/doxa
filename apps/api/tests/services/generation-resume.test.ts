@@ -19,6 +19,8 @@ function run(overrides: Partial<GenerationRerunSource> = {}): GenerationRerunSou
     sourceInstallationExternalId: null,
     sourceAuthor: null,
     changeExternalId: null,
+    change: null,
+    productionBranch: "main",
     ...overrides,
   };
 }
@@ -103,6 +105,16 @@ describe("GenerationResumeService", () => {
     const { resume, sent } = service({ reopen: async () => false });
     await expect(resume.resume(input)).resolves.toEqual({ outcome: "blocked", reason: "not_resumable" });
     expect(sent).toEqual([]);
+  });
+
+  test("refuses a preview whose pull request ended or left the production branch, as the page does", async () => {
+    const preview = { publicationMode: "preview" as const, sourceProvider: "github" as const, changeExternalId: "pr-9" };
+    const closed = service({ run: run({ ...preview, change: { state: "closed", baseRef: "main" } }) });
+    const offBase = service({ run: run({ ...preview, change: { state: "open", baseRef: "release" } }) });
+
+    await expect(closed.resume.resume(input)).resolves.toEqual({ outcome: "blocked", reason: "change_not_open" });
+    await expect(offBase.resume.resume(input)).resolves.toEqual({ outcome: "blocked", reason: "base_not_production" });
+    expect([...closed.sent, ...offBase.sent]).toEqual([]);
   });
 
   test("an unknown run is not found", async () => {

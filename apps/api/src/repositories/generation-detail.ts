@@ -20,6 +20,7 @@ export interface RecordedStepFailure {
 import { RERUN_EVENT_TYPES } from "./job-events";
 import {
   awaitsGenerationReview,
+  isOffProductionBranch,
   promoteRetentionFacts,
   resolveGenerationActions,
   type GenerationActionFacts,
@@ -55,6 +56,8 @@ interface GenerationSourceAuthorRow {
 interface ChangeProposalRow {
   displayNumber: number;
   state: "open" | "closed" | "merged";
+  /** The branch that the pull request targets. */
+  baseRef: string;
 }
 
 interface ProductionDomainRow {
@@ -364,7 +367,8 @@ function resolvePreviewDeployment(input: {
   previewChannel: PreviewChannelRow | null;
   env: DocsUrlEnv;
 }): DeploymentWithoutState {
-  const domain = input.previewChannel
+  // A closed pull request's channel serves nothing, so its URL would not load.
+  const domain = input.previewChannel?.currentVersionId
     ? {
         hostname: input.previewChannel.hostname,
         url: createDocsHostnameUrl(
@@ -572,6 +576,11 @@ export function toGenerationDetailDto(
       publicationMode: input.job.publicationMode,
       isSuperseded: input.job.supersededByJobId !== null,
       changeState: input.changeProposal?.state ?? null,
+      // `repository.defaultBranch` is the project's production branch.
+      changeOffProductionBranch: isOffProductionBranch(
+        input.changeProposal,
+        input.repository?.defaultBranch ?? null,
+      ),
       ...promoteRetentionFacts(
         input.version?.retention ?? null,
         resolveRetentionPolicy({ id: input.job.projectId }),

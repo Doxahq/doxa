@@ -18,7 +18,9 @@ import {
   listPendingMerges,
   listProjectGenerationEvents,
   listProjectGenerations,
+  listProjectRepositoryBranches,
   listProjects,
+  listRepositoryBranches,
   listRepositories,
 } from "~/lib/platform-api"
 import { fromProjectShell } from "~/lib/queries/project-shell"
@@ -40,6 +42,8 @@ export const dashboardQueryKeys = {
   summary: () => [...dashboardQueryKeys.all, "summary"] as const,
   projects: () => [...dashboardQueryKeys.summary(), "projects"] as const,
   githubRepositories: () => [...dashboardQueryKeys.summary(), "github-repositories"] as const,
+  githubRepositoryBranches: (githubRepositoryId: string) =>
+    [...dashboardQueryKeys.githubRepositories(), githubRepositoryId, "branches"] as const,
   project: (projectId: string) => [...dashboardQueryKeys.all, "projects", projectId] as const,
   contentRoot: (projectId: string) => [...dashboardQueryKeys.project(projectId), "content"] as const,
   content: (projectId: string, branch: BranchRef) =>
@@ -51,6 +55,9 @@ export const dashboardQueryKeys = {
     [...dashboardQueryKeys.content(projectId, branch), "mdx-issues"] as const,
   domains: (projectId: string) => [...dashboardQueryKeys.project(projectId), "domains"] as const,
   doxabot: (projectId: string) => [...dashboardQueryKeys.project(projectId), "doxabot"] as const,
+  /** Not under `doxabot`, so saving a setting does not list the branches again. */
+  repositoryBranches: (projectId: string) =>
+    [...dashboardQueryKeys.project(projectId), "repository-branches"] as const,
   pendingMerges: (projectId: string) =>
     [...dashboardQueryKeys.project(projectId), "pending-merges"] as const,
   generationCache: (projectId: string) =>
@@ -150,6 +157,29 @@ export function pendingMergesQueryOptions(projectId: string) {
     queryKey: dashboardQueryKeys.pendingMerges(projectId),
     queryFn: (context) => fromProjectShell(context, projectId, "pendingMerges", () => listPendingMerges(projectId)),
     staleTime: 30_000,
+    retry: false,
+  })
+}
+
+/** Branches change on GitHub, not here, so a short stale time keeps the picker current. */
+const BRANCHES_STALE_TIME_MS = 30_000
+
+/** The branches of a repository that has no project yet. */
+export function githubRepositoryBranchesQueryOptions(githubRepositoryId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.githubRepositoryBranches(githubRepositoryId),
+    queryFn: () => listRepositoryBranches(githubRepositoryId),
+    staleTime: BRANCHES_STALE_TIME_MS,
+    retry: false,
+  })
+}
+
+/** The branches of the project's repository. */
+export function projectRepositoryBranchesQueryOptions(projectId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.repositoryBranches(projectId),
+    queryFn: () => listProjectRepositoryBranches(projectId),
+    staleTime: BRANCHES_STALE_TIME_MS,
     retry: false,
   })
 }

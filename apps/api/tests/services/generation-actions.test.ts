@@ -60,6 +60,10 @@ describe("generation actions", () => {
     [{ status: "failed", publicationMode: "preview", changeState: "open" }, null],
     [{ status: "failed", publicationMode: "preview", changeState: "merged" }, "change_not_open"],
     [{ status: "failed", publicationMode: "preview", changeState: "open", isSuperseded: true }, "superseded"],
+    [{ status: "failed", publicationMode: "preview", changeState: "open", changeOffProductionBranch: true }, "base_not_production"],
+    // A closed pull request says so first: its base no longer matters.
+    [{ status: "failed", publicationMode: "preview", changeState: "closed", changeOffProductionBranch: true }, "change_not_open"],
+    [{ status: "failed", publicationMode: "production", changeOffProductionBranch: true }, null],
   ] as const)("knows when a run can run again", (input, expected) => {
     expect(getRerunBlockedReason(input)).toBe(expected);
   });

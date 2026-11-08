@@ -2,11 +2,23 @@ import { and, desc, eq, notInArray } from "drizzle-orm";
 import { createDb, schema } from "@doxahq/db";
 import type { GenerationContext, GitHubRepositoryDto } from "@doxahq/contracts";
 import type { Env } from "../env";
+import { productionBranchSql } from "./production-branch";
+
+/** A repository whose branches the API can list, with what a read token needs. */
+export interface RepositoryBranchTarget {
+  externalId: string;
+  owner: string;
+  name: string;
+  installationId: string;
+  /** The repository's default branch on GitHub. */
+  defaultBranch: string;
+}
 
 export interface ProductionGenerationSourceContext {
   externalId: string;
   owner: string;
   name: string;
+  /** The project's production branch (`productionBranchSql`). */
   defaultBranch: string;
   installationId: string;
 }
@@ -123,6 +135,54 @@ export class GitHubRepository {
     return removed.length;
   }
 
+  /** A repository of one of the user's installations, to list or check its branches. */
+  async getBranchTargetForUser(
+    userId: string,
+    githubRepositoryId: string,
+  ): Promise<RepositoryBranchTarget | null> {
+    const [row] = await this.branchTargetQuery()
+      .from(schema.githubRepositories)
+      .innerJoin(
+        schema.githubInstallations,
+        eq(schema.githubRepositories.installationId, schema.githubInstallations.id),
+      )
+      .where(
+        and(
+          eq(schema.githubRepositories.id, githubRepositoryId),
+          eq(schema.githubInstallations.userId, userId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /** The project's repository, with its GitHub default branch (not the production branch). */
+  async getBranchTargetForProject(projectId: string): Promise<RepositoryBranchTarget | null> {
+    const [row] = await this.branchTargetQuery()
+      .from(schema.projects)
+      .innerJoin(
+        schema.githubRepositories,
+        eq(schema.projects.githubRepositoryId, schema.githubRepositories.id),
+      )
+      .innerJoin(
+        schema.githubInstallations,
+        eq(schema.githubRepositories.installationId, schema.githubInstallations.id),
+      )
+      .where(eq(schema.projects.id, projectId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  private branchTargetQuery() {
+    return this.db.select({
+      externalId: schema.githubRepositories.githubRepoId,
+      owner: schema.githubRepositories.owner,
+      name: schema.githubRepositories.name,
+      installationId: schema.githubInstallations.installationId,
+      defaultBranch: schema.githubRepositories.defaultBranch,
+    });
+  }
+
   async getGenerationContext(projectId: string): Promise<GenerationContext | null> {
     const [row] = await this.db
       .select({
@@ -133,7 +193,7 @@ export class GitHubRepository {
         siteSlug: schema.docsSites.slug,
         repositoryId: schema.githubRepositories.id,
         repositoryFullName: schema.githubRepositories.fullName,
-        repositoryDefaultBranch: schema.githubRepositories.defaultBranch,
+        repositoryDefaultBranch: productionBranchSql(),
         installationId: schema.githubInstallations.installationId,
       })
       .from(schema.projects)
@@ -173,7 +233,7 @@ export class GitHubRepository {
         externalId: schema.githubRepositories.githubRepoId,
         owner: schema.githubRepositories.owner,
         name: schema.githubRepositories.name,
-        defaultBranch: schema.githubRepositories.defaultBranch,
+        defaultBranch: productionBranchSql(),
         installationId:
           schema.githubInstallations.installationId,
       })

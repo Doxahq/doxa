@@ -188,6 +188,7 @@ The `docs_retired_version` collector deletes the folder of a version that stoppe
 |---|---|---|
 | A publication, promotion, restore, or generation moves the site to another version | `recordPublication` | The previous production version |
 | A newer push moves a pull request preview channel | `completeJob` (`retireReplacedPreview`) | The replaced preview. Its `preview_replaced_at` is set. |
+| A pull request closes or merges | `PreviewChannelClosureRepository.closeForChange` (`retireReplacedPreview`, reason `preview_closed`) | The channel's last preview. Its `preview_replaced_at` is set, and the channel keeps no version. |
 | A person discards a generation review | `GenerationReviewsRepository.discard` | The staged version of the review |
 | A person deletes a generation | `JobsRepository.deleteForProject` | The version of the generation |
 

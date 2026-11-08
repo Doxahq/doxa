@@ -10,7 +10,7 @@ import {
   JobsRepository,
   type GenerationRerunSource,
 } from "../repositories/jobs";
-import { getResumeBlockedReason } from "./generation-actions";
+import { getResumeBlockedReason, isOffProductionBranch } from "./generation-actions";
 import type { GenerationQueue } from "./generation-dispatch";
 
 export type GenerationResumeOutcome =
@@ -102,6 +102,10 @@ function resumeBlockedReason(
     status: run.status,
     publicationMode: run.publicationMode,
     isSuperseded: run.supersededByJobId !== null,
+    // The same rules as the generation page, so an API call cannot do what
+    // the disabled button does not.
+    changeState: run.change?.state ?? null,
+    changeOffProductionBranch: isOffProductionBranch(run.change, run.productionBranch),
     failedStep: stepFailure?.failure ?? null,
     failedAt: stepFailure?.failedAt ?? null,
     now,

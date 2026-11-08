@@ -6,10 +6,12 @@ import type {
 import type { Env } from "../../env";
 import {
   ChangeProposalsRepository,
+  type ChangeProposalRecord,
   type ChangeProposalsStore,
 } from "../../repositories/change-proposals";
 import {
   DoxabotSettingsRepository,
+  type DoxabotAutomationContext,
   type DoxabotSettingsStore,
 } from "../../repositories/doxabot-settings";
 import {
@@ -23,6 +25,9 @@ import {
   PreviewBaselinesRepository,
   type PreviewBaselinesStore,
 } from "../../repositories/preview-baselines";
+import type { PreviewAdmissionStop } from "../../repositories/preview-admission-guard";
+import type { ChangeProposalSnapshot } from "./change-proposal-state";
+import { GitHubPullRequestStateResolver } from "./github-pull-requests";
 import {
   evaluateDoxabotEligibility,
   resolveDoxabotDeploymentPolicy,
@@ -30,13 +35,13 @@ import {
 } from "./eligibility";
 import {
   mapDoxabotReviewRunState,
+  reviewRunPresentationFor,
   ReviewRunsService,
   type ReviewRunReporter,
 } from "./review-runs";
 import {
   createDoxabotIdempotencyKey,
   resolveDoxabotExecutionConfig,
-  reviewRunPresentationFor,
   type DoxabotJobQueue,
 } from "./webhook-orchestrator";
 
@@ -72,9 +77,19 @@ export interface PreviewRerunDependencies {
   reviewRuns: ReviewRunReporter;
   deploymentPolicy: DoxabotDeploymentPolicy;
   executionConfig: GenerationExecutionConfig;
+  /** The pull request as GitHub has it now. */
+  pullRequests: Pick<GitHubPullRequestStateResolver, "getCurrentForJob">;
 }
 
 const QUEUE_FAILED_MESSAGE = "Doxa could not queue the preview generation. Try again.";
+
+/** The re-run answer when the pull request changes during the re-run. */
+const BLOCKED_REASON_FOR_STOP: Record<PreviewAdmissionStop, GenerationActionBlockedReason> = {
+  closed: "change_not_open",
+  merged: "change_not_open",
+  retargeted: "base_not_production",
+  superseded: "superseded",
+};
 
 /**
  * Starts an ended preview run again, on the head of its pull request as it
@@ -94,6 +109,7 @@ export class PreviewGenerationRerunService {
       reviewRuns: ReviewRunsService.fromEnv(env),
       deploymentPolicy: resolveDoxabotDeploymentPolicy(env),
       executionConfig: resolveDoxabotExecutionConfig(env),
+      pullRequests: GitHubPullRequestStateResolver.fromEnv(env),
     });
   }
 
@@ -110,9 +126,6 @@ export class PreviewGenerationRerunService {
       externalId: changeExternalId,
     });
     if (!proposal) return { outcome: "not_found" };
-    if (proposal.state !== "open" || proposal.draft) {
-      return { outcome: "blocked", reason: "change_not_open" };
-    }
 
     const context = await this.deps.settings.getAutomationContext({
       provider,
@@ -120,12 +133,32 @@ export class PreviewGenerationRerunService {
       installationExternalId: proposal.installationExternalId,
     });
     if (!context || context.projectId !== previous.projectId) return { outcome: "not_found" };
+
+    // A missed or late webhook leaves the record behind. The live state
+    // decides; the record stands in when GitHub cannot answer, and the worker
+    // checks the live state again.
+    const live = await this.readLivePullRequest(context, proposal);
+    const current = live ?? proposal;
+    if (current.state !== "open" || current.draft) {
+      return { outcome: "blocked", reason: "change_not_open" };
+    }
+    // A push that Doxa has not recorded yet: its own webhook starts the
+    // preview of the new head, and a run of the recorded head would only be
+    // superseded at its first step.
+    if (live && live.headRevision !== proposal.headRevision) {
+      return { outcome: "blocked", reason: "superseded" };
+    }
+    // The webhook previews only pull requests into the production branch. A
+    // re-run follows the same rule, also after either branch changed.
+    if (current.baseRef !== context.productionBranch) {
+      return { outcome: "blocked", reason: "base_not_production" };
+    }
     // A person asks for this run, so the project setting that turns
     // automatic previews off does not stop it. Previews must exist at all.
     const eligibility = evaluateDoxabotEligibility({
       deploymentPolicy: this.deps.deploymentPolicy,
       repository: { connected: true, visibility: context.repositoryVisibility },
-      hasPublishedVersion: context.publishedVersionId !== null,
+      hasPublishedVersion: context.hasPublishedVersion,
       storedEnabled: context.storedEnabled,
     });
     if (!eligibility.available) return { outcome: "blocked", reason: "previews_unavailable" };
@@ -151,10 +184,12 @@ export class PreviewGenerationRerunService {
       sourceAuthor: previous.sourceAuthor,
       changeProposalId: proposal.id,
       changeExternalId,
-      baselineRevision: baseline?.sourceRevision ?? context.publishedSourceRevision,
+      baselineRevision: baseline
+        ? baseline.sourceRevision
+        : context.publishedBaseline?.sourceRevision ?? null,
       targetRevision: proposal.headRevision,
       sourceTreeHash: null,
-      baselineVersionId: baseline?.versionId ?? context.publishedVersionId,
+      baselineVersionId: baseline?.versionId ?? context.publishedBaseline?.versionId ?? null,
       plannerModel: executionConfig.plannerModel,
       writerModel: executionConfig.writerModel,
       generationProfile: executionConfig.generationProfile,
@@ -171,7 +206,14 @@ export class PreviewGenerationRerunService {
       })}:rerun:${crypto.randomUUID()}`,
       concurrencyKey,
       rerunOfJobId: previous.id,
+      // A close, a base change or a push that Doxa records during the re-run
+      // refuses it. A record that stays as read here does not: the live state
+      // above already decided.
+      guard: { seen: proposal, productionBranch: context.productionBranch },
     });
+    if (admission.outcome === "stale_change") {
+      return { outcome: "blocked", reason: BLOCKED_REASON_FOR_STOP[admission.reason] };
+    }
     if (admission.outcome === "concurrency_conflict") {
       const winner = await this.deps.jobs.activeForConcurrencyKey(concurrencyKey);
       return winner ? { outcome: "already_active", job: winner } : { outcome: "active_conflict" };
@@ -187,6 +229,24 @@ export class PreviewGenerationRerunService {
       return { outcome: "dispatch_failed", message: QUEUE_FAILED_MESSAGE };
     }
     return { outcome: "started", job };
+  }
+
+  private async readLivePullRequest(
+    context: DoxabotAutomationContext,
+    proposal: ChangeProposalRecord,
+  ): Promise<ChangeProposalSnapshot | null> {
+    try {
+      return await this.deps.pullRequests.getCurrentForJob({
+        externalId: proposal.externalId,
+        number: proposal.displayNumber,
+        repositoryOwner: context.repositoryOwner,
+        repositoryName: context.repositoryName,
+        repositoryExternalId: context.repositoryExternalId,
+        installationExternalId: context.installationExternalId,
+      });
+    } catch {
+      return null;
+    }
   }
 
   private async createReviewRun(job: GenerationJobDto, headRevision: string): Promise<string | null> {

@@ -8,6 +8,7 @@ vi.mock("cloudflare:workers", () => ({
 
 import type { ChangeProposalRecord } from "../../src/repositories/change-proposals";
 import type { DoxabotAutomationContext } from "../../src/repositories/doxabot-settings";
+import type { ChangeProposalSnapshot } from "../../src/services/doxabot/change-proposal-state";
 import type {
   DoxabotGenerationJobAdmission,
   GenerationRerunSource,
@@ -47,6 +48,8 @@ function failedRun(overrides: Partial<GenerationRerunSource> = {}): GenerationRe
     sourceInstallationExternalId: "789",
     sourceAuthor: { externalId: "42", handle: "octocat", avatarUrl: null },
     changeExternalId: "pr-9",
+    change: { state: "open", baseRef: "main" },
+    productionBranch: "main",
     ...overrides,
   };
 }
@@ -72,7 +75,7 @@ function proposal(overrides: Partial<ChangeProposalRecord> = {}): ChangeProposal
   };
 }
 
-function automationContext(): DoxabotAutomationContext {
+function automationContext(overrides: Partial<DoxabotAutomationContext> = {}): DoxabotAutomationContext {
   return {
     projectId,
     ownerUserId: "owner-user",
@@ -81,12 +84,13 @@ function automationContext(): DoxabotAutomationContext {
     repositoryOwner: "ipenywis",
     repositoryName: "flagforge",
     repositoryVisibility: "private",
-    defaultBranch: "main",
+    productionBranch: "main",
     // A person asks for the run, so automatic previews being off does not stop it.
     storedEnabled: false,
     mergeTrigger: "batched",
-    publishedVersionId: "version-live",
-    publishedSourceRevision: "a".repeat(40),
+    hasPublishedVersion: true,
+    publishedBaseline: { versionId: "version-live", sourceRevision: "a".repeat(40) },
+    ...overrides,
   };
 }
 
@@ -95,6 +99,9 @@ function previewSetup(input: {
   active?: GenerationJobDto | null;
   admission?: DoxabotGenerationJobAdmission;
   queueFails?: boolean;
+  context?: Partial<DoxabotAutomationContext>;
+  /** The pull request on GitHub now; by default it matches the record. "unavailable" makes GitHub fail. */
+  live?: Partial<ChangeProposalSnapshot> | "unavailable";
 } = {}) {
   const admitted: PreviewRerunJobInput[] = [];
   const jobs = {
@@ -102,7 +109,7 @@ function previewSetup(input: {
     activeForConcurrencyKey: vi.fn(async () => input.active ?? null),
     admitPreviewRerun: vi.fn(async (admission: PreviewRerunJobInput) => {
       admitted.push(admission);
-      return input.admission ?? { outcome: "created" as const, job: job(), queuePublished: false };
+      return input.admission ?? { outcome: "created" as const, job: job(), queuePublished: false, supersededJobId: null };
     }),
     markFailed: vi.fn(async () => true),
     addEvent: vi.fn(async () => undefined),
@@ -118,7 +125,7 @@ function previewSetup(input: {
   };
   const deps: PreviewRerunDependencies = {
     jobs,
-    settings: { getAutomationContext: vi.fn(async () => automationContext()) },
+    settings: { getAutomationContext: vi.fn(async () => automationContext(input.context)) },
     changeProposals: {
       getByIdentity: vi.fn(async () => (input.proposal === undefined ? proposal() : input.proposal)),
     },
@@ -133,6 +140,23 @@ function previewSetup(input: {
       planningFingerprint: "planning-v1",
       writingFingerprint: "writing-v1",
       generatorFingerprint: "generator-v1",
+    },
+    pullRequests: {
+      getCurrentForJob: vi.fn(async (): Promise<ChangeProposalSnapshot> => {
+        if (input.live === "unavailable") throw new Error("GitHub unavailable");
+        const stored = input.proposal ?? proposal();
+        return {
+          externalId: stored.externalId,
+          number: stored.displayNumber,
+          draft: stored.draft,
+          state: stored.state,
+          baseRef: stored.baseRef,
+          baseRevision: stored.baseRevision,
+          headRevision: stored.headRevision,
+          sourceUpdatedAt: stored.sourceUpdatedAt,
+          ...input.live,
+        };
+      }),
     },
   };
   return { service: new PreviewGenerationRerunService(deps), admitted, jobs, queue, reviewRuns };
@@ -172,6 +196,71 @@ describe("preview generation re-run", () => {
       await expect(service.rerun(failedRun())).resolves.toEqual({ outcome: "blocked", reason: "change_not_open" });
       expect(admitted).toHaveLength(0);
     }
+  });
+
+  test("refuses a pull request that GitHub reports on another base, before Doxa has seen the change", async () => {
+    const { service, admitted } = previewSetup({ live: { baseRef: "release" } });
+
+    await expect(service.rerun(failedRun())).resolves.toEqual({ outcome: "blocked", reason: "base_not_production" });
+    expect(admitted).toHaveLength(0);
+  });
+
+  test("refuses a pull request that GitHub reports closed", async () => {
+    const { service, admitted } = previewSetup({ live: { state: "closed" } });
+
+    await expect(service.rerun(failedRun())).resolves.toEqual({ outcome: "blocked", reason: "change_not_open" });
+    expect(admitted).toHaveLength(0);
+  });
+
+  test("refuses the recorded head when GitHub already has a newer one", async () => {
+    const { service, admitted } = previewSetup({ live: { headRevision: "f".repeat(40) } });
+
+    await expect(service.rerun(failedRun())).resolves.toEqual({ outcome: "blocked", reason: "superseded" });
+    expect(admitted).toHaveLength(0);
+  });
+
+  test("falls back to the record when GitHub cannot answer", async () => {
+    const { service } = previewSetup({ live: "unavailable" });
+
+    await expect(service.rerun(failedRun())).resolves.toMatchObject({ outcome: "started" });
+  });
+
+  test("refuses a pull request that no longer targets the production branch", async () => {
+    // The pull request targets main; the project moved production to release.
+    const { service, admitted } = previewSetup({ context: { productionBranch: "release" } });
+
+    await expect(service.rerun(failedRun())).resolves.toEqual({ outcome: "blocked", reason: "base_not_production" });
+    expect(admitted).toHaveLength(0);
+  });
+
+  test("guards the admission with the record that it read", async () => {
+    const { service, admitted } = previewSetup();
+
+    await service.rerun(failedRun());
+
+    expect(admitted[0]?.guard).toEqual({ seen: proposal(), productionBranch: "main" });
+  });
+
+  test.each([
+    { stop: "closed", reason: "change_not_open" },
+    { stop: "merged", reason: "change_not_open" },
+    { stop: "retargeted", reason: "base_not_production" },
+    { stop: "superseded", reason: "superseded" },
+  ] as const)("answers $reason when the pull request was $stop during the re-run", async ({ stop, reason }) => {
+    const { service, queue, reviewRuns } = previewSetup({
+      admission: { outcome: "stale_change", reason: stop },
+    });
+
+    await expect(service.rerun(failedRun())).resolves.toEqual({ outcome: "blocked", reason });
+    expect(reviewRuns.create).not.toHaveBeenCalled();
+    expect(queue.send).not.toHaveBeenCalled();
+  });
+
+  test("runs without a baseline after the generation cache was cleared", async () => {
+    const { service, admitted } = previewSetup({ context: { publishedBaseline: null } });
+
+    await expect(service.rerun(failedRun())).resolves.toMatchObject({ outcome: "started" });
+    expect(admitted[0]).toMatchObject({ baselineVersionId: null, baselineRevision: null });
   });
 
   test("opens the active run of the pull request instead of a second one", async () => {
@@ -227,6 +316,16 @@ describe("generation re-run", () => {
     expect(jobs.addEvent).toHaveBeenCalledWith("job-new", "rerun_of", expect.any(String), {
       jobId: "job-failed",
     });
+  });
+
+  test("leaves the pull request's state to the preview service, which reads it live", async () => {
+    // The record says another base; GitHub may say otherwise, so only the preview service decides.
+    const failed = failedRun({ change: { state: "open", baseRef: "release" } });
+    const { service, preview, input } = setup(failed);
+
+    await service.rerun(input);
+
+    expect(preview.rerun).toHaveBeenCalledWith(failed);
   });
 
   test("starts a failed preview run on its pull request", async () => {

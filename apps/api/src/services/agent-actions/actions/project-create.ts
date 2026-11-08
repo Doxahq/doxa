@@ -71,6 +71,7 @@ export const projectCreateAction = definePrincipalAction({
       githubRepositoryId: payload.githubRepositoryId,
       name: payload.name,
       slug: payload.slug,
+      productionBranch: payload.productionBranch,
     });
   },
 });

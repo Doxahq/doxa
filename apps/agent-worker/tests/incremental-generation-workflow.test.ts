@@ -238,6 +238,21 @@ describe("incremental preview workflow invariants", () => {
     });
   });
 
+  test("checks out a preview with no baseline against its pull request base", () => {
+    // After the generation cache was cleared, a preview has no baseline.
+    const context = executionContext();
+    context.job.baselineRevision = null;
+    context.job.baselineVersionId = null;
+    const proposal = context.changeProposal;
+    if (!proposal) throw new Error("The fixture is a preview context.");
+
+    expect(resolveGenerationCheckoutSpec(context)).toMatchObject({
+      kind: "pull_request_merge",
+      baselineRevision: proposal.baseRevision,
+      baseRevision: proposal.baseRevision,
+    });
+  });
+
   test("routes only fully captured production jobs through revision-aware generation", () => {
     const context = executionContext();
     context.job.trigger = "manual";

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import type { GitHubRepositoryDto, ProjectDto } from "@doxahq/contracts"
+import type { CreateProjectInput, GitHubRepositoryDto, ProjectDto } from "@doxahq/contracts"
 
 import { mergeProjectIntoList } from "~/lib/dashboard/cache"
 import { useProjectsSummary } from "~/lib/dashboard/use-projects-summary"
@@ -28,7 +28,7 @@ export interface GitHubConnection {
   selectedRepositoryProject: ProjectDto | null
   projectByRepositoryId: Map<string, ProjectDto>
   setSelectedRepositoryId: (repositoryId: string) => void
-  createProject: (input: { githubRepositoryId: string; name?: string; slug?: string }) => Promise<ProjectDto>
+  createProject: (input: CreateProjectInput) => Promise<ProjectDto>
   isCreatingProject: boolean
   createError: string | null
 }

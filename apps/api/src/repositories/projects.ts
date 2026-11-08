@@ -19,7 +19,9 @@ export type CreateProjectErrorCode =
   | "repository_project_exists"
   | "repository_already_connected"
   | "project_not_found"
-  | "slug_unavailable";
+  | "slug_unavailable"
+  | "branch_not_found"
+  | "branch_check_unavailable";
 
 export class CreateProjectError extends Error {
   constructor(
@@ -154,11 +156,17 @@ export class ProjectsRepository {
     return row ?? null;
   }
 
+  /**
+   * `productionBranch` must already be checked on GitHub
+   * (`services/project-production-branch.ts`). Left out, the project follows
+   * the repository's default branch.
+   */
   async createForRepository(input: {
     userId: string;
     githubRepositoryId: string;
     name?: string;
     slug?: string;
+    productionBranch?: string;
   }): Promise<ProjectDto> {
     const repo = await this.getOwnedUnusedRepository(
       input.userId,
@@ -169,6 +177,7 @@ export class ProjectsRepository {
       repository: repo,
       name: input.name ?? repo.name,
       baseSlug: ensureSlug(input.slug ?? repo.name, repo.name),
+      productionBranch: input.productionBranch ?? null,
     });
     return project;
   }
@@ -184,14 +193,19 @@ export class ProjectsRepository {
       repository: null,
       name: input.name,
       baseSlug: ensureSlug(input.slug ?? input.name, "docs"),
+      productionBranch: null,
     });
   }
 
-  /** Links a repository to a project that has none. */
+  /**
+   * Links a repository to a project that has none. A branch chosen for an
+   * earlier repository does not carry over: `productionBranch` replaces it.
+   */
   async connectRepository(input: {
     userId: string;
     projectId: string;
     githubRepositoryId: string;
+    productionBranch?: string;
   }): Promise<ProjectDto> {
     const project = await this.getForUser(input.userId, input.projectId);
     if (!project) {
@@ -209,7 +223,11 @@ export class ProjectsRepository {
     );
     const [updated] = await this.db
       .update(schema.projects)
-      .set({ githubRepositoryId: repo.id, updatedAt: new Date() })
+      .set({
+        githubRepositoryId: repo.id,
+        productionBranch: input.productionBranch ?? null,
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(schema.projects.id, project.id),
@@ -279,6 +297,7 @@ export class ProjectsRepository {
     repository: { id: string; fullName: string } | null;
     name: string;
     baseSlug: string;
+    productionBranch: string | null;
   }): Promise<{ project: ProjectDto; siteId: string }> {
     return this.db.transaction(async (tx) => {
       const docsNamespace = createDocsNamespaceLookup(tx);
@@ -292,6 +311,7 @@ export class ProjectsRepository {
         .values({
           userId: input.userId,
           githubRepositoryId: input.repository?.id ?? null,
+          productionBranch: input.productionBranch,
           name: input.name,
           slug,
         })

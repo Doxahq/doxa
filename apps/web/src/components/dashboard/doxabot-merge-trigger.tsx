@@ -18,7 +18,7 @@ import { getErrorMessage } from "~/lib/errors"
 import { cn } from "~/lib/utils"
 
 /**
- * When a merge into the default branch updates the docs. Every update goes
+ * When a merge into the production branch updates the docs. Every update goes
  * to a review, so no choice changes the live site by itself.
  */
 export function DoxabotMergeTrigger(props: {

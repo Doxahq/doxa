@@ -25,7 +25,12 @@ import {
   ProjectsRepository,
 } from "../repositories/projects";
 import { cancelGenerationJob } from "../services/generation-cancellation";
+import { ReviewRunsService } from "../services/doxabot/review-runs";
 import { createExampleProject } from "../services/example-docs/create-project";
+import {
+  connectProjectRepository,
+  createRepositoryProject,
+} from "../services/project-production-branch";
 import { ProjectDeletionError } from "../repositories/project-deletion";
 import {
   DocsDomainProvisioningError,
@@ -91,9 +96,7 @@ export function createProjectRoutes(): ApiApp {
       if (!input.ok) return input.response;
 
       try {
-        const project = await new ProjectsRepository(
-          context.env,
-        ).createForRepository({
+        const project = await createRepositoryProject(context.env, {
           userId,
           ...input.data,
         });
@@ -156,12 +159,10 @@ export function createProjectRoutes(): ApiApp {
       if (!input.ok) return input.response;
 
       try {
-        const project = await new ProjectsRepository(
-          context.env,
-        ).connectRepository({
+        const project = await connectProjectRepository(context.env, {
           userId,
           projectId: context.req.param("projectId"),
-          githubRepositoryId: input.data.githubRepositoryId,
+          ...input.data,
         });
         return json({ project: withDocsUrl(project, context.env) });
       } catch (err) {
@@ -302,7 +303,7 @@ export function createProjectRoutes(): ApiApp {
         message: "Cancelled by user.",
         eventType: "user_cancel_requested",
         data: { requestedByUserId: access.actorUserId },
-      });
+      }, ReviewRunsService.fromEnv(context.env));
       if (!result.transitioned) {
         return error("Generation has already finished.", 409);
       }
@@ -554,16 +555,21 @@ const RERUN_BLOCKED_FALLBACK = "This generation cannot run again.";
 const RESUME_BLOCKED_FALLBACK =
   "This generation cannot continue from where it stopped. Re-run it instead.";
 
+const BASE_NOT_PRODUCTION_MESSAGE =
+  "The pull request does not target the production branch. Change its base, or change the production branch in the Doxabot settings.";
+
 const RESUME_BLOCKED_MESSAGES: Partial<Record<GenerationActionBlockedReason, string>> = {
   in_progress: "Another generation of this project is running. Continue this one after it ends.",
   superseded: "A newer run for this pull request replaced this generation.",
   change_not_open: "The pull request is closed, merged, or a draft.",
+  base_not_production: BASE_NOT_PRODUCTION_MESSAGE,
 };
 
 const RERUN_BLOCKED_MESSAGES: Partial<Record<GenerationActionBlockedReason, string>> = {
   not_finished: "A generation runs again only after it ends.",
   superseded: "A newer run for this pull request replaced this generation.",
   change_not_open: "The pull request is closed, merged, or a draft.",
+  base_not_production: BASE_NOT_PRODUCTION_MESSAGE,
   previews_unavailable: "Pull request previews are not available for this project.",
 };
 
@@ -602,5 +608,9 @@ function getCreateProjectStatus(error: CreateProjectError): number {
     case "repository_already_connected":
     case "slug_unavailable":
       return 409;
+    case "branch_not_found":
+      return 422;
+    case "branch_check_unavailable":
+      return 502;
   }
 }

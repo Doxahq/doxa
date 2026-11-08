@@ -15,6 +15,7 @@ export const INSTRUCTIONS_PAGE_DESCRIPTION =
 /** The cards of the Doxabot page, with their real titles. */
 const DOXABOT_CARDS = [
   { title: "Instructions", action: "5.5rem" },
+  { title: "Production branch", action: null },
   { title: "Pull request previews", action: null },
   { title: "Generation cache", action: null },
 ] as const

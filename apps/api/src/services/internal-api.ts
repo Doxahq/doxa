@@ -22,6 +22,11 @@ import {
 import { resolveDocsHost as resolveDocsHostForEnv } from "./docs-host-resolution";
 import { createInstallationAccessToken } from "./github-app";
 import { ReviewRunsService } from "./doxabot/review-runs";
+import {
+  CANCELLED_PREVIEW_CHECK,
+  closePreviewCheck,
+  SUPERSEDED_PREVIEW_CHECK,
+} from "./generation-cancellation";
 import { generationNotifierFromEnv } from "./email/notifications";
 import { GitHubPullRequestStateResolver } from "./doxabot/github-pull-requests";
 import { withGenerationSiteConfig } from "./generation-site-config";
@@ -267,10 +272,18 @@ async function markJobFailed(env: Env, jobId: string, message: string): Promise<
   if (failed) await generationNotifierFromEnv(env).finished(jobId, "failed", message);
 }
 
+/**
+ * The worker cancels its own job, for example while generation is paused,
+ * then stops without touching the check. The check closes here.
+ */
 async function markJobCancelled(env: Env, jobId: string, message: string): Promise<void> {
-  await new JobsRepository(env).markCancelled(jobId, message, "generation_cancelled");
+  const jobs = new JobsRepository(env);
+  const check = { title: CANCELLED_PREVIEW_CHECK.title, summary: message };
+  if (!(await jobs.markCancelled(jobId, message, "generation_cancelled", undefined, check))) return;
+  await closePreviewCheck(jobs, ReviewRunsService.fromEnv(env), { jobId, message, check });
 }
 
+/** The worker found a newer pull request state; it writes the check itself. */
 async function markJobSuperseded(
   env: Env,
   jobId: string,
@@ -280,6 +293,8 @@ async function markJobSuperseded(
     jobId,
     message,
     "doxabot_superseded",
+    undefined,
+    SUPERSEDED_PREVIEW_CHECK,
   );
 }
 

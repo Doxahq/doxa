@@ -44,6 +44,8 @@ const pullRequestActionSchema = z.enum([
   "ready_for_review",
   "converted_to_draft",
   "closed",
+  // Only an edit that moves the base counts; see parsePullRequest.
+  "edited",
 ]);
 
 const pullRequestEnvelopeSchema = z.object({
@@ -55,6 +57,8 @@ const pullRequestPayloadSchema = z.object({
   number: z.number().int().positive(),
   installation: githubInstallationSchema,
   repository: githubRepositorySchema,
+  /** On "edited": what changed. `base` is set when the target branch moved. */
+  changes: z.object({ base: z.unknown().optional() }).passthrough().optional(),
   pull_request: z.object({
     id: githubIdSchema,
     user: githubUserSchema.nullable(),
@@ -211,6 +215,11 @@ function parsePullRequest(
   const parsed = pullRequestPayloadSchema.safeParse(input.payload);
   if (!parsed.success) return malformed();
   const payload = parsed.data;
+  // A title or body edit changes nothing a preview reads. A base change moves
+  // the pull request onto or off the production branch.
+  if (payload.action === "edited" && payload.changes?.base === undefined) {
+    return irrelevant("unsupported_action");
+  }
   // GitHub always sends head.repo; null means a deleted fork.
   const headRepo = payload.pull_request.head.repo;
   const fromFork = headRepo === null || (headRepo !== undefined && headRepo.id !== payload.repository.id);
@@ -224,7 +233,7 @@ function parsePullRequest(
   return normalized({
     kind: "change_proposal",
     deliveryId: input.deliveryId,
-    action: payload.action,
+    action: payload.action === "edited" ? "base_changed" : payload.action,
     repository: toSourceRepository(
       payload.repository,
       payload.installation.id,

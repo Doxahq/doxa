@@ -14,11 +14,11 @@ const context: DoxabotAutomationContext = {
   repositoryOwner: "doxahq",
   repositoryName: "doxa",
   repositoryVisibility: "private",
-  defaultBranch: "main",
+  productionBranch: "main",
   storedEnabled: true,
   mergeTrigger: "batched",
-  publishedVersionId: "22222222-2222-4222-8222-222222222222",
-  publishedSourceRevision: baseRevision,
+  hasPublishedVersion: true,
+  publishedBaseline: { versionId: "22222222-2222-4222-8222-222222222222", sourceRevision: baseRevision },
 };
 
 const event: NormalizedChangeProposalEvent = {

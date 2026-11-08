@@ -6,8 +6,10 @@ import {
 } from "../http/project-access";
 import { error, json } from "../http/response";
 import { parseValidatedJson } from "../http/validation";
+import { GitHubRepository } from "../repositories/github";
 import { PendingMergesRepository } from "../repositories/pending-merges";
 import { createDoxabotInstructionsRoutes } from "./doxabot-instructions";
+import { repositoryBranchesResponse } from "./github";
 import {
   DoxabotSettingsError,
   DoxabotSettingsService,
@@ -28,6 +30,20 @@ export function createDoxabotRoutes(): ApiApp {
     withProjectAccess(context, "project.read", (access) =>
       listPendingMerges(context, access),
     ),
+  );
+
+  // The production branch picker. It reads the repository, and only people
+  // who can change the branch need it.
+  app.get("/branches", (context) =>
+    withProjectAccess(context, "generation.run", async (access) => {
+      const target = await new GitHubRepository(context.env).getBranchTargetForProject(access.projectId);
+      if (!target) {
+        return error("Connect a repository before you choose a production branch.", 409, {
+          code: "repository_not_connected",
+        });
+      }
+      return repositoryBranchesResponse(context.env, target);
+    }),
   );
 
   // Doxabot starts generations on repository changes, so it needs the
@@ -72,6 +88,12 @@ function mapDoxabotSettingsError(caught: unknown): Response {
       return error(caught.message, 409, {
         code: caught.unavailableReason,
       });
+    case "repository_not_connected":
+      return error(caught.message, 409, { code: caught.code });
+    case "branch_not_found":
+      return error(caught.message, 422, { code: caught.code });
+    case "branch_check_unavailable":
+      return error(caught.message, 502, { code: caught.code });
   }
 }
 

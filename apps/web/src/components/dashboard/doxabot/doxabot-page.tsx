@@ -5,6 +5,7 @@ import { DoxabotPageActions } from "~/components/dashboard/doxabot/doxabot-page-
 import { DoxabotStatusRow } from "~/components/dashboard/doxabot/doxabot-status-row"
 import { GenerationCacheCard } from "~/components/dashboard/doxabot/generation-cache-card"
 import { InstructionsCard } from "~/components/dashboard/doxabot/instructions-card"
+import { ProductionBranchCard } from "~/components/dashboard/doxabot/production-branch-card"
 import { DoxabotSettingsCard } from "~/components/dashboard/project-doxabot-page"
 import {
   DOXABOT_PAGE_DESCRIPTION,
@@ -50,6 +51,7 @@ export function ProjectDoxabotPage({ projectId }: { projectId: string }) {
       <section className="flex flex-col gap-4">
         <DoxabotStatusRow facts={facts} />
         <InstructionsCard projectId={projectId} current={instructions} />
+        <ProductionBranchCard projectId={projectId} />
         <DoxabotSettingsCard projectId={projectId} />
         <GenerationCacheCard projectId={projectId} />
       </section>

@@ -265,6 +265,28 @@ describe("GitHub event parser", () => {
     expect(result.events[0]?.repository.visibility).toBe("public");
   });
 
+  test("turns a base change into a base_changed event and ignores every other edit", () => {
+    const moved = parseGitHubEvent({
+      eventName: "pull_request",
+      deliveryId: "delivery-edited-base",
+      payload: { ...pullRequestPayload({ action: "edited", baseRef: "release" }), changes: { base: { ref: { from: "main" } } } },
+    });
+    const retitled = parseGitHubEvent({
+      eventName: "pull_request",
+      deliveryId: "delivery-edited-title",
+      payload: { ...pullRequestPayload({ action: "edited" }), changes: { title: { from: "Old title" } } },
+    });
+
+    expect(moved.outcome).toBe("normalized");
+    if (moved.outcome !== "normalized") return;
+    expect(moved.events[0]).toMatchObject({
+      kind: "change_proposal",
+      action: "base_changed",
+      change: { baseRef: "release" },
+    });
+    expect(retitled).toEqual({ outcome: "irrelevant", reason: "unsupported_action" });
+  });
+
   test("preserves draft pull requests", () => {
     const result = parseGitHubEvent({
       eventName: "pull_request",

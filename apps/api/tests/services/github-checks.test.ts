@@ -27,9 +27,11 @@ function createContext(
 ): ReviewRunJobContext {
   return {
     jobId,
+    status: "queued",
     provider: "github",
     targetRevision: headRevision,
     externalReviewRunId: null,
+    cancelledPresentation: null,
     repository: {
       externalId: "123456",
       owner: "doxahq",
@@ -409,6 +411,174 @@ describe("provider-neutral review runs", () => {
       }),
     ).rejects.toThrow("Review run ID does not belong to this generation job.");
     expect(update).not.toHaveBeenCalled();
+  });
+
+  describe("keeping the check in agreement with its job", () => {
+    function serviceWith(contexts: ReviewRunJobContext[]) {
+      const queue = [...contexts];
+      const update = vi.fn(async () => ({ externalRunId: "9001" }));
+      const create = vi.fn(async () => ({ externalRunId: "9001" }));
+      const service = new ReviewRunsService({
+        jobs: {
+          // Each read returns the next context, then keeps the last one.
+          getReviewRunContext: vi.fn(async () => (queue.length > 1 ? queue.shift() : queue[0]) ?? null),
+          claimReviewRun: vi.fn(async (): Promise<ReviewRunClaim> => ({ outcome: "claimed", reconcile: false })),
+          completeReviewRunClaim: vi.fn(async () => true),
+        },
+        adapters: { github: { find: vi.fn(async () => null), create, update } },
+        createClaimToken: () => "claim-5",
+        now: () => new Date("2026-07-23T10:00:00.000Z"),
+      });
+      return { service, update, create };
+    }
+
+    test("skips a progress update for a job that was cancelled", async () => {
+      const { service, update } = serviceWith([createContext({ status: "cancelled", externalReviewRunId: "9001" })]);
+
+      await expect(
+        service.update(jobId, {
+          externalRunId: "9001",
+          status: "in_progress",
+          title: "Generating documentation preview",
+          summary: "Doxa is analyzing this pull request.",
+          detailsUrl: null,
+          sourceRevision: headRevision,
+        }),
+      ).resolves.toEqual({ externalRunId: "9001", outcome: "skipped" });
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    test("creates the check in the job's own end state when the job ended first", async () => {
+      const { service, create } = serviceWith([createContext({ status: "cancelled" })]);
+
+      await service.create(jobId, createCommand());
+
+      expect(create).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ status: "completed", conclusion: "cancelled" }),
+      );
+    });
+
+    test("reports a created check as created even when the correction fails", async () => {
+      const { service, update } = serviceWith([
+        createContext({ status: "queued" }),
+        createContext({ status: "cancelled", externalReviewRunId: "9001" }),
+      ]);
+      update.mockRejectedValueOnce(new Error("GitHub unavailable"));
+
+      await expect(service.create(jobId, createCommand())).resolves.toEqual({ externalRunId: "9001", outcome: "created" });
+    });
+
+    test("closes a check whose job was cancelled while GitHub created it", async () => {
+      // The cancel found no run ID yet; the creator reads the job again after storing it.
+      const { service, create, update } = serviceWith([
+        createContext({ status: "queued" }),
+        createContext({ status: "cancelled", externalReviewRunId: "9001" }),
+      ]);
+
+      await expect(service.create(jobId, createCommand())).resolves.toMatchObject({ outcome: "created" });
+
+      expect(create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "queued" }));
+      expect(update).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ externalRunId: "9001", status: "completed", conclusion: "cancelled" }),
+      );
+    });
+
+    test("closes it with the text of the cancel, such as stopped for a closed pull request", async () => {
+      const stopped = {
+        title: "Documentation preview stopped",
+        summary: "The pull request was closed, so Doxa stopped this preview.",
+      };
+      const { service, update } = serviceWith([
+        createContext({ status: "queued" }),
+        createContext({ status: "cancelled", externalReviewRunId: "9001", cancelledPresentation: stopped }),
+      ]);
+
+      await service.create(jobId, createCommand());
+
+      expect(update).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ conclusion: "cancelled", title: stopped.title, summary: stopped.summary }),
+      );
+    });
+
+    test("creates the check with the text of a cancel that landed first", async () => {
+      const superseded = {
+        title: "Documentation preview superseded",
+        summary: "A newer pull request revision is available, so this preview was cancelled.",
+      };
+      const { service, create } = serviceWith([
+        createContext({ status: "cancelled", cancelledPresentation: superseded }),
+      ]);
+
+      await service.create(jobId, createCommand());
+
+      expect(create).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ conclusion: "cancelled", title: superseded.title, summary: superseded.summary }),
+      );
+    });
+
+    test("uses the default text for a job that ended in another way", async () => {
+      // A stored cancel text never relabels a failed job.
+      const { service, create } = serviceWith([
+        createContext({ status: "failed", cancelledPresentation: null }),
+      ]);
+
+      await service.create(jobId, createCommand());
+
+      expect(create).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ conclusion: "failure", title: "Documentation preview failed" }),
+      );
+    });
+  });
+
+  describe("cancelling the check of a preview job", () => {
+    const presentation = { title: "Documentation preview stopped", summary: "The pull request was merged." };
+
+    function serviceFor(context: ReviewRunJobContext | null) {
+      const update = vi.fn(async () => ({ externalRunId: "9001" }));
+      const service = new ReviewRunsService({
+        jobs: {
+          getReviewRunContext: vi.fn(async () => context),
+          claimReviewRun: vi.fn(async (): Promise<ReviewRunClaim> => ({ outcome: "not_found" })),
+          completeReviewRunClaim: vi.fn(async () => false),
+        },
+        adapters: { github: { find: vi.fn(async () => null), create: vi.fn(async () => ({ externalRunId: "9001" })), update } },
+        createClaimToken: () => "claim-4",
+        now: () => new Date("2026-07-23T10:00:00.000Z"),
+      });
+      return { service, update };
+    }
+
+    test("completes the job's check as cancelled on its target commit", async () => {
+      const context = createContext({ externalReviewRunId: "9001" });
+      const { service, update } = serviceFor(context);
+
+      await expect(service.cancel(jobId, presentation)).resolves.toBe(true);
+      expect(update).toHaveBeenCalledWith(context, {
+        externalRunId: "9001",
+        status: "completed",
+        conclusion: "cancelled",
+        title: presentation.title,
+        summary: presentation.summary,
+        detailsUrl: null,
+        sourceRevision: headRevision,
+      });
+    });
+
+    test.each([
+      ["a production job", null],
+      ["a preview whose check was never created", createContext()],
+      ["a preview whose check is still being created", createContext({ externalReviewRunId: "pending:job:claim" })],
+    ])("does nothing for %s", async (_name, context) => {
+      const { service, update } = serviceFor(context);
+
+      await expect(service.cancel(jobId, presentation)).resolves.toBe(false);
+      expect(update).not.toHaveBeenCalled();
+    });
   });
 
   test.each([

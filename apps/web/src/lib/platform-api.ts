@@ -4,8 +4,10 @@ import type {
   PendingMerges,
   ApplyDocsContentEditsInput,
   ApplyDocsContentEditsResult,
+  ConnectProjectRepositoryInput,
   CreateDocsDomainInput,
   CreateExampleProjectInput,
+  CreateProjectInput,
   DocsContentMdxReport,
   DocsContentOverviewDto,
   DocsContentPageDetailDto,
@@ -20,6 +22,7 @@ import type {
   GitHubRepositoryDto,
   JobEventDto,
   ProjectDto,
+  RepositoryBranchesDto,
   UpdateDoxabotSettingsInput,
   UpdateDocsPreviewVisibilityInput,
 } from "@doxahq/contracts";
@@ -126,7 +129,17 @@ export async function listRepositories(): Promise<GitHubRepositoryDto[]> {
   return result.repositories;
 }
 
-export async function createProject(input: { githubRepositoryId: string; name?: string; slug?: string }) {
+/** The branches of a repository of the user's GitHub installations, for a new project. */
+export async function listRepositoryBranches(githubRepositoryId: string): Promise<RepositoryBranchesDto> {
+  return apiFetch<RepositoryBranchesDto>(`/github/repos/${encodeURIComponent(githubRepositoryId)}/branches`)
+}
+
+/** The branches of the project's repository, for its production branch setting. */
+export async function listProjectRepositoryBranches(projectId: string): Promise<RepositoryBranchesDto> {
+  return apiFetch<RepositoryBranchesDto>(`/projects/${encodeURIComponent(projectId)}/doxabot/branches`)
+}
+
+export async function createProject(input: CreateProjectInput) {
   const result = await apiFetch<{ project: ProjectDto }>("/projects", {
     method: "POST",
     json: input,
@@ -146,12 +159,12 @@ export async function createExampleProject(input: CreateExampleProjectInput) {
   return result.project;
 }
 
-export async function connectProjectRepository(projectId: string, githubRepositoryId: string) {
+export async function connectProjectRepository(projectId: string, input: ConnectProjectRepositoryInput) {
   const result = await apiFetch<{ project: ProjectDto }>(
     `/projects/${encodeURIComponent(projectId)}/repository`,
     {
       method: "PUT",
-      json: { githubRepositoryId },
+      json: input,
     },
   );
   return result.project;
@@ -208,7 +221,7 @@ export async function startGeneration(
 }
 
 /**
- * Starts a failed generation again: a production run on the default branch
+ * Starts a failed generation again: a production run on the production branch
  * as it is now, a preview run on its pull request's head. The answer reads
  * like a start, with the same confirmations.
  */

@@ -123,6 +123,19 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" ? sanitizeString(value) || undefined : undefined;
 }
 
+/**
+ * A page id without its own section id in front. The route of a page holds
+ * its section already, so "documentation/overview" in section
+ * "documentation" would move the page from /overview to
+ * /documentation/overview.
+ */
+function withoutSectionPrefix(pageId: string, sectionId: string): string {
+  const prefix = `${sectionId}/`;
+  let id = pageId;
+  while (id.startsWith(prefix)) id = id.slice(prefix.length);
+  return id;
+}
+
 function validateStructure(structure: unknown): DocumentationStructure {
   if (!structure || typeof structure !== "object" || Array.isArray(structure)) {
     return { sections: [] };
@@ -133,12 +146,15 @@ function validateStructure(structure: unknown): DocumentationStructure {
   const sections = s.sections.flatMap((value, sIdx) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return [];
     const section = value as Record<string, unknown>;
+    const sectionId = sanitizeString(typeof section.id === "string" ? section.id : "") || `section-${sIdx}`;
     const rawPages = Array.isArray(section.pages) ? section.pages : [];
     const pages = rawPages.flatMap((pageValue, pIdx) => {
       if (!pageValue || typeof pageValue !== "object" || Array.isArray(pageValue)) return [];
       const page = pageValue as Record<string, unknown>;
-      const pageId = sanitizeString(typeof page.id === "string" ? page.id : "") ||
-        `page-${sIdx}-${pIdx}`;
+      const pageId = withoutSectionPrefix(
+        sanitizeString(typeof page.id === "string" ? page.id : ""),
+        sectionId,
+      ) || `page-${sIdx}-${pIdx}`;
       const pageTitle = sanitizeString(typeof page.title === "string" ? page.title : "") ||
         `Page ${pIdx + 1}`;
       const common = {
@@ -180,7 +196,7 @@ function validateStructure(structure: unknown): DocumentationStructure {
     });
 
     return [{
-      id: sanitizeString(typeof section.id === "string" ? section.id : "") || `section-${sIdx}`,
+      id: sectionId,
       title: sanitizeString(typeof section.title === "string" ? section.title : "") || `Section ${sIdx + 1}`,
       pages,
       ...(section.default === true ? { default: true } : {}),

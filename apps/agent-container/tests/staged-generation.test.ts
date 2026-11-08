@@ -462,11 +462,18 @@ describe("staged structure anchoring", () => {
 
     expect(result.stage).toBe("structure");
     expect(requests).toHaveLength(2);
+    // The planner reuses page ids, so it sees the id itself. The review
+    // names pages by `section/page`, the form of its decisions.
+    const [structureRequest, reviewRequest] = requests.map((request) =>
+      String(request.messages.find((message) => message.role === "user")?.content ?? "")
+    );
+    expect(structureRequest).toContain('"id": "overview"');
+    expect(structureRequest).not.toContain('"pageId": "documentation/overview"');
+    expect(reviewRequest).toContain('"pageId": "documentation/overview"');
     for (const request of requests) {
       const userMessage = request.messages.find(
         (message) => message.role === "user",
       );
-      expect(userMessage?.content).toContain("documentation/overview");
       expect(userMessage?.content).toContain("Published Overview");
       expect(userMessage?.content).toContain("src/index.ts");
     }

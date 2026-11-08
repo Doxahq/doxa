@@ -6,6 +6,7 @@ import type {
 } from "../core";
 import type { AgentProgressCallback, DocumentationStructure, StructureSuggestionInput } from "../types";
 import { applyCollectionsToStructure } from "../utils/documentation-collections";
+import { plannedPageTitleErrors } from "../utils/page-title-rules";
 import { prompts } from "./prompts";
 import type { PromptRegistry } from "./prompts";
 import { validateDocumentationStructureForProfile } from "./prompts/dynamic";
@@ -229,9 +230,12 @@ export async function generateStructureWithRetry(
           `(${injectionOnlyErrors.join("; ")}). This is a defect in injection, not in the model output.`,
       );
     }
+    // A long title costs a retry, never the run: the last attempt keeps it.
+    const titleErrors = attempt < maxAttempts ? plannedPageTitleErrors(parsed) : [];
     const validationErrors = [
       ...injectedDuplicates,
       ...postInjectionValidation.errors,
+      ...titleErrors,
     ];
     if (validationErrors.length > 0) {
       throw new Error(

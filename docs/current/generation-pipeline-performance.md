@@ -691,6 +691,25 @@ source paths. Unchanged subjects keep their published IDs, titles,
 descriptions, and placement; additions, removals, or moves must be justified by
 the source delta. Cold-start structure prompts remain unchanged.
 
+**Page ids in the anchor.** The planner sees each published page as `id`, the
+page id itself. The reviewer sees `pageId` as `section/page`, because its
+decisions use that form. Before planning v10, the planner also saw
+`section/page`, copied it into the page id, and every published page moved
+from `/overview` to `/documentation/overview`. The structure parser now
+removes a page's own section id from the front of its id
+(`withoutSectionPrefix` in `json-parsing.ts`).
+
+**Titles and subjects.** Since planning v10, a plan has one subject per page,
+and a title has 1 to 4 words (the TITLE RULES of the structure prompt).
+`plannedPageTitleErrors` (`utils/page-title-rules.ts`) sends a title back to
+the planner when it has more than 5 words or 36 characters, a comma or "&",
+or "and" in a title of more than 3 words. Collection and reference pages are
+not checked, because their titles come from the analysis. The last of the
+three planner attempts keeps the titles that it gets, so a title never stops
+a run. The continuity rules allow a published page to take a shorter title
+with the same id, and allow a page that covers two subjects to split. The
+reviewer merges only two pages about the same subject.
+
 Page fate is decided after the regenerated structure is finalized. A
 preliminary full-plan verdict can require analysis and structure work, but it
 no longer automatically forces every resulting page through the writer. The

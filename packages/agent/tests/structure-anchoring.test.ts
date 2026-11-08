@@ -13,7 +13,7 @@ import { analysisFixture, structureFixture } from "./fixtures";
 const COLD_STRUCTURE_PROMPT_HASH =
   "4b032edf932b10c570afed69e475ce014d2a2a04250fb84c893488df6454c3ab";
 const COLD_REVIEW_PROMPT_HASH =
-  "0828ebc9fec224f0da4e1bf66fc752132d7bb4a5cf986b601d09ef547064c778";
+  "988cb6cc193f043c77beb2377084ac0f3d75878573a497e33fa196a1ea5cb598";
 
 describe("published structure anchoring", () => {
   test("includes every published page and the continuity rules in structure generation", () => {
@@ -25,7 +25,7 @@ describe("published structure anchoring", () => {
       changedFiles: ["src/index.ts"],
     });
 
-    expectPublishedPages(prompt.user);
+    expectPublishedPages(prompt.user, "plan");
     expect(prompt.user).toContain("Reuse the exact id and title");
     expect(prompt.user).toContain("Do not rename for style, clarity, or consistency");
     expect(prompt.user).toContain("Reuse the exact description verbatim");
@@ -55,7 +55,7 @@ describe("published structure anchoring", () => {
       changedFiles: ["src/index.ts"],
     });
 
-    expectPublishedPages(prompt.user);
+    expectPublishedPages(prompt.user, "review");
     expect(prompt.user).toContain("must be keep");
     expect(prompt.user).toContain(
       "drop, merge, or move on a published page requires a reason",
@@ -110,16 +110,25 @@ describe("published structure anchoring", () => {
       const userMessage = request.messages.find(
         (message) => message.role === "user",
       );
-      expectPublishedPages(String(userMessage?.content));
+      expectPublishedPages(String(userMessage?.content), "plan");
       expect(userMessage?.content).toContain("src/index.ts");
     }
   });
 });
 
-function expectPublishedPages(prompt: string): void {
+/**
+ * The planner sees each published page id as it is, because it reuses ids.
+ * The review names pages by `section/page`, the form of its decisions.
+ */
+function expectPublishedPages(prompt: string, identity: "plan" | "review"): void {
   for (const section of structureFixture.sections) {
     for (const page of section.pages) {
-      expect(prompt).toContain(`${section.id}/${page.id}`);
+      if (identity === "plan") {
+        expect(prompt).toContain(`"id": ${JSON.stringify(page.id)}`);
+        expect(prompt).not.toContain(`"pageId": ${JSON.stringify(`${section.id}/${page.id}`)}`);
+      } else {
+        expect(prompt).toContain(`"pageId": ${JSON.stringify(`${section.id}/${page.id}`)}`);
+      }
       expect(prompt).toContain(page.title);
     }
   }

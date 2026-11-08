@@ -12,7 +12,7 @@ describe("generation execution config", () => {
     expect(config.plannerModel).toBe("claude-sonnet-5-5");
     expect(config.writerModel).toBe("claude-haiku-5-5");
     expect(config.planningFingerprint).toBe(
-      "doxabot-planning-v9:fast-mvp",
+      "doxabot-planning-v10:fast-mvp",
     );
     expect(config.writingFingerprint).toContain("claude-haiku-5-5");
   });

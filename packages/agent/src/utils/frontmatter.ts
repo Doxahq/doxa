@@ -351,10 +351,37 @@ function normalizePlainText(value: string): string {
   s = s.replace(BACKSLASH_PATH_REPLACE_PATTERN, " ");
   s = s.replace(DOTTED_PATH_REPLACE_PATTERN, " ");
   s = s.replace(ALLOWED_TEXT_CHARS, " ");
+  s = s.replace(/\(\s*\)/g, " ");
   s = s.replace(/\s+([.,:;!?])/g, "$1");
-  s = s.replace(/[,:;!?'"()&+\-]{2,}/g, " ");
+  s = s.replace(/[,:;!?'"&+\-]{2,}/g, " ");
   s = s.replace(/\s+/g, " ").trim();
-  return s.replace(/^[.,:;!?'"()&+\-\s]+|[.,:;!?'"()&+\-\s]+$/g, "");
+  return trimEdgePunctuation(s);
+}
+
+const EDGE_PUNCTUATION = /[.,:;!?'"()&+\-\s]/;
+
+function countOf(value: string, character: string): number {
+  return value.split(character).length - 1;
+}
+
+/**
+ * Removes punctuation at both ends of a text. A parenthesis that closes or
+ * opens a pair stays, so "Advanced (JSON)" keeps its closing parenthesis.
+ */
+function trimEdgePunctuation(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (end > start && EDGE_PUNCTUATION.test(value[end - 1] ?? "")) {
+    const inner = value.slice(start, end - 1);
+    if (value[end - 1] === ")" && countOf(inner, "(") > countOf(inner, ")")) break;
+    end--;
+  }
+  while (start < end && EDGE_PUNCTUATION.test(value[start] ?? "")) {
+    const inner = value.slice(start + 1, end);
+    if (value[start] === "(" && countOf(inner, ")") > countOf(inner, "(")) break;
+    start++;
+  }
+  return value.slice(start, end);
 }
 
 function trimDanglingWords(value: string): string {

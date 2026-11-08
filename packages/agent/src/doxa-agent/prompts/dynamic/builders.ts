@@ -28,6 +28,22 @@ ${rawContext}
 }
 
 /**
+ * How a page is named in a prompt. The review names a page by
+ * `section/page`, the form of its decisions. The planner reuses page ids,
+ * so it sees the id itself: with `section/page`, it copied the section into
+ * the id, and every published page moved to a new route.
+ */
+type PromptPageIdentity = "review" | "plan";
+
+function promptPageIdentity(
+  identity: PromptPageIdentity,
+  sectionId: string,
+  pageId: string,
+): { pageId: string } | { id: string } {
+  return identity === "review" ? { pageId: `${sectionId}/${pageId}` } : { id: pageId };
+}
+
+/**
  * Renders the section > group > page structure used by planning prompts.
  * Template-rendered pages are left out: `fixedReferencePagesForPrompt`
  * summarizes them, because no model may change them.
@@ -36,6 +52,7 @@ function structurePagesForPrompt(
   structure: NonNullable<PromptRenderContext["structure"]>,
   analysis: ProjectAnalysis,
   documentationBrief: PromptRenderContext["documentationBrief"],
+  identity: PromptPageIdentity,
 ) {
   const instructions = documentationBrief?.projectInstructions?.instructions;
   const turnedOff = new Set(instructions ? turnedOffPageTypes(instructions) : []);
@@ -65,7 +82,7 @@ function structurePagesForPrompt(
       const mandatory = inventoryPage && !turnedOffCollectionPage;
 
       return {
-        pageId: `${section.id}/${page.id}`,
+        ...promptPageIdentity(identity, section.id, page.id),
         sectionId: section.id,
         sectionTitle: section.title,
         title: page.title,
@@ -116,10 +133,12 @@ function fixedReferencePagesBlock(structure: DocumentationStructure, heading: st
 }
 
 const SOURCE_CONTINUITY_RULES = `- Reuse the exact id and title of every published page whose subject still exists in the source. Do not rename for style, clarity, or consistency.
+- Exception: when a published title breaks the TITLE RULES, give the page a title that follows them and keep its id.
+- When a published page covers two subjects, split it: the page keeps its id for its main subject, and a new page takes the other subject.
 - Reuse the exact description verbatim unless a changed file materially alters what that page documents.
 - Reuse each page's group when its subject still exists.
 - Keep each page in its published section, in its published order.
-- Add a page only for a public surface that has no published page covering it.
+- Add a page only for a public surface that has no published page covering it, or for a subject split out of a published page.
 - Drop a published page only when its subject no longer exists in the source.
 - The changed-file list is the only justification for revising a published page.`;
 
@@ -133,6 +152,8 @@ const SOURCE_REVIEW_CONTINUITY_RULES = `- A page that exists in the published st
  */
 const INSTRUCTIONS_CONTINUITY_RULES = `- The project instructions changed since this structure was published. Revise the published pages to follow them.
 - Reuse the exact id of every published page whose subject still exists in the source and still fits the instructions.
+- When a published title breaks the TITLE RULES, give the page a title that follows them and keep its id.
+- When a published page covers two subjects, split it: the page keeps its id for its main subject, and a new page takes the other subject.
 - Rename a page whose title uses a term that the instructions avoid, or that does not fit the readers that they name.
 - Rewrite a description for the readers, the tone, and the terminology of the instructions. Keep a description verbatim when it already follows them.
 - Drop or merge a published page whose page type the instructions turn off, that documents only "Do not document" paths, or that does not serve the readers that they name.
@@ -164,7 +185,7 @@ function publishedStructureAnchor(
   return `
 
 PUBLISHED STRUCTURE ANCHOR:
-${JSON.stringify(structurePagesForPrompt(context.publishedStructure, context.analysis, context.documentationBrief), null, 2)}${fixedReferencePagesBlock(context.publishedStructure, "PUBLISHED FIXED REFERENCE PAGES")}
+${JSON.stringify(structurePagesForPrompt(context.publishedStructure, context.analysis, context.documentationBrief, review ? "review" : "plan"), null, 2)}${fixedReferencePagesBlock(context.publishedStructure, "PUBLISHED FIXED REFERENCE PAGES")}
 
 CHANGED FILES SINCE THE PUBLISHED STRUCTURE:
 ${changedFiles}
@@ -271,6 +292,7 @@ ${referenceSurfaceRules(context)}
     team: "publicEditorialBrief must normalize positioning, intended readers, reader goals, focus areas, deprioritized areas, tone, and terminology for the team. Omit secret values.",
   })}
 - documentationCollections must capture repeated user-facing surfaces with 4+ items, such as providers, adapters, integrations, plugins, SDK targets, or command families. Each item should include exact source evidence.
+- Each item of a collection gets its own page, so list a collection only when each item has its own setup, configuration, or use. The values of one concept, such as roles, plans, statuses, or permission levels, are not a collection: one page documents them in a table.
 - A folder of repository documents is not a collection: never list the files under docs/ as items only because they sit together. Package scripts are not a collection either: they belong in internalTooling.`,
   });
 }
@@ -321,7 +343,7 @@ export function buildStructureReviewPrompt(
     throw new Error("Cannot build structure review prompt without analysis, structure, and maxPages");
   }
 
-  const pages = structurePagesForPrompt(context.structure, context.analysis, context.documentationBrief);
+  const pages = structurePagesForPrompt(context.structure, context.analysis, context.documentationBrief, "review");
   const validationSection = context.validationErrors?.length
     ? `\n\nPREVIOUS REVIEW WAS REJECTED. Correct every issue:\n${context.validationErrors.map((error) => `- ${error}`).join("\n")}`
     : "";
@@ -332,8 +354,8 @@ export function buildStructureReviewPrompt(
     context,
     modules,
     systemIntro: lineForReaders(context, {
-      public: "You are Doxa's final public documentation information architect. Make the smallest evidence-backed structure that fully serves public users.",
-      team: "You are Doxa's final documentation information architect. Make the smallest evidence-backed structure that fully serves the team that builds and runs the product.",
+      public: "You are Doxa's final public documentation information architect. Make a clear, evidence-backed structure with one subject per page that fully serves public users.",
+      team: "You are Doxa's final documentation information architect. Make a clear, evidence-backed structure with one subject per page that fully serves the team that builds and runs the product.",
     }),
     userBody: `Review the enriched documentation structure before any pages are written.${publishedAnchor}
 
@@ -354,7 +376,7 @@ ${JSON.stringify(pages, null, 2)}${fixedReferencePagesBlock(context.structure, "
 
 Choose exactly one action for every page in PAGES:
 - keep: the page directly advances a ${lineForReaders(context, { public: "public reader", team: "team reader" })} goal.
-- merge: combine a duplicate or overly narrow page into targetPageId.
+- merge: combine a duplicate page, or a page too thin to stand alone, into targetPageId.
 - move: keep the page but place it under targetSectionId.
 - drop: ${lineForReaders(context, {
     public: "remove internal, diagnostic, contributor-only, redundant, or low-value material.",
@@ -368,8 +390,8 @@ Rules:
     public: "Never retain internal local endpoints, implementation decomposition, tests, status files, or repository process as public guides.",
     team: "Keep architecture, tests, and team workflows when they help the team. Never retain status files or secret values.",
   })}
-4. Merge pages that serve the same reader goal, even when their names differ slightly.
-5. Preserve evidence-backed pages needed to use the actual product. Do not drop reference pages to satisfy the editorial budget; merge related prose pages first.
+4. Merge two pages only when they document the same subject, even when their names differ slightly. Never merge two different subjects only to have fewer pages: keep both, because each page links to the other.
+5. Preserve evidence-backed pages needed to use the actual product. Do not drop reference pages to satisfy the editorial budget. If the structure has more pages than the budget, merge related prose pages first.
 6. The resulting structure must contain at most ${context.maxPages} guide, concept, and workflow pages. Reference pages generated from the project's API surface do not count toward this budget.
 7. Pages marked "mandatory" are derived from the project's own inventory.
    You may \`move\` them. You may not \`drop\` or \`merge\` them.${turnedOffMandatoryNote(context)}

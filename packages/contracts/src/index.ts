@@ -74,8 +74,11 @@ export const WRITING_FINGERPRINT_VERSION = "doxabot-writing-v2";
  * And for v9: v8 analyses list a docs folder as a collection, so each file
  * became a public page. The planner chooses from those files now, and pages
  * can declare a page type that the project instructions can turn off.
+ * And for v10: v9 plans put two subjects on one page under long titles, and
+ * copied the section id into page ids, so published pages moved to new
+ * routes.
  */
-export const PLANNING_FINGERPRINT_VERSION = "doxabot-planning-v9";
+export const PLANNING_FINGERPRINT_VERSION = "doxabot-planning-v10";
 /**
  * The hash of the structure and structure review response schemas that
  * PLANNING_FINGERPRINT_VERSION was set for. A test in @doxahq/agent fails

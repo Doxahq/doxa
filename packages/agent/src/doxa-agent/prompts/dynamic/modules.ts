@@ -355,7 +355,7 @@ Required shape:
     render: (_context, profile) => `STRUCTURE RULES FOR ${profile.label.toUpperCase()}
 ${bulletList(profile.structureRules)}
 
-Every page must have a clear reason to exist. Prefer fewer strong pages over many thin pages.`,
+Every page must have a clear reason to exist. Give each subject its own page, and link related pages to each other.`,
   },
   {
     id: "structure-universal-rules",
@@ -378,6 +378,8 @@ SECTION-vs-PAGE RULE (read this twice before you generate sections):
 
 PAGE RULES:
 - Target 18-32 pages for substantial projects; use fewer when the project surface is small.
+- One subject per page. If a title needs "and", a comma, or "&" to name two subjects that a reader can use on their own, plan two pages. For example, plan "Generations" and "Doxabot instructions", not "Generations and Doxabot Instructions". Each page links to the other.
+- A pair that is one subject is one page, such as "SEO and sharing" or "Roles and permissions".
 - Repeated user-facing collections with 4+ items must use one normal page per item under a shared navigation group.
 - Public REST endpoints and public SDK exports must be represented as separate top-level reference sections when detected. Use "REST API" for served HTTP/RPC/webhook endpoints and "API Reference" for SDK/library/framework exports unless configured labels say otherwise.
 - REST API reference: create one page per endpoint. Each page covers exactly one HTTP method and path. The generator adds the section overview page, the authentication page, and one resource page per endpoint group. Do not author those pages yourself.
@@ -394,7 +396,16 @@ ${lineForReaders(context, {
 - Titles and nav labels must have balanced punctuation. Avoid code, paths, package import strings, and parenthetical fragments in titles.
 - Do not create pages that are only names of internal scripts.
 - Do not duplicate the same topic under multiple sections.
-- If a topic would produce a thin page, group it into a broader workflow or reference page.
+- If the evidence gives a topic only one or two facts, put the topic in the page of the closest subject.
+
+TITLE RULES:
+- A title has 1 to 4 words, and never more than 5 words or 36 characters. It is the sidebar label too.
+- Name the subject, not every step: "Quickstart", not "Create a Project and Publish Your First Site".
+- Do not put the product name in a title: "Overview", not "Doxa Platform Overview".
+- Use the standard names that readers know: Introduction or Overview, Quickstart, Installation, Configuration, Troubleshooting, FAQ.
+- A task guide can have a short action title, such as "Publish a site" or "Connect an agent".
+- No commas and no "&" in a title.
+- Use sentence case.
 - Descriptions must say what content belongs on the page and which source evidence supports it.`,
   },
   {

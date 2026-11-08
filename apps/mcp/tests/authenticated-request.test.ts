@@ -30,7 +30,7 @@ describe("handleAuthenticatedMcpRequest", () => {
     expect(harness.toolCalls).toEqual([]);
   });
 
-  it("answers 413 for a body over 8 MiB before MCP parsing", async () => {
+  it("answers 413 for a body over 4 MiB before MCP parsing", async () => {
     const harness = createHarness();
     const response = await harness.fetch(
       workerRequest(RESOURCE_URL, {

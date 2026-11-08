@@ -22,7 +22,9 @@ export function openProductionContext(
       requestId: crypto.randomUUID(),
       actor,
       policy: MembershipProjectAccessPolicy.fromEnv(scope.env),
-      services: createMcpServices(scope.env),
+      services: createMcpServices(scope.env, {
+        uploadOrigin: new URL(env.MCP_RESOURCE_URL).origin,
+      }),
       actions: createPlatformActions(env.PLATFORM_ACTIONS, actor),
       limiter: createRateLimiter({
         read: env.MCP_READ_LIMITER,

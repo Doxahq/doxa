@@ -1,9 +1,31 @@
 export class RequestBodyTooLarge extends Error {}
 
+export class RequestBodyTimeout extends Error {}
+
 /** Content-Length is advisory. The stream limit also covers chunked uploads. */
-export async function readBoundedBody(
+export function readBoundedBody(
   request: Request,
   maxBytes: number,
+): Promise<Uint8Array> {
+  return readBody(request, maxBytes, null);
+}
+
+/**
+ * `readBoundedBody` with a deadline for the whole body: a client that sends
+ * slowly gets `RequestBodyTimeout` instead of holding the request open.
+ */
+export function readBoundedBodyWithin(
+  request: Request,
+  maxBytes: number,
+  timeoutMs: number,
+): Promise<Uint8Array> {
+  return readBody(request, maxBytes, Date.now() + timeoutMs);
+}
+
+async function readBody(
+  request: Request,
+  maxBytes: number,
+  deadlineMs: number | null,
 ): Promise<Uint8Array> {
   if (Number(request.headers.get("content-length")) > maxBytes)
     throw new RequestBodyTooLarge();
@@ -13,7 +35,7 @@ export async function readBoundedBody(
   let size = 0;
   try {
     for (;;) {
-      const chunk = await reader.read();
+      const chunk = await readBefore(reader, deadlineMs);
       if (chunk.done) break;
       size += chunk.value.byteLength;
       if (size > maxBytes) {
@@ -22,6 +44,9 @@ export async function readBoundedBody(
       }
       chunks.push(chunk.value);
     }
+  } catch (error) {
+    if (error instanceof RequestBodyTimeout) await reader.cancel().catch(() => {});
+    throw error;
   } finally {
     reader.releaseLock();
   }
@@ -32,6 +57,25 @@ export async function readBoundedBody(
     offset += chunk.byteLength;
   }
   return body;
+}
+
+/** One read, or `RequestBodyTimeout` when the deadline passes first. */
+async function readBefore(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  deadlineMs: number | null,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (deadlineMs === null) return reader.read();
+  const remaining = deadlineMs - Date.now();
+  if (remaining <= 0) throw new RequestBodyTimeout();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new RequestBodyTimeout()), remaining);
+  });
+  try {
+    return await Promise.race([reader.read(), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**

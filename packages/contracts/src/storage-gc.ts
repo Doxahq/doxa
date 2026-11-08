@@ -228,6 +228,23 @@ export const DOCS_BRANCH_ASSET_FOLDER_TARGET =
   "docs_branch_asset_folder" as const;
 
 /**
+ * Resource of the `agent_asset_upload` collector: the ticket and the staged
+ * file of one MCP upload URL. `finish_asset_upload` deletes them; the
+ * collector deletes what an agent never finished, after the URL expired.
+ * The member's open-upload ledger is not part of it: its entries expire on
+ * their own.
+ */
+export const agentAssetUploadResourceSchema = z
+  .object({ uploadId: z.uuid() })
+  .strict();
+
+export type AgentAssetUploadResource = z.infer<
+  typeof agentAssetUploadResourceSchema
+>;
+
+export const AGENT_ASSET_UPLOAD_TARGET = "agent_asset_upload" as const;
+
+/**
  * Resource of the `docs_retired_version` collector: a version row that
  * stopped serving, and with it the folder that its `artifact_prefix` names.
  * Several rows can share one folder (a promotion reuses its preview's

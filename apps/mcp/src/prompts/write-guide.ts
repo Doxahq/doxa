@@ -53,7 +53,7 @@ export const writeGuidePrompt = defineMcpPrompt({
         'Call `create_branch` with a name like "agent-guide-<topic>". Use its ID as branch from now on.',
         "Call `edit_docs` with a create_page edit (sectionSlug, groupIndex, title, slug) to add the page.",
         `Plan the guide: goal, prerequisites, numbered steps with commands or code, the expected result, and next steps that link to related pages. ${MDX_RULE}`,
-        "Call `read_page` on the new page for its revision, then call `write_page` with the full MDX source, frontmatter included. For an image, call `upload_asset` on the branch and use the returned path.",
+        "Call `read_page` on the new page for its revision, then call `write_page` with the full MDX source, frontmatter included. For an image, call `create_asset_upload` on the branch, send the file to the returned URL with the curl command, call `finish_asset_upload`, and use the returned path.",
         ...REVIEW_STEPS,
         PUBLISH_STEP,
         cleanupStep("created"),

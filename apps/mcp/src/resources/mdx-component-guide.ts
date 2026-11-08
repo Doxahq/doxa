@@ -130,5 +130,5 @@ export const MDX_AUTHORING_RULES: readonly string[] = [
   "Leave a blank line before and after a code fence inside a component. Give every fence a language.",
   "Escape a literal < or { in prose, or put it in inline code.",
   "GitHub-flavored Markdown works: tables, task lists, blockquotes, images, and fenced code with line highlights such as ```ts {2-3}.",
-  "Write an image as ![alt text](/assets/name.png) with the path that upload_asset returns, or an https URL. HTML <img> tags and relative paths do not render.",
+  "Write an image as ![alt text](/assets/name.png) with the path that finish_asset_upload or upload_asset returns, or an https URL. HTML <img> tags and relative paths do not render.",
 ];

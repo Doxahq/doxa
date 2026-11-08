@@ -1,4 +1,5 @@
 import {
+  AGENT_ASSET_UPLOAD_LIMITS,
   DOCS_ASSET_LIMITS,
   docsAssetUploadResultSchema,
 } from "@doxahq/contracts/docs-assets";
@@ -12,25 +13,18 @@ import {
   writeAnnotations,
 } from "../shared";
 import { OWN_BRANCH_ONLY, requireOwnBranch } from "../branches/branch-ownership";
+import { ALT_TEXT_DESCRIPTION, imageMarkdown } from "./asset-markdown";
 
 const MAX_MB = DOCS_ASSET_LIMITS.maxBytes / (1024 * 1024);
+const INLINE_KB = AGENT_ASSET_UPLOAD_LIMITS.inlineBytesHint / 1024;
 /** Base64 of the largest file, with room for line breaks. */
 const MAX_BASE64_LENGTH =
   Math.ceil(DOCS_ASSET_LIMITS.maxBytes / 3) * 4 + 65_536;
 
-/** Alt text inside `![...]`: one line, no brackets. */
-function imageMarkdown(path: string, altText: string | undefined): string {
-  const alt = (altText ?? "")
-    .replace(/[[\]\\]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return `![${alt}](${path})`;
-}
-
 export const uploadAssetTool = defineMcpTool({
   name: "upload_asset",
   title: "Upload image",
-  description: `Adds an image to a named branch and returns the path to use in MDX, for example /assets/rate-limits-diagram.png. Send PNG, JPEG, WebP, GIF, or SVG bytes as base64, at most ${MAX_MB} MB. The type comes from the bytes, not the file name. SVG files are cleaned: scripts, event attributes, and external references are removed (sanitized: true). A branch can add ${DOCS_ASSET_LIMITS.maxFilesPerBranch} images. A name in use gets a number suffix, so always use the returned path; the same file again returns its path (reused: true). Put the path in a page with write_page or edit_docs. The image goes live with the next approved publish of the branch, and build_preview shows it. ${OWN_BRANCH_ONLY}`,
+  description: `Adds a small image to a named branch from base64 in this call, and returns the path to use in MDX, for example /assets/rate-limits-diagram.png. For any file larger than about ${INLINE_KB} KB, or whenever you can run a shell command, use create_asset_upload and finish_asset_upload instead: you must write every base64 character of this call yourself, so a large file fails or gets cut. Send PNG, JPEG, WebP, GIF, or SVG bytes as standard base64, at most ${MAX_MB} MB. The type comes from the bytes, not the file name. SVG files are cleaned: scripts, event attributes, and external references are removed (sanitized: true). A branch can add ${DOCS_ASSET_LIMITS.maxFilesPerBranch} images. A name in use gets a number suffix, so always use the returned path; the same file again returns its path (reused: true). Put the path in a page with write_page or edit_docs. The image goes live with the next approved publish of the branch, and build_preview shows it. ${OWN_BRANCH_ONLY}`,
   scope: "docs:write",
   cost: "expensive",
   annotations: writeAnnotations(true),
@@ -54,7 +48,7 @@ export const uploadAssetTool = defineMcpTool({
         .string()
         .max(300)
         .optional()
-        .describe("Alt text for the returned markdown line."),
+        .describe(ALT_TEXT_DESCRIPTION),
     })
     .strict(),
   output: docsAssetUploadResultSchema,

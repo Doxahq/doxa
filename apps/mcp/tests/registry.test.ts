@@ -41,14 +41,16 @@ const FORBIDDEN_IN_TOOLS: Array<[string, RegExp]> = [
 
 describe("tool registry", () => {
   // v2 spec section 10: 31 v1 tools, plus delete_branch, get_branch_diff,
-  // and upload_asset.
-  it("registers 34 tools", () => {
-    expect(TOOLS).toHaveLength(34);
+  // and upload_asset; then create_asset_upload and finish_asset_upload.
+  it("registers 36 tools", () => {
+    expect(TOOLS).toHaveLength(36);
   });
 
-  it("counts upload_asset as an expensive docs:write tool", () => {
-    const tool = TOOLS.find((item) => item.name === "upload_asset");
-    expect(tool).toMatchObject({ scope: "docs:write", cost: "expensive" });
+  it("counts every image upload tool as an expensive docs:write tool", () => {
+    const costOf = (name: string) => TOOLS.find((item) => item.name === name);
+    expect(costOf("upload_asset")).toMatchObject({ scope: "docs:write", cost: "expensive" });
+    expect(costOf("finish_asset_upload")).toMatchObject({ scope: "docs:write", cost: "expensive" });
+    expect(costOf("create_asset_upload")).toMatchObject({ scope: "docs:write", cost: "expensive" });
   });
 
   it("has unique tool names in the allowed shape", () => {

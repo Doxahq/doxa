@@ -94,7 +94,7 @@ describe("image type detection", () => {
     expectError(() => prepareDocsAsset(bytes), "asset_invalid");
   });
 
-  test("caps a file at 5 MB of decoded bytes", () => {
+  test("caps a file at 2 MB of decoded bytes", () => {
     expect(prepareDocsAsset(png(DOCS_ASSET_LIMITS.maxBytes)).contentType).toBe(
       "image/png",
     );

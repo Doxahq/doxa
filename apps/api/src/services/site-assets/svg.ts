@@ -2,8 +2,20 @@ import {
   DOMParser,
   XMLSerializer,
   onErrorStopParsing,
+  type Attr,
+  type Node,
+  type Document,
   type Element,
 } from "@xmldom/xmldom";
+import { applyDrawBudget } from "./svg-draw-budget";
+import {
+  LOCAL_HREF,
+  LOCAL_URL,
+  type KeptAttribute,
+  type PlannedElement,
+  type PlannedNode,
+  type SvgPlan,
+} from "./svg-plan";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const XLINK_NAMESPACE = "http://www.w3.org/1999/xlink";
@@ -169,33 +181,157 @@ function safeStyle(value: string): boolean {
 
 function safeAttributeValue(value: string): boolean {
   if (/[\\<>\u0000-\u001f]|\/\*|@|expression\s*\(/i.test(value)) return false;
-  const withoutLocalPaint = value.replace(/url\(#[A-Za-z_][\w:.-]*\)/g, "");
+  const withoutLocalPaint = value.replace(LOCAL_URL, "");
   return !/url\s*\(/i.test(withoutLocalPaint);
 }
 
-/** Returns the number of removed attributes. Namespace declarations do not count. */
-function cleanAttributes(element: Element, allowlist: Allowlist): number {
-  let removed = 0;
-  for (let index = element.attributes.length - 1; index >= 0; index--) {
-    const attribute = element.attributes.item(index);
-    if (!attribute) continue;
-    const name = attribute.name;
-    const isHref =
-      name === "href" ||
-      (name === "xlink:href" && attribute.namespaceURI === XLINK_NAMESPACE);
-    const allowed = isHref
-      ? /^#[A-Za-z_][\w:.-]*$/.test(attribute.value)
-      : !attribute.namespaceURI &&
-        allowlist.attributes.has(name) &&
-        (name === "style"
-          ? safeStyle(attribute.value)
-          : safeAttributeValue(attribute.value));
-    if (allowed) continue;
-    element.removeAttributeNode(attribute);
-    // The serializer declares the namespaces that the kept nodes use again.
-    if (attribute.namespaceURI !== XMLNS_NAMESPACE) removed++;
+const MAX_DEPTH = 64;
+
+function isElement(node: Node): node is Element {
+  return node.nodeType === 1;
+}
+
+function isAllowedAttribute(attribute: Attr, allowlist: Allowlist): boolean {
+  const name = attribute.name;
+  const isHref =
+    name === "href" ||
+    (name === "xlink:href" && attribute.namespaceURI === XLINK_NAMESPACE);
+  if (isHref) return LOCAL_HREF.test(attribute.value);
+  return (
+    !attribute.namespaceURI &&
+    allowlist.attributes.has(name) &&
+    (name === "style" ? safeStyle(attribute.value) : safeAttributeValue(attribute.value))
+  );
+}
+
+function isAllowedChild(element: Element, depth: number, allowlist: Allowlist): boolean {
+  return (
+    depth < MAX_DEPTH &&
+    allowlist.elements.has(element.tagName) &&
+    (!element.namespaceURI || element.namespaceURI === SVG_NAMESPACE) &&
+    (element.tagName !== "style" || safeStyle(element.textContent ?? ""))
+  );
+}
+
+/**
+ * Pass 1: reads the parsed tree with sibling pointers only and decides what
+ * stays. It never changes the parsed document: xmldom re-indexes child
+ * lists on every change, which made the old in-place cleaning quadratic.
+ */
+class SvgPlanner {
+  removedCount = 0;
+  private readonly byId = new Map<string, PlannedElement[]>();
+  private readonly elements: PlannedElement[] = [];
+
+  constructor(private readonly allowlist: Allowlist) {}
+
+  plan(root: Element): SvgPlan {
+    const planned = this.element(root);
+    const stack: Array<{ source: Element; target: PlannedElement; depth: number }> = [
+      { source: root, target: planned, depth: 0 },
+    ];
+    // Children go on the stack in reverse, so elements are visited in
+    // document order.
+    while (stack.length) {
+      const current = stack.pop();
+      if (!current) break;
+      this.visit(current.target);
+      const below: typeof stack = [];
+      for (let child = current.source.firstChild; child; child = child.nextSibling) {
+        const node = this.child(child, current.depth);
+        if (!node) continue;
+        current.target.children.push(node);
+        if (node.kind === "element" && isElement(child)) {
+          below.push({ source: child, target: node.element, depth: current.depth + 1 });
+        }
+      }
+      for (let index = below.length - 1; index >= 0; index--) {
+        const next = below[index];
+        if (next) stack.push(next);
+      }
+    }
+    return { root: planned, elements: this.elements, byId: this.byId };
   }
-  return removed;
+
+  private visit(element: PlannedElement): void {
+    this.elements.push(element);
+    const id = element.attributes.find((attribute) => attribute.name === "id")?.value;
+    if (id === undefined) return;
+    const sharing = this.byId.get(id);
+    if (sharing) sharing.push(element);
+    else this.byId.set(id, [element]);
+  }
+
+  private child(node: Node, depth: number): PlannedNode | null {
+    if (node.nodeType === 3) return { kind: "text", data: node.nodeValue ?? "" };
+    if (node.nodeType === 4) return { kind: "cdata", data: node.nodeValue ?? "" };
+    if (isElement(node) && isAllowedChild(node, depth, this.allowlist)) {
+      return { kind: "element", element: this.element(node) };
+    }
+    // Comments go without counting: they hold no content.
+    if (node.nodeType !== 8) this.removedCount++;
+    return null;
+  }
+
+  private element(source: Element): PlannedElement {
+    const attributes: KeptAttribute[] = [];
+    for (let index = 0; index < source.attributes.length; index++) {
+      const attribute = source.attributes.item(index);
+      if (!attribute) continue;
+      if (isAllowedAttribute(attribute, this.allowlist)) {
+        attributes.push({
+          name: attribute.name,
+          namespaceURI: attribute.namespaceURI,
+          value: attribute.value,
+          dropped: false,
+        });
+      } else if (attribute.namespaceURI !== XMLNS_NAMESPACE) {
+        // The serializer declares the namespaces that the kept nodes use again.
+        this.removedCount++;
+      }
+    }
+    return {
+      tagName: source.tagName,
+      namespaceURI: source.namespaceURI,
+      attributes,
+      children: [],
+      dropped: false,
+    };
+  }
+}
+
+/** Pass 2: builds the kept tree with appends only, which xmldom does in O(1). */
+function buildElement(document: Document, root: PlannedElement): Element {
+  const create = (planned: PlannedElement): Element => {
+    const element = document.createElementNS(planned.namespaceURI, planned.tagName);
+    for (const attribute of planned.attributes) {
+      if (attribute.dropped) continue;
+      if (attribute.namespaceURI) {
+        element.setAttributeNS(attribute.namespaceURI, attribute.name, attribute.value);
+      } else {
+        element.setAttribute(attribute.name, attribute.value);
+      }
+    }
+    return element;
+  };
+  const output = create(root);
+  const stack: Array<{ planned: PlannedElement; element: Element }> = [
+    { planned: root, element: output },
+  ];
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current) break;
+    for (const node of current.planned.children) {
+      if (node.kind === "text") current.element.appendChild(document.createTextNode(node.data));
+      else if (node.kind === "cdata") current.element.appendChild(document.createCDATASection(node.data));
+      else if (!node.element.dropped) {
+        const child = create(node.element);
+        current.element.appendChild(child);
+        stack.push({ planned: node.element, element: child });
+      }
+    }
+  }
+  return output;
 }
 
 export interface CleanedSvg {
@@ -208,11 +344,14 @@ export interface CleanedSvg {
   removedCount: number;
 }
 
-/** Serialize only the allowlisted SVG subtree, never the input document. */
+/**
+ * Serialize only the allowlisted SVG subtree, never the input document.
+ * The work is linear in the size of the input, and the references in the
+ * output draw a bounded number of nodes (see `svg-draw-budget.ts`).
+ */
 export function cleanSvg(input: string, profile: SvgProfile): CleanedSvg {
   if (/<!\s*(?:DOCTYPE|ENTITY)/i.test(input))
     throw new Error("Unsupported SVG declaration.");
-  const allowlist = ALLOWLISTS[profile];
   const document = new DOMParser({
     onError: onErrorStopParsing,
   }).parseFromString(input, "image/svg+xml");
@@ -224,45 +363,17 @@ export function cleanSvg(input: string, profile: SvgProfile): CleanedSvg {
   ) {
     throw new Error("Invalid SVG root.");
   }
-  let removedCount = 0;
+  const planner = new SvgPlanner(ALLOWLISTS[profile]);
   // Only the root is serialized, so a processing instruction beside it, for
   // example an external stylesheet, is dropped.
   for (let node = document.firstChild; node; node = node.nextSibling) {
-    if (node.nodeType === 7 && node.nodeName !== "xml") removedCount++;
+    if (node.nodeType === 7 && node.nodeName !== "xml") planner.removedCount++;
   }
-  const pending = [{ element: root, depth: 0 }];
-  while (pending.length) {
-    const current = pending.pop();
-    if (!current) break;
-    removedCount += cleanAttributes(current.element, allowlist);
-    for (let index = current.element.children.length - 1; index >= 0; index--) {
-      const element = current.element.children.item(index);
-      if (!element) continue;
-      if (
-        current.depth >= 64 ||
-        !allowlist.elements.has(element.tagName) ||
-        (element.namespaceURI && element.namespaceURI !== SVG_NAMESPACE) ||
-        (element.tagName === "style" && !safeStyle(element.textContent ?? ""))
-      ) {
-        current.element.removeChild(element);
-        removedCount++;
-      } else pending.push({ element, depth: current.depth + 1 });
-    }
-    for (let child = current.element.lastChild; child; ) {
-      const previous = child.previousSibling;
-      if (
-        child.nodeType !== 1 &&
-        child.nodeType !== 3 &&
-        child.nodeType !== 4
-      ) {
-        current.element.removeChild(child);
-        if (child.nodeType !== 8) removedCount++;
-      }
-      child = previous;
-    }
-  }
-  root.setAttribute("xmlns", SVG_NAMESPACE);
-  return { svg: new XMLSerializer().serializeToString(root), removedCount };
+  const plan = planner.plan(root);
+  const removedCount = planner.removedCount + applyDrawBudget(plan);
+  const output = buildElement(document, plan.root);
+  output.setAttribute("xmlns", SVG_NAMESPACE);
+  return { svg: new XMLSerializer().serializeToString(output), removedCount };
 }
 
 /** The site asset allowlist: logos, favicons, and social images. */

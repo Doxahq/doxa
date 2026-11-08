@@ -9,6 +9,7 @@ import { DocsVersionGcEntriesRepository } from "../../repositories/docs-version-
 import { DocsVersionRetentionRepository } from "../../repositories/docs-version-retention";
 import { StorageGcRepository } from "../../repositories/storage-gc";
 import { createR2DocsObjectStore } from "../docs-content/store";
+import { createAgentAssetUploadCollector } from "./collectors/agent-asset-upload";
 import { createDocsBranchAssetFolderCollector } from "./collectors/docs-branch-asset-folder";
 import { createDocsDeletedSiteCollector } from "./collectors/docs-deleted-site";
 import { createDocsGenerationStateCollector } from "./collectors/docs-generation-state";
@@ -23,6 +24,7 @@ import {
 import { StorageGarbageCollector } from "./runner";
 
 export { StorageGarbageCollector } from "./runner";
+export { createAgentAssetUploadCollector } from "./collectors/agent-asset-upload";
 export { createDocsBranchAssetFolderCollector } from "./collectors/docs-branch-asset-folder";
 export { createDocsDeletedSiteCollector } from "./collectors/docs-deleted-site";
 export { createDocsGenerationStateCollector } from "./collectors/docs-generation-state";
@@ -52,6 +54,7 @@ export function createStorageCollectors(env: Env): StorageCollector[] {
     createDocsPreviewVersionCollector({ versions, content, onCollected }),
     createDocsOrphanVersionPrefixCollector({ versions, content, onCollected }),
     createDocsBranchAssetFolderCollector({ versions, content, onCollected }),
+    createAgentAssetUploadCollector({ objects: content }) as StorageCollector,
     createDocsRetiredVersionCollector({
       versions: retention,
       content,

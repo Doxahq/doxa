@@ -33,6 +33,8 @@
     "./services/agent-actions/actions/project-delete": "./src/services/agent-actions/actions/project-delete.ts",
     "./services/agent-actions/registry": "./src/services/agent-actions/registry.ts",
     "./services/agent-actions/rpc-contract": "./src/services/agent-actions/rpc-contract.ts",
+    "./services/docs-branches/assets/agent-asset-uploads": "./src/services/docs-branches/assets/agent-asset-uploads.ts",
+    "./services/docs-branches/assets/agent-upload-store": "./src/services/docs-branches/assets/agent-upload-store.ts",
     "./services/docs-branches/assets/asset-content": "./src/services/docs-branches/assets/asset-content.ts",
     "./services/docs-branches/assets/asset-name": "./src/services/docs-branches/assets/asset-name.ts",
     "./services/docs-branches/assets/asset-upload": "./src/services/docs-branches/assets/asset-upload.ts",

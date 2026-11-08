@@ -9,8 +9,8 @@ import { z } from "zod";
  * type, never the type that the uploaded file name claims.
  */
 export const DOCS_ASSET_LIMITS = {
-  /** Decoded bytes of one file. Base64 makes the tool call about 6.7 MB. */
-  maxBytes: 5 * 1024 * 1024,
+  /** Decoded bytes of one file, on every upload path. */
+  maxBytes: 2 * 1024 * 1024,
   /** Assets that one branch can add or replace. */
   maxFilesPerBranch: 50,
   /** Characters of the name before its extension. */
@@ -131,6 +131,80 @@ export function docsAssetContentTypeForName(
   const extension = name.slice(name.lastIndexOf(".") + 1);
   return CONTENT_TYPES_BY_EXTENSION.get(extension) ?? null;
 }
+
+/**
+ * An upload URL from `create_asset_upload`. The agent sends the file to the
+ * URL with one HTTP PUT, then calls `finish_asset_upload`. The file bytes
+ * never pass through the model, so the size of the file does not matter to
+ * the tool call.
+ */
+export const AGENT_ASSET_UPLOAD_LIMITS = {
+  /** How long the upload URL accepts the file and the upload can finish. */
+  ttlSeconds: 15 * 60,
+  /**
+   * Upload URLs that one connection (member and OAuth client) can hold open
+   * at once. An open URL has not finished and has not expired.
+   */
+  maxOpenPerConnection: 5,
+  /**
+   * Open upload URLs of one member across all their OAuth clients. With the
+   * image limit, this caps the staged bytes of one member at 20 MB.
+   */
+  maxOpenPerMember: 10,
+  /** Refused PUTs (not an image, too large, too slow) before the URL closes. */
+  maxFailedAttempts: 5,
+  /** How long the upload URL waits for the whole request body. */
+  bodyTimeoutSeconds: 60,
+  /** Small files can go inline with `upload_asset`; larger ones use a URL. */
+  inlineBytesHint: 100 * 1024,
+} as const;
+
+/** The scheme of the Authorization header that carries the upload secret. */
+export const AGENT_ASSET_UPLOAD_AUTH_SCHEME = "Bearer";
+
+/** The path of the upload URL on the MCP host, before the upload ID. */
+export const AGENT_ASSET_UPLOAD_PATH = "/uploads/";
+
+export const agentAssetUploadIdSchema = z.uuid();
+
+/** The result of `create_asset_upload`. */
+export const agentAssetUploadTicketSchema = z
+  .object({
+    uploadId: z
+      .uuid()
+      .describe("Pass it to finish_asset_upload after the PUT."),
+    uploadUrl: z
+      .string()
+      .describe("Send the raw file bytes here with one HTTP PUT, with the headers below."),
+    method: z.literal("PUT"),
+    headers: z
+      .object({ Authorization: z.string() })
+      .strict()
+      .describe(
+        "Send these headers with the PUT. The Authorization value is a secret for this one upload: never put it in a page, a file, or a message.",
+      ),
+    maxBytes: z.number().int().positive(),
+    expiresAt: z.iso.datetime(),
+    curl: z
+      .string()
+      .describe(
+        "A ready command: replace FILE with the local path of the image.",
+      ),
+  })
+  .strict();
+
+export type AgentAssetUploadTicket = z.infer<
+  typeof agentAssetUploadTicketSchema
+>;
+
+/** The JSON body that the upload URL returns after a PUT. */
+export const agentAssetUploadReceiptSchema = z
+  .object({
+    uploadId: z.uuid(),
+    size: z.number().int().nonnegative(),
+    next: z.string(),
+  })
+  .strict();
 
 /** The result of `upload_asset`. */
 export const docsAssetUploadResultSchema = z

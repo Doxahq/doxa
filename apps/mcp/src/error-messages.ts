@@ -40,8 +40,15 @@ const DOCS_CONTENT_HINTS: Partial<Record<DocsContentErrorCode, string>> = {
   publish_pending:
     "Call cancel_approval_request with details.requestId, then call delete_branch again.",
   asset_invalid:
-    "Send a PNG, JPEG, WebP, GIF, or SVG file as standard base64, without a data: prefix.",
-  asset_too_large: "Send a file of 5 MB or less, for example a resized or compressed image.",
+    "Send a PNG, JPEG, WebP, GIF, or SVG file. With upload_asset, send it as standard base64 without a data: prefix.",
+  asset_too_large: "Send a file of 2 MB or less, for example a resized or compressed image.",
+  asset_upload_not_found:
+    "Call create_asset_upload for a new upload URL, send the file to it with PUT, then call finish_asset_upload.",
+  asset_upload_limit_reached:
+    "Call finish_asset_upload for the uploads you started, or wait details.retryAfterSeconds for one to expire, then call create_asset_upload again. details.scope says whether this connection or this member is at the limit.",
+  asset_upload_busy: "Call create_asset_upload again.",
+  asset_upload_not_sent:
+    "Send the file to uploadUrl with an HTTP PUT first (the curl command of create_asset_upload), then call finish_asset_upload again.",
   asset_limit_reached:
     "Publish this branch, or reuse an image path that the branch already has.",
   storage_quota_exceeded:

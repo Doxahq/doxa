@@ -1,6 +1,7 @@
 import { DocsContentError } from "@doxahq/api/services/docs-content/errors";
 import type { McpServices } from "../../src/services/mcp-services";
 import type { TeamSummary } from "@doxahq/contracts/teams";
+import { assetUploadServices, createFakeAssetUploads } from "./fake-asset-uploads";
 import {
   type AppliedEdits,
   assertKnownBranch,
@@ -53,6 +54,7 @@ export function createFakeServices(
   ) => calls.push({ method, userId, projectId });
 
   return {
+    assetUploads: assetUploadServices(createFakeAssetUploads(), record),
     projects: {
       async getForUser(userId, projectId) {
         record("projects.getForUser", userId, projectId);

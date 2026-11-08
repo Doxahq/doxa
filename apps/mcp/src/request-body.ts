@@ -1,10 +1,11 @@
 import { readBoundedBody, RequestBodyTooLarge } from "@doxahq/api/http/bounded-body";
 
 /**
- * Spec 9.1: a bigger body gets 413 before MCP parsing. v2 raised it from
- * 4 MiB: an `upload_asset` call carries up to 5 MB of image as base64.
+ * Spec 9.1: a bigger body gets 413 before MCP parsing. An `upload_asset`
+ * call carries up to 2 MB of image as base64, about 2.7 MB. Larger files
+ * never come here: they go to the upload URL of `create_asset_upload`.
  */
-export const MAX_MCP_BODY_BYTES = 8 * 1024 * 1024;
+export const MAX_MCP_BODY_BYTES = 4 * 1024 * 1024;
 
 export type BoundedRequest =
   | { readonly kind: "ok"; readonly request: Request }
@@ -36,7 +37,7 @@ export function payloadTooLargeResponse(): Response {
   return Response.json(
     {
       error: "payload_too_large",
-      message: "The request body is larger than 8 MiB.",
+      message: "The request body is larger than 4 MiB.",
     },
     { status: 413 },
   );

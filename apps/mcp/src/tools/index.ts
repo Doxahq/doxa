@@ -19,7 +19,9 @@ import { getBranchDiffTool } from "./branches/get-branch-diff";
 import { getBranchStatusTool } from "./branches/get-branch-status";
 import { listBranchesTool } from "./branches/list-branches";
 import { syncBranchTool } from "./branches/sync-branch";
+import { createAssetUploadTool } from "./docs/create-asset-upload";
 import { editDocsTool } from "./docs/edit-docs";
+import { finishAssetUploadTool } from "./docs/finish-asset-upload";
 import { getDocsStructureTool } from "./docs/get-docs-structure";
 import { readPageTool } from "./docs/read-page";
 import { searchDocsTool } from "./docs/search-docs";
@@ -47,6 +49,8 @@ export const TOOLS: readonly AnyMcpTool[] = [
   writePageTool,
   editDocsTool,
   uploadAssetTool,
+  createAssetUploadTool,
+  finishAssetUploadTool,
   listBranchesTool,
   createBranchTool,
   getBranchStatusTool,

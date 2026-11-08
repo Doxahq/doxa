@@ -40,20 +40,38 @@ function isDocsRaster(type: RasterImageType): type is DocsRasterType {
   return type !== "image/x-icon";
 }
 
-/** Checks the image with the shared rules and the docs image SVG allowlist. */
-export function prepareDocsAsset(bytes: Uint8Array): PreparedDocsAsset {
+export type DocsAssetCheck =
+  | { readonly ok: true; readonly asset: PreparedDocsAsset }
+  | { readonly ok: false; readonly reason: "too_large" | "unsupported_type" };
+
+/**
+ * Checks the image with the shared rules and the docs image SVG allowlist,
+ * without throwing. The upload URL uses it to refuse a file that is not an
+ * image before it stores anything.
+ */
+export function checkDocsAsset(bytes: Uint8Array): DocsAssetCheck {
   const image = checkImage(bytes, {
     maxBytes: DOCS_ASSET_LIMITS.maxBytes,
     svgProfile: "docs_image",
     accepts: isDocsRaster,
   });
-  if (!image.ok) throw image.reason === "too_large" ? assetTooLarge() : unsupportedType();
+  if (!image.ok) return image;
   return {
-    bytes: image.bytes,
-    contentType: image.contentType,
-    extension: DOCS_ASSET_EXTENSIONS[image.contentType],
-    sanitized: image.sanitized,
+    ok: true,
+    asset: {
+      bytes: image.bytes,
+      contentType: image.contentType,
+      extension: DOCS_ASSET_EXTENSIONS[image.contentType],
+      sanitized: image.sanitized,
+    },
   };
+}
+
+/** `checkDocsAsset` for the upload paths that answer with an error. */
+export function prepareDocsAsset(bytes: Uint8Array): PreparedDocsAsset {
+  const checked = checkDocsAsset(bytes);
+  if (checked.ok) return checked.asset;
+  throw checked.reason === "too_large" ? assetTooLarge() : unsupportedType();
 }
 
 /**

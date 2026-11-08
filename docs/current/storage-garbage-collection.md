@@ -113,6 +113,19 @@ The tiered blob cache of the docs runtime (`DocsBlobCache`) can keep a deleted t
 
 ## Branch Image Folders
 
+An MCP upload URL (`create_asset_upload`) writes a ticket, and later the
+received file, under `agent-uploads/{uploadId}/`, outside every site prefix.
+It enqueues an `agent_asset_upload` entry with the resource `{ uploadId }`
+before it writes either key. A PUT reads its body within 60 seconds and
+never writes after the URL expired, so no file can land after the collector
+ran. The grace period is the URL lifetime (15 minutes) plus one hour. The
+collector always collects: it deletes the keys under the upload prefix.
+`finish_asset_upload` deleted them already when the agent finished. The
+collector leaves the member's open-upload ledger
+(`agent-upload-ledgers/{memberKey}.json`) alone: a change to it needs a
+compare-and-swap, which the Node runner does not have, and its entries
+expire on their own.
+
 An image upload (MCP `upload_asset`) writes a version folder with one file,
 `assets/{name}`, and a branch change that points to it. The upload enqueues a
 `docs_branch_asset_folder` entry before it writes the folder. The resource is

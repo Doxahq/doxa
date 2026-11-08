@@ -1,4 +1,5 @@
 import {
+  AGENT_ASSET_UPLOAD_TARGET,
   DOCS_BRANCH_ASSET_FOLDER_TARGET,
   DOCS_DELETED_SITE_TARGET,
   DOCS_GENERATION_STATE_TARGET,
@@ -9,6 +10,7 @@ import {
   createDocsDeletedSiteResourceKey,
   createDocsSiteBlobsResourceKey,
   createDocsVersionResourceKey,
+  type AgentAssetUploadResource,
   type DocsBranchAssetFolderResource,
   type DocsDeletedSiteResource,
   type DocsGenerationStateResource,
@@ -18,6 +20,7 @@ import {
   type DocsSiteBlobsResource,
 } from "@doxahq/contracts/storage-gc";
 import { HOSTNAME_READER_GRACE_SECONDS } from "@doxahq/contracts";
+import { AGENT_ASSET_UPLOAD_LIMITS } from "@doxahq/contracts/docs-assets";
 import { createDb, type DbEnv } from "@doxahq/db";
 
 import { enqueueStorageCollection } from "./storage-gc";
@@ -37,6 +40,9 @@ const ORPHAN_PREFIX_GRACE_SECONDS = 24 * 60 * 60;
  * period covers that; later, the collector checks the row itself.
  */
 const BRANCH_ASSET_FOLDER_GRACE_SECONDS = 60 * 60;
+/** The upload URL expires first; the margin covers a finish in flight. */
+const AGENT_ASSET_UPLOAD_GRACE_SECONDS =
+  AGENT_ASSET_UPLOAD_LIMITS.ttlSeconds + 60 * 60;
 /**
  * The dispatcher can hold a resolved hostname for a day, so a reader can
  * still ask for the files of a deleted site during that time.
@@ -130,6 +136,20 @@ export function enqueueDocsBranchAssetFolder(
   });
 }
 
+/** Records an MCP upload URL before its ticket is written. */
+export function enqueueAgentAssetUpload(
+  writer: StorageGcWriter,
+  resource: AgentAssetUploadResource,
+): Promise<string | null> {
+  return enqueueStorageCollection(writer, {
+    target: AGENT_ASSET_UPLOAD_TARGET,
+    resourceKey: resource.uploadId,
+    resource,
+    reason: "agent_upload_created",
+    graceSeconds: AGENT_ASSET_UPLOAD_GRACE_SECONDS,
+  });
+}
+
 /**
  * The sweep has no grace period of its own. It never deletes a blob that is
  * younger than `BLOB_IN_FLIGHT_SECONDS`, and it runs again for such a blob.
@@ -182,6 +202,12 @@ export class DocsVersionGcEntriesRepository {
     resource: DocsBranchAssetFolderResource,
   ): Promise<string | null> {
     return enqueueDocsBranchAssetFolder(this.db, resource);
+  }
+
+  enqueueAgentAssetUpload(
+    resource: AgentAssetUploadResource,
+  ): Promise<string | null> {
+    return enqueueAgentAssetUpload(this.db, resource);
   }
 
   enqueueSiteBlobs(

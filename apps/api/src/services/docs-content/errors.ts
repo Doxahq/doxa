@@ -12,6 +12,14 @@ export type DocsContentErrorCode =
   | "asset_invalid"
   | "asset_too_large"
   | "asset_limit_reached"
+  /** The MCP upload URL is unknown, expired, or belongs to another agent. */
+  | "asset_upload_not_found"
+  /** The MCP upload URL has not received its file yet. */
+  | "asset_upload_not_sent"
+  /** The connection holds the most open MCP upload URLs it can. */
+  | "asset_upload_limit_reached"
+  /** Concurrent requests of one member kept changing its open MCP upload URLs. */
+  | "asset_upload_busy"
   | "storage_quota_exceeded"
   /** A changed page on the branch fails the MDX check, so it cannot go live. */
   | "mdx_invalid"
@@ -33,6 +41,7 @@ export function getDocsContentErrorStatus(code: DocsContentErrorCode): number {
   switch (code) {
     case "not_found":
     case "branch_not_found":
+    case "asset_upload_not_found":
       return 404;
     case "conflict":
     case "branch_behind":
@@ -40,9 +49,12 @@ export function getDocsContentErrorStatus(code: DocsContentErrorCode): number {
     case "conflicts_unresolved":
     case "publish_pending":
     case "page_edited":
+    case "asset_upload_not_sent":
+    case "asset_upload_busy":
       return 409;
     case "no_changes":
     case "asset_limit_reached":
+    case "asset_upload_limit_reached":
     case "storage_quota_exceeded":
     case "mdx_invalid":
       return 422;

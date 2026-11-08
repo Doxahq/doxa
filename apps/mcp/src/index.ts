@@ -4,6 +4,7 @@ import {
   handleAuthenticatedMcpRequest,
   type McpRuntime,
 } from "./authenticated-request";
+import { handleAssetUpload, isAssetUploadPath } from "./asset-upload-endpoint";
 import { devAuthContext } from "./dev-auth";
 import type { McpEnv } from "./mcp-env";
 import { openProductionContext } from "./production-context";
@@ -51,6 +52,10 @@ export default {
   async fetch(request, env, ctx) {
     const limited = await limitByIp(request, env);
     if (limited) return limited;
+    // The upload URL carries its own secret, so it needs no bearer token.
+    if (isAssetUploadPath(new URL(request.url).pathname)) {
+      return handleAssetUpload(request, env);
+    }
     const devContext = devAuthContext(request, env, (promise) =>
       ctx.waitUntil(promise),
     );

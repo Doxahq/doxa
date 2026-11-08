@@ -77,7 +77,7 @@ checks the count).
 - Account and projects: `get_account`, `list_projects`, `get_project`,
   `list_github_repositories`, `create_project`, `delete_project`.
 - Docs: `get_docs_structure`, `read_page`, `search_docs`, `write_page`,
-  `edit_docs`, `upload_asset`.
+  `edit_docs`, `upload_asset`, `create_asset_upload`, `finish_asset_upload`.
 - Branches: `list_branches`, `create_branch`, `get_branch_status`,
   `get_branch_diff`, `sync_branch`, `build_preview`, `delete_branch`.
 - Site settings: `get_site_settings`, `update_site_settings`.
@@ -119,7 +119,8 @@ Rules:
   with a pending publish request fails with `publish_pending` and
   `details.requestId`: cancel it with `cancel_approval_request` first. No
   approval gate. It reuses `DocsBranchManagement` (`eraseOwnedByAgent`).
-- `write_page`, `edit_docs`, `upload_asset`, `update_site_settings` and
+- `write_page`, `edit_docs`, `upload_asset`, `create_asset_upload`,
+  `finish_asset_upload`, `update_site_settings` and
   `sync_branch` (when it applies) change only a branch that the same OAuth
   client created for the same member, by the same rule as `delete_branch`
   (`requireOwnBranch` in `tools/branches/branch-ownership.ts`). Any other
@@ -144,7 +145,16 @@ Rules:
   branch. Input: `branch`, `fileName`, `contentBase64`, optional `altText`.
   Output: `path` (for example `/assets/rate-limits-diagram.png`), a
   `markdown` image line, `contentType`, `size`, `sanitized`, `reused`, and
-  the new `revision`. See [Branch images](#branch-images).
+  the new `revision`. Use it only for small images (about 100 KB) from
+  clients that cannot run commands: the model writes every base64 character
+  of the call, so a large file fails. See [Branch images](#branch-images).
+- `create_asset_upload` (`docs:write`, cost `expensive`) returns an upload URL
+  for a named branch. Input: `branch`, `fileName`. Output: `uploadId`,
+  `uploadUrl`, `method` (`PUT`), `maxBytes`, `expiresAt`, and a `curl`
+  command. See [Upload URLs](#upload-urls).
+- `finish_asset_upload` (`docs:write`, cost `expensive`) adds the file that
+  the upload URL received to the branch. Input: `uploadId`, optional
+  `altText`. Output: the `upload_asset` result.
 - `get_branch_diff` lists the images of the branch in `assets` (`path`,
   `change`, `contentType`, `size`). Images have no text diff.
 - Action tools return `{ outcome: "completed", result }` or
@@ -227,6 +237,36 @@ approved publish of the branch. `build_preview` shows it too.
 - Type: from the bytes, never from the file name. PNG, JPEG, WebP, and GIF
   by their signatures. Any other file must be UTF-8 SVG text that parses as
   XML; anything else fails with `asset_invalid`.
+- SVG cost: the cleaner reads the parsed tree with sibling pointers and
+  builds the kept nodes into a new tree with appends only, so it is linear
+  (60,000 elements in about 0.3 s; the old in-place walk took minutes,
+  because xmldom re-indexes child lists on every change).
+- SVG draw cost: `<use>`, markers, patterns, clip paths, and masks make a
+  browser draw content again, and chains of them multiply. The reference
+  rules (`src/services/site-assets/svg-draw-budget.ts`) bound the total:
+  - The cost of an element is the number of nodes that one draw of it
+    draws, with every reference below it expanded. A marker counts once
+    per vertex (`marker-mid`) or per subpath (`marker-start`, `marker-end`).
+    A pattern counts once per element that it paints.
+  - A reference on a cycle is cut. All references together may draw at
+    most 20,000 nodes, in document order; one that does not fit is cut.
+  - A reference points at an ID. When several elements share the ID, it
+    costs as much as the costliest of them: a browser draws the first one
+    in the output, which is a later one when the rules cut the first. Each
+    ID is one node of the graph, so shared IDs add no work per reference.
+  - A pattern `fill` or `stroke`, or a marker property, stays only on a
+    shape or text element. These properties inherit, so on a group they
+    would reach content that is drawn elsewhere.
+  - A marker copy also pays for the pattern paint of its element, which
+    marker content can use through `context-fill` and `context-stroke`.
+  - A cut `<use>` is removed; any other cut reference loses its attribute.
+    Gradients draw no content and are not counted.
+
+  In headless Chrome, attack files of 2 KB to 1.3 MB took 6 s to more than
+  30 s to draw; after the cleaner, each draws in under 0.1 s. Real files do
+  not change: 2,236 SVG files (icons, logos, and 14 Mermaid diagram types)
+  give the same output as before. `tests/services/svg-cleaning-cost.test.ts`
+  guards the cost of cleaning and of drawing.
 - SVG: the site asset allowlist (`cleanSvg` in
   `src/services/site-assets/svg.ts`, built on `@xmldom/xmldom`) with the
   `docs_image` profile, which adds diagram elements (`marker`, `pattern`,
@@ -236,8 +276,8 @@ approved publish of the branch. `build_preview` shows it too.
   `url()` or escapes, DOCTYPE and entities, and processing instructions such
   as `xml-stylesheet`. `sanitized: true` means it removed one of these.
   Comments and namespace declarations do not count.
-- Size: 5 MB decoded (`asset_too_large`). The MCP body limit is 8 MiB, so the
-  base64 of the largest image fits.
+- Size: 2 MB decoded on every upload path (`asset_too_large`). The MCP body
+  limit is 4 MiB, so the base64 of the largest image fits in `upload_asset`.
 - Names: the file name becomes a lowercase slug with the extension of the
   detected type (`Rate Limits.PNG` with JPEG bytes becomes
   `rate-limits.jpg`). A new upload never replaces a file: a name that the
@@ -259,6 +299,73 @@ approved publish of the branch. `build_preview` shows it too.
   folder.
 - The dashboard editor does not show branch images yet: its preview has no
   route for them.
+
+### Upload URLs
+
+An agent with a shell sends an image file over HTTP, not inside a tool
+call. `AgentAssetUploads` in
+`apps/api/src/services/docs-branches/assets/agent-asset-uploads.ts` holds
+the logic. `agent-upload-store.ts` is its storage port, with the one
+conditional write it needs. `apps/mcp/src/asset-upload-endpoint.ts` serves
+the URL.
+
+1. `create_asset_upload` checks the project and the branch ownership, then
+   the open-upload limits: 5 per connection (member and OAuth client) and 10
+   per member across clients (`asset_upload_limit_reached`, with
+   `details.scope` and `details.retryAfterSeconds`). The open uploads of a
+   member are entries in one ledger object,
+   `agent-upload-ledgers/{memberKey}.json` (`agent-upload-ledger.ts`). A
+   claim reads the ledger, drops expired entries, checks both limits, and
+   writes it back with a compare-and-swap: `onlyIf: { etagMatches }`, or
+   `If-None-Match: *` for the first entry. Of parallel claims only one
+   writes; the others read again and count it. So the limits hold exactly
+   under concurrency. If every swap loses, the tool answers
+   `asset_upload_busy`. Member and connection keys are SHA-256 digests of
+   the IDs, so no ID appears in a key or in the ledger. Then the tool
+   enqueues an `agent_asset_upload` collector entry and writes a ticket at
+   `agent-uploads/{uploadId}/ticket.json` in `DOCS_BUCKET`. The ticket keeps
+   the owner, project, branch, member, OAuth client, file name, expiry,
+   state (`open` or `received`), refused attempts, and the SHA-256 of a
+   32-byte random secret. Nothing deletes a ledger: R2 has no conditional
+   delete. It is one small object per member, and its entries expire on
+   their own.
+2. The URL is `{MCP origin}/uploads/{uploadId}`. The secret goes in
+   `Authorization: Bearer {secret}`, never in the URL. Workers Logs and
+   Tail Workers redact the `Authorization` value (checked with a local Tail
+   Worker: the value arrives as `REDACTED`), and the MCP logger writes fixed
+   fields only. The tool returns the header and a `curl` command. The
+   secret is the only credential, like an S3 presigned URL, so
+   `src/index.ts` routes `/uploads/` after the IP limit and before OAuth.
+3. The PUT handler checks the path, the method, the header shape, the secret
+   hash (constant time), the expiry (15 minutes), the state, and the
+   refused-attempt count, all before it reads the body. It reads at most
+   2 MB within 60 seconds, checks the expiry again, and runs the docs image
+   check (`checkDocsAsset`, the same check as every upload). Then it moves
+   the ticket from `open` to `received` with an R2 `onlyIf: { etagMatches }`
+   write, and only the PUT that wins writes `agent-uploads/{uploadId}/file`.
+   It stages the bytes as sent. Answers: 200 `{ uploadId, size, next }`;
+   400 empty body; 401 no or malformed `Authorization`; 404 unknown upload
+   or wrong secret; 405 not PUT; 408 body slower than 60 s; 409 file already
+   received, or a parallel PUT won; 410 expired, or closed after 5 refused
+   files; 413 over 2 MB; 415 not a PNG, JPEG, WebP, GIF, or SVG image.
+   Refused files (400, 408, 413, 415) store nothing and count toward the
+   close.
+4. `finish_asset_upload` calls `takeFor`, which reads the ticket and answers
+   `asset_upload_not_found` to any other project, member, or OAuth client
+   before it reads a byte of the file. Without a received file it answers
+   `asset_upload_not_sent`. It checks the branch ownership again, runs
+   `DocsBranchAssetUpload` with the staged bytes (the image check runs again
+   and cleans an SVG), deletes the ticket and the file, and then frees the
+   slot in the ledger. `asset_invalid` and `asset_too_large` do the same.
+   If the release loses every swap, the slot stays taken until it expires.
+5. The collector deletes what an agent never finished. Its grace period is
+   the URL lifetime plus one hour, longer than any PUT can run. See
+   `docs/current/storage-garbage-collection.md`.
+
+The Worker holds no new secret and no R2 API token: it writes through the
+`DOCS_BUCKET` binding. Local development works with the local bucket.
+`AgentAssetUploads.fromEnv` needs the R2 Worker binding: the Node origin's
+S3 bucket adapter refuses conditional writes.
 
 Resources: `doxa://projects/{projectId}/pages/{+href}`,
 `doxa://schemas/site-config`, `doxa://reference/mdx`.
@@ -335,8 +442,9 @@ Resources: `doxa://projects/{projectId}/pages/{+href}`,
 | write | user and client | 120 |
 | expensive | user | 20 |
 
-The request body limit is 8 MiB (it was 4 MiB in v1; `upload_asset` needs
-more). Rate limits count per Cloudflare location.
+The request body limit is 4 MiB. It was 4 MiB in v1 and 8 MiB in v2 for
+5 MB images; images are now at most 2 MB, and larger work goes to upload
+URLs. Rate limits count per Cloudflare location.
 
 ## Errors and logs
 

@@ -39,9 +39,11 @@ export class DocsDomainLifecycleService {
   private readonly routingProbe: DocsDomainRoutingProbe;
   private readonly domainLimitPolicy: DocsDomainLimitPolicy;
   private readonly domainNotifier: DomainNotifier;
+  private readonly officialDocsProjectId: string | undefined;
 
   constructor(env: Env, dependencies: DocsDomainLifecycleDependencies = {}) {
     this.domains = new DocsDomainsRepository(env);
+    this.officialDocsProjectId = env.DOXA_OFFICIAL_DOCS_PROJECT_ID;
     const customHostnames = createCustomHostnamesClient(env);
     this.customHostnames = customHostnames.client;
     this.customHostnamesConfigurationError = customHostnames.configurationError;
@@ -76,6 +78,7 @@ export class DocsDomainLifecycleService {
     const customDomainLimit = await this.domainLimitPolicy.getLimit(input);
     const domain = await this.domains.createCustomDomain({
       ...input,
+      officialDocsProjectId: this.officialDocsProjectId,
       customDomainLimit,
     });
     if (this.customHostnamesConfigurationError) {

@@ -60,6 +60,11 @@ export interface Env extends AuthEnv {
   WEB_ORIGIN?: string;
   DOCS_RUNTIME_URL?: string;
   DOCS_BASE_DOMAIN?: string;
+  /**
+   * The project of the official Doxa docs. Only this project can connect
+   * `docs.doxa.so`, the one exact host of the retired base domains.
+   */
+  DOXA_OFFICIAL_DOCS_PROJECT_ID?: string;
   DOCS_RENDERER_BASE_URL?: string;
   DOCS_PREVIEW_GATE_ENABLED?: string;
   DOCS_CUSTOM_DOMAIN_CNAME_TARGET?: string;

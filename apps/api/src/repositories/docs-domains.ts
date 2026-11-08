@@ -24,6 +24,13 @@ import {
 
 export const RETIRED_DOCS_BASE_DOMAINS = ["docs.doxa.so"] as const;
 
+/**
+ * The host of the official Doxa docs. Its name is a retired base domain, so
+ * only the project in `DOXA_OFFICIAL_DOCS_PROJECT_ID` can connect it. Every
+ * name under it stays reserved, for the links to old generated sites.
+ */
+export const OFFICIAL_DOCS_HOSTNAME = "docs.doxa.so";
+
 export type CreateCustomDocsDomainErrorCode =
   | "invalid_hostname"
   | "reserved_hostname"
@@ -95,11 +102,15 @@ export class DocsDomainsRepository {
     projectId: string;
     hostname: string;
     docsBaseDomain?: string;
+    /** The one project that can connect the official docs host; see `OFFICIAL_DOCS_HOSTNAME`. */
+    officialDocsProjectId?: string;
     customDomainLimit: number;
   }): Promise<DocsDomainDto> {
     const normalizedHostname = validateCustomDocsHostname({
       hostname: input.hostname,
       docsBaseDomain: input.docsBaseDomain,
+      projectId: input.projectId,
+      officialDocsProjectId: input.officialDocsProjectId,
     });
 
     const site = await this.getOwnedSite({
@@ -499,10 +510,16 @@ export function isHostnameWithinBaseDomain(
 export function validateCustomDocsHostname(input: {
   hostname: string;
   docsBaseDomain?: string;
+  /** The project that connects the hostname. */
+  projectId?: string;
+  officialDocsProjectId?: string;
 }): string {
   const normalizedHostname = normalizeDocsHostname(input.hostname);
   if (!normalizedHostname || !isPublicCustomHostname(normalizedHostname)) {
     throw new CreateCustomDocsDomainError("invalid_hostname");
+  }
+  if (isOfficialDocsConnect(normalizedHostname, input)) {
+    return normalizedHostname;
   }
 
   const activeBaseDomain = input.docsBaseDomain
@@ -522,6 +539,19 @@ export function validateCustomDocsHostname(input: {
   }
 
   return normalizedHostname;
+}
+
+/** True only for the exact official host, connected by the configured project. */
+function isOfficialDocsConnect(
+  hostname: string,
+  input: { projectId?: string; officialDocsProjectId?: string },
+): boolean {
+  const officialProjectId = input.officialDocsProjectId?.trim();
+  return (
+    hostname === OFFICIAL_DOCS_HOSTNAME &&
+    Boolean(officialProjectId) &&
+    input.projectId === officialProjectId
+  );
 }
 
 function getCreateCustomDocsDomainMessage(

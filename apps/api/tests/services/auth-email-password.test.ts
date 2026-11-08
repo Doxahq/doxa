@@ -13,6 +13,8 @@ const env = {
   GITHUB_CLIENT_SECRET: "github-secret",
 };
 
+const signupsOpenEnv = { ...env, AUTH_SIGNUPS_ENABLED: "true" };
+
 const EMAIL = "ada@example.com";
 const PASSWORD = "correct horse battery";
 
@@ -72,9 +74,30 @@ describe("email and password sign-in", () => {
     expect(response.ok).toBe(false);
   });
 
+  test("refuses every new user unless sign-ups are enabled", async () => {
+    const { mailer, verification } = recordingMailer();
+    for (const closedEnv of [env, { ...env, AUTH_SIGNUPS_ENABLED: "false" }]) {
+      const auth = createAuth(closedEnv, undefined, undefined, { mailer });
+      const context = await auth.$context;
+      const createUser = vi.spyOn(context.internalAdapter, "createUser");
+
+      const response = await auth.handler(post("/sign-up/email", {
+        name: "Ada", email: EMAIL, password: PASSWORD,
+      }));
+
+      expect(response.status).toBe(400);
+      expect(createUser).not.toHaveBeenCalled();
+      expect(verification).toHaveLength(0);
+      expect(context.socialProviders.map((provider) => provider.options?.disableSignUp)).toEqual([true, true]);
+      await expect(
+        context.options.databaseHooks?.user?.create?.before?.(storedUser(false) as never, null),
+      ).rejects.toThrow("New sign-ups are closed.");
+    }
+  });
+
   test("sign-up sends a verification link and starts no session", async () => {
     const { mailer, verification } = recordingMailer();
-    const auth = createAuth(env, undefined, undefined, { mailer });
+    const auth = createAuth(signupsOpenEnv, undefined, undefined, { mailer });
     const context = await auth.$context;
     vi.spyOn(context.internalAdapter, "findUserByEmail").mockResolvedValue(null);
     vi.spyOn(context.internalAdapter, "createUser").mockImplementation(async (data) => ({
@@ -103,7 +126,7 @@ describe("email and password sign-in", () => {
 
   test("refuses a password shorter than 8 characters", async () => {
     const { mailer, verification } = recordingMailer();
-    const auth = createAuth(env, undefined, undefined, { mailer });
+    const auth = createAuth(signupsOpenEnv, undefined, undefined, { mailer });
     const context = await auth.$context;
     const createUser = vi.spyOn(context.internalAdapter, "createUser");
 

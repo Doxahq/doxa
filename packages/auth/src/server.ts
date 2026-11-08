@@ -1,5 +1,6 @@
 import type { ExecutionContext, IncomingRequestCfProperties, KVNamespace } from "@cloudflare/workers-types";
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { withCloudflare } from "better-auth-cloudflare";
 import {
@@ -20,6 +21,8 @@ export interface AuthEnv extends DbEnv {
   BETTER_AUTH_TRUSTED_ORIGINS?: string;
   AUTH_COOKIE_DOMAIN?: string;
   AUTH_COOKIE_PREFIX?: string;
+  /** New accounts are refused unless this is exactly "true". */
+  AUTH_SIGNUPS_ENABLED?: string;
   WEB_ORIGIN?: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
@@ -62,6 +65,7 @@ export function createAuth(
   options: CreateAuthOptions = {},
 ) {
   const { mailer } = options;
+  const disableSignUp = env.AUTH_SIGNUPS_ENABLED?.trim() !== "true";
   const db = createDb(env);
   const cf = (request as CfRequest | undefined)?.cf ?? {};
   const githubIdentityStore = createGitHubIdentityStore(db);
@@ -120,6 +124,7 @@ export function createAuth(
     }),
     emailAndPassword: {
       enabled: Boolean(mailer),
+      disableSignUp,
       requireEmailVerification: true,
       minPasswordLength: MIN_PASSWORD_LENGTH,
       maxPasswordLength: MAX_PASSWORD_LENGTH,
@@ -162,6 +167,9 @@ export function createAuth(
       },
     },
     databaseHooks: {
+      // The provider options do not cover ID token sign-in, so this hook is
+      // the check that holds for every path that creates a user.
+      ...(disableSignUp ? { user: { create: { before: refuseNewUser } } } : {}),
       account: {
         create: {
           after: async (account) =>
@@ -177,14 +185,20 @@ export function createAuth(
       google: {
         clientId: env.GOOGLE_CLIENT_ID,
         clientSecret: env.GOOGLE_CLIENT_SECRET,
+        disableSignUp,
       },
       github: {
         clientId: env.GITHUB_CLIENT_ID,
         clientSecret: env.GITHUB_CLIENT_SECRET,
+        disableSignUp,
       },
     },
     plugins: [],
   });
+}
+
+async function refuseNewUser(): Promise<never> {
+  throw new APIError("FORBIDDEN", { message: "New sign-ups are closed." });
 }
 
 async function runIdentitySync(

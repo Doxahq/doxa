@@ -1,55 +1,72 @@
 import { useEffect, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { AlertCircle, CheckCircle2, Github } from "lucide-react"
+import { Link } from "@tanstack/react-router"
+import { AlertCircle } from "lucide-react"
 
-import {
-  FieldList,
-  FieldRow,
-  PageBody,
-  PageHeading,
-} from "~/components/dashboard/dashboard-header"
 import { ConnectRepositoryDialog } from "~/components/dashboard/connect-repository-dialog"
-import { ConnectRepositoryWelcome } from "~/components/dashboard/connect-repository-welcome"
+import { PageBody, PageHeading } from "~/components/dashboard/dashboard-header"
 import { GenerationStartDialogs } from "~/components/dashboard/generation-start-dialogs"
-import { GenerationWelcome } from "~/components/dashboard/generation-welcome"
-import { JobStatusBadge } from "~/components/dashboard/dashboard-status"
-import { ReviewWaitingBanner } from "~/components/dashboard/review/review-waiting-banner"
-import { PendingMergesNote } from "~/components/dashboard/pending-merges-note"
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert"
-import { Badge } from "~/components/ui/badge"
-import { Button } from "~/components/ui/button"
+import { ActivityCard } from "~/components/dashboard/overview/activity-card"
 import {
-  getProjectPublicationLabel,
-  getProjectPublicationState,
-} from "~/lib/dashboard/model"
+  AttentionAllClear,
+  AttentionQueue,
+  buildAttentionItems,
+} from "~/components/dashboard/overview/attention-queue"
+import { LiveSiteCard } from "~/components/dashboard/overview/live-site-card"
+import { OpenPreviewsCard } from "~/components/dashboard/overview/open-previews-card"
+import { SetupChecklist } from "~/components/dashboard/overview/setup-checklist"
+import { ProjectOverviewSkeleton } from "~/components/dashboard/skeletons/project-skeletons"
+import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert"
+import { Button } from "~/components/ui/button"
 import {
   clearPendingRepositoryConnect,
   readPendingRepositoryConnect,
 } from "~/lib/dashboard/pending-repository-connect"
-import { useProjectBranch } from "~/lib/dashboard/project-branch-context"
 import { useGenerationStartFlow } from "~/lib/dashboard/use-generation-start-flow"
+import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
 import { useProjectCapabilities } from "~/lib/dashboard/use-project-capabilities"
 import { useProjectGenerations } from "~/lib/dashboard/use-project-generations"
-import { ProjectOverviewSkeleton } from "~/components/dashboard/skeletons/project-skeletons"
+import { useProjectSetup } from "~/lib/dashboard/use-project-setup"
 import { useProjectWorkspace } from "~/lib/dashboard/use-project-workspace"
-import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
+import { approvalRequestListQueryOptions } from "~/lib/queries/approval-requests"
+import {
+  docsDomainsQueryOptions,
+  pendingMergesQueryOptions,
+  projectContentMdxReportQueryOptions,
+  projectDoxabotQueryOptions,
+  projectOverviewQueryOptions,
+} from "~/lib/queries/dashboard"
 import { generationReviewQueryOptions } from "~/lib/queries/generation-review"
-import { pendingMergesQueryOptions, projectDoxabotQueryOptions } from "~/lib/queries/dashboard"
 
 export function ProjectOverviewPage({ projectId }: { projectId: string }) {
   const workspace = useProjectWorkspace(projectId)
   const generations = useProjectGenerations(projectId)
+  const capabilities = useProjectCapabilities(projectId)
+  // Connecting a repository and starting a generation both need `generation.run`.
+  const canRun = capabilities.can("generation.run")
+  const canEdit = capabilities.can("docs.write")
+
   const reviewQuery = useQuery(generationReviewQueryOptions(projectId))
   const pendingMergesQuery = useQuery(pendingMergesQueryOptions(projectId))
   const doxabotQuery = useQuery(projectDoxabotQueryOptions(projectId))
-  const { startGeneration, dialogProps } = useGenerationStartFlow(projectId, generations)
-  const branch = useProjectBranch()
-  const hasRepository = Boolean(workspace.project?.githubRepositoryId)
-  const showWelcome = workspace.project !== null && workspace.latestJob === null
+  const overviewQuery = useQuery(projectOverviewQueryOptions(projectId))
+  const domainsQuery = useQuery(docsDomainsQueryOptions(projectId))
+  const approvalsQuery = useQuery(approvalRequestListQueryOptions(projectId, "pending"))
+  const mdxQuery = useQuery({ ...projectContentMdxReportQueryOptions(projectId, "main"), enabled: canEdit })
+
+  const domains = domainsQuery.data?.domains ?? []
+  const setup = useProjectSetup({
+    projectId,
+    project: workspace.project,
+    generations: generations.generations,
+    domains,
+    canRun,
+  })
+  const { startGeneration, dialogProps } = useGenerationStartFlow(projectId, generations, {
+    skipInstructionsOffer: setup.skippedInstructions,
+  })
+
   const [connectOpen, setConnectOpen] = useState(false)
-  // Connecting a repository and starting a generation both need `generation.run`.
-  const canRun = useProjectCapabilities(projectId).can("generation.run")
-  const openConnect = canRun ? () => setConnectOpen(true) : null
 
   // Finishes a connection that started before the GitHub App install.
   useEffect(() => {
@@ -58,24 +75,51 @@ export function ProjectOverviewPage({ projectId }: { projectId: string }) {
     if (!workspace.project.githubRepositoryId) setConnectOpen(true)
   }, [canRun, projectId, workspace.project])
 
-  // The skeleton is for the first load only (see `useIsFirstLoad`).
-  // The review banner is part of the first frame, so it never shifts the page.
+  // The skeleton is for the first load only (see `useIsFirstLoad`). Every
+  // section below is part of the first frame, so none of them shifts the page.
   const isFirstLoad = useIsFirstLoad([
     { isPending: workspace.isLoading },
+    { isPending: generations.isPending },
     { isPending: reviewQuery.isPending },
     { isPending: pendingMergesQuery.isPending },
+    { isPending: overviewQuery.isPending },
+    { isPending: domainsQuery.isPending },
+    { isPending: approvalsQuery.isPending },
+    { isPending: mdxQuery.isLoading },
+    { isPending: setup.isLoading },
   ])
   if (isFirstLoad) return <ProjectOverviewSkeleton />
 
+  const { project, latestJob } = workspace
+  const overview = overviewQuery.data ?? null
+  const activity = overview?.activity ?? []
+  const isGenerating = generations.isStarting || generations.hasActiveGeneration
+  const attentionItems = buildAttentionItems({
+    projectId,
+    review: reviewQuery.data ?? null,
+    merges: pendingMergesQuery.data ?? [],
+    doxabot: doxabotQuery.data ?? null,
+    approvals: approvalsQuery.data?.requests ?? [],
+    mdxPageCount: mdxQuery.data?.pages.length ?? 0,
+    latestJob,
+    domains,
+    onGenerate: canRun ? () => void startGeneration() : null,
+    isGenerating,
+  })
+  // A new project has nothing to report yet, so the checklist stands alone.
+  const showActivity = !setup.isVisible || activity.length > 0 || overviewQuery.isError
+
   return (
-    <PageBody>
+    <PageBody className="max-w-5xl">
       <PageHeading
         label="Project"
-        title={workspace.project?.name ?? "Overview"}
-        description={
-          hasRepository || !workspace.project
-            ? "Repository connection, publication state, and hosted documentation target."
-            : "Publication state and hosted documentation target. This project has no repository yet."
+        title={project?.name ?? "Overview"}
+        actions={
+          <Button variant="outline" asChild>
+            <Link to="/dashboard/projects/$projectId/content" params={{ projectId }}>
+              {canEdit ? "Edit content" : "View content"}
+            </Link>
+          </Button>
         }
       />
 
@@ -87,94 +131,52 @@ export function ProjectOverviewPage({ projectId }: { projectId: string }) {
         </Alert>
       ) : null}
 
-      {reviewQuery.data ? <ReviewWaitingBanner projectId={projectId} review={reviewQuery.data} /> : null}
-
-      <PendingMergesNote
-        merges={pendingMergesQuery.data ?? []}
-        settings={doxabotQuery.data ?? null}
-        onGenerate={canRun ? () => void startGeneration() : null}
-      />
-
-      {showWelcome && !hasRepository ? (
-        <ConnectRepositoryWelcome projectId={projectId} onConnect={openConnect} />
+      {generations.startError ? (
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription>{generations.startError}</AlertDescription>
+        </Alert>
       ) : null}
 
-      {showWelcome && hasRepository ? (
-        <div className="flex flex-col gap-4">
-          {generations.startError ? (
-            <Alert variant="destructive">
-              <AlertCircle aria-hidden="true" />
-              <AlertDescription>{generations.startError}</AlertDescription>
-            </Alert>
-          ) : null}
-          <GenerationWelcome
-            isStarting={generations.isStarting}
-            isGenerating={generations.hasActiveGeneration}
-            onStart={canRun ? () => void startGeneration() : null}
+      {project ? (
+        <LiveSiteCard
+          project={project}
+          latestPublication={overview?.latestPublication ?? null}
+          lastSyncedRevision={overview?.lastSyncedRevision ?? null}
+          productionBranch={doxabotQuery.data?.productionBranch ?? null}
+          defaultHostname={domains.find((domain) => domain.kind === "doxa_subdomain")?.hostname ?? null}
+        />
+      ) : null}
+
+      <AttentionQueue items={attentionItems} />
+
+      {setup.isVisible ? (
+        <SetupChecklist
+          projectId={projectId}
+          steps={setup.steps}
+          onConnectRepository={() => setConnectOpen(true)}
+          onStartGeneration={() => void startGeneration()}
+          isGenerating={isGenerating}
+          onSkip={setup.skip}
+          onHide={setup.hide}
+        />
+      ) : project?.publishedVersionId && attentionItems.length === 0 ? (
+        <AttentionAllClear hasRepository={project.repositoryFullName !== null} />
+      ) : null}
+
+      {showActivity ? (
+        <div className="flex flex-wrap items-start gap-6">
+          <ActivityCard projectId={projectId} events={activity} failed={overviewQuery.isError} />
+          <OpenPreviewsCard
+            projectId={projectId}
+            previews={overview?.openPreviews ?? []}
+            repositoryFullName={project?.repositoryFullName ?? null}
           />
         </div>
-      ) : null}
-
-      {workspace.project ? (
-        <section className="flex flex-col gap-4">
-          <FieldList>
-            <FieldRow label="Status">
-              <PublicationBadge publishedVersionId={workspace.project.publishedVersionId} />
-            </FieldRow>
-            <FieldRow label="Slug" mono>/{workspace.project.slug}</FieldRow>
-            <FieldRow label="Current branch" mono>
-              {branch.selectedBranch?.name ?? "main"}
-            </FieldRow>
-            <FieldRow label="Repository" mono={Boolean(workspace.project.repositoryFullName)}>
-              {workspace.project.repositoryFullName ?? (
-                <span className="flex flex-wrap items-center gap-3">
-                  Not connected
-                  {canRun ? (
-                    <Button variant="outline" size="sm" onClick={() => setConnectOpen(true)}>
-                      <Github aria-hidden="true" />
-                      Connect repository
-                    </Button>
-                  ) : null}
-                </span>
-              )}
-            </FieldRow>
-            <FieldRow label="Docs target" mono={Boolean(workspace.project.docsUrl)}>
-              {workspace.project.docsUrl ? (
-                <a
-                  href={workspace.project.docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-link block truncate"
-                >
-                  {workspace.project.docsUrl}
-                </a>
-              ) : (
-                "Not configured"
-              )}
-            </FieldRow>
-            <FieldRow label="Latest generation">
-              {workspace.latestJob ? (
-                <JobStatusBadge status={workspace.latestJob.status} />
-              ) : (
-                "No generation yet"
-              )}
-            </FieldRow>
-          </FieldList>
-        </section>
       ) : null}
 
       <GenerationStartDialogs {...dialogProps} />
       <ConnectRepositoryDialog projectId={projectId} open={connectOpen} onOpenChange={setConnectOpen} />
     </PageBody>
-  )
-}
-
-function PublicationBadge({ publishedVersionId }: { publishedVersionId: string | null }) {
-  const state = getProjectPublicationState({ publishedVersionId })
-  return (
-    <Badge variant={state === "published" ? "success" : "muted"}>
-      {state === "published" ? <CheckCircle2 aria-hidden="true" className="size-3" /> : null}
-      {getProjectPublicationLabel(state)}
-    </Badge>
   )
 }

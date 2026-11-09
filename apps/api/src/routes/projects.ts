@@ -62,7 +62,11 @@ import { createProjectApprovalSettingsRoutes } from "./approval-settings";
 import { createDoxabotRoutes } from "./doxabot";
 import { createProjectTeamRoutes } from "./teams";
 import { handleProjectShell } from "./project-shell";
-import { listGenerationsPage, readProjectDetail } from "./project-reads";
+import {
+  listGenerationsPage,
+  readProjectDetail,
+  readProjectOverview,
+} from "./project-reads";
 import { dashboardActor } from "../services/agent-access/actor";
 import { MembershipProjectAccessPolicy } from "../services/agent-access/membership-project-access-policy";
 import { toGenerationLog } from "../services/generation-log";
@@ -203,6 +207,12 @@ export function createProjectRoutes(): ApiApp {
   app.route("/:projectId/approval-requests", createProjectApprovalRequestRoutes());
   app.route("/:projectId/approval-settings", createProjectApprovalSettingsRoutes());
   app.route("/:projectId/team", createProjectTeamRoutes());
+
+  app.get("/:projectId/overview", (context) =>
+    withProjectAccess(context, "generation.read", (access) =>
+      readProjectOverview(context, access),
+    ),
+  );
 
   app.get("/:projectId/generations", (context) =>
     withProjectAccess(context, "generation.read", async (access) => {

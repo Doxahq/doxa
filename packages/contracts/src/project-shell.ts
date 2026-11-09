@@ -9,6 +9,7 @@ import {
   generationsPageSchema,
   projectSchema,
 } from "./index";
+import { projectOverviewSchema } from "./project-overview";
 import { teamRoleSchema } from "./teams";
 
 /**
@@ -77,6 +78,8 @@ export const projectShellSchema = z
     pendingApprovalRequests: projectShellSectionSchema(approvalRequestListSchema),
     /** `GET /projects/:projectId/docs-domains` */
     docsDomains: projectShellSectionSchema(docsDomainCollectionSchema),
+    /** `GET /projects/:projectId/overview` */
+    overview: projectShellSectionSchema(projectOverviewSchema),
   })
   .strict();
 

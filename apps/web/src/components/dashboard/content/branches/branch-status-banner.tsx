@@ -1,6 +1,7 @@
 import type { DocsBranchStatus } from "@doxahq/contracts/docs-branches"
 import { GitCompareArrows } from "lucide-react"
 
+import { ExactDateTooltip } from "~/components/dashboard/exact-date-tooltip"
 import { Button } from "~/components/ui/button"
 
 export function BranchStatusBanner(props: {
@@ -12,7 +13,7 @@ export function BranchStatusBanner(props: {
 
   const text = props.status.branch.kind === "hidden"
     ? "Main changed while you edited. Synchronize to get the latest main."
-    : namedBranchMessage(props.status)
+    : <NamedBranchMessage status={props.status} />
 
   return (
     <div
@@ -33,16 +34,17 @@ export function BranchStatusBanner(props: {
   )
 }
 
-function namedBranchMessage(status: DocsBranchStatus): string {
+function NamedBranchMessage({ status }: { status: DocsBranchStatus }) {
   const count = status.publicationsSinceBase
   const publicationWord = count === 1 ? "publication" : "publications"
   const latest = status.main.latestPublication
-  const latestDescription = `${articleFor(latest.kind)} ${latest.kind}, ${relativeTime(latest.createdAt)}`
-  return [
-    `Main changed since this branch started: ${count} new ${publicationWord}.`,
-    `The latest is ${latestDescription}.`,
-    "Synchronize to get the latest main.",
-  ].join(" ")
+  return (
+    <>
+      Main changed since this branch started: {count} new {publicationWord}. The latest is {articleFor(latest.kind)}{" "}
+      {latest.kind}, <ExactDateTooltip date={latest.createdAt}>{relativeTime(latest.createdAt)}</ExactDateTooltip>.
+      Synchronize to get the latest main.
+    </>
+  )
 }
 
 function articleFor(value: string): "an" | "a" {

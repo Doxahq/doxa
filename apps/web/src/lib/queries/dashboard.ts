@@ -8,6 +8,7 @@ import {
   getProject,
   getProjectContent,
   getProjectContentMdxReport,
+  getProjectOverview,
   getProjectContentPage,
   getProjectDoxabotSettings,
   getProjectGenerationCache,
@@ -45,6 +46,7 @@ export const dashboardQueryKeys = {
   githubRepositoryBranches: (githubRepositoryId: string) =>
     [...dashboardQueryKeys.githubRepositories(), githubRepositoryId, "branches"] as const,
   project: (projectId: string) => [...dashboardQueryKeys.all, "projects", projectId] as const,
+  overview: (projectId: string) => [...dashboardQueryKeys.project(projectId), "overview"] as const,
   contentRoot: (projectId: string) => [...dashboardQueryKeys.project(projectId), "content"] as const,
   content: (projectId: string, branch: BranchRef) =>
     [...dashboardQueryKeys.contentRoot(projectId), branch] as const,
@@ -148,6 +150,16 @@ export function docsDomainsQueryOptions(projectId: string) {
     queryKey: dashboardQueryKeys.domains(projectId),
     queryFn: (context) => fromProjectShell(context, projectId, "docsDomains", () => listDocsDomains(projectId)),
     staleTime: 5_000,
+  })
+}
+
+/** Under the project key, so a project-wide invalidation refreshes it too. */
+export function projectOverviewQueryOptions(projectId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.overview(projectId),
+    queryFn: (context) => fromProjectShell(context, projectId, "overview", () => getProjectOverview(projectId)),
+    staleTime: 15_000,
+    retry: false,
   })
 }
 

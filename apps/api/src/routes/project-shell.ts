@@ -19,7 +19,11 @@ import { listDocsBranches } from "./docs-branches";
 import { listDocsDomains } from "./docs-domains";
 import { listPendingMerges, readDoxabotSettings } from "./doxabot";
 import { readGenerationReview } from "./generation-reviews";
-import { listGenerationsPage, readProjectDetail } from "./project-reads";
+import {
+  listGenerationsPage,
+  readProjectDetail,
+  readProjectOverview,
+} from "./project-reads";
 
 /** How long one section may take before it answers with a timeout. */
 export const PROJECT_SHELL_SECTION_TIMEOUT_MS = 2_000;
@@ -59,6 +63,7 @@ export const PROJECT_SHELL_SECTIONS: Readonly<
       listProjectApprovalRequests(context, access.actorUserId, "pending"),
   },
   docsDomains: { capability: "domains.read", load: listDocsDomains },
+  overview: { capability: "generation.read", load: readProjectOverview },
 };
 
 export interface ProjectShellOptions {

@@ -10,6 +10,7 @@ import {
   projectDoxabotQueryOptions,
   projectGenerationCacheQueryOptions,
   projectGenerationsQueryOptions,
+  projectOverviewQueryOptions,
 } from "~/lib/queries/dashboard"
 import { docsBranchListQueryOptions } from "~/lib/queries/docs-branches"
 import { doxabotInstructionsQueryOptions } from "~/lib/queries/doxabot-instructions"
@@ -69,6 +70,7 @@ function projectPageRequests(
         queryClient.ensureQueryData(pendingMergesQueryOptions(projectId)),
         queryClient.ensureQueryData(projectDoxabotQueryOptions(projectId)),
         queryClient.ensureInfiniteQueryData(projectGenerationsQueryOptions(projectId)),
+        queryClient.ensureQueryData(projectOverviewQueryOptions(projectId)),
       ]
     case "content": {
       // The editor starts on the branch this browser chose last, before the

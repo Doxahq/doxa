@@ -11,7 +11,11 @@ import { useGenerationStarter, type GenerationStartAction } from "~/lib/dashboar
  * generation it offers the instructions page, then starts as usual. Exposes
  * the props for `GenerationStartDialogs`.
  */
-export function useGenerationStartFlow(projectId: string, generations: GenerationStartAction) {
+export function useGenerationStartFlow(
+  projectId: string,
+  generations: GenerationStartAction,
+  options: { skipInstructionsOffer?: boolean } = {},
+) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const canConfigureInstructions = useProjectCapabilities(projectId).can("instructions.configure")
@@ -19,7 +23,7 @@ export function useGenerationStartFlow(projectId: string, generations: Generatio
   const [isOfferOpen, setIsOfferOpen] = useState(false)
 
   async function requestGeneration(): Promise<void> {
-    if (await loadInstructionsOffer(queryClient, projectId, canConfigureInstructions)) {
+    if (!options.skipInstructionsOffer && (await loadInstructionsOffer(queryClient, projectId, canConfigureInstructions))) {
       setIsOfferOpen(true)
       return
     }

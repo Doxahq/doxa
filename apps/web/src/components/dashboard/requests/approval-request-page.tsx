@@ -4,8 +4,9 @@ import type { DashboardApprovalRequest } from "@doxahq/contracts/approval-reques
 import { FieldList, FieldRow, PageBody, PageHeading, SectionLabel } from "~/components/dashboard/dashboard-header"
 import { ApprovalDecision } from "~/components/dashboard/requests/approval-decision"
 import { ApprovalStatusBadge } from "~/components/dashboard/requests/approval-status-badge"
+import { RelativeDate } from "~/components/dashboard/exact-date-tooltip"
 import { Alert, AlertDescription } from "~/components/ui/alert"
-import { formatRequestAge, requesterLabel } from "~/lib/dashboard/approval-request-model"
+import { requesterLabel } from "~/lib/dashboard/approval-request-model"
 import { policySourceLabel } from "~/lib/dashboard/approval-settings-model"
 import { getErrorMessage } from "~/lib/errors"
 import { ApprovalRequestSkeleton } from "~/components/dashboard/skeletons/request-skeletons"
@@ -39,7 +40,12 @@ function RequestReview({ request }: { request: DashboardApprovalRequest }) {
       <PageHeading
         label={request.title}
         title={request.headline}
-        description={`Requested by ${requesterLabel(request.requestedBy)} ${formatRequestAge(request.createdAt)}. It needs approval because of ${policySourceLabel(request.policySource)}.`}
+        description={
+          <>
+            Requested by {requesterLabel(request.requestedBy)} <RelativeDate date={request.createdAt} />. It needs
+            approval because of {policySourceLabel(request.policySource)}.
+          </>
+        }
         actions={<ApprovalStatusBadge status={request.status} />}
       />
       {request.summary ? (

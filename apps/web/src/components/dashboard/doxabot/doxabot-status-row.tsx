@@ -1,3 +1,4 @@
+import { ExactDateTooltip } from "~/components/dashboard/exact-date-tooltip"
 import type { DoxabotStatusFact } from "~/lib/dashboard/doxabot-status-model"
 import { cn } from "~/lib/utils"
 
@@ -19,7 +20,9 @@ export function DoxabotStatusRow({ facts }: { facts: readonly DoxabotStatusFact[
             {fact.tone ? <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[fact.tone])} /> : null}
             <span className={cn("truncate", fact.mono && "font-mono")}>{fact.value}</span>
           </dd>
-          <dd className="truncate text-[12.5px] text-muted-foreground">{fact.detail}</dd>
+          <dd className="truncate text-[12.5px] text-muted-foreground">
+            {fact.detailDate ? <ExactDateTooltip date={fact.detailDate}>{fact.detail}</ExactDateTooltip> : fact.detail}
+          </dd>
         </div>
       ))}
     </dl>

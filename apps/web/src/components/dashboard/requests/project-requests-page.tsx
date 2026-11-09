@@ -7,6 +7,7 @@ import type { ApprovalRequestSummary } from "@doxahq/contracts/approval-requests
 import { EmptyState, PageBody, PageHeading } from "~/components/dashboard/dashboard-header"
 import { ApprovalStatusBadge } from "~/components/dashboard/requests/approval-status-badge"
 import { RequestFilters } from "~/components/dashboard/requests/request-filters"
+import { RelativeDate } from "~/components/dashboard/exact-date-tooltip"
 import { Button } from "~/components/ui/button"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import {
@@ -16,7 +17,7 @@ import {
   type RequestAgentFilter,
   type RequestStatusFilter,
 } from "~/lib/dashboard/approval-request-filters"
-import { formatRequestAge, requesterLabel } from "~/lib/dashboard/approval-request-model"
+import { requesterLabel } from "~/lib/dashboard/approval-request-model"
 import { getErrorMessage } from "~/lib/errors"
 import { approvalRequestListQueryOptions } from "~/lib/queries/approval-requests"
 import { cn } from "~/lib/utils"
@@ -115,7 +116,7 @@ function RequestRow({
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-sm text-foreground">{request.headline}</span>
         <span className="text-xs text-muted-foreground">
-          {requesterLabel(request.requestedBy)} · {formatRequestAge(request.createdAt)}
+          {requesterLabel(request.requestedBy)} · <RelativeDate date={request.createdAt} />
         </span>
       </div>
       <ApprovalStatusBadge status={request.status} />

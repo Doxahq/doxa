@@ -76,6 +76,16 @@ function sections(
       async () => error("Docs domains are unavailable.", 503, { code: "unavailable" }),
       "domains.read",
     ),
+    overview: section(
+      async () =>
+        json({
+          latestPublication: null,
+          lastSyncedRevision: null,
+          activity: [],
+          openPreviews: [],
+        }),
+      "generation.read",
+    ),
     ...overrides,
   };
 }
@@ -248,6 +258,7 @@ describe("GET /projects/:projectId/shell", () => {
       branches: "docs.read",
       pendingApprovalRequests: null,
       docsDomains: "domains.read",
+      overview: "generation.read",
     });
   });
 

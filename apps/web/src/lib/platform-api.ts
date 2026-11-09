@@ -27,6 +27,7 @@ import type {
   UpdateDocsPreviewVisibilityInput,
 } from "@doxahq/contracts";
 import type { BranchRef } from "@doxahq/contracts/docs-branches";
+import type { ProjectOverview } from "@doxahq/contracts/project-overview";
 import type { TeamRole } from "@doxahq/contracts/teams";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8787";
@@ -452,6 +453,11 @@ export async function applyProjectContentEdits(
     `/projects/${encodeURIComponent(projectId)}/content/edits`,
     { method: "POST", json: { ...input, branch: input.branch ?? "main" } },
   );
+}
+
+/** What the project Overview shows beside the project itself. */
+export async function getProjectOverview(projectId: string): Promise<ProjectOverview> {
+  return apiFetch<ProjectOverview>(`/projects/${encodeURIComponent(projectId)}/overview`);
 }
 
 /** The changed pages of a branch that fail the MDX check, which block a publish. */

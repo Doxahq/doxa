@@ -5,7 +5,6 @@ import type {
   ApproveBlockReason,
 } from "@doxahq/contracts/approval-requests"
 import { ApiRequestError } from "~/lib/api-errors"
-import { formatRelativeAge } from "~/lib/dashboard/relative-time"
 
 export type ApprovalTone = "warning" | "success" | "muted" | "destructive" | "outline"
 
@@ -40,11 +39,6 @@ export function closedRequestMessage(status: ApprovalRequestStatus): string | nu
     default:
       return "This request is already decided."
   }
-}
-
-/** "2 minutes ago", "3 days ago". */
-export function formatRequestAge(iso: string, now: number = Date.now()): string {
-  return formatRelativeAge(iso, now)
 }
 
 /** True when a completed publish request also deleted its branch. */

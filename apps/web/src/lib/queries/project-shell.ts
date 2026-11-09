@@ -76,6 +76,10 @@ const SHELL_SECTIONS: Record<ProjectShellSectionKey, ShellSection> = {
     queryKey: (projectId) => dashboardQueryKeys.domains(projectId),
     toQueryData: (data) => data,
   },
+  overview: {
+    queryKey: (projectId) => dashboardQueryKeys.overview(projectId),
+    toQueryData: (data) => data,
+  },
 }
 
 /** The sections that answered with data, as each endpoint's response body. */

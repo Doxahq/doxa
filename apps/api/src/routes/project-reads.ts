@@ -1,8 +1,11 @@
 import type { ApiContext } from "../http/app";
-import type { DashboardProjectAccess } from "../http/project-access";
+import { forbidden, type DashboardProjectAccess } from "../http/project-access";
 import { json, notFound } from "../http/response";
 import { JobsRepository } from "../repositories/jobs";
+import { ProjectOverviewRepository } from "../repositories/project-overview";
 import { ProjectsRepository } from "../repositories/projects";
+import { buildProjectOverview } from "../services/project-overview";
+import { createDocsHostnameUrl } from "../utils/docs-url";
 import type { GenerationPageRequest } from "../utils/generation-pagination";
 import { withPreferredDocsUrl } from "../utils/project-docs-urls";
 
@@ -51,4 +54,23 @@ export async function listGenerationsPage(
     ...pagination,
   });
   return json(page);
+}
+
+/**
+ * `GET /projects/:projectId/overview`, after `generation.read` passed. The
+ * activity also shows publications, so the read needs `docs.read` too.
+ */
+export async function readProjectOverview(
+  context: ApiContext,
+  access: DashboardProjectAccess,
+): Promise<Response> {
+  if (!access.capabilities.has("docs.read")) return forbidden();
+  const rows = await new ProjectOverviewRepository(context.env).read(
+    access.projectId,
+  );
+  return json(
+    buildProjectOverview(rows, (hostname) =>
+      createDocsHostnameUrl(hostname, context.env),
+    ),
+  );
 }

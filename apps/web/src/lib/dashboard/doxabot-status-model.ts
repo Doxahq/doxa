@@ -8,6 +8,8 @@ export interface DoxabotStatusFact {
   label: string
   value: string
   detail: string
+  /** The date behind a relative `detail`. The row shows it exactly on hover. */
+  detailDate?: string
   /** A colored dot before the value, for the state of the last generation. */
   tone?: "success" | "warning" | "destructive" | "muted"
   /** Code-like values (a repository name) use the mono face. */
@@ -49,13 +51,19 @@ function lastGenerationFact({ latestJob, now }: DoxabotStatusInput): DoxabotStat
     label: "Last generation",
     value: status.value,
     detail: formatRelativeAge(latestJob.updatedAt, now),
+    detailDate: latestJob.updatedAt,
     tone: status.tone,
   }
 }
 
 function instructionsFact({ instructions, now }: DoxabotStatusInput): DoxabotStatusFact {
   return instructions
-    ? { label: "Instructions", value: `Version ${instructions.version}`, detail: `Edited ${formatRelativeAge(instructions.createdAt, now)}` }
+    ? {
+        label: "Instructions",
+        value: `Version ${instructions.version}`,
+        detail: `Edited ${formatRelativeAge(instructions.createdAt, now)}`,
+        detailDate: instructions.createdAt,
+      }
     : { label: "Instructions", value: "Not set", detail: "Default writing style" }
 }
 

@@ -3,33 +3,54 @@ import { ChevronRight } from "lucide-react"
 import {
   Bar,
   BadgeBar,
-  FieldListSkeleton,
   PageBodySkeleton,
   PageHeadingSkeleton,
   TextBar,
 } from "~/components/dashboard/skeletons/skeleton-kit"
 import { FIELD_LABEL_CLASS } from "~/components/dashboard/dashboard-header"
+import { SitePreviewArt } from "~/components/dashboard/overview/site-preview-art"
 
-/** The project Overview while the project loads: its heading, then the facts card. */
+const ACTIVITY_ROW_WIDTHS = ["14rem", "11rem", "16rem", "12rem"]
+
+/** The project Overview while it loads: its heading, the site card and the activity. */
 export function ProjectOverviewSkeleton() {
   return (
-    <PageBodySkeleton label="Loading project">
+    <PageBodySkeleton label="Loading project" className="max-w-5xl">
       <PageHeadingSkeleton
         label="Project"
         titleWidth="10rem"
-        description="Repository connection, publication state, and hosted documentation target."
+        actions={<Bar width="6.5rem" height="2.25rem" className="rounded-md" />}
       />
-      <section className="flex flex-col gap-4">
-        <FieldListSkeleton
-          rows={[
-            { label: "Status", width: "6.5rem", badge: true },
-            { label: "Slug", width: "7rem", mono: true },
-            { label: "Current branch", width: "3.5rem", mono: true },
-            { label: "Repository", width: "11rem", mono: true },
-            { label: "Docs target", width: "15rem", mono: true },
-            { label: "Latest generation", width: "5.5rem", badge: true },
-          ]}
-        />
+      <section className="surface-card flex flex-col overflow-hidden lg:flex-row">
+        <div className="min-w-0 flex-1 border-b border-divider bg-sidebar pt-6 pl-6 lg:border-r lg:border-b-0">
+          <SitePreviewArt address={null} title={null} />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-5 p-6">
+          <div className="flex flex-col gap-2">
+            <BadgeBar width="3.5rem" />
+            <TextBar width="12rem" className="text-xl font-semibold" />
+            <TextBar width="18rem" className="text-sm" />
+          </div>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+            {["9rem", "3.5rem", "4.5rem", "10rem"].map((width) => (
+              <div key={width} className="flex flex-col gap-1">
+                <TextBar width="6rem" className={FIELD_LABEL_CLASS} />
+                <TextBar width={width} className="font-mono text-[13px]" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+      <section className="flex flex-col gap-3">
+        <TextBar width="5rem" className={FIELD_LABEL_CLASS} />
+        <ul className="surface-card">
+          {ACTIVITY_ROW_WIDTHS.map((width, index) => (
+            <li key={width} className={index > 0 ? "flex items-center gap-3 border-t border-divider px-4 py-3.5" : "flex items-center gap-3 px-4 py-3.5"}>
+              <Bar width="26px" height="26px" className="rounded-md" />
+              <TextBar width={width} className="text-[13.5px]" />
+            </li>
+          ))}
+        </ul>
       </section>
     </PageBodySkeleton>
   )

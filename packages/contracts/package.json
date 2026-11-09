@@ -15,6 +15,7 @@
     "./docs-branches": "./src/docs-branches.ts",
     "./generation-reviews": "./src/generation-reviews.ts",
     "./project-shell": "./src/project-shell.ts",
+    "./project-overview": "./src/project-overview.ts",
     "./docs-assets": "./src/docs-assets.ts",
     "./agent-access": "./src/agent-access.ts",
     "./approval-requests": "./src/approval-requests.ts",

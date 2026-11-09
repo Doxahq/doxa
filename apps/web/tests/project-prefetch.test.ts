@@ -11,6 +11,7 @@ import {
   projectDoxabotQueryOptions,
   projectGenerationCacheQueryOptions,
   projectGenerationsQueryOptions,
+  projectOverviewQueryOptions,
 } from "~/lib/queries/dashboard"
 import { docsBranchListQueryOptions } from "~/lib/queries/docs-branches"
 import { doxabotInstructionsQueryOptions } from "~/lib/queries/doxabot-instructions"
@@ -64,6 +65,7 @@ describe("prefetchProjectPage", () => {
         pendingMergesQueryOptions("p1").queryKey,
         projectDoxabotQueryOptions("p1").queryKey,
         projectGenerationsQueryOptions("p1").queryKey,
+        projectOverviewQueryOptions("p1").queryKey,
       ),
       1,
     ],

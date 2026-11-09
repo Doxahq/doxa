@@ -1,6 +1,7 @@
 import { ArrowLeft, Link2 } from "lucide-react"
 import type { DashboardApprovalRequest } from "@doxahq/contracts/approval-requests"
 
+import { RelativeDate } from "~/components/dashboard/exact-date-tooltip"
 import { ApprovalChangedPages } from "~/components/dashboard/content/branches/approval-changed-pages"
 import type { PublishMenuProps } from "~/components/dashboard/content/branches/publish-menu"
 import {
@@ -12,7 +13,7 @@ import {
 import { ApprovalDecision } from "~/components/dashboard/requests/approval-decision"
 import { MenuSectionLabel } from "~/components/dashboard/shell/menu-parts"
 import { Button } from "~/components/ui/button"
-import { erasedBranchOnApprove, formatRequestAge, requesterLabel } from "~/lib/dashboard/approval-request-model"
+import { erasedBranchOnApprove, requesterLabel } from "~/lib/dashboard/approval-request-model"
 
 /**
  * Spec 12.4: an agent's publish request, approved from the publish menu.
@@ -30,7 +31,11 @@ export function ApprovalPanel(props: PublishMenuProps & {
     <div className="flex min-h-[min(580px,calc(100vh-7rem))] flex-col">
       <PanelHeader
         title={`Publish to ${props.host}`}
-        description={`Requested by ${requesterLabel(request.requestedBy)} ${formatRequestAge(request.createdAt)}`}
+        description={
+          <>
+            Requested by {requesterLabel(request.requestedBy)} <RelativeDate date={request.createdAt} />
+          </>
+        }
       />
       {request.summary ? (
         <section className="px-5 pt-5">

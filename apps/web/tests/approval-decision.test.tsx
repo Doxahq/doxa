@@ -7,7 +7,8 @@ import type { DashboardApprovalRequest } from "@doxahq/contracts/approval-reques
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 import { ApprovalDecision } from "~/components/dashboard/requests/approval-decision"
-import { closedRequestMessage, formatRequestAge } from "~/lib/dashboard/approval-request-model"
+import { closedRequestMessage } from "~/lib/dashboard/approval-request-model"
+import { formatRelativeAge } from "~/lib/dashboard/relative-time"
 
 const approve = vi.fn()
 const reject = vi.fn()
@@ -43,7 +44,7 @@ describe("approval request model", () => {
 
   test("formats the request age relative to now", () => {
     const now = Date.parse("2026-10-04T12:00:00Z")
-    expect(formatRequestAge("2026-10-04T11:58:00Z", now)).toBe("2 minutes ago")
+    expect(formatRelativeAge("2026-10-04T11:58:00Z", now)).toBe("2 minutes ago")
   })
 })
 

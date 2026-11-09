@@ -1,3 +1,4 @@
+import { storedBranchAssetBytes } from "../../src/services/docs-branches/assets/asset-pointer";
 import {
   branchIdSchema,
   versionIdSchema,
@@ -416,6 +417,15 @@ export class InMemoryDocsBranchStore
       : null;
   }
 
+  async siteBranchAssetBytes(siteId: string): Promise<number> {
+    const contents = [...this.changes]
+      .filter(([branchId]) => this.branches.get(branchId)?.siteId === siteId)
+      .flatMap(([, rows]) => rows)
+      .filter((row) => row.kind === "upsert" && row.path.startsWith("assets/"))
+      .map((row) => row.content ?? "");
+    return storedBranchAssetBytes(contents);
+  }
+
   async writeChanges(
     input: Parameters<DocsBranchStore["writeChanges"]>[0],
   ): ReturnType<DocsBranchStore["writeChanges"]> {
@@ -429,6 +439,12 @@ export class InMemoryDocsBranchStore
     )
       return "not_found";
     if (branch.revision !== input.expectedRevision) return "revision_changed";
+    if (input.assetQuota) {
+      const usedBytes = await this.siteBranchAssetBytes(site.id);
+      if (usedBytes + input.assetQuota.addedBytes > input.assetQuota.maxBytes) {
+        return "storage_quota_exceeded";
+      }
+    }
     const rows = new Map(
       (this.changes.get(branch.id) ?? []).map((row) => [row.path, row]),
     );

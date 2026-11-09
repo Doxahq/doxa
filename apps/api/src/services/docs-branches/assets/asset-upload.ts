@@ -24,7 +24,14 @@ import type { StorageLimitsService } from "../../entitlements";
 import { freePlanStorageLimits } from "../../free-plan-entitlements";
 import { SiteConfigValidationError } from "../../site-config-validation";
 import { BranchResolver, type ResolvedBranchContext } from "../branch-resolver";
-import { prepareDocsAsset, type PreparedDocsAsset } from "./asset-content";
+import type { ImageCompressor } from "../../site-assets/image-compression";
+import type { SvgCleaner } from "../../site-assets/image-content";
+import { siteUploadsBusy } from "../../site-assets/upload-busy-errors";
+import {
+  compressDocsAsset,
+  prepareDocsAssetIsolated,
+  type PreparedDocsAsset,
+} from "./asset-content";
 import { assetBaseName, assetNameCandidates } from "./asset-name";
 import { encodeBranchAssetPointer } from "./asset-pointer";
 import { branchAssets, type BranchAsset } from "./branch-assets";
@@ -66,6 +73,7 @@ export interface DocsBranchAssetUploadDeps {
     | "listChanges"
     | "writeChanges"
     | "getOrCreateHiddenBranch"
+    | "siteBranchAssetBytes"
   >;
   store: Pick<DocsContentStore, "listKeys" | "versionSize" | "openVersion">;
   storageLimits: StorageLimitsService;
@@ -74,6 +82,8 @@ export interface DocsBranchAssetUploadDeps {
    * collector keeps it while a change row of the branch points to it.
    */
   registerFolder(folder: BranchAssetFolder): Promise<unknown>;
+  compressor?: ImageCompressor | null;
+  svgCleaner?: SvgCleaner | null;
   createId?: () => string;
 }
 
@@ -100,11 +110,17 @@ export class DocsBranchAssetUpload {
       store: createR2DocsContentStore(env.DOCS_BUCKET),
       storageLimits: freePlanStorageLimits,
       registerFolder: (folder) => gcEntries.enqueueBranchAssetFolder(folder),
+      compressor: env.IMAGE_COMPRESSOR ?? null,
+      svgCleaner: env.SVG_CLEANER ?? null,
     });
   }
 
   async upload(input: UploadBranchAssetInput): Promise<UploadedBranchAsset> {
-    const prepared = prepareDocsAsset(input.bytes);
+    // The name, the type, and the hash all follow the bytes that are stored.
+    const prepared = await compressDocsAsset(
+      await prepareDocsAssetIsolated(input.bytes, this.deps.svgCleaner),
+      this.deps.compressor,
+    );
     const sha256 = await sha256Hex(prepared.bytes);
     const baseName = assetBaseName(input.fileName);
     let written: { name: string; folderVersionId: string } | null = null;
@@ -145,7 +161,7 @@ export class DocsBranchAssetUpload {
         );
       }
 
-      await this.assertStorageQuota(input.projectId, context, assets, prepared);
+      const storage = await this.assertStorageQuota(input.projectId, context, prepared);
 
       // A retry after a concurrent write reuses the folder of the same name.
       const folderVersionId: string =
@@ -167,6 +183,7 @@ export class DocsBranchAssetUpload {
         branchId: branch.id,
         expectedRevision: branch.revision,
         origin: input.origin,
+        assetQuota: storage.assetQuota,
         changes: [
           {
             path: docsAssetArtifactPath(choice.name),
@@ -190,6 +207,8 @@ export class DocsBranchAssetUpload {
       if (outcome === "too_many_changes" || outcome === "branch_too_large") {
         throw new SiteConfigValidationError([createValidationIssue(outcome)]);
       }
+      if (outcome === "storage_quota_exceeded") throw storageQuotaExceeded(storage.usage);
+      if (outcome === "quota_busy") throw siteUploadsBusy();
       // revision_changed: another write landed first. Decide again.
     }
 
@@ -235,30 +254,32 @@ export class DocsBranchAssetUpload {
   }
 
   /**
-   * Uploads count with the version size against the plan storage: the base
-   * version, the images the branch already adds, and this file.
+   * The plan storage holds the published version and the images of every
+   * branch of the site. A check of one branch alone would let each branch
+   * use the whole plan. This check runs before the file is written, and
+   * returns the budget that the write checks again with a site lock.
    */
   private async assertStorageQuota(
     projectId: string,
     context: ResolvedBranchContext,
-    assets: readonly BranchAsset[],
     prepared: PreparedDocsAsset,
-  ): Promise<void> {
-    const [limits, versionBytes] = await Promise.all([
+  ): Promise<{ assetQuota: { addedBytes: number; maxBytes: number }; usage: StorageUsage }> {
+    const [limits, versionBytes, branchAssetBytes] = await Promise.all([
       this.deps.storageLimits.getStorageLimits(projectId),
-      this.deps.store.versionSize(context.basePrefix),
+      this.deps.store.versionSize(context.main.artifactPrefix),
+      this.deps.branches.siteBranchAssetBytes(context.main.siteId),
     ]);
-    const usedBytes =
-      (versionBytes ?? 0) +
-      assets.reduce((sum, asset) => sum + asset.pointer.size, 0);
+    const addedBytes = prepared.bytes.byteLength;
+    const usage = {
+      usedBytes: (versionBytes ?? 0) + branchAssetBytes,
+      limitBytes: limits.maxDocsStorageBytes,
+    };
 
-    if (usedBytes + prepared.bytes.byteLength > limits.maxDocsStorageBytes) {
-      throw new DocsContentError(
-        "storage_quota_exceeded",
-        "This image would take the documentation over the storage of the plan.",
-        { usedBytes, limitBytes: limits.maxDocsStorageBytes },
-      );
-    }
+    if (usage.usedBytes + addedBytes > usage.limitBytes) throw storageQuotaExceeded(usage);
+    return {
+      assetQuota: { addedBytes, maxBytes: usage.limitBytes - (versionBytes ?? 0) },
+      usage,
+    };
   }
 
   private async writeFolder(
@@ -301,6 +322,19 @@ export class DocsBranchAssetUpload {
       revision,
     };
   }
+}
+
+interface StorageUsage {
+  usedBytes: number;
+  limitBytes: number;
+}
+
+function storageQuotaExceeded(usage: StorageUsage): DocsContentError {
+  return new DocsContentError(
+    "storage_quota_exceeded",
+    "This image would take the documentation over the storage of the plan.",
+    { usedBytes: usage.usedBytes, limitBytes: usage.limitBytes },
+  );
 }
 
 function requireBranch(context: ResolvedBranchContext): StoredDocsBranch {

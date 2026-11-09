@@ -5,7 +5,15 @@ import {
   type DocsAssetExtension,
 } from "@doxahq/contracts/docs-assets";
 import { DocsContentError } from "../../docs-content/errors";
-import { checkImage } from "../../site-assets/image-content";
+import { compressUploadedImage, type ImageCompressor } from "../../site-assets/image-compression";
+import {
+  checkImage,
+  checkImageIsolated,
+  type CheckedImage,
+  type ImageRules,
+  type SvgCleaner,
+} from "../../site-assets/image-content";
+import { imageWorkerBusy } from "../../site-assets/upload-busy-errors";
 import type { RasterImageType } from "../../site-assets/image-type";
 
 export interface PreparedDocsAsset {
@@ -44,34 +52,67 @@ export type DocsAssetCheck =
   | { readonly ok: true; readonly asset: PreparedDocsAsset }
   | { readonly ok: false; readonly reason: "too_large" | "unsupported_type" };
 
+const DOCS_IMAGE_RULES: ImageRules<DocsAssetContentType> = {
+  maxBytes: DOCS_ASSET_LIMITS.maxBytes,
+  svgProfile: "docs_image",
+  accepts: isDocsRaster,
+};
+
+function toPreparedAsset(
+  image: Extract<CheckedImage<DocsAssetContentType>, { ok: true }>,
+): PreparedDocsAsset {
+  return {
+    bytes: image.bytes,
+    contentType: image.contentType,
+    extension: DOCS_ASSET_EXTENSIONS[image.contentType],
+    sanitized: image.sanitized,
+  };
+}
+
 /**
  * Checks the image with the shared rules and the docs image SVG allowlist,
  * without throwing. The upload URL uses it to refuse a file that is not an
  * image before it stores anything.
  */
 export function checkDocsAsset(bytes: Uint8Array): DocsAssetCheck {
-  const image = checkImage(bytes, {
-    maxBytes: DOCS_ASSET_LIMITS.maxBytes,
-    svgProfile: "docs_image",
-    accepts: isDocsRaster,
-  });
-  if (!image.ok) return image;
-  return {
-    ok: true,
-    asset: {
-      bytes: image.bytes,
-      contentType: image.contentType,
-      extension: DOCS_ASSET_EXTENSIONS[image.contentType],
-      sanitized: image.sanitized,
-    },
-  };
+  const image = checkImage(bytes, DOCS_IMAGE_RULES);
+  return image.ok ? { ok: true, asset: toPreparedAsset(image) } : image;
+}
+
+function refusal(reason: "too_large" | "unsupported_type"): DocsContentError {
+  return reason === "too_large" ? assetTooLarge() : unsupportedType();
 }
 
 /** `checkDocsAsset` for the upload paths that answer with an error. */
 export function prepareDocsAsset(bytes: Uint8Array): PreparedDocsAsset {
   const checked = checkDocsAsset(bytes);
   if (checked.ok) return checked.asset;
-  throw checked.reason === "too_large" ? assetTooLarge() : unsupportedType();
+  throw refusal(checked.reason);
+}
+
+/** `prepareDocsAsset`, with the SVG cleaning away from the API thread when the runtime can. */
+export async function prepareDocsAssetIsolated(
+  bytes: Uint8Array,
+  cleaner: SvgCleaner | null | undefined,
+): Promise<PreparedDocsAsset> {
+  const image = await checkImageIsolated(bytes, DOCS_IMAGE_RULES, cleaner);
+  if (image.ok) return toPreparedAsset(image);
+  throw image.reason === "busy" ? imageWorkerBusy() : refusal(image.reason);
+}
+
+/** The asset to store: smaller when compression helps, else the same one. */
+export async function compressDocsAsset(
+  asset: PreparedDocsAsset,
+  compressor: ImageCompressor | null | undefined,
+): Promise<PreparedDocsAsset> {
+  const compressed = await compressUploadedImage(compressor, asset, "docs_image");
+  if (!compressed) return asset;
+  return {
+    ...asset,
+    bytes: compressed.bytes,
+    contentType: compressed.contentType,
+    extension: DOCS_ASSET_EXTENSIONS[compressed.contentType],
+  };
 }
 
 /**

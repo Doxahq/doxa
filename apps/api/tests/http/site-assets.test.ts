@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   head: vi.fn(),
   put: vi.fn(),
+  list: vi.fn(),
 }));
 vi.mock("../../src/services/agent-access/project-access-repository", async () => {
   const { SessionOwnedProjectAccess } = await import("../support/session-owned-project-access");
@@ -17,6 +18,7 @@ vi.mock("@doxahq/auth", () => ({ getSessionUser: mocks.session }));
 vi.mock("../../src/repositories/projects", () => ({
   ProjectsRepository: class {
     getDocsSiteForUser = mocks.site;
+    withSiteAssetLock = <T>(_siteId: string, work: () => Promise<T>) => work();
   },
 }));
 
@@ -26,7 +28,7 @@ function request(form: FormData) {
   return app.request(
     "https://api.test/projects/11111111-1111-4111-8111-111111111111/assets",
     { method: "POST", body: form },
-    { DOCS_BUCKET: { head: mocks.head, get: mocks.get, put: mocks.put } },
+    { DOCS_BUCKET: { head: mocks.head, get: mocks.get, put: mocks.put, list: mocks.list } },
   );
 }
 function upload(
@@ -44,6 +46,17 @@ describe("site asset upload route", () => {
     mocks.session.mockResolvedValue({ id: "owner" });
     mocks.site.mockResolvedValue({ siteId: "resolved-site" });
     mocks.head.mockResolvedValue(null);
+    mocks.list.mockResolvedValue({ objects: [], truncated: false });
+  });
+  test("refuses a new file when the site is at its limit", async () => {
+    mocks.session.mockResolvedValue({ id: "owner" });
+    mocks.list.mockResolvedValue({
+      objects: Array.from({ length: 200 }, (_, index) => ({ key: `a${index}`, size: 1 })),
+      truncated: false,
+    });
+    const response = await request(upload());
+    expect(response.status).toBe(422);
+    expect(mocks.put).not.toHaveBeenCalled();
   });
   test("requires a session", async () => {
     mocks.session.mockResolvedValue(null);

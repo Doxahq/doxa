@@ -8,9 +8,6 @@ const ACCEPTED_TYPES = new Set(IMAGE_UPLOAD_ACCEPT.split(","))
 /** Wider images are scaled down: twice the article width covers sharp screens. */
 export const MAX_IMAGE_WIDTH = 2400
 
-/** Raster images below this size and width are sent as they are. */
-const SMALL_IMAGE_BYTES = 300 * 1024
-
 const WEBP_QUALITY = 0.86
 
 /** The image files among dropped or pasted files. */
@@ -21,12 +18,14 @@ export function imageFiles(files: Iterable<File> | ArrayLike<File> | null | unde
 /**
  * The file to upload for a picked, pasted or dropped image.
  *
- * Screenshots arrive as large PNGs. A PNG, JPEG or WebP image that is wide
- * or heavy is scaled to `MAX_IMAGE_WIDTH` and stored as WebP, which is often
- * five to ten times smaller. The original is kept when the result is not
- * smaller. GIF (it can be animated) and SVG files are sent as they are.
+ * The server compresses every image that fits its limit, with an encoder
+ * that keeps small text readable, so such a file is sent as it is. Only a
+ * larger PNG, JPEG or WebP image is scaled to `MAX_IMAGE_WIDTH` and converted
+ * to WebP here, so that it fits. GIF (it can be animated) and SVG files are
+ * always sent as they are.
  */
 export async function prepareImageUpload(file: File): Promise<File> {
+  if (file.size <= DOCS_ASSET_LIMITS.maxBytes) return file
   if (file.type === "image/gif" || file.type === "image/svg+xml") return file
 
   let bitmap: ImageBitmap
@@ -37,7 +36,6 @@ export async function prepareImageUpload(file: File): Promise<File> {
   }
 
   try {
-    if (file.size <= SMALL_IMAGE_BYTES && bitmap.width <= MAX_IMAGE_WIDTH) return file
     const scale = Math.min(1, MAX_IMAGE_WIDTH / bitmap.width)
     const width = Math.max(1, Math.round(bitmap.width * scale))
     const height = Math.max(1, Math.round(bitmap.height * scale))

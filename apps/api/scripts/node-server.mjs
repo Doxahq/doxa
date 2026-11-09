@@ -11,22 +11,28 @@
 // apps/api-edge/.dev.vars. Variables set in the shell win.
 //
 // The bundle holds every dependency except Wrangler, which only the local
-// docs bucket of `dev` loads. `cloudflare:workers` resolves to a small shim.
+// docs bucket of `dev` loads, and sharp, which is native code. `build` copies
+// sharp to dist-node/node_modules. `cloudflare:workers` resolves to a small shim.
 
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import * as esbuild from "esbuild";
 
 const appRoot = path.resolve(import.meta.dirname, "..");
 const repoRoot = path.resolve(appRoot, "../..");
-const outfile = path.join(appRoot, "dist-node", "server.mjs");
+const outdir = path.join(appRoot, "dist-node");
+const outfile = path.join(outdir, "server.mjs");
 
 /** @type {import("esbuild").BuildOptions} */
 const buildOptions = {
-  entryPoints: [path.join(appRoot, "src/runtime/node/main.ts")],
-  outfile,
+  entryPoints: {
+    server: path.join(appRoot, "src/runtime/node/main.ts"),
+    "image-worker-child": path.join(appRoot, "src/runtime/node/image-processing/child.ts"),
+  },
+  outdir,
+  outExtension: { ".js": ".mjs" },
   bundle: true,
   platform: "node",
   target: "node24",
@@ -35,7 +41,8 @@ const buildOptions = {
   legalComments: "none",
   alias: { "cloudflare:workers": path.join(appRoot, "src/runtime/node/workers-shim.ts") },
   // Wrangler: dev only. pg-native: an optional pg driver that the server does not use.
-  external: ["wrangler", "pg-native"],
+  // sharp: native code, which a bundle cannot hold.
+  external: ["wrangler", "pg-native", "sharp"],
   // CommonJS dependencies call require(); ESM output has none by default.
   banner: { js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);' },
   logLevel: "warning",
@@ -45,12 +52,32 @@ const command = process.argv[2];
 
 if (command === "build") {
   await esbuild.build(buildOptions);
+  rmSync(path.join(outdir, "node_modules"), { recursive: true, force: true });
+  copyInstalledPackage("sharp", path.join(appRoot, "node_modules"));
   console.log(`[node-server] Built ${path.relative(process.cwd(), outfile)}`);
 } else if (command === "dev") {
   await runDev();
 } else {
   console.error("Usage: node scripts/node-server.mjs build|dev");
   process.exit(1);
+}
+
+/**
+ * Copies a package and its dependencies, as the lockfile installed them. An
+ * optional dependency for another platform is not on disk, so it is skipped.
+ */
+function copyInstalledPackage(name, fromModules, copied = new Set()) {
+  const link = path.join(fromModules, name);
+  if (copied.has(name) || !existsSync(link)) return;
+  copied.add(name);
+  const directory = realpathSync(link);
+  cpSync(directory, path.join(outdir, "node_modules", name), { recursive: true });
+  const { dependencies = {}, optionalDependencies = {} } = JSON.parse(readFileSync(path.join(directory, "package.json"), "utf8"));
+  // pnpm puts a package's dependencies beside it.
+  const siblings = directory.slice(0, -name.length - 1);
+  for (const dependency of Object.keys({ ...dependencies, ...optionalDependencies })) {
+    copyInstalledPackage(dependency, siblings, copied);
+  }
 }
 
 /** Settings of the local origin. The shell environment overrides them. */

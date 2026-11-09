@@ -104,6 +104,7 @@ export function createFakeActionsRpc(
       row.detail = { ...row.detail, status: "cancelled" };
       return { ok: true, value: row.detail };
     },
+    compressImage: async () => null,
   };
   return { rpc, calls };
 }

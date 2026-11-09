@@ -50,6 +50,20 @@ export function parseBranchAssetPointer(
   }
 }
 
+/**
+ * The bytes that branch change rows store as images. A copied branch has
+ * rows that point to the same folder, and that file is stored once. A row
+ * that is no pointer stores no image.
+ */
+export function storedBranchAssetBytes(contents: Iterable<string>): number {
+  const sizes = new Map<string, number>();
+  for (const content of contents) {
+    const pointer = parseBranchAssetPointer(content);
+    if (pointer) sizes.set(pointer.folderVersionId, pointer.size);
+  }
+  return [...sizes.values()].reduce((sum, size) => sum + size, 0);
+}
+
 /** The upload folder of a pointer; it belongs to the branch's site. */
 export function branchAssetFolderPrefix(
   siteId: string,

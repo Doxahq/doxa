@@ -9,6 +9,7 @@ import {
   type ApprovalRequestSummary,
   type PendingApprovalRequest,
 } from "@doxahq/contracts/approval-requests";
+import type { CompressedImage, ImageCompressionInput } from "../site-assets/image-compression";
 
 /**
  * The service-binding contract between doxa-mcp and `AgentActionsApi`.
@@ -75,4 +76,6 @@ export interface AgentActionsRpc {
   getRequestTask(input: RequestRpcInput): Promise<AgentActionsRpcResult<ApprovalRequestTaskSource>>;
   listRequests(input: ListRequestsRpcInput): Promise<AgentActionsRpcResult<ApprovalRequestSummary[]>>;
   cancelRequest(input: RequestRpcInput): Promise<AgentActionsRpcResult<ApprovalRequestDetail>>;
+  /** Null means: store the original. This never throws. */
+  compressImage(input: ImageCompressionInput): Promise<CompressedImage | null>;
 }

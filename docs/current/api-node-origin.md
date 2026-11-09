@@ -64,7 +64,7 @@ origin → edge   header x-doxa-bridge-key (BRIDGE_SHARED_SECRET)
 - RPC values go through `devalue`: `Date`, `Map`, `Set`, `undefined`, `BigInt`
   and typed arrays survive. A thrown error keeps its name and message, as with
   Workers RPC.
-- `API_ENTRYPOINT_METHODS` lists the 39 methods. Tests on both sides check the
+- `API_ENTRYPOINT_METHODS` lists the 42 methods. Tests on both sides check the
   list against the classes. **When you add an RPC method, add it to the list.**
 
 ## Security rules
@@ -106,6 +106,7 @@ origin → edge   header x-doxa-bridge-key (BRIDGE_SHARED_SECRET)
 | `ctx.waitUntil` | `BackgroundTasks`. SIGTERM waits up to `SHUTDOWN_GRACE_MS` (110 s). |
 | `caches.default` | None. The code already works without it. |
 | `cloudflare:workers` | `runtime/node/workers-shim.ts`, through the build alias. |
+| `IMAGE_COMPRESSOR`, `SVG_CLEANER` (no Worker equivalent) | `runtime/node/image-processing/`: `sharp` and the SVG cleaning, one child process for each job. See [mcp-server.md](mcp-server.md#image-compression). |
 | `global_fetch_strictly_public` | `strict-public-fetch.ts`: every `fetch` refuses private, loopback and link-local addresses. The OAuth provider needs it for Client ID Metadata Documents. The server checks the guard at start-up and exits if it does not work. Off in development, as in `wrangler dev`. |
 
 ## Local development

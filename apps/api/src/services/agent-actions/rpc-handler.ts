@@ -25,7 +25,7 @@ export interface AgentActionsRpcDeps {
  * every input again: a service binding is private, but doxa-api still owns
  * the access decision, so it rebuilds the actor and re-authorizes (spec 5.1).
  */
-export class AgentActionsRpcHandler implements AgentActionsRpc {
+export class AgentActionsRpcHandler implements Omit<AgentActionsRpc, "compressImage"> {
   constructor(private readonly deps: AgentActionsRpcDeps) {}
 
   perform(raw: unknown) {

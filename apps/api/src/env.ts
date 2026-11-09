@@ -4,6 +4,8 @@ import type { AgentContainerBinding, GenerationMode } from "@doxahq/generation";
 import type { PrerenderQueueRpc } from "@doxahq/contracts/docs-prerender-tasks";
 import type { EmailQueueMessage } from "@doxahq/email";
 import type { ModelTokenBroker } from "./services/model-access/model-token-broker";
+import type { ImageCompressor } from "./services/site-assets/image-compression";
+import type { SvgCleaner } from "./services/site-assets/image-content";
 
 export interface Env extends AuthEnv {
   DOCS_CACHE_INVALIDATOR?: DocsCacheInvalidationRpc;
@@ -22,6 +24,13 @@ export interface Env extends AuthEnv {
    * has it, from its AWS role; elsewhere generations use the static key.
    */
   MODEL_TOKEN_BROKER?: ModelTokenBroker;
+  /**
+   * Compresses uploaded images. The Node origin has the encoder, and
+   * `doxa-mcp` reaches it over RPC. Without it, uploads store the original.
+   */
+  IMAGE_COMPRESSOR?: ImageCompressor;
+  /** Only the Node origin has it. Elsewhere the Worker's CPU limit bounds a parse. */
+  SVG_CLEANER?: SvgCleaner;
   DATABASE_URL?: string;
   /** The search cluster. Without both, every site stays on browser search. */
   SEARCH_TYPESENSE_HOST?: string;

@@ -5,8 +5,9 @@ import { z } from "zod";
  *
  * An asset is one file of a version at `assets/{name}`. A published version
  * serves it at `/assets/{name}` on the docs host, so a page links to it with
- * that path. The name is a lowercase slug with the extension of the detected
- * type, never the type that the uploaded file name claims.
+ * that path. The name is a lowercase slug with the extension of the stored
+ * type, never the type that the uploaded file name claims. The stored type
+ * can differ from the uploaded one: a PNG or JPEG image can become WebP.
  */
 export const DOCS_ASSET_LIMITS = {
   /** Decoded bytes of one file, on every upload path. */
@@ -211,12 +212,14 @@ export const docsAssetUploadResultSchema = z
   .object({
     path: z
       .string()
-      .describe("The path to use in MDX, for example /assets/diagram.png."),
+      .describe(
+        "The path to use in MDX, for example /assets/diagram.png. Its extension is the stored type, which can differ from the file you sent.",
+      ),
     markdown: z
       .string()
       .describe("An MDX image line with this path and the alt text."),
-    contentType: docsAssetContentTypeSchema,
-    size: z.number().int().nonnegative(),
+    contentType: docsAssetContentTypeSchema.describe("The type of the stored file."),
+    size: z.number().int().nonnegative().describe("The bytes of the stored file."),
     sanitized: z
       .boolean()
       .describe(

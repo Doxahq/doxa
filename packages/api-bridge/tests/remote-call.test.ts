@@ -117,7 +117,7 @@ describe("protocol", () => {
   });
 
   it("lists the 41 RPC methods of the API", () => {
-    expect(Object.values(API_ENTRYPOINT_METHODS).flat()).toHaveLength(41);
+    expect(Object.values(API_ENTRYPOINT_METHODS).flat()).toHaveLength(42);
   });
 });
 

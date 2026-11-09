@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { DOCS_ASSET_LIMITS } from "@doxahq/contracts/docs-assets";
+import { branchIdSchema, versionIdSchema } from "@doxahq/contracts/docs-branches";
 import { buildArtifactPrefix } from "@doxahq/docs-engine";
 import { resolveSiteConfig } from "@doxahq/site-config";
 import {
@@ -24,6 +25,8 @@ import { createMaterializer } from "../../src/services/docs-branches/materialize
 import { computeSyncPlan } from "../../src/services/docs-branches/sync-plan";
 import { prepareWorkingChanges } from "../../src/services/docs-branches/working-changes";
 import { DocsContentError } from "../../src/services/docs-content/errors";
+import type { ImageCompressor } from "../../src/services/site-assets/image-compression";
+import type { SvgCleaner } from "../../src/services/site-assets/image-content";
 import type { DocsContentStore } from "../../src/services/docs-content/store";
 import {
   BASE_PREFIX,
@@ -243,7 +246,9 @@ describe("image names", () => {
   });
 });
 
-function uploadFixture(options: { maxDocsStorageBytes?: number } = {}) {
+function uploadFixture(
+  options: { maxDocsStorageBytes?: number; compressor?: ImageCompressor; svgCleaner?: SvgCleaner } = {},
+) {
   const fixture = createBranchContentFixture();
   const registered: BranchAssetFolder[] = [];
   let next = 0;
@@ -253,11 +258,15 @@ function uploadFixture(options: { maxDocsStorageBytes?: number } = {}) {
     storageLimits: {
       getStorageLimits: async () => ({
         maxDocsStorageBytes: options.maxDocsStorageBytes ?? 100 * 1024 * 1024,
+        maxSiteAssetBytes: 50 * 1024 * 1024,
+        maxSiteAssetFiles: 200,
       }),
     },
     registerFolder: async (folder) => {
       registered.push(folder);
     },
+    compressor: options.compressor ?? null,
+    svgCleaner: options.svgCleaner ?? null,
     createId: () =>
       `20000000-0000-4000-8000-${String(++next).padStart(12, "0")}`,
   });
@@ -267,6 +276,59 @@ function uploadFixture(options: { maxDocsStorageBytes?: number } = {}) {
 }
 
 describe("branch image upload", () => {
+  test("stores the compressed file under the name of its real type", async () => {
+    const compressed = webp();
+    const compress = vi.fn(async () => ({ bytes: compressed, contentType: "image/webp" as const }));
+    const { send, objects, registered, branches, scope } = uploadFixture({ compressor: { compress } });
+
+    const result = await send("Rate limits.png", png(64));
+
+    expect(result).toMatchObject({
+      path: "/assets/rate-limits.webp",
+      contentType: "image/webp",
+      size: compressed.byteLength,
+      sanitized: false,
+    });
+    expect(compress).toHaveBeenCalledWith(expect.objectContaining({ contentType: "image/png", profile: "docs_image" }));
+    const folderPrefix = buildArtifactPrefix(SITE_ID, registered[0]!.versionId);
+    expect(objects.get(`${folderPrefix}/assets/rate-limits.webp`)).toEqual(compressed);
+    expect(objects.has(`${folderPrefix}/assets/rate-limits.png`)).toBe(false);
+    const [change] = await branches.listChanges(scope);
+    expect(change).toMatchObject({ path: "assets/rate-limits.webp", kind: "upsert" });
+  });
+
+  test("a re-upload of the same image returns the path it has", async () => {
+    const compress = vi.fn(async () => ({ bytes: webp(), contentType: "image/webp" as const }));
+    const { send } = uploadFixture({ compressor: { compress } });
+
+    const first = await send("diagram.png", png(64));
+    const second = await send("diagram.png", png(64));
+
+    expect(second).toMatchObject({ path: first.path, reused: true });
+  });
+
+  test("stores the original when compression fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const compress = vi.fn(() => Promise.reject(new Error("no origin")));
+    const { send } = uploadFixture({ compressor: { compress } });
+    const bytes = png(64);
+
+    await expect(send("diagram.png", bytes)).resolves.toMatchObject({
+      path: "/assets/diagram.png",
+      contentType: "image/png",
+      size: bytes.byteLength,
+    });
+    warn.mockRestore();
+  });
+
+  test("refuses a bad file before it reaches the encoder", async () => {
+    const compress = vi.fn(async () => null);
+    const { send } = uploadFixture({ compressor: { compress } });
+
+    await expectRejection(send("notes.png", encode("plain text")), "asset_invalid");
+    expect(compress).not.toHaveBeenCalled();
+  });
+
   test("stores the image as a branch change through a version folder", async () => {
     const { send, branches, scope, objects, registered } = uploadFixture();
     const bytes = png();
@@ -360,6 +422,115 @@ describe("branch image upload", () => {
       send("second.png", png(60)),
       "storage_quota_exceeded",
     );
+  });
+
+  describe("the plan storage covers the whole site", () => {
+    const OTHER_BRANCH = "10000000-0000-4000-8000-000000000099";
+    const OLD_VERSION = "10000000-0000-4000-8000-000000000098";
+
+    async function twoBranches(maxExtraBytes: number, otherBase?: string) {
+      const versionBytes = await createBranchContentFixture().store.versionSize(BASE_PREFIX);
+      const fixture = uploadFixture({
+        maxDocsStorageBytes: (versionBytes ?? 0) + maxExtraBytes,
+      });
+      const first = await fixture.branches.getBranchForUser(fixture.scope);
+      if (!first) throw new Error("The fixture has no branch.");
+      fixture.branches.addBranch({
+        ...first,
+        kind: "named",
+        id: branchIdSchema.parse(OTHER_BRANCH),
+        name: "agent-other",
+        revision: 1,
+        ...(otherBase ? { baseVersionId: versionIdSchema.parse(otherBase) } : {}),
+      });
+      if (otherBase) {
+        fixture.branches.addVersion(otherBase, buildArtifactPrefix(SITE_ID, otherBase));
+      }
+      const sendTo = (branch: string, fileName: string, bytes: Uint8Array) =>
+        fixture.upload.upload({ ...fixture.scope, branch, origin: "mcp", fileName, bytes });
+      return { ...fixture, sendTo };
+    }
+
+    test("counts the images of every branch", async () => {
+      const { sendTo } = await twoBranches(100);
+      await sendTo(BRANCH_ID, "first.png", png(60));
+      await expectRejection(sendTo(OTHER_BRANCH, "second.png", png(60)), "storage_quota_exceeded");
+    });
+
+    test("allows a file that fills the plan exactly and refuses one byte more", async () => {
+      const { sendTo } = await twoBranches(100);
+      await sendTo(BRANCH_ID, "first.png", png(60));
+      await expectRejection(sendTo(OTHER_BRANCH, "over.png", png(41)), "storage_quota_exceeded");
+      await expect(sendTo(OTHER_BRANCH, "fits.png", png(40))).resolves.toBeDefined();
+    });
+
+    test("measures the published version, not an older base of the branch", async () => {
+      const { sendTo } = await twoBranches(10, OLD_VERSION);
+      await expectRejection(sendTo(OTHER_BRANCH, "first.png", png(60)), "storage_quota_exceeded");
+    });
+
+    test("a deleted branch gives its storage back", async () => {
+      const { sendTo, branches } = await twoBranches(100);
+      await sendTo(BRANCH_ID, "first.png", png(60));
+      branches.setChanges(BRANCH_ID, []);
+      await expect(sendTo(OTHER_BRANCH, "second.png", png(60))).resolves.toBeDefined();
+    });
+
+    test("writes no file when the plan is full", async () => {
+      const { sendTo, registered } = await twoBranches(100);
+      await sendTo(BRANCH_ID, "first.png", png(60));
+      registered.length = 0;
+      await expectRejection(sendTo(OTHER_BRANCH, "second.png", png(60)), "storage_quota_exceeded");
+      expect(registered).toEqual([]);
+    });
+
+    test("hands the budget to the write, which checks it under the site lock", async () => {
+      const { sendTo, branches } = await twoBranches(100);
+      const write = vi.spyOn(branches, "writeChanges");
+      await sendTo(BRANCH_ID, "first.png", png(60));
+      expect(write.mock.calls[0]?.[0].assetQuota).toEqual({ addedBytes: 60, maxBytes: 100 });
+    });
+
+    test("refuses when a parallel upload took the last bytes first", async () => {
+      const { sendTo, branches, scope } = await twoBranches(100);
+      vi.spyOn(branches, "writeChanges").mockResolvedValueOnce("storage_quota_exceeded");
+      await expectRejection(sendTo(BRANCH_ID, "first.png", png(60)), "storage_quota_exceeded");
+      expect(await branches.listChanges(scope)).toEqual([]);
+    });
+
+    test("stores nothing when the site lock stays busy", async () => {
+      const { sendTo, branches, scope } = await twoBranches(100);
+      vi.spyOn(branches, "writeChanges").mockResolvedValueOnce("quota_busy");
+      await expectRejection(sendTo(BRANCH_ID, "first.png", png(60)), "asset_upload_busy");
+      expect(await branches.listChanges(scope)).toEqual([]);
+    });
+
+    test("counts a copied branch once: its rows share one stored file", async () => {
+      const { sendTo, branches, scope } = await twoBranches(100);
+      await sendTo(BRANCH_ID, "first.png", png(60));
+      branches.setChanges(OTHER_BRANCH, await branches.listChanges(scope));
+      await expect(sendTo(OTHER_BRANCH, "fits.png", png(40))).resolves.toBeDefined();
+    });
+
+    test("reports the whole plan in the refusal", async () => {
+      const { sendTo } = await twoBranches(100);
+      await sendTo(BRANCH_ID, "first.png", png(60));
+      const versionBytes = await createBranchContentFixture().store.versionSize(BASE_PREFIX);
+      await expect(sendTo(OTHER_BRANCH, "second.png", png(60))).rejects.toMatchObject({
+        code: "storage_quota_exceeded",
+        details: { usedBytes: (versionBytes ?? 0) + 60, limitBytes: (versionBytes ?? 0) + 100 },
+      });
+    });
+  });
+
+  test("sends an SVG file to the isolated cleaner, and stores nothing without a result", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fixture = uploadFixture({
+      svgCleaner: { clean: () => Promise.reject(new Error("timed out")) },
+    });
+    await expectRejection(fixture.send("a.svg", encode(svg(""))), "asset_upload_busy");
+    expect(fixture.registered).toEqual([]);
+    warn.mockRestore();
   });
 
   test("rejects a spoofed file before any write", async () => {

@@ -7,14 +7,12 @@ import { createApiRouter } from "../http/app";
 import { withProjectAccess } from "../http/project-access";
 import { readBoundedBody, RequestBodyTooLarge } from "../http/bounded-body";
 import { error, json, validationError } from "../http/response";
-import { ProjectsRepository } from "../repositories/projects";
 import {
   DocsContentError,
   getDocsContentErrorStatus,
 } from "../services/docs-content/errors";
 import { SiteConfigValidationError } from "../services/site-config-validation";
 import { SiteAssetsService } from "../services/site-assets/service";
-import { createR2SiteAssetStore } from "../services/site-assets/store";
 
 const MAX_MULTIPART_BYTES = SITE_ASSET_MAX_BYTES.ogImage + 16 * 1024;
 
@@ -49,10 +47,7 @@ export function createSiteAssetsRoutes() {
             400,
           );
         }
-        const service = new SiteAssetsService(
-          new ProjectsRepository(context.env),
-          createR2SiteAssetStore(context.env.DOCS_BUCKET),
-        );
+        const service = SiteAssetsService.fromEnv(context.env);
         return json(
           await service.upload(
             access.ownerUserId,
@@ -68,10 +63,7 @@ export function createSiteAssetsRoutes() {
   app.get("/:hash", (context) =>
     withProjectAccess(context, "docs.read", (access) =>
       run(() => {
-        const service = new SiteAssetsService(
-          new ProjectsRepository(context.env),
-          createR2SiteAssetStore(context.env.DOCS_BUCKET),
-        );
+        const service = SiteAssetsService.fromEnv(context.env);
         return service.preview(
           access.ownerUserId,
           access.projectId,

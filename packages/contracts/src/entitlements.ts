@@ -20,12 +20,18 @@ export const FREE_PLAN_ENTITLEMENTS = {
  * generation job messages: a new field there would break older consumers.
  */
 export interface PlanStorageLimits {
-  /** Bytes of one docs version, with the images that a branch adds. */
+  /** Bytes of the published docs version, with the images of every branch. */
   maxDocsStorageBytes: number;
+  /** Bytes of the logos, favicons, and social images that one site stores. */
+  maxSiteAssetBytes: number;
+  /** Files that one site stores for them. Each upload of a new file adds one. */
+  maxSiteAssetFiles: number;
 }
 
 export const FREE_PLAN_STORAGE_LIMITS = {
   maxDocsStorageBytes: 100 * 1024 * 1024,
+  maxSiteAssetBytes: 50 * 1024 * 1024,
+  maxSiteAssetFiles: 200,
 } as const satisfies PlanStorageLimits;
 
 /**

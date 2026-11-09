@@ -237,6 +237,11 @@ approved publish of the branch. `build_preview` shows it too.
 - Type: from the bytes, never from the file name. PNG, JPEG, WebP, and GIF
   by their signatures. Any other file must be UTF-8 SVG text that parses as
   XML; anything else fails with `asset_invalid`.
+- SVG limits: `svg-parser.ts` stops the parser at 64 levels below the root, at
+  256 attributes on one element, and at 100,000 elements in one file. The
+  parser's work grows with the square of the first two, and the parsed tree
+  must fit the heap of the isolated cleaner. A file past any limit fails with
+  `asset_invalid`, on every runtime.
 - SVG cost: the cleaner reads the parsed tree with sibling pointers and
   builds the kept nodes into a new tree with appends only, so it is linear
   (60,000 elements in about 0.3 s; the old in-place walk took minutes,
@@ -278,15 +283,25 @@ approved publish of the branch. `build_preview` shows it too.
   Comments and namespace declarations do not count.
 - Size: 2 MB decoded on every upload path (`asset_too_large`). The MCP body
   limit is 4 MiB, so the base64 of the largest image fits in `upload_asset`.
+- Compression: see "Image compression" below. A PNG or JPEG image can be
+  stored as WebP, so the returned `path`, `contentType` and `size` describe
+  the stored file. The PUT receipt of an upload URL reports the bytes as sent.
 - Names: the file name becomes a lowercase slug with the extension of the
-  detected type (`Rate Limits.PNG` with JPEG bytes becomes
+  stored type (`Rate Limits.PNG` with JPEG bytes becomes
   `rate-limits.jpg`). A new upload never replaces a file: a name that the
   branch or its base already has gets `-2`, `-3`, and so on. The same bytes
   under a name the branch already has return that path with `reused: true`
   and write nothing.
-- Quota: 50 images on one branch (`asset_limit_reached`). The base version
-  size plus the branch images plus the new file must fit the plan storage
-  (`storage_quota_exceeded`, free plan 100 MiB, `FREE_PLAN_STORAGE_LIMITS`).
+- Quota: 50 images on one branch (`asset_limit_reached`). The published
+  version, the images of all branches of the site, and the new file must fit
+  the plan storage (`storage_quota_exceeded`, free plan 100 MiB,
+  `FREE_PLAN_STORAGE_LIMITS`). The write checks this again under a site lock,
+  so parallel uploads to different branches cannot pass it together.
+- Site assets: logos, favicons, and social images have their own limit, 200
+  files and 50 MiB for each site (`storage_quota_exceeded`). A site lock makes
+  the check and the write one step. A repeated upload of a stored file needs
+  no quota. Nothing deletes an old site asset yet, so replacing a logo uses up
+  this limit.
 - Storage: the upload writes a one-file version folder with the version tree
   writer, then a branch change at `assets/{name}` whose content is a pointer
   to that folder (`asset-pointer.ts`). Publish and preview copy the tree
@@ -299,6 +314,56 @@ approved publish of the branch. `build_preview` shows it too.
   folder.
 - The dashboard editor does not show branch images yet: its preview has no
   route for them.
+
+### Image compression
+
+Every server upload path compresses PNG and JPEG images before it picks the
+name and the hash: the dashboard editor, `upload_asset`, `finish_asset_upload`,
+logos, and OG images. Favicons, WebP, GIF, APNG, and SVG files are not
+compressed. An SVG file is still cleaned.
+
+The smallest candidate wins. It must be at least 10% smaller than the upload.
+
+| Upload | Candidates |
+|---|---|
+| Docs image or logo, PNG | Palette PNG, WebP quality 90 with `smartSubsample` |
+| Docs image or logo, JPEG | WebP quality 90 with `smartSubsample` |
+| OG image, PNG | Palette PNG |
+| OG image, JPEG | mozjpeg quality 86, 4:4:4 |
+
+Docs images are scaled to at most 2400 pixels wide. A candidate removes all
+metadata, after it applies the EXIF orientation. When the original file is
+kept, its metadata stays. A CMYK JPEG without a color profile is kept as sent.
+
+The encoder (`sharp`) is native code, so it runs only on the Node origin, in
+`apps/api/src/runtime/node/image-processing/`. `Env.IMAGE_COMPRESSOR` holds it.
+`doxa-mcp` is a Worker, so it calls `AgentActionsApi.compressImage` over its
+`PLATFORM_ACTIONS` binding, and waits at most 8 seconds.
+
+Each job runs in a new child process:
+
+- The child has no secrets: its environment holds only `NODE_ENV`.
+- The child can decode only PNG and JPEG with `sharp`.
+- `limitInputPixels` is 40 million, and `failOn` is `warning`. An image wider
+  than 16383 or taller than 32767 pixels is kept as sent, before it is decoded.
+- A job has 10 seconds, then the parent kills the child with SIGKILL.
+- The JavaScript heap of a child is limited to 512 MB.
+- Two jobs run at one time, and 16 can wait for at most 8 seconds. In a test on 2 vCPU and 4 GB,
+  a burst of 22 MP files peaked at about 740 MB, and the longest job took
+  5.4 seconds.
+
+If compression fails, times out, or finds no free place, the upload stores the
+original file and logs the reason. Compression never fails an upload. The
+dashboard editor sends a file of 2 MB or less as it is. Only a larger file is
+converted in the browser, so that it fits the limit.
+
+SVG cleaning on the Node origin (`Env.SVG_CLEANER`) runs in the same child
+processes, with the same limits, so a parse never stops the API thread. A
+file with no result is not stored (`asset_upload_busy`). `doxa-mcp` cleans in
+the Worker, where the CPU limit of the request bounds the work.
+
+Images that were uploaded before this feature stay as they are. Published
+version trees pin their hashes, and a format change needs edits to MDX paths.
 
 ### Upload URLs
 

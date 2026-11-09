@@ -202,7 +202,7 @@ branch is erased, the channel is erased and collection can start at once.
 | Changed paths for each branch | 2,000 |
 | Changed content for each branch | 32 MiB |
 | One page source | 512 KiB |
-| Images for each branch | 50, 5 MB each, within the plan storage |
+| Images for each branch | 50, 2 MB each, within the plan storage |
 | Preview builds for each branch | One every 10 seconds |
 
 The branch count comes from project entitlements. Hidden branches do not count

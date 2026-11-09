@@ -91,7 +91,7 @@ export const API_ENTRYPOINT_METHODS = {
   ],
   PrerenderTaskApi: ["validate", "heartbeat", "complete", "fail", "enqueueRepair"],
   OAuthTokenValidator: ["validateToken"],
-  AgentActionsApi: ["perform", "getRequest", "getRequestTask", "listRequests", "cancelRequest"],
+  AgentActionsApi: ["perform", "getRequest", "getRequestTask", "listRequests", "cancelRequest", "compressImage"],
   EmailDeliveryApi: ["claimEmailDelivery", "recordEmailAttempt"],
 } as const;
 

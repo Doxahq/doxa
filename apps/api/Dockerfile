@@ -17,7 +17,7 @@ RUN pnpm install --filter @doxahq/api... --frozen-lockfile
 RUN pnpm --filter "@doxahq/api^..." build
 RUN node apps/api/scripts/node-server.mjs build
 
-# The bundle holds every dependency, so the runtime image needs only Node and the bundle.
+# dist-node holds the bundle and sharp, so the runtime image needs only Node and that folder.
 FROM node:24-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app

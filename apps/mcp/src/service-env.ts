@@ -1,6 +1,7 @@
 import type { GenerateJobMessage } from "@doxahq/contracts";
 import type { Env } from "@doxahq/api/env";
 import type { McpEnv } from "./mcp-env";
+import { createRemoteImageCompressor } from "./services/remote-image-compressor";
 
 const NO_QUEUE_MESSAGE =
   "The MCP Worker has no generation queue. Generation actions run in doxa-api.";
@@ -23,6 +24,9 @@ export function toServiceEnv(env: McpEnv): Env {
     DATABASE_URL: env.DATABASE_URL,
     DOCS_BUCKET: env.DOCS_BUCKET,
     GENERATION_QUEUE: unavailableQueue,
+    ...(env.PLATFORM_ACTIONS
+      ? { IMAGE_COMPRESSOR: createRemoteImageCompressor(env.PLATFORM_ACTIONS) }
+      : {}),
     WEB_ORIGIN: env.WEB_ORIGIN,
     DOCS_BASE_DOMAIN: env.DOCS_BASE_DOMAIN,
     DOCS_RENDERER_BASE_URL: env.DOCS_RENDERER_BASE_URL,

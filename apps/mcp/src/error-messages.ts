@@ -46,7 +46,7 @@ const DOCS_CONTENT_HINTS: Partial<Record<DocsContentErrorCode, string>> = {
     "Call create_asset_upload for a new upload URL, send the file to it with PUT, then call finish_asset_upload.",
   asset_upload_limit_reached:
     "Call finish_asset_upload for the uploads you started, or wait details.retryAfterSeconds for one to expire, then call create_asset_upload again. details.scope says whether this connection or this member is at the limit.",
-  asset_upload_busy: "Call create_asset_upload again.",
+  asset_upload_busy: "Send the same call again in a moment.",
   asset_upload_not_sent:
     "Send the file to uploadUrl with an HTTP PUT first (the curl command of create_asset_upload), then call finish_asset_upload again.",
   asset_limit_reached:

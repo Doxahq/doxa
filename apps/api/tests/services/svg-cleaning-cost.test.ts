@@ -17,15 +17,91 @@ function timed(input: string) {
   return { result, ms: performance.now() - started };
 }
 
+const TWO_MB = 2_000_000;
+/**
+ * Large enough to show quadratic work as a clear failure, and small enough
+ * that a regression fails the test in about a minute. At 2 MB it would run
+ * for hours, because a regular expression cannot be interrupted.
+ */
+const STYLE_TEST_SIZE = 200_000;
+
+/** Repeats `unit` until the document has about `size` characters. */
+const filled = (open: string, unit: string, close: string, size = TWO_MB) =>
+  open + unit.repeat(Math.floor((size - open.length - close.length) / unit.length)) + close;
+const SVG_OPEN = '<svg xmlns="http://www.w3.org/2000/svg">';
+
 describe("SVG cleaning cost", () => {
+  test.each([
+    ["a style attribute of one long name", filled(`${SVG_OPEN}<g style="`, "a", '"/></svg>', STYLE_TEST_SIZE)],
+    ["a style element of one long name", filled(`${SVG_OPEN}<style>`, "a", "</style></svg>", STYLE_TEST_SIZE)],
+    ["a style of names and spaces", filled(`${SVG_OPEN}<g style="`, "a   ", '"/></svg>', STYLE_TEST_SIZE)],
+    ["a style of many safe functions", filled(`${SVG_OPEN}<g style="`, "rgb(", '"/></svg>', STYLE_TEST_SIZE)],
+    ["the most flat elements", filled(SVG_OPEN, "<g/>", "</svg>", 390_000)],
+    ["text between the most elements", filled(SVG_OPEN, "x<g/>", "</svg>", 480_000)],
+    ["many leaves under the deepest namespace chain", filled(
+      `${SVG_OPEN}${Array.from({ length: 63 }, (_, i) => `<g xmlns:p${i}="u">`).join("")}`,
+      "<g/>",
+      `${"</g>".repeat(63)}</svg>`,
+      360_000,
+    )],
+    ["elements with the most attributes", filled(
+      SVG_OPEN,
+      `<g ${Array.from({ length: 250 }, (_, i) => `a${i}="1"`).join(" ")}/>`,
+      "</svg>",
+    )],
+  ])("cleans %s in linear time", (_name, input) => {
+    expect(timed(input).ms).toBeLessThan(5_000);
+  }, 180_000);
+
+  test.each([
+    ["2 MB of empty elements", filled(SVG_OPEN, "<g/>", "</svg>")],
+    ["nested groups", svg("<g>".repeat(200_000) + "</g>".repeat(200_000))],
+    ["a nested namespace chain", (() => {
+      const opens = Array.from({ length: 40_000 }, (_, i) => `<g xmlns:p${i}="u">`).join("");
+      return svg(opens + "</g>".repeat(40_000));
+    })()],
+    ["one element with 60k attributes", svg(`<g ${Array.from({ length: 60_000 }, (_, i) => `a${i}="1"`).join(" ")}/>`)],
+  ])("refuses %s at once", (_name, input) => {
+    const started = performance.now();
+    expect(() => cleanSvg(input, "docs_image")).toThrow();
+    expect(performance.now() - started).toBeLessThan(2_000);
+  }, 180_000);
+
+  test("allows 64 levels below the root and refuses 65", () => {
+    const nested = (levels: number) => svg("<g>".repeat(levels) + "</g>".repeat(levels));
+    expect(() => cleanSvg(nested(64), "docs_image")).not.toThrow();
+    expect(() => cleanSvg(nested(65), "docs_image")).toThrow();
+  });
+
+  test("allows 100,000 elements with the root and refuses one more", () => {
+    expect(() => cleanSvg(svg("<g/>".repeat(99_999)), "docs_image")).not.toThrow();
+    expect(() => cleanSvg(svg("<g/>".repeat(100_000)), "docs_image")).toThrow();
+  });
+
+  test("allows 256 attributes on an element and refuses 257", () => {
+    const element = (count: number) =>
+      svg(`<g ${Array.from({ length: count }, (_, i) => `a${i}="1"`).join(" ")}/>`);
+    expect(() => cleanSvg(element(256), "docs_image")).not.toThrow();
+    expect(() => cleanSvg(element(257), "docs_image")).toThrow();
+  });
+
+  test("still removes a style with an unknown function", () => {
+    const style = (value: string) => cleanSvg(svg(`<g style="${value}"/>`), "docs_image").removedCount;
+    for (const unsafe of ["x:foo(1)", "x:FOO (1)", "x:foo-bar(1)", "x:1foo(1)", "x:a_b(1)", "x:rgb(foo(1))"]) {
+      expect(style(unsafe), unsafe).toBe(1);
+    }
+    for (const safe of ["fill:rgb(1,2,3)", "transform:RotAte (1deg)", "color:red", "x:(1)"]) {
+      expect(style(safe), safe).toBe(0);
+    }
+  });
+
   test.each([
     ["60k allowed siblings", svg('<path d="M0 0"/>'.repeat(60_000))],
     ["60k removed siblings", svg("<foo/>".repeat(60_000))],
     ["60k siblings with a removed attribute", svg('<path d="M0 0" onclick="x()"/>'.repeat(60_000))],
-    ["200k nested groups", svg("<g>".repeat(200_000) + "</g>".repeat(200_000))],
     ["30k <use> elements of an ID that 30k elements share", svg('<g id="a"/>'.repeat(30_000) + '<use href="#a"/>'.repeat(30_000))],
-    ["150k elements that share one ID", svg('<g id="a"/>'.repeat(150_000) + '<use href="#a"/>')],
-    ["a 100k-step <use> chain", svg(Array.from({ length: 100_000 }, (_, i) => `<use id="u${i}" href="#u${i + 1}"/>`).join("") + '<g id="u100000"/>')],
+    ["90k elements that share one ID", svg('<g id="a"/>'.repeat(90_000) + '<use href="#a"/>')],
+    ["a 99k-step <use> chain", svg(Array.from({ length: 99_000 }, (_, i) => `<use id="u${i}" href="#u${i + 1}"/>`).join("") + '<g id="u100000"/>')],
   ])("cleans %s in linear time", (_name, input) => {
     // Linear work takes well under a second; the quadratic walk took minutes.
     expect(timed(input).ms).toBeLessThan(5_000);

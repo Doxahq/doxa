@@ -3,7 +3,10 @@ import { SITE_ASSET_MAX_BYTES, type SiteAssetKind } from "@doxahq/site-config";
 import { siteAssetUploadResponseSchema } from "@doxahq/contracts/site-assets";
 import { prepareSiteAsset } from "../../src/services/site-assets/content";
 import { sanitizeSvg } from "../../src/services/site-assets/svg";
+import type { ImageCompressor } from "../../src/services/site-assets/image-compression";
+import type { SvgCleaner } from "../../src/services/site-assets/image-content";
 import { SiteAssetsService } from "../../src/services/site-assets/service";
+import { SiteConfigValidationError } from "../../src/services/site-config-validation";
 import type {
   SiteAssetMetadata,
   SiteAssetStore,
@@ -137,7 +140,19 @@ describe("asset preparation", () => {
   });
 });
 
-function fixture() {
+const LIMITS = {
+  maxDocsStorageBytes: 100 * 1024 * 1024,
+  maxSiteAssetBytes: 1_000,
+  maxSiteAssetFiles: 3,
+};
+
+function fixture(
+  options: {
+    compressor?: ImageCompressor | null;
+    svgCleaner?: SvgCleaner | null;
+    limits?: typeof LIMITS;
+  } = {},
+) {
   const entries = new Map<string, SiteAssetMetadata & { bytes: ArrayBuffer }>();
   const store: SiteAssetStore = {
     async head(site, hash) {
@@ -152,14 +167,183 @@ function fixture() {
         bytes: Uint8Array.from(bytes).buffer,
       });
     }),
+    async usage(site) {
+      const stored = [...entries].filter(([key]) => key.startsWith(`${site}/`));
+      return {
+        files: stored.length,
+        bytes: stored.reduce((sum, [, entry]) => sum + entry.bytes.byteLength, 0),
+      };
+    },
   };
+  // Like the database lock: one upload of a site at a time.
+  let lastUpload: Promise<unknown> = Promise.resolve();
+  let lockCount = 0;
   const sites = {
     getDocsSiteForUser: vi.fn(async (user: string, project: string) =>
       user === "owner" ? { siteId: project } : null,
     ),
+    withSiteAssetLock<T>(_site: string, work: () => Promise<T>): Promise<T> {
+      lockCount += 1;
+      const run = lastUpload.then(work, work);
+      lastUpload = run.catch(() => undefined);
+      return run;
+    },
   };
-  return { store, entries, service: new SiteAssetsService(sites, store) };
+  const service = new SiteAssetsService({
+    sites,
+    store,
+    storageLimits: { getStorageLimits: async () => options.limits ?? LIMITS },
+    compressor: options.compressor ?? null,
+    svgCleaner: options.svgCleaner ?? null,
+  });
+  return { store, entries, service, lockCount: () => lockCount };
 }
+
+const uniquePng = (seed: number, size = 64) => {
+  const bytes = png(size);
+  bytes[size - 1] = seed;
+  return bytes;
+};
+
+describe("site asset quota", () => {
+  test("refuses a new file when the file count is full", async () => {
+    const { service, store } = fixture();
+    for (const seed of [1, 2, 3]) await service.upload("owner", "site", "logo", uniquePng(seed));
+
+    await expect(service.upload("owner", "site", "logo", uniquePng(4))).rejects.toMatchObject({
+      code: "storage_quota_exceeded",
+    });
+    expect(store.write).toHaveBeenCalledTimes(3);
+  });
+
+  test("allows a file that fills the byte limit exactly and refuses one byte more", async () => {
+    const limits = { ...LIMITS, maxSiteAssetFiles: 10 };
+    const { service } = fixture({ limits });
+    await service.upload("owner", "site", "logo", uniquePng(1, 600));
+
+    await expect(service.upload("owner", "site", "logo", uniquePng(2, 401))).rejects.toMatchObject({
+      code: "storage_quota_exceeded",
+    });
+    await expect(service.upload("owner", "site", "logo", uniquePng(3, 400))).resolves.toBeDefined();
+  });
+
+  test("a repeated upload of a stored file needs no quota", async () => {
+    const { service, store } = fixture();
+    for (const seed of [1, 2, 3]) await service.upload("owner", "site", "logo", uniquePng(seed));
+
+    await expect(service.upload("owner", "site", "logo", uniquePng(2))).resolves.toBeDefined();
+    expect(store.write).toHaveBeenCalledTimes(3);
+  });
+
+  test("counts each site apart", async () => {
+    const { service } = fixture();
+    for (const seed of [1, 2, 3]) await service.upload("owner", "site-a", "logo", uniquePng(seed));
+    await expect(service.upload("owner", "site-b", "logo", uniquePng(9))).resolves.toBeDefined();
+  });
+
+  test("parallel uploads store exactly the limit", async () => {
+    const limits = { ...LIMITS, maxSiteAssetFiles: 5, maxSiteAssetBytes: 1_000_000 };
+    const { service, store } = fixture({ limits });
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 30 }, (_, seed) => service.upload("owner", "site", "logo", uniquePng(seed))),
+    );
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(5);
+    expect(store.write).toHaveBeenCalledTimes(5);
+  });
+
+  test("checks the stored size after compression, inside the lock", async () => {
+    const compressed = Uint8Array.from([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 32]);
+    const compressor: ImageCompressor = {
+      compress: async () => ({ bytes: compressed, contentType: "image/webp" }),
+    };
+    const limits = { ...LIMITS, maxSiteAssetBytes: compressed.byteLength };
+    const { service, lockCount } = fixture({ compressor, limits });
+
+    await expect(service.upload("owner", "site", "logo", png(5_000))).resolves.toBeDefined();
+    expect(lockCount()).toBe(1);
+  });
+});
+
+describe("SVG cleaning away from the API thread", () => {
+  const svgBytes = () => new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
+
+  test("sends SVG files to the cleaner, and stores what it returns", async () => {
+    const cleaned = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"><g/></svg>');
+    const clean = vi.fn(async () => ({ bytes: cleaned, removedCount: 1 }));
+    const { service, entries } = fixture({ svgCleaner: { clean } });
+
+    const result = await service.upload("owner", "site", "logo", svgBytes());
+
+    expect(clean).toHaveBeenCalledWith(expect.objectContaining({ profile: "site" }));
+    expect(result).toMatchObject({ contentType: "image/svg+xml", size: cleaned.byteLength });
+    expect(result.warnings).toHaveLength(1);
+    expect(new Uint8Array([...entries.values()][0]!.bytes)).toEqual(cleaned);
+  });
+
+  test("never sends a raster file to the cleaner", async () => {
+    const clean = vi.fn(async () => null);
+    const { service } = fixture({ svgCleaner: { clean } });
+    await service.upload("owner", "site", "logo", png(64));
+    expect(clean).not.toHaveBeenCalled();
+  });
+
+  test("refuses a file that the cleaner rejects as invalid", async () => {
+    const { service, store } = fixture({ svgCleaner: { clean: async () => null } });
+    await expect(service.upload("owner", "site", "logo", svgBytes())).rejects.toBeInstanceOf(
+      SiteConfigValidationError,
+    );
+    expect(store.write).not.toHaveBeenCalled();
+  });
+
+  test("stores nothing when the cleaner gives no result", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { service, store } = fixture({
+      svgCleaner: { clean: () => Promise.reject(new Error("timed out")) },
+    });
+    await expect(service.upload("owner", "site", "logo", svgBytes())).rejects.toMatchObject({
+      code: "asset_upload_busy",
+    });
+    expect(store.write).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test("cleans in the thread when the runtime has no cleaner", async () => {
+    const { service } = fixture();
+    await expect(service.upload("owner", "site", "logo", svgBytes())).resolves.toMatchObject({
+      contentType: "image/svg+xml",
+    });
+  });
+});
+
+describe("site asset compression", () => {
+  const webpBytes = () =>
+    Uint8Array.from([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 32]);
+
+  test.each([
+    ["logo", "logo"],
+    ["ogImage", "og_image"],
+  ] as const)("compresses a %s with the %s profile", async (kind, profile) => {
+    const compress = vi.fn(async () => ({ bytes: webpBytes(), contentType: "image/webp" as const }));
+    const { service, entries } = fixture({ compressor: { compress } });
+
+    const result = await service.upload("owner", "site", kind, png(64));
+
+    expect(compress).toHaveBeenCalledWith(expect.objectContaining({ profile }));
+    expect(result).toMatchObject({ contentType: "image/webp", size: webpBytes().byteLength });
+    expect([...entries.values()][0]).toMatchObject({ contentType: "image/webp" });
+  });
+
+  test("never compresses a favicon", async () => {
+    const compress = vi.fn(async () => null);
+    const { service } = fixture({ compressor: { compress } });
+
+    await service.upload("owner", "site", "favicon", png(64));
+
+    expect(compress).not.toHaveBeenCalled();
+  });
+});
 
 describe("site assets service", () => {
   test("rejects uploads from a non-owner before storage access", async () => {

@@ -2,6 +2,8 @@ import { and, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
 import { createDb, schema } from "@doxahq/db";
 import type { ProjectDto } from "@doxahq/contracts";
 import type { Env } from "../env";
+import { siteUploadsBusy } from "../services/site-assets/upload-busy-errors";
+import { runWithSiteLock, SITE_LOCK_BUSY, SITE_LOCKS } from "./site-advisory-lock";
 import {
   createDocsNamespaceLookup,
   isHostnameAvailable,
@@ -35,6 +37,16 @@ export class CreateProjectError extends Error {
 
 const MAX_SLUG_ATTEMPTS = 50;
 
+const SITE_ASSET_LOCK_DEADLINE_MS = 15_000;
+
+function withinDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(siteUploadsBusy()), SITE_ASSET_LOCK_DEADLINE_MS);
+  });
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
+}
+
 export class ProjectsRepository {
   private readonly db;
   private readonly docsBaseDomain: string | undefined;
@@ -42,6 +54,19 @@ export class ProjectsRepository {
   constructor(env: Env) {
     this.db = createDb(env);
     this.docsBaseDomain = env.DOCS_BASE_DOMAIN;
+  }
+
+  /**
+   * A transaction only carries the lock: R2 holds the files. The deadline
+   * frees the lock if a storage call stalls, because the storage client has
+   * no timeout of its own.
+   */
+  async withSiteAssetLock<T>(siteId: string, work: () => Promise<T>): Promise<T> {
+    const result = await runWithSiteLock(this.db, SITE_LOCKS.siteAssetUploads, siteId, () =>
+      withinDeadline(work()),
+    );
+    if (result === SITE_LOCK_BUSY) throw siteUploadsBusy();
+    return result;
   }
 
   async getDocsSiteForUser(

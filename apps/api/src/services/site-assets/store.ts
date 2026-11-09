@@ -22,6 +22,13 @@ export interface SiteAssetStore {
     bytes: Uint8Array,
     metadata: SiteAssetMetadata,
   ): Promise<void>;
+  /** What the site stores now. */
+  usage(siteId: string): Promise<SiteAssetUsage>;
+}
+
+export interface SiteAssetUsage {
+  files: number;
+  bytes: number;
 }
 
 function metadata(object: R2Object): SiteAssetMetadata | null {
@@ -34,8 +41,8 @@ function metadata(object: R2Object): SiteAssetMetadata | null {
 }
 
 export function createR2SiteAssetStore(bucket: R2Bucket): SiteAssetStore {
-  const key = (siteId: string, hash: string) =>
-    `sites/${siteId}/assets/${hash}`;
+  const prefix = (siteId: string) => `sites/${siteId}/assets/`;
+  const key = (siteId: string, hash: string) => `${prefix(siteId)}${hash}`;
   return {
     async head(siteId, hash) {
       const object = await bucket.head(key(siteId, hash));
@@ -56,6 +63,19 @@ export function createR2SiteAssetStore(bucket: R2Bucket): SiteAssetStore {
         httpMetadata: { contentType: info.contentType },
         customMetadata: { kind: info.kind },
       });
+    },
+    async usage(siteId) {
+      const usage: SiteAssetUsage = { files: 0, bytes: 0 };
+      let cursor: string | undefined;
+      do {
+        const page = await bucket.list({ prefix: prefix(siteId), cursor });
+        for (const object of page.objects) {
+          usage.files += 1;
+          usage.bytes += object.size;
+        }
+        cursor = page.truncated ? page.cursor : undefined;
+      } while (cursor);
+      return usage;
     },
   };
 }

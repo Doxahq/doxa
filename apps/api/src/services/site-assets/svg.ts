@@ -1,13 +1,12 @@
 import {
-  DOMParser,
   XMLSerializer,
-  onErrorStopParsing,
   type Attr,
   type Node,
   type Document,
   type Element,
 } from "@xmldom/xmldom";
 import { applyDrawBudget } from "./svg-draw-budget";
+import { parseSvgDocument } from "./svg-parser";
 import {
   LOCAL_HREF,
   LOCAL_URL,
@@ -152,6 +151,28 @@ const ALLOWLISTS: Record<SvgProfile, Allowlist> = {
 
 const XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
 
+const SAFE_CSS_FUNCTIONS = new Set([
+  "rgb",
+  "rgba",
+  "hsl",
+  "hsla",
+  "oklab",
+  "oklch",
+  "matrix",
+  "translate",
+  "scale",
+  "rotate",
+  "skewx",
+  "skewy",
+]);
+
+/**
+ * A CSS function name and its `(`. The lookbehind starts a match only at the
+ * start of a name. Without it, a long name with no `(` makes the regex try
+ * again from each of its letters, which is quadratic work.
+ */
+const CSS_FUNCTION = /(?<![a-z-])([a-z-]+)\s*\(/gi;
+
 function safeStyle(value: string): boolean {
   // Reject CSS escapes and comments as well: they can conceal URL tokens.
   if (
@@ -160,23 +181,10 @@ function safeStyle(value: string): boolean {
     )
   )
     return false;
-  const safeFunctions = new Set([
-    "rgb",
-    "rgba",
-    "hsl",
-    "hsla",
-    "oklab",
-    "oklch",
-    "matrix",
-    "translate",
-    "scale",
-    "rotate",
-    "skewx",
-    "skewy",
-  ]);
-  return [...value.matchAll(/([a-z-]+)\s*\(/gi)].every((match) =>
-    safeFunctions.has(match[1].toLowerCase()),
-  );
+  for (const match of value.matchAll(CSS_FUNCTION)) {
+    if (!SAFE_CSS_FUNCTIONS.has(match[1].toLowerCase())) return false;
+  }
+  return true;
 }
 
 function safeAttributeValue(value: string): boolean {
@@ -184,8 +192,6 @@ function safeAttributeValue(value: string): boolean {
   const withoutLocalPaint = value.replace(LOCAL_URL, "");
   return !/url\s*\(/i.test(withoutLocalPaint);
 }
-
-const MAX_DEPTH = 64;
 
 function isElement(node: Node): node is Element {
   return node.nodeType === 1;
@@ -204,9 +210,8 @@ function isAllowedAttribute(attribute: Attr, allowlist: Allowlist): boolean {
   );
 }
 
-function isAllowedChild(element: Element, depth: number, allowlist: Allowlist): boolean {
+function isAllowedChild(element: Element, allowlist: Allowlist): boolean {
   return (
-    depth < MAX_DEPTH &&
     allowlist.elements.has(element.tagName) &&
     (!element.namespaceURI || element.namespaceURI === SVG_NAMESPACE) &&
     (element.tagName !== "style" || safeStyle(element.textContent ?? ""))
@@ -227,8 +232,8 @@ class SvgPlanner {
 
   plan(root: Element): SvgPlan {
     const planned = this.element(root);
-    const stack: Array<{ source: Element; target: PlannedElement; depth: number }> = [
-      { source: root, target: planned, depth: 0 },
+    const stack: Array<{ source: Element; target: PlannedElement }> = [
+      { source: root, target: planned },
     ];
     // Children go on the stack in reverse, so elements are visited in
     // document order.
@@ -238,11 +243,11 @@ class SvgPlanner {
       this.visit(current.target);
       const below: typeof stack = [];
       for (let child = current.source.firstChild; child; child = child.nextSibling) {
-        const node = this.child(child, current.depth);
+        const node = this.child(child);
         if (!node) continue;
         current.target.children.push(node);
         if (node.kind === "element" && isElement(child)) {
-          below.push({ source: child, target: node.element, depth: current.depth + 1 });
+          below.push({ source: child, target: node.element });
         }
       }
       for (let index = below.length - 1; index >= 0; index--) {
@@ -262,10 +267,10 @@ class SvgPlanner {
     else this.byId.set(id, [element]);
   }
 
-  private child(node: Node, depth: number): PlannedNode | null {
+  private child(node: Node): PlannedNode | null {
     if (node.nodeType === 3) return { kind: "text", data: node.nodeValue ?? "" };
     if (node.nodeType === 4) return { kind: "cdata", data: node.nodeValue ?? "" };
-    if (isElement(node) && isAllowedChild(node, depth, this.allowlist)) {
+    if (isElement(node) && isAllowedChild(node, this.allowlist)) {
       return { kind: "element", element: this.element(node) };
     }
     // Comments go without counting: they hold no content.
@@ -350,11 +355,7 @@ export interface CleanedSvg {
  * output draw a bounded number of nodes (see `svg-draw-budget.ts`).
  */
 export function cleanSvg(input: string, profile: SvgProfile): CleanedSvg {
-  if (/<!\s*(?:DOCTYPE|ENTITY)/i.test(input))
-    throw new Error("Unsupported SVG declaration.");
-  const document = new DOMParser({
-    onError: onErrorStopParsing,
-  }).parseFromString(input, "image/svg+xml");
+  const document = parseSvgDocument(input);
   const root = document.documentElement;
   if (
     !root ||

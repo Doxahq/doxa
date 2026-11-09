@@ -9,9 +9,10 @@ import {
 } from "@doxahq/contracts/docs-branches";
 import type { DocsContentEditOrigin } from "@doxahq/contracts";
 import {
-  writeBranchChanges,
   discardBranch,
+  sumSiteBranchAssetBytes,
   synchronizeBranch,
+  writeBranchChanges,
 } from "./docs-branch-writes";
 import {
   getBranchBaseVersion,
@@ -78,6 +79,8 @@ export interface DocsBranchStore {
     projectId: string;
     branch: string;
   }): Promise<StoredBranchChange[]>;
+  /** The bytes of the images that all branches of the site add. */
+  siteBranchAssetBytes(siteId: string): Promise<number>;
   getBaseVersion(branchId: string): Promise<{
     versionId: VersionId;
     artifactPrefix: string;
@@ -94,12 +97,20 @@ export interface DocsBranchStore {
      * the branch follows them in the same transaction.
      */
     hrefMoves?: readonly PageHrefMove[];
+    /**
+     * The write adds an image. It happens only when the images of all
+     * branches of the site still fit `maxBytes` with it. The check and the
+     * write are one step, so parallel uploads cannot pass it together.
+     */
+    assetQuota?: { readonly addedBytes: number; readonly maxBytes: number };
   }): Promise<
     | "written"
     | "revision_changed"
     | "not_found"
     | "too_many_changes"
     | "branch_too_large"
+    | "storage_quota_exceeded"
+    | "quota_busy"
   >;
   /**
    * Clears a named branch, or deletes the hidden branch. Returns null when
@@ -330,6 +341,10 @@ export class DocsBranchesRepository
         ),
       );
     return rows.map(({ change }) => toStoredChange(change));
+  }
+
+  siteBranchAssetBytes(siteId: string): Promise<number> {
+    return sumSiteBranchAssetBytes(this.db, siteId);
   }
 
   getBaseVersion(

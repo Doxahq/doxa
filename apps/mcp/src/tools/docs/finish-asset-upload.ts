@@ -25,7 +25,7 @@ export const finishAssetUploadTool = defineMcpTool({
   name: "finish_asset_upload",
   title: "Finish image upload",
   description:
-    "Adds the image that you sent to the upload URL of create_asset_upload to its branch, and returns the path to use in MDX, for example /assets/rate-limits-diagram.png. Call it after the PUT succeeded. The image is checked like upload_asset checks it: the type comes from the bytes, SVG files are cleaned (sanitized: true), and a name in use gets a number suffix, so always use the returned path. Put the path in a page with write_page or edit_docs. The image goes live with the next approved publish of the branch, and build_preview shows it.",
+    "Adds the image that you sent to the upload URL of create_asset_upload to its branch, and returns the path to use in MDX, for example /assets/rate-limits-diagram.png. Call it after the PUT succeeded. The image is checked like upload_asset checks it: the type comes from the bytes, SVG files are cleaned (sanitized: true), and a name in use gets a number suffix. PNG and JPEG images can be compressed and stored as WebP, so the returned path and contentType can differ from what you sent. Always use the returned path. Put the path in a page with write_page or edit_docs. The image goes live with the next approved publish of the branch, and build_preview shows it.",
   scope: "docs:write",
   cost: "expensive",
   annotations: writeAnnotations(true),

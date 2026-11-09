@@ -1,12 +1,19 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 import { schema, type DoxaDb } from "@doxahq/db";
 import {
   branchPathSchema,
   branchRefSchema,
 } from "@doxahq/contracts/docs-branches";
 import type { DocsBranchStore } from "./docs-branches";
+import { storedBranchAssetBytes } from "../services/docs-branches/assets/asset-pointer";
 import { retireBranchPreview } from "./docs-branch-preview-gc";
 import { followReviewPageMoves } from "./generation-review-records";
+import {
+  runWithSiteLock,
+  SITE_LOCK_BUSY,
+  SITE_LOCKS,
+  type DoxaTransaction,
+} from "./site-advisory-lock";
 
 const INSERT_CHUNK_SIZE = 200;
 
@@ -18,81 +25,131 @@ export async function writeBranchChanges(
     branchPathSchema.parse(change.path);
   }
 
-  return db.transaction(async (tx) => {
-    const [owned] = await tx
-      .select({ siteId: schema.docsSites.id })
-      .from(schema.projects)
-      .innerJoin(
-        schema.docsSites,
-        eq(schema.docsSites.projectId, schema.projects.id),
-      )
-      .where(
-        and(
-          eq(schema.projects.id, input.projectId),
-          eq(schema.projects.userId, input.userId),
-        ),
-      )
-      .limit(1);
+  if (!input.assetQuota) {
+    return db.transaction((tx) => writeInTransaction(tx, input));
+  }
 
-    if (!owned) {
-      return "not_found";
-    }
-
-    // The branch lock alone orders this write against publish, sync, and
-    // discard, because each of them locks the branch row too. The site row
-    // stays free, so writes to other branches of the site do not wait.
-    const [branch] = await tx
-      .select()
-      .from(schema.docsBranches)
-      .where(
-        and(
-          eq(schema.docsBranches.id, input.branchId),
-          eq(schema.docsBranches.siteId, owned.siteId),
-          eq(schema.docsBranches.ownerUserId, input.userId),
-        ),
-      )
-      .for("update")
-      .limit(1);
-
-    if (!branch) {
-      return "not_found";
-    }
-
-    if (branch.revision !== input.expectedRevision) {
-      return "revision_changed";
-    }
-
-    const applied = await applyBranchChangeWrites(tx, {
-      branchId: branch.id,
-      userId: input.userId,
-      origin: input.origin,
-      changes: input.changes,
-    });
-
-    if (applied !== "applied") {
-      return applied;
-    }
-
-    if (branch.purpose === "generation_review" && input.hrefMoves) {
-      await followReviewPageMoves(tx, {
-        branchId: branch.id,
-        moves: input.hrefMoves,
-      });
-    }
-
-    await tx
-      .update(schema.docsBranches)
-      .set({
-        revision: branch.revision + 1,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.docsBranches.id, branch.id));
-
-    return "written";
-  });
+  const siteId = await ownedSiteId(db, input);
+  if (!siteId) return "not_found";
+  // The site lock comes before the branch lock: a holder of the site lock can
+  // wait for a branch, but a holder of a branch lock never waits for the site.
+  const outcome = await runWithSiteLock(db, SITE_LOCKS.branchAssetQuota, siteId, (tx) =>
+    writeInTransaction(tx, input),
+  );
+  return outcome === SITE_LOCK_BUSY ? "quota_busy" : outcome;
 }
 
-type BranchWriteTransaction = Parameters<Parameters<DoxaDb["transaction"]>[0]>[0];
+async function ownedSiteId(
+  db: DoxaDb | DoxaTransaction,
+  input: { projectId: string; userId: string },
+): Promise<string | null> {
+  const [owned] = await db
+    .select({ siteId: schema.docsSites.id })
+    .from(schema.projects)
+    .innerJoin(
+      schema.docsSites,
+      eq(schema.docsSites.projectId, schema.projects.id),
+    )
+    .where(
+      and(
+        eq(schema.projects.id, input.projectId),
+        eq(schema.projects.userId, input.userId),
+      ),
+    )
+    .limit(1);
+  return owned?.siteId ?? null;
+}
+
+async function writeInTransaction(
+  tx: DoxaTransaction,
+  input: Parameters<DocsBranchStore["writeChanges"]>[0],
+): ReturnType<DocsBranchStore["writeChanges"]> {
+  const siteId = await ownedSiteId(tx, input);
+  if (!siteId) return "not_found";
+
+  // The branch lock alone orders this write against publish, sync, and
+  // discard, because each of them locks the branch row too. The site row
+  // stays free, so writes to other branches of the site do not wait.
+  const [branch] = await tx
+    .select()
+    .from(schema.docsBranches)
+    .where(
+      and(
+        eq(schema.docsBranches.id, input.branchId),
+        eq(schema.docsBranches.siteId, siteId),
+        eq(schema.docsBranches.ownerUserId, input.userId),
+      ),
+    )
+    .for("update")
+    .limit(1);
+
+  if (!branch) {
+    return "not_found";
+  }
+
+  if (branch.revision !== input.expectedRevision) {
+    return "revision_changed";
+  }
+
+  if (input.assetQuota) {
+    const usedBytes = await sumSiteBranchAssetBytes(tx, siteId);
+    if (usedBytes + input.assetQuota.addedBytes > input.assetQuota.maxBytes) {
+      return "storage_quota_exceeded";
+    }
+  }
+
+  const applied = await applyBranchChangeWrites(tx, {
+    branchId: branch.id,
+    userId: input.userId,
+    origin: input.origin,
+    changes: input.changes,
+  });
+
+  if (applied !== "applied") {
+    return applied;
+  }
+
+  if (branch.purpose === "generation_review" && input.hrefMoves) {
+    await followReviewPageMoves(tx, {
+      branchId: branch.id,
+      moves: input.hrefMoves,
+    });
+  }
+
+  await tx
+    .update(schema.docsBranches)
+    .set({
+      revision: branch.revision + 1,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.docsBranches.id, branch.id));
+
+  return "written";
+}
+
+/** What the image rows of all branches of the site store. */
+export async function sumSiteBranchAssetBytes(
+  db: DoxaDb | DoxaTransaction,
+  siteId: string,
+): Promise<number> {
+  const rows = await db
+    .select({ content: schema.docsBranchChanges.content })
+    .from(schema.docsBranchChanges)
+    .innerJoin(
+      schema.docsBranches,
+      eq(schema.docsBranches.id, schema.docsBranchChanges.branchId),
+    )
+    .where(
+      and(
+        eq(schema.docsBranches.siteId, siteId),
+        eq(schema.docsBranchChanges.kind, "upsert"),
+        like(schema.docsBranchChanges.path, "assets/%"),
+      ),
+    );
+  return storedBranchAssetBytes(rows.map((row) => row.content ?? ""));
+}
+
+type BranchWriteTransaction = DoxaTransaction;
 
 /**
  * Applies working changes to a branch that the caller has locked, inside the

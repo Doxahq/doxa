@@ -54,7 +54,7 @@ const CAPABILITIES = [
  * can do. The clients, their snippets and the picker state are the ones the
  * MCP page uses (`lib/mcp`), so both stay the same.
  */
-export function McpConnectCard() {
+export function McpConnectCard({ insideDialog = false }: { insideDialog?: boolean }) {
   const copyState = useCopied()
   const picker = useMcpClientPicker(copyState.reset)
   const { active } = picker
@@ -76,7 +76,7 @@ export function McpConnectCard() {
       </div>
 
       <div className="surface-card flex flex-col">
-        <ClientTabs picker={picker} />
+        <ClientTabs picker={picker} insideDialog={insideDialog} />
 
         <div className="flex flex-col gap-3 p-5">
           <div className="overflow-hidden rounded-md border border-border bg-code">
@@ -147,14 +147,16 @@ export function McpConnectCard() {
 }
 
 /** The five client tabs and the "More clients" tab with its menu. */
-function ClientTabs({ picker }: { picker: McpClientPickerState }) {
+function ClientTabs({ picker, insideDialog }: { picker: McpClientPickerState; insideDialog: boolean }) {
   const { active, menuOpen } = picker
   const inMore = isMoreClient(active.id)
   const more = moreButtonText(active)
   const moreRef = useRef<HTMLButtonElement>(null)
 
   return (
-    <Popover open={menuOpen} onOpenChange={(open) => (open ? undefined : picker.closeMenu())}>
+    // The menu renders outside a surrounding dialog, and the scroll lock of that
+    // dialog blocks the wheel there. A modal popover takes over the lock.
+    <Popover modal={insideDialog} open={menuOpen} onOpenChange={(open) => (open ? undefined : picker.closeMenu())}>
       <PopoverAnchor asChild>
         <div role="group" aria-label="MCP client" className="flex flex-wrap gap-0.5 border-b border-divider px-3">
           {MAIN_CLIENTS.map((client) => (

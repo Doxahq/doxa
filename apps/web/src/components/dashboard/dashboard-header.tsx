@@ -23,11 +23,14 @@ export function DashboardHeader({ title, actions, menu }: DashboardHeaderProps) 
 export function PageHeading({
   label,
   title,
+  titleTag,
   description,
   actions,
 }: {
   label: string
   title: string
+  /** A small tag after the title, for example `<BetaTag />`. */
+  titleTag?: ReactNode
   description?: ReactNode
   actions?: ReactNode
 }) {
@@ -37,15 +40,27 @@ export function PageHeading({
         <span className="font-mono text-[11px] font-medium tracking-[0.16em] text-label uppercase">
           {label}
         </span>
-        <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em] text-foreground">
-          {title}
-        </h1>
+        <PageTitle title={title} tag={titleTag} />
         {description ? (
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
         ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
     </header>
+  )
+}
+
+/** The 26px page title, with an optional tag after it on the same line. */
+export function PageTitle({ title, tag }: { title: string; tag?: ReactNode }) {
+  const heading = (
+    <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em] text-foreground">{title}</h1>
+  )
+  if (!tag) return heading
+  return (
+    <div className="flex items-center gap-3">
+      {heading}
+      {tag}
+    </div>
   )
 }
 

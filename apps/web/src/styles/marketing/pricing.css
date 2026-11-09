@@ -17,6 +17,8 @@
 .pg--pricing .btn--blue:hover { background: #5a8fff; color: #ffffff; }
 .pg--pricing .btn--sm { height: 32px; padding: 0 12px; font-size: 11px; }
 .pg--pricing .nav__links { display: flex; gap: 28px; font-size: 14px; color: #c7c7c7; }
+.pg--pricing .nav__links a { display: inline-flex; align-items: center; gap: 6px; }
+.pg--pricing .nav__tag { padding: 2px 4px; font-family: var(--mono); font-size: 9px; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase; color: #ffffff; background: var(--accent); }
 .pg--pricing .nav__links .on { color: #ffffff; }
 .pg--pricing .nav__actions { display: flex; gap: 8px; }
 

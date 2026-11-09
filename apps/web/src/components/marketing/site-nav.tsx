@@ -11,10 +11,11 @@ import {
 
 const marketingRoute = getRouteApi("/_marketing")
 
-type NavItem = { label: string; page?: MarketingPage; to?: string; hash?: string; href?: string }
+/** `tag` is a small label after the link text, for example "Beta". */
+type NavItem = { label: string; page?: MarketingPage; to?: string; hash?: string; href?: string; tag?: string }
 
 const NAV: NavItem[] = [
-  { label: "Agent", page: "agent", to: "/agent" },
+  { label: "Agent", page: "agent", to: "/agent", tag: "Beta" },
   { label: "MCP", page: "mcp", to: "/mcp" },
   { label: "Docs", href: DOCS_URL },
   { label: "Pricing", page: "pricing", to: "/pricing" },
@@ -77,6 +78,7 @@ export function SiteNav({ current, cta = DEFAULT_CTA }: { current: MarketingPage
                 aria-current={on ? "page" : undefined}
               >
                 {item.label}
+                {item.tag ? <span className="nav__tag">{item.tag}</span> : null}
               </Link>
             )
           })}

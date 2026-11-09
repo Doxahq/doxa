@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react"
 
-import { FieldList, FieldRow, PageBody } from "~/components/dashboard/dashboard-header"
+import { FieldList, FieldRow, PageBody, PageTitle } from "~/components/dashboard/dashboard-header"
 import { SKELETON_PULSE_STYLE, useSkeletonPulse } from "~/lib/dashboard/skeleton-pulse"
 import { cn } from "~/lib/utils"
 
@@ -101,6 +101,7 @@ export function PageHeadingSkeleton({
   label,
   title,
   titleWidth = "11rem",
+  titleTag,
   description,
   actions,
 }: {
@@ -108,6 +109,8 @@ export function PageHeadingSkeleton({
   /** The real title, or omit it for a bar. */
   title?: string
   titleWidth?: string
+  /** The same tag as the real page heading, for example `<BetaTag />`. */
+  titleTag?: ReactNode
   description?: ReactNode
   actions?: ReactNode
 }) {
@@ -116,7 +119,7 @@ export function PageHeadingSkeleton({
       <div className="flex min-w-0 flex-col gap-2">
         <span className="font-mono text-[11px] font-medium tracking-[0.16em] text-label uppercase">{label}</span>
         {title ? (
-          <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em] text-foreground">{title}</h1>
+          <PageTitle title={title} tag={titleTag} />
         ) : (
           <TextBar width={titleWidth} className="text-[26px] leading-tight font-semibold" />
         )}

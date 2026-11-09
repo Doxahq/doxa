@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
+import { BetaTag } from "~/components/dashboard/beta-tag"
 import { Activity, Bot, ChevronRight, Info, PenLine, Settings } from "lucide-react"
 import type { GenerationJobDto } from "@doxahq/contracts"
 
@@ -89,6 +90,7 @@ export function ProjectSidebarView({ projectId }: { projectId: string }) {
         icon={DoxabotIcon}
         label="Doxabot"
         active={isOn("doxabot")}
+        hint={<BetaTag />}
       />
       <SidebarNavLink
         to="/dashboard/projects/$projectId/requests"

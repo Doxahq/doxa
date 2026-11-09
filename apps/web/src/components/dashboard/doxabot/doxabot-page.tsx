@@ -1,4 +1,5 @@
 import { usePrefetchQuery, useQuery } from "@tanstack/react-query"
+import { BetaTag } from "~/components/dashboard/beta-tag"
 
 import { PageBody, PageHeading } from "~/components/dashboard/dashboard-header"
 import { DoxabotPageActions } from "~/components/dashboard/doxabot/doxabot-page-actions"
@@ -50,7 +51,7 @@ export function ProjectDoxabotPage({ projectId }: { projectId: string }) {
 
   return (
     <PageBody className="max-w-4xl">
-      <PageHeading label="Project" title="Doxabot" description={DOXABOT_PAGE_DESCRIPTION} />
+      <PageHeading label="Project" title="Doxabot" titleTag={<BetaTag />} description={DOXABOT_PAGE_DESCRIPTION} />
       <DoxabotPageActions projectId={projectId} canRun={can("generation.run") && Boolean(project?.repositoryFullName)} />
 
       <section className="flex flex-col gap-4">

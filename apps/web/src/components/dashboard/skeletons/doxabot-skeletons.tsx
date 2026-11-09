@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card"
+import { BetaTag } from "~/components/dashboard/beta-tag"
 import {
   Bar,
   PageBodySkeleton,
@@ -25,7 +26,7 @@ const DOXABOT_CARDS = [
 export function ProjectDoxabotSkeleton() {
   return (
     <PageBodySkeleton label="Loading Doxabot" className="max-w-4xl">
-      <PageHeadingSkeleton label="Project" title="Doxabot" description={DOXABOT_PAGE_DESCRIPTION} />
+      <PageHeadingSkeleton label="Project" title="Doxabot" titleTag={<BetaTag />} description={DOXABOT_PAGE_DESCRIPTION} />
       <div className="flex gap-2">
         <Bar width="8.5rem" height="2.25rem" className="rounded-md" />
         <Bar width="8rem" height="2.25rem" className="rounded-md" />

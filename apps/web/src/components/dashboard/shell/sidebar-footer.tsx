@@ -114,7 +114,7 @@ export function UserRow({ projectId, showLinks = true }: { projectId: string | n
  * The projects, grouped by team when any team project exists, then "New
  * project". The list scrolls when it is long.
  */
-function ProjectMenuItems({ projectId }: { projectId: string | null }) {
+export function ProjectMenuItems({ projectId }: { projectId: string | null }) {
   const { projects } = useProjectsSummary()
   const grouped = hasTeamProjects(projects)
 

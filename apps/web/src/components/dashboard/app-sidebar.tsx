@@ -16,8 +16,8 @@ import { useContentOverviewFailed } from "~/lib/dashboard/use-content-overview-f
 
 /**
  * The dashboard sidebar: a fixed header (logo over the search button) over
- * three sliding views (Project, Content, Site settings). The account menu in
- * the footer switches projects.
+ * three sliding views (Project, Content, Site settings). The project title
+ * and the account menu in the footer switch projects.
  *
  * The Content view body comes from the content route, which owns the editor
  * state, through the sidebar panel slot.

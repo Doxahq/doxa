@@ -290,7 +290,9 @@ passes 4.5:1 on `card`.
   `sidebar-border`. An active nav item has a `secondary` grey fill and
   `foreground` text, with no blue and no left border. Nav rows are 40px tall
   and 4px apart, with soft corners, 14.5px medium text and 18px icons. Their
-  hover fill changes in 100ms.
+  hover fill changes in 100ms. The project name above the rows reads as a
+  title at rest. On hover it gets the same fill and an up-down arrow, and a
+  click opens the project list.
 - **Scrollbars:** use `scrollbar-subtle` on dark scroll surfaces. Its transparent
   track and square 6px thumb use `scrollbar-thumb`, then lift to
   `scrollbar-thumb-hover` on hover.

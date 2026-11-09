@@ -4,13 +4,8 @@ import { Activity, Bot, ChevronRight, Info, PenLine, Settings } from "lucide-rea
 import type { GenerationJobDto } from "@doxahq/contracts"
 
 import { DoxabotIcon } from "~/components/dashboard/doxabot/doxabot-icon"
-import { ProjectMonogram } from "~/components/dashboard/shell/project-monogram"
-import {
-  EditedPill,
-  SidebarNavHint,
-  SidebarNavLink,
-  SidebarProjectTitle,
-} from "~/components/dashboard/shell/sidebar-nav"
+import { ProjectTitleSelect } from "~/components/dashboard/shell/project-title-select"
+import { EditedPill, SidebarNavHint, SidebarNavLink } from "~/components/dashboard/shell/sidebar-nav"
 import { isProjectPublished } from "~/lib/dashboard/model"
 import { useOptionalProjectBranch } from "~/lib/dashboard/project-branch-context"
 import { useShell } from "~/lib/dashboard/shell-context"
@@ -42,16 +37,7 @@ export function ProjectSidebarView({ projectId }: { projectId: string }) {
 
   return (
     <nav aria-label="Project" className="scrollbar-subtle min-h-0 flex-1 overflow-y-auto px-2 pt-2 pb-3.5">
-      <SidebarProjectTitle>
-        {detail.data ? (
-          <>
-            <ProjectMonogram project={detail.data.project} className="size-[22px] rounded-md text-[11.5px]" />
-            <span className="truncate">{detail.data.project.name}</span>
-          </>
-        ) : (
-          "Project"
-        )}
-      </SidebarProjectTitle>
+      <ProjectTitleSelect projectId={projectId} project={detail.data?.project ?? null} />
       <SidebarNavLink
         to="/dashboard/projects/$projectId/project"
         params={{ projectId }}

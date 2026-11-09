@@ -21,15 +21,6 @@ export function SidebarSectionLabel({
   )
 }
 
-/** The name above the project's own pages. It titles the whole list, so it reads larger than a section label. */
-export function SidebarProjectTitle({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 items-center gap-2 px-3 pt-3 pb-1.5 text-base leading-7 font-semibold tracking-[-0.01em] text-foreground">
-      {children}
-    </div>
-  )
-}
-
 export const SIDEBAR_NAV_ITEM_CLASS =
   "mt-1 flex w-full items-center gap-3 rounded-md px-3 py-[9px] text-left text-[14.5px] font-medium whitespace-nowrap transition-colors duration-100 ease-out [&>svg]:size-[18px] [&>svg]:shrink-0"
 

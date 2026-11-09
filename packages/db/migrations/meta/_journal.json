@@ -309,6 +309,13 @@
       "when": 1794094946787,
       "tag": "0043_project_production_branch",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1794227059123,
+      "tag": "0044_agent_signup",
+      "breakpoints": true
     }
   ]
 }

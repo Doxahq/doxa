@@ -22,5 +22,18 @@ export const resetPasswordEmail = defineEmailKind({
   }),
 });
 
+/** Sent when an agent gets a token through the claim flow. It is a security notice, so nobody can turn it off. */
+export const agentConnectedEmail = defineEmailKind({
+  name: "agent-connected",
+  category: "transactional",
+  props: z.object({
+    agentName: z.string().min(1).max(60),
+    tokenName: z.string().min(1).max(60),
+    permissions: z.array(z.string()),
+    manageUrl: emailLink,
+  }),
+});
+
 export type VerifyEmailEmailProps = EmailKindProps<typeof verifyEmailEmail>;
 export type ResetPasswordEmailProps = EmailKindProps<typeof resetPasswordEmail>;
+export type AgentConnectedEmailProps = EmailKindProps<typeof agentConnectedEmail>;

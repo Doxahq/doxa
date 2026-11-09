@@ -1,6 +1,9 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import type { ValidatedAccessToken } from "@cloudflare/workers-oauth-provider";
 import { agentGrantPropsSchema, type AgentGrantProps } from "@doxahq/contracts/agent-access";
+import type { DbEnv } from "@doxahq/db";
+import { AgentTokenAuthenticator } from "../agent-signup/agent-token-authenticator";
+import { isAgentToken } from "../agent-signup/agent-signup-secrets";
 import { authorizationServerFor } from "./authorization-server";
 import { requireOAuthConfig, type OAuthSettings } from "./oauth-config";
 
@@ -11,8 +14,10 @@ export type ValidatedAgentToken = ValidatedAccessToken<AgentGrantProps>;
  * parsed here too, so a token with an unknown props version is invalid.
  * Its env type lists only the entries it reads.
  */
-export class OAuthTokenValidator extends WorkerEntrypoint<OAuthSettings> {
+export class OAuthTokenValidator extends WorkerEntrypoint<OAuthSettings & DbEnv> {
   async validateToken(resource: string, token: string): Promise<ValidatedAgentToken | null> {
+    // Only the token format decides the path. A provider token never reaches the database.
+    if (isAgentToken(token)) return AgentTokenAuthenticator.fromEnv(this.env).validate(resource, token);
     const { config, env } = requireOAuthConfig(this.env);
     const validated = await authorizationServerFor(config).validateToken<unknown>(
       resource,

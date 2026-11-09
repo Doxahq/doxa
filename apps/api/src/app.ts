@@ -22,6 +22,7 @@ import { createProjectRoutes } from "./routes/projects";
 import { createSignInRoutes } from "./routes/sign-in";
 import { createTeamInviteRoutes, createTeamRoutes } from "./routes/teams";
 import { OutboxAuthMailer } from "./services/auth/outbox-auth-mailer";
+import { agentSignupDispatch } from "./services/agent-signup/agent-signup-dispatch";
 import { oauthProviderDispatch } from "./services/oauth/provider-dispatch";
 
 /** Sign-in and session requests are small. */
@@ -50,6 +51,7 @@ export function createApiApp() {
 
   // First, so provider paths skip the Hono CORS, CSRF, and header middleware:
   // the provider owns their rules (spec 6.2).
+  app.use("*", agentSignupDispatch());
   app.use("*", oauthProviderDispatch());
   app.use("*", securityHeaders());
   app.use("*", corsPolicy());

@@ -9,6 +9,8 @@ import { MergeGenerationScheduler } from "./services/doxabot/merge-generations";
 import { DoxabotQueueOutboxPublisher } from "./services/doxabot/queue-outbox";
 import { EmailDeliverySweeper } from "./services/email/email-delivery-sweeper";
 import { EmailSuppressionSync, isFirstCronRunOfHour } from "./services/email/email-suppression-sync";
+import { AgentSignupPurge } from "./services/agent-signup/agent-signup-purge";
+import { isAgentSignupEnabled } from "./services/agent-signup/agent-signup-config";
 import { resolveOAuthConfig } from "./services/oauth/oauth-config";
 import { OAuthDataPurge } from "./services/oauth/purge";
 import { createStorageGarbageCollector } from "./services/storage-gc";
@@ -34,6 +36,9 @@ export function runScheduledJobs(scheduledTime: number, env: Env, context: Execu
   if (suppressionSync) context.waitUntil(suppressionSync.run());
   if (resolveOAuthConfig(env).configured) {
     context.waitUntil(OAuthDataPurge.fromEnv(env).run());
+  }
+  if (isAgentSignupEnabled(env)) {
+    context.waitUntil(AgentSignupPurge.fromEnv(env).run());
   }
 }
 

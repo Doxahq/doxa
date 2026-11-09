@@ -20,6 +20,7 @@ import {
   wantsOfflineAccess,
 } from "./consent-request";
 import type { AgentGrantMetadata } from "./grant-metadata";
+import { projectScopeIssues, scopeIssues } from "./consent-validation";
 import { requireOAuthConfig } from "./oauth-config";
 import {
   KvPendingConsentStore,
@@ -93,7 +94,7 @@ export class ConsentService {
     if (consent === null) return NOT_FOUND;
     const issues = [
       ...scopeIssues(input.scopes, offeredScopes(consent.authRequest.scope)),
-      ...(await this.projectIssues(userId, input.projectScope)),
+      ...(await projectScopeIssues(this.deps.projects, userId, input.projectScope)),
     ];
     if (issues.length > 0) return { kind: "rejected", issues };
 
@@ -143,34 +144,6 @@ export class ConsentService {
     if (consent === null || expiresAt(consent) <= this.deps.now()) return null;
     return consent;
   }
-
-  private async projectIssues(
-    userId: string,
-    projectScope: ApproveAgentConsentInput["projectScope"],
-  ): Promise<ValidationIssue[]> {
-    if (projectScope.kind === "all") return [];
-    const actor = dashboardActor(userId);
-    const decisions = await Promise.all(
-      projectScope.projectIds.map((id) => this.deps.projects.authorize(actor, id, "project.read")),
-    );
-    return decisions.flatMap((decision, index) =>
-      decision.allowed
-        ? []
-        : [issue(`/projectScope/projectIds/${index}`, "The project was not found.")],
-    );
-  }
-}
-
-function scopeIssues(approved: readonly string[], offered: readonly string[]): ValidationIssue[] {
-  return approved.flatMap((scope, index) =>
-    offered.includes(scope)
-      ? []
-      : [issue(`/scopes/${index}`, `The agent did not request the ${scope} scope.`)],
-  );
-}
-
-function issue(path: string, message: string): ValidationIssue {
-  return { path, code: "unknown_key", severity: "error", message };
 }
 
 function expiresAt(consent: PendingConsent): Date {

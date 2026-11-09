@@ -75,6 +75,7 @@ Preview the templates with `pnpm --filter @doxahq/email email:dev`
 | Kind | Category | Sent when | Recipients |
 |---|---|---|---|
 | `team-invite` | transactional | A manager creates an invite with an email address | The address |
+| `agent-connected` | transactional | An agent collects a token through the claim flow | The person who approved it |
 | `approval-requested` | approvals | An agent action needs approval (a new request, not a reused one) | Members with `approvals.decide` and the action's capability; not the requester when `require_other_decider` is on. `project.create`: the requester |
 | `approval-decided` | approvals | A member approves or rejects | The requester, unless they decided |
 | `generation-finished` | generations | A job succeeds (`completeJobOutput`, `publishJobOutput`) or fails (`markJobFailed` that changed the row) | `generation_jobs.requested_by_user_id`; nothing for a Doxabot run without a linked author |

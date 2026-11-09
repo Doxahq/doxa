@@ -49,6 +49,7 @@ describe("connected agents section", () => {
             ],
           },
           lastActivityAt: null,
+          expiresAt: null,
         }),
       ],
     })
@@ -136,6 +137,7 @@ function grant(overrides: Partial<AgentGrantSummary>): AgentGrantSummary {
     projectScope: { kind: "all" },
     createdAt: "2026-10-01T09:00:00.000Z",
     lastActivityAt: "2026-10-03T09:00:00.000Z",
+    expiresAt: null,
     ...overrides,
   }
 }

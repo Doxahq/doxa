@@ -1,10 +1,14 @@
 import {
+  agentClaimDetailsSchema,
   agentConsentDecisionSchema,
   agentConsentDetailsSchema,
   agentGrantListSchema,
+  type AgentClaimDetails,
+  type AgentClaimReference,
   type AgentConsentDecision,
   type AgentConsentDetails,
   type AgentGrantList,
+  type ApproveAgentClaimInput,
   type ApproveAgentConsentInput,
 } from "@doxahq/contracts/agent-access"
 
@@ -35,6 +39,24 @@ export async function approveAgentConsent(
 export async function denyAgentConsent(consentId: string): Promise<AgentConsentDecision> {
   const payload = await apiFetch<unknown>(consentPath(consentId, "deny"), { method: "POST" })
   return agentConsentDecisionSchema.parse(payload)
+}
+
+/** Fails with status 404 when the claim is unknown or expired. */
+export async function openAgentClaim(reference: AgentClaimReference): Promise<void> {
+  await apiFetch<unknown>("/agent-access/claims/open", { method: "POST", json: reference })
+}
+
+export async function getAgentClaim(reference: AgentClaimReference): Promise<AgentClaimDetails> {
+  const payload = await apiFetch<unknown>("/agent-access/claims/details", { method: "POST", json: reference })
+  return agentClaimDetailsSchema.parse(payload)
+}
+
+export async function approveAgentClaim(input: ApproveAgentClaimInput): Promise<void> {
+  await apiFetch<unknown>("/agent-access/claims/approve", { method: "POST", json: input })
+}
+
+export async function denyAgentClaim(reference: AgentClaimReference): Promise<void> {
+  await apiFetch<unknown>("/agent-access/claims/deny", { method: "POST", json: reference })
 }
 
 export async function listAgentGrants(): Promise<AgentGrantList> {

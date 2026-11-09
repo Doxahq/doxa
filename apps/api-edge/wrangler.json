@@ -44,6 +44,14 @@
       }
     },
     {
+      "name": "API_AGENT_IDENTITY_LIMITER",
+      "namespace_id": "4004",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    },
+    {
       "name": "API_PUBLIC_LIMITER",
       "namespace_id": "4003",
       "simple": {
@@ -79,6 +87,14 @@
           "namespace_id": "5002",
           "simple": {
             "limit": 600,
+            "period": 60
+          }
+        },
+        {
+          "name": "API_AGENT_IDENTITY_LIMITER",
+          "namespace_id": "5004",
+          "simple": {
+            "limit": 10,
             "period": 60
           }
         },

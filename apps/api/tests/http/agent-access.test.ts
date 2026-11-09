@@ -26,6 +26,7 @@ const {
   OTHER_PROJECT,
   OWNER,
   PROJECT_A,
+  agentTokenDeps,
   consentService,
   fakeOAuthApi,
   grantSummary,
@@ -53,7 +54,8 @@ function createApp(configured = true) {
           })
       : unavailable,
     consents: configured ? () => consentService(store, oauth) : unavailable,
-    grants: configured ? () => new GrantsService({ oauth, activity: noAgentActivity }) : unavailable,
+    grants: configured ? () => new GrantsService({ oauth, activity: noAgentActivity, ...agentTokenDeps }) : unavailable,
+    claims: unavailable,
   };
   const app = createApiRouter();
   app.use("*", corsPolicy());
@@ -247,6 +249,7 @@ describe("grant routes", () => {
           projectScope: { kind: "all" },
           createdAt: NOW.toISOString(),
           lastActivityAt: null,
+          expiresAt: null,
         },
       ],
     });

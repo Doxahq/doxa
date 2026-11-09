@@ -19,7 +19,7 @@ const { KvPendingConsentStore } = await import("../../../src/services/oauth/pend
 const { serveOAuthProviderRequest } = await import("../../../src/services/oauth/provider-dispatch");
 const { OAuthTokenValidator } = await import("../../../src/services/oauth/token-validator");
 const { createMemoryKv } = await import("./memory-kv");
-const { ISSUER, MCP_RESOURCE, OWNER, PROJECT_A, ownerPolicy } = await import("./fixtures");
+const { ISSUER, MCP_RESOURCE, OWNER, PROJECT_A, agentTokenDeps, ownerPolicy } = await import("./fixtures");
 
 const REDIRECT_URI = "http://127.0.0.1:9999/callback";
 const WEB_ORIGIN = "https://doxa.test";
@@ -50,7 +50,7 @@ function setup() {
       now: () => new Date(),
       newGrantRef: () => crypto.randomUUID(),
     }),
-    grants: new GrantsService({ oauth, activity: noAgentActivity }),
+    grants: new GrantsService({ oauth, activity: noAgentActivity, ...agentTokenDeps }),
   };
 }
 
@@ -160,6 +160,7 @@ describe("OAuth flow against the real provider", () => {
       scopes: ["docs:read"],
       projectScope: { kind: "selected", projectIds: [PROJECT_A] },
       lastActivityAt: null,
+      expiresAt: null,
     });
     expect(await flow.grants.list("someone-else")).toEqual([]);
     expect(await flow.grants.revoke("someone-else", grant.grantId)).toEqual({ kind: "not_found" });

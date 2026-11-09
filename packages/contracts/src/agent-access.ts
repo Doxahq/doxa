@@ -125,6 +125,8 @@ export const agentGrantSummarySchema = z
     projectScope: projectScopeClaimSchema,
     createdAt: z.iso.datetime(),
     lastActivityAt: z.iso.datetime().nullable(),
+    /** Set for an agent token from the claim flow. An OAuth grant renews itself. */
+    expiresAt: z.iso.datetime().nullable(),
   })
   .strict();
 
@@ -139,3 +141,69 @@ export type ApproveAgentConsentInput = z.infer<typeof approveAgentConsentInputSc
 export type AgentConsentDecision = z.infer<typeof agentConsentDecisionSchema>;
 export type AgentGrantSummary = z.infer<typeof agentGrantSummarySchema>;
 export type AgentGrantList = z.infer<typeof agentGrantListSchema>;
+
+/** The grant type of the auth.md claim flow. The protocol defines this name. */
+export const AGENT_CLAIM_GRANT_TYPE = "urn:workos:agent-auth:grant-type:claim";
+export const AGENT_IDENTITY_TYPE = "service_auth";
+/** Every agent token has its own client ID with this prefix. */
+export const AGENT_TOKEN_CLIENT_ID_PREFIX = "doxa-agent-token:";
+
+export function isAgentTokenClientId(clientId: string): boolean {
+  return clientId.startsWith(AGENT_TOKEN_CLIENT_ID_PREFIX);
+}
+export const AGENT_USER_CODE_LENGTH = 6;
+export const AGENT_DISPLAY_NAME_MAX_LENGTH = 60;
+
+const AGENT_ATTEMPT_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+/** Letters, digits, and simple punctuation: a name cannot imitate page text with markup or line breaks. */
+const AGENT_DISPLAY_NAME_PATTERN = /^[\p{L}\p{N} ._:()/-]+$/u;
+
+const agentDisplayNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(AGENT_DISPLAY_NAME_MAX_LENGTH)
+  .regex(AGENT_DISPLAY_NAME_PATTERN);
+
+/** The body of `POST /agent/identity`. The field names follow the auth.md protocol. */
+export const agentIdentityRequestSchema = z.object({
+  type: z.literal(AGENT_IDENTITY_TYPE),
+  login_hint: z.email().max(254).toLowerCase().optional(),
+  client_name: agentDisplayNameSchema.optional(),
+  token_name: agentDisplayNameSchema.optional(),
+  /** OAuth format: scopes separated by spaces. */
+  scope: z.string().max(500).optional(),
+});
+
+const agentClaimAttemptSchema = z.string().regex(AGENT_ATTEMPT_TOKEN_PATTERN);
+
+/** Secrets travel in the body, so they stay out of URLs and access logs. */
+export const agentClaimReferenceSchema = z
+  .object({ attemptToken: agentClaimAttemptSchema })
+  .strict();
+
+export const approveAgentClaimInputSchema = approveAgentConsentInputSchema
+  .extend({
+    attemptToken: agentClaimAttemptSchema,
+    userCode: z.string().regex(new RegExp(`^\\d{${AGENT_USER_CODE_LENGTH}}$`)),
+  })
+  .strict();
+
+export const agentClaimDetailsSchema = z
+  .object({
+    clientName: z.string().min(1).max(AGENT_DISPLAY_NAME_MAX_LENGTH),
+    tokenName: z.string().min(1).max(AGENT_DISPLAY_NAME_MAX_LENGTH),
+    requestedScopes: z.array(oauthScopeSchema),
+    projects: z.array(agentConsentProjectSchema),
+    /** The email that the agent named, or null when it named none. */
+    loginHint: z.string().nullable(),
+    /** False when the agent named an email of a different account. */
+    accountMatches: z.boolean(),
+    expiresAt: z.iso.datetime(),
+  })
+  .strict();
+
+export type AgentIdentityRequest = z.infer<typeof agentIdentityRequestSchema>;
+export type AgentClaimReference = z.infer<typeof agentClaimReferenceSchema>;
+export type ApproveAgentClaimInput = z.infer<typeof approveAgentClaimInputSchema>;
+export type AgentClaimDetails = z.infer<typeof agentClaimDetailsSchema>;

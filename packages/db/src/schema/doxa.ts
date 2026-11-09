@@ -94,6 +94,14 @@ export const agentActivityOutcome = pgEnum("agent_activity_outcome", [
   "rate_limited",
 ]);
 
+export const agentClaimStatus = pgEnum("agent_claim_status", [
+  "pending",
+  "approved",
+  "denied",
+  "locked",
+  "redeemed",
+]);
+
 export const agentApprovalRequestStatus = pgEnum(
   "agent_approval_request_status",
   [
@@ -1686,4 +1694,74 @@ export const docsPrerenderTaskRelations = relations(
       references: [docsVersions.id],
     }),
   }),
+);
+
+/**
+ * A request from an agent to connect to a person's account (auth.md claim
+ * flow). Every secret is stored only as a hash. The cron removes old rows.
+ */
+export const agentClaims = pgTable(
+  "agent_claims",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    claimTokenHash: text("claim_token_hash").notNull().unique(),
+    attemptTokenHash: text("attempt_token_hash").notNull().unique(),
+    userCodeHash: text("user_code_hash").notNull(),
+    clientName: text("client_name").notNull(),
+    tokenName: text("token_name").notNull(),
+    loginHint: text("login_hint"),
+    clientIpKey: text("client_ip_key"),
+    requestedScopes: text("requested_scopes").array().notNull(),
+    status: agentClaimStatus("status").notNull().default("pending"),
+    codeAttempts: integer("code_attempts").notNull().default(0),
+    approvedUserId: text("approved_user_id").references(() => user.id, {
+      onDelete: "cascade",
+    }),
+    approvedScopes: text("approved_scopes").array(),
+    approvedProjectScope: jsonb("approved_project_scope"),
+    openedAt: timestamp("opened_at", { withTimezone: true }),
+    lastPolledAt: timestamp("last_polled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index("agent_claims_expires_idx").on(table.expiresAt),
+    index("agent_claims_login_hint_created_idx").on(
+      table.loginHint,
+      table.createdAt,
+    ),
+    index("agent_claims_client_ip_created_idx").on(
+      table.clientIpKey,
+      table.createdAt,
+    ),
+  ],
+);
+
+/** A long-life credential for an agent. Only the SHA-256 hash is stored. */
+export const agentTokens = pgTable(
+  "agent_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    tokenName: text("token_name").notNull(),
+    clientName: text("client_name").notNull(),
+    scopes: text("scopes").array().notNull(),
+    projectScope: jsonb("project_scope").notNull(),
+    grantRef: uuid("grant_ref").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("agent_tokens_user_created_idx").on(table.userId, table.createdAt),
+    index("agent_tokens_expires_idx").on(table.expiresAt),
+  ],
 );

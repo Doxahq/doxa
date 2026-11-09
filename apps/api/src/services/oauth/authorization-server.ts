@@ -33,7 +33,7 @@ const REFRESH_TOKEN_IDLE_TTL_SECONDS = 14 * 24 * 3600;
 const CLIENT_REGISTRATION_TTL_SECONDS = 30 * 24 * 3600;
 
 export const AUTHORIZE_PATH = "/oauth/authorize";
-const METADATA_PATH = "/.well-known/oauth-authorization-server";
+export const METADATA_PATH = "/.well-known/oauth-authorization-server";
 
 export function createAuthorizationServer(
   config: OAuthServerConfig,

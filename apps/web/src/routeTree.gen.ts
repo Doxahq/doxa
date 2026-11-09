@@ -25,6 +25,7 @@ import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard/settings'
 import { Route as EmailUnsubscribeRouteImport } from './routes/email/unsubscribe'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
+import { Route as OauthClaimRouteImport } from './routes/oauth/claim'
 import { Route as OauthConsentRouteImport } from './routes/oauth/consent'
 import { Route as MarketingBlogIndexRouteImport } from './routes/_marketing/blog/index'
 import { Route as MarketingBlogSlugRouteImport } from './routes/_marketing/blog/$slug'
@@ -136,6 +137,11 @@ const EmailUnsubscribeRoute = EmailUnsubscribeRouteImport.update({
 const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OauthClaimRoute = OauthClaimRouteImport.update({
+  id: '/oauth/claim',
+  path: '/oauth/claim',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OauthConsentRoute = OauthConsentRouteImport.update({
@@ -342,6 +348,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/email/unsubscribe': typeof EmailUnsubscribeRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/oauth/claim': typeof OauthClaimRoute
   '/oauth/consent': typeof OauthConsentRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/projects/$projectId': typeof DashboardProjectsProjectIdRouteRouteWithChildren
@@ -390,6 +397,7 @@ export interface FileRoutesByTo {
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/email/unsubscribe': typeof EmailUnsubscribeRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/oauth/claim': typeof OauthClaimRoute
   '/oauth/consent': typeof OauthConsentRoute
   '/': typeof MarketingIndexRoute
   '/dashboard': typeof DashboardIndexRoute
@@ -440,6 +448,7 @@ export interface FileRoutesById {
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/email/unsubscribe': typeof EmailUnsubscribeRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/oauth/claim': typeof OauthClaimRoute
   '/oauth/consent': typeof OauthConsentRoute
   '/_marketing/': typeof MarketingIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -493,6 +502,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/email/unsubscribe'
     | '/invite/$token'
+    | '/oauth/claim'
     | '/oauth/consent'
     | '/dashboard/'
     | '/dashboard/projects/$projectId'
@@ -541,6 +551,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/email/unsubscribe'
     | '/invite/$token'
+    | '/oauth/claim'
     | '/oauth/consent'
     | '/'
     | '/dashboard'
@@ -590,6 +601,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/email/unsubscribe'
     | '/invite/$token'
+    | '/oauth/claim'
     | '/oauth/consent'
     | '/_marketing/'
     | '/dashboard/'
@@ -637,6 +649,7 @@ export interface RootRouteChildren {
   ApproveRequestIdRoute: typeof ApproveRequestIdRoute
   EmailUnsubscribeRoute: typeof EmailUnsubscribeRoute
   InviteTokenRoute: typeof InviteTokenRoute
+  OauthClaimRoute: typeof OauthClaimRoute
   OauthConsentRoute: typeof OauthConsentRoute
 }
 
@@ -752,6 +765,13 @@ declare module '@tanstack/react-router' {
       path: '/invite/$token'
       fullPath: '/invite/$token'
       preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oauth/claim': {
+      id: '/oauth/claim'
+      path: '/oauth/claim'
+      fullPath: '/oauth/claim'
+      preLoaderRoute: typeof OauthClaimRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/oauth/consent': {
@@ -1142,6 +1162,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApproveRequestIdRoute: ApproveRequestIdRoute,
   EmailUnsubscribeRoute: EmailUnsubscribeRoute,
   InviteTokenRoute: InviteTokenRoute,
+  OauthClaimRoute: OauthClaimRoute,
   OauthConsentRoute: OauthConsentRoute,
 }
 export const routeTree = rootRouteImport

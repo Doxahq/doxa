@@ -9,14 +9,16 @@ import type { EdgeEnv } from "./env";
  * - client registration: each call stores an OAuth client in Valkey;
  * - the other OAuth endpoints: each authorize call stores a consent and can
  *   fetch a client metadata URL;
+ * - agent registration: each call stores a claim, and needs no credential;
  * - everything else: a ceiling for one IP that the dashboard never reaches.
  */
 export type EdgeRateLimitEnv = Pick<
   EdgeEnv,
-  "API_OAUTH_REGISTER_LIMITER" | "API_OAUTH_LIMITER" | "API_PUBLIC_LIMITER"
+  "API_OAUTH_REGISTER_LIMITER" | "API_OAUTH_LIMITER" | "API_AGENT_IDENTITY_LIMITER" | "API_PUBLIC_LIMITER"
 >;
 
 const OAUTH_REGISTER_PATH = "/oauth/register";
+const AGENT_IDENTITY_PATH = "/agent/identity";
 /**
  * The doxa.so web Worker calls GET /me while it renders the login, consent,
  * invite and approve pages. Those calls all come from Cloudflare's egress IP,
@@ -38,6 +40,7 @@ export function limiterForRequest(
   // A CORS preflight is answered at once; counting it would halve the budget.
   if (request.method === "OPTIONS" || UNCOUNTED_PATHS.has(path)) return undefined;
   if (path === OAUTH_REGISTER_PATH) return env.API_OAUTH_REGISTER_LIMITER;
+  if (path === AGENT_IDENTITY_PATH) return env.API_AGENT_IDENTITY_LIMITER;
   if (path.startsWith("/oauth/")) return env.API_OAUTH_LIMITER;
   if (request.method === "GET" && SHARED_EGRESS_PATHS.has(path)) return undefined;
   return env.API_PUBLIC_LIMITER;

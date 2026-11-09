@@ -22,6 +22,12 @@ export const NOW = new Date("2026-10-04T12:00:00.000Z");
 export const ISSUER = "https://api.doxa.test";
 export const MCP_RESOURCE = "https://mcp.doxa.test/mcp";
 
+/** A GrantsService without agent tokens. */
+export const agentTokenDeps = {
+  agentTokens: { listActive: async () => [], revoke: async () => false },
+  now: () => NOW,
+};
+
 export function authRequest(overrides: Partial<AuthRequest> = {}): AuthRequest {
   return {
     responseType: "code",

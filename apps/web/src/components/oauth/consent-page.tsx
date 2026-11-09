@@ -1,9 +1,6 @@
-import type { ReactNode } from "react"
-import { Loader2 } from "lucide-react"
-
-import { AuthCard, AuthCardHeading } from "~/components/auth/auth-card"
-import { LogoMark } from "~/components/navigation/logo"
+import { AuthCard } from "~/components/auth/auth-card"
 import { ConsentForm, type ConsentDecisionState } from "~/components/oauth/consent-form"
+import { ConsentCardHeader, ConsentMessage } from "~/components/oauth/consent-message"
 import { Button } from "~/components/ui/button"
 import { isExpiredConsentError } from "~/lib/queries/agent-access"
 import { UnsafeConsentRedirectError, useAgentConsent } from "~/lib/oauth/use-agent-consent"
@@ -45,38 +42,6 @@ export function ConsentPage({ consentId }: { consentId: string }) {
         decisionError={decisionErrorMessage(decision.error)}
         onDecide={(request) => decision.mutate(request)}
       />
-    </AuthCard>
-  )
-}
-
-function ConsentCardHeader({ title }: { title: string }) {
-  return (
-    <div className="flex flex-col items-center gap-4 text-center">
-      <LogoMark size={32} />
-      <AuthCardHeading title={title} />
-    </div>
-  )
-}
-
-function ConsentMessage({
-  title,
-  description,
-  loading = false,
-  action,
-}: {
-  title: string
-  description: string
-  loading?: boolean
-  action?: ReactNode
-}) {
-  return (
-    <AuthCard>
-      <ConsentCardHeader title={title} />
-      <div role="status" className="flex items-center gap-2.5 text-center text-sm text-muted-foreground">
-        {loading ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : null}
-        <p>{description}</p>
-      </div>
-      {action}
     </AuthCard>
   )
 }

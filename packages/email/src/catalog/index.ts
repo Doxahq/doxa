@@ -5,7 +5,7 @@ import {
   domainStatusChangedEmail,
   generationFinishedEmail,
 } from "./notifications";
-import { resetPasswordEmail, verifyEmailEmail } from "./account";
+import { agentConnectedEmail, resetPasswordEmail, verifyEmailEmail } from "./account";
 import { teamInviteEmail } from "./team-invite";
 
 export {
@@ -31,8 +31,10 @@ export {
   type GenerationFinishedEmailProps,
 } from "./notifications";
 export {
+  agentConnectedEmail,
   resetPasswordEmail,
   verifyEmailEmail,
+  type AgentConnectedEmailProps,
   type ResetPasswordEmailProps,
   type VerifyEmailEmailProps,
 } from "./account";
@@ -47,6 +49,7 @@ export const EMAIL_KINDS = [
   domainStatusChangedEmail,
   verifyEmailEmail,
   resetPasswordEmail,
+  agentConnectedEmail,
 ] as const satisfies readonly EmailKind[];
 
 export type EmailKindName = (typeof EMAIL_KINDS)[number]["name"];

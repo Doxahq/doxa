@@ -25,5 +25,6 @@ export interface EdgeEnv {
   // Per-IP rate limits of public requests (see ./rate-limit).
   API_OAUTH_REGISTER_LIMITER?: RateLimit;
   API_OAUTH_LIMITER?: RateLimit;
+  API_AGENT_IDENTITY_LIMITER?: RateLimit;
   API_PUBLIC_LIMITER?: RateLimit;
 }

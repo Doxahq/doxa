@@ -112,6 +112,19 @@ describe("activity helpers", () => {
 });
 
 describe("rateLimitKey", () => {
+  it("gives the agent tokens of one user one budget", () => {
+    const tokenActor = (grantRef: string) =>
+      agentActor({
+        userId: "user-1",
+        clientId: `doxa-agent-token:${grantRef}`,
+        clientName: "Agent",
+        grantRef,
+        scopes: [],
+        projectScope: { kind: "all" },
+      });
+    expect(rateLimitKey("read", tokenActor("a"))).toBe(rateLimitKey("read", tokenActor("b")));
+  });
+
   const actor = agentActor({
     userId: "user-1",
     clientId: "client-1",

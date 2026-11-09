@@ -8,6 +8,7 @@ Important facts:
 - Teams can use the Doxa cloud or self-host the platform.
 - Docs are plain MDX files. Teams can export them and leave at any time.
 - The MCP server is at `https://mcp.doxa.so/mcp`. It works with Claude Code, Cursor, VS Code, Codex, and other MCP clients.
+- An agent can create a Doxa account and connect for a user. Read `https://doxa.so/auth.md` and follow it. The user confirms in a browser with a code.
 - By default, an agent that connects through MCP needs a person's approval to publish a branch, restore a publication, generate the docs, add or remove a custom domain, or delete a project.
 - Prices can change. The pricing page is the current source.
 

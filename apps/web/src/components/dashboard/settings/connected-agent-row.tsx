@@ -35,6 +35,7 @@ export function ConnectedAgentRow({
             {formatGrantProjectScope(grant.projectScope)}
             {" · "}Connected {formatGrantDate(grant.createdAt)}
             {" · "}Last activity {formatGrantDate(grant.lastActivityAt)}
+            {grant.expiresAt ? ` · Expires ${formatGrantDate(grant.expiresAt)}` : null}
           </p>
           <ul aria-label="Permissions" className="flex flex-wrap gap-1.5 pt-1">
             {grant.scopes.map((scope) => (

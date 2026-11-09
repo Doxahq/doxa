@@ -1,3 +1,4 @@
+import { AGENT_TOKEN_CLIENT_ID_PREFIX, isAgentTokenClientId } from "@doxahq/contracts/agent-access";
 import type { AgentActor } from "@doxahq/api/services/agent-access/actor";
 import type { ToolCost } from "./tool-definition";
 
@@ -22,7 +23,10 @@ export type RateLimitBindings = Record<ToolCost, RateLimit>;
 /** Expensive calls count per user, so many clients cannot multiply the budget. */
 export function rateLimitKey(cost: ToolCost, actor: AgentActor): string {
   const { userId } = actor.principal;
-  return cost === "expensive" ? userId : `${userId}:${actor.channel.clientId}`;
+  if (cost === "expensive") return userId;
+  // Agent tokens of one user share a budget, so many tokens cannot multiply it.
+  const { clientId } = actor.channel;
+  return `${userId}:${isAgentTokenClientId(clientId) ? AGENT_TOKEN_CLIENT_ID_PREFIX : clientId}`;
 }
 
 export function createRateLimiter(bindings: RateLimitBindings): McpRateLimiter {

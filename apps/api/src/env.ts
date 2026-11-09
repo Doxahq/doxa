@@ -98,6 +98,8 @@ export interface Env extends AuthEnv {
   /** Storage of the OAuth authorization server: clients, grants, tokens, pending consents. */
   OAUTH_KV?: KVNamespace;
   OAUTH_ISSUER?: string;
+  /** Opens the auth.md agent signup flow. Only the exact value `true` opens it. */
+  AGENT_SIGNUP_ENABLED?: string;
   MCP_RESOURCE_URL?: string;
 }
 

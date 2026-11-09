@@ -458,6 +458,19 @@ describe("public rate limits", () => {
     expect(origin.requests).toHaveLength(0);
   });
 
+  it("gives agent registration its own budget, and answers 429 at the limit", async () => {
+    const identity = limiter(false);
+    const publicLimit = limiter(true);
+    const { env: e, origin } = env({ API_AGENT_IDENTITY_LIMITER: identity as never, API_PUBLIC_LIMITER: publicLimit as never });
+
+    const response = await worker.fetch(from("203.0.113.9", "https://api.doxa.so/agent/identity", { method: "POST", body: "{}" }), e);
+
+    expect(response.status).toBe(429);
+    expect(identity.limit).toHaveBeenCalledTimes(1);
+    expect(publicLimit.limit).not.toHaveBeenCalled();
+    expect(origin.requests).toHaveLength(0);
+  });
+
   it("uses the OAuth budget for the other OAuth endpoints and the public budget elsewhere", async () => {
     const oauth = limiter(true);
     const publicLimit = limiter(true);

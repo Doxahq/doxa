@@ -109,6 +109,7 @@ describe("sending streams", () => {
       ["domain-status-changed", "notifications"],
       ["verify-email", "transactional"],
       ["reset-password", "transactional"],
+      ["agent-connected", "transactional"],
     ]);
   });
 });

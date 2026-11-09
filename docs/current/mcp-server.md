@@ -44,6 +44,9 @@ Consequential actions and approvals are in [agent-actions.md](agent-actions.md).
 - Users see and revoke grants in Settings, under "Connected agents".
 - Access tokens last 1 hour. Refresh tokens last 30 days, or 14 days without
   use.
+- An agent without OAuth support uses the claim flow and an agent token. The token lasts
+  90 days, or 30 days without use.
+  See `docs/current/agent-signup.md`.
 
 ## Scopes
 

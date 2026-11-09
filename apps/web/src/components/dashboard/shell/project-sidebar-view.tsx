@@ -9,7 +9,7 @@ import {
   EditedPill,
   SidebarNavHint,
   SidebarNavLink,
-  SidebarSectionLabel,
+  SidebarProjectTitle,
 } from "~/components/dashboard/shell/sidebar-nav"
 import { isProjectPublished } from "~/lib/dashboard/model"
 import { useOptionalProjectBranch } from "~/lib/dashboard/project-branch-context"
@@ -42,16 +42,16 @@ export function ProjectSidebarView({ projectId }: { projectId: string }) {
 
   return (
     <nav aria-label="Project" className="scrollbar-subtle min-h-0 flex-1 overflow-y-auto px-2 pt-2 pb-3.5">
-      <SidebarSectionLabel>
+      <SidebarProjectTitle>
         {detail.data ? (
-          <span className="flex min-w-0 items-center gap-2">
-            <ProjectMonogram project={detail.data.project} className="size-5 rounded-sm text-[10.5px]" />
+          <>
+            <ProjectMonogram project={detail.data.project} className="size-[22px] rounded-md text-[11.5px]" />
             <span className="truncate">{detail.data.project.name}</span>
-          </span>
+          </>
         ) : (
           "Project"
         )}
-      </SidebarSectionLabel>
+      </SidebarProjectTitle>
       <SidebarNavLink
         to="/dashboard/projects/$projectId/project"
         params={{ projectId }}

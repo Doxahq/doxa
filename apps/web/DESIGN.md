@@ -288,7 +288,9 @@ passes 4.5:1 on `card`.
 - **Sidebar palette:** the sidebar sits one step off the canvas (`sidebar` 0.05)
   with its own `sidebar-foreground` (0.7), `sidebar-accent` hover (0.14), and
   `sidebar-border`. An active nav item has a `secondary` grey fill and
-  `foreground` text, with no blue and no left border.
+  `foreground` text, with no blue and no left border. Nav rows are 40px tall
+  and 4px apart, with soft corners, 14.5px medium text and 18px icons. Their
+  hover fill changes in 100ms.
 - **Scrollbars:** use `scrollbar-subtle` on dark scroll surfaces. Its transparent
   track and square 6px thumb use `scrollbar-thumb`, then lift to
   `scrollbar-thumb-hover` on hover.

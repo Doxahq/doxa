@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router"
-import { BookText, Check, ChevronRight, ChevronsUpDown, Github, LogOut, Plus, Settings, UserRound, Users } from "lucide-react"
+import { BookText, Check, ChevronRight, ChevronsUpDown, Github, LogOut, PanelsTopLeft, Plus, UserRound, Users } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar"
 import {
@@ -30,7 +30,7 @@ export function SiteSettingsButton({ projectId }: { projectId: string }) {
       onClick={() => openSiteSettings(projectId)}
       className="mb-2 flex w-full items-center gap-2.5 rounded-md border border-border bg-card px-2.5 py-2 text-[13.5px] text-foreground transition-colors hover:border-border-strong hover:bg-surface-hover [&>svg]:size-4"
     >
-      <Settings aria-hidden="true" />
+      <PanelsTopLeft aria-hidden="true" />
       <span>Site settings</span>
       <span className="ml-auto flex items-center text-faint">
         <ChevronRight aria-hidden="true" className="size-3.5" />

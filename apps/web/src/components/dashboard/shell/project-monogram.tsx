@@ -18,6 +18,8 @@ export function ProjectMonogram({
       className={cn(
         "grid size-7 shrink-0 place-items-center font-mono text-[12.5px] font-bold text-foreground",
         className,
+        // After className: tailwind-merge drops a line height that comes before a font size.
+        "leading-none",
       )}
       style={{ backgroundColor: color }}
     >

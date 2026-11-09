@@ -49,10 +49,13 @@ export function ProjectTitleSelect({
           onPointerUp={() => {
             lastInputWasPointer.current = true
           }}
+          onPointerDownOutside={() => {
+            lastInputWasPointer.current = true
+          }}
           onKeyDown={() => {
             lastInputWasPointer.current = false
           }}
-          // Focus that returns after a mouse choice counts as keyboard focus,
+          // Focus that returns after a mouse action counts as keyboard focus,
           // and its fill would stay on the title. Keyboard users keep the return.
           onCloseAutoFocus={(event) => {
             if (lastInputWasPointer.current) event.preventDefault()

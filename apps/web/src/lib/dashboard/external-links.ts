@@ -1,4 +1,4 @@
-export const DOXA_GITHUB_URL = "https://github.com/ipenywis/doxa"
+export const DOXA_GITHUB_URL = "https://github.com/Doxahq/doxa"
 export const DOXA_DOCS_URL = "https://docs.doxa.so"
 
 /** How a production generation goes to a review before it changes the live site. */

@@ -28,7 +28,7 @@ Important facts:
 
 - [About](https://doxa.so/about): Why Doxa exists, and what it believes about docs.
 - [Blog](https://doxa.so/blog): Product notes and guides.
-- [GitHub](https://github.com/ipenywis/doxa): The source code.
+- [GitHub](https://github.com/Doxahq/doxa): The source code, under the Apache 2.0 license.
 - [Contact](mailto:hello@doxa.so): Questions, sales, and support.
 
 ## Optional

@@ -1,7 +1,7 @@
 # Agent Instructions
 
 ## Project Context
-- Purpose: private Doxa platform monorepo for dashboard, API, docs content runtime, generation workers, shared agent packages, auth, database, and contracts.
+- Purpose: public, open source (Apache 2.0) Doxa platform monorepo (`github.com/Doxahq/doxa`) for dashboard, API, docs content runtime, generation workers, shared agent packages, auth, database, and contracts.
 - Main entrypoints:
   - `apps/web`: Doxa homepage and dashboard.
   - `apps/api`: Cloudflare Worker API with Better Auth, GitHub integration, projects, jobs, docs domains, and publish endpoints.
@@ -19,7 +19,7 @@
   - `packages/docs-engine`: docs artifact paths, manifest helpers, and the artifact schema version contract.
   - `packages/docs-artifact-fixtures`: frozen artifact sets and golden outputs for the artifact compatibility gate.
   - API on Node (in production since 2026-10-24): `apps/api/src/runtime/node` (the Node origin), `apps/api-edge` (the thin `doxa-api` Worker), `packages/api-bridge` (their protocol) and `infra/terraform` (ECS Fargate behind a private Cloudflare Tunnel, reached only through the edge's `ORIGIN` Workers VPC binding; never give the origin a public hostname). See `docs/current/api-node-origin.md`. Add every new RPC entrypoint method to `API_ENTRYPOINT_METHODS`. Keep Node-only code under `apps/api/src/runtime/node`, because `doxa-mcp` and `doxa-docs-resolver` build from `apps/api` as Workers. `terraform apply`, `pnpm deploy:api:ecs` and `pnpm secrets:api:ecs` (the origin secrets in SSM) change production: ask first. `pnpm secrets:api:ecs --list` only reads.
-  - Production setup lives in the private ops repo `ipenywis/doxa-ops`, not here: Terraform variables and backend, the Cloudflare ID values, the Deploy Production and Deploy API Origin workflows, and the runbook. This repo is planned to go public, so never commit an account-issued ID (KV, Hyperdrive, zone, VPC Service, account) or an AWS account ID. Wrangler configs hold `${CF_*}` placeholders instead (and `${OPS_*}` for operator values such as admin emails) (`scripts/apply-production-ids.mjs`, see `docs/current/self-hosting.md`). A new placeholder needs its value in `doxa-ops/wrangler/production-ids.json` before the next deploy.
+  - Production setup lives in the private ops repo `ipenywis/doxa-ops`, not here: Terraform variables and backend, the Cloudflare ID values, the Deploy Production and Deploy API Origin workflows, and the runbook. This repo is public, so never commit an account-issued ID (KV, Hyperdrive, zone, VPC Service, account) or an AWS account ID. Wrangler configs hold `${CF_*}` placeholders instead (and `${OPS_*}` for operator values such as admin emails) (`scripts/apply-production-ids.mjs`, see `docs/current/self-hosting.md`). A new placeholder needs its value in `doxa-ops/wrangler/production-ids.json` before the next deploy.
 - Important boundaries:
   - `apps/docs-runtime` is not the public docs renderer. The user-facing renderer is `apps/docs-template`, usually deployed as `doxa-docs-renderer`.
   - Local generated docs use `<slug>.localhost:3002`. Production generated docs use `<slug>.doxa.page`, routed to the renderer. `preview.doxa.so` was the public hostname of the private content/runtime Worker; production does not use it (the renderer and dispatcher use service bindings), and it is being retired.

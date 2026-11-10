@@ -13,7 +13,7 @@
     "not_found_handling": "none"
   },
   "vars": {
-    "VITE_OPENSOURCE_REPO_URL": "https://github.com/ipenywis/doxa",
+    "VITE_OPENSOURCE_REPO_URL": "https://github.com/Doxahq/doxa",
     "DOXA_API_BASE_URL": "http://localhost:8787",
     "DOXA_DASHBOARD_BASE_URL": "http://localhost:3001",
     "DOXA_DOCS_BASE_DOMAIN": "localhost"

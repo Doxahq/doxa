@@ -237,7 +237,7 @@
     "DOXA_PREVIOUS_RENDERER_BUILD_ID": "",
     "DOXA_PREVIOUS_RENDERER_RELEASE_ID": "",
     "DOXA_RENDERER_DEPLOYED_AT": "",
-    "VITE_OPENSOURCE_REPO_URL": "https://github.com/ipenywis/doxa",
+    "VITE_OPENSOURCE_REPO_URL": "https://github.com/Doxahq/doxa",
     "DOXA_API_BASE_URL": "https://api.doxa.so",
     "DOXA_DASHBOARD_BASE_URL": "https://doxa.so",
     "DOXA_DOCS_BASE_DOMAIN": "doxa.page"

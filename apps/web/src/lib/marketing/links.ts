@@ -2,7 +2,7 @@
 // until the real destination exists.
 
 export const SITE_ORIGIN = "https://doxa.so"
-export const GITHUB_URL = "https://github.com/ipenywis/doxa"
+export const GITHUB_URL = "https://github.com/Doxahq/doxa"
 export const DOCS_URL = "https://docs.doxa.so"
 export const MCP_SERVER_URL = "https://mcp.doxa.so/mcp"
 export const DISCORD_URL = "#"

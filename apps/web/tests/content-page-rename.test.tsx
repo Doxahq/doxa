@@ -127,13 +127,14 @@ vi.mock("~/lib/platform-api", async (importOriginal) => ({
       status: page?.edited ? "edited" : "published",
       publishedContent: body,
       workingContent: page?.edited ? body : null,
+      revision: 0,
     } satisfies DocsContentPageDetailDto
   },
   applyProjectContentEdits: async (_projectId: string, input: { edits: DocsContentEdit[] }) => {
     await server.delay()
     for (const edit of input.edits) server.apply(edit)
     const saved = input.edits.flatMap((edit) => (edit.type === "set_page_content" ? [edit.href] : []))
-    return { mdxIssues: server.mdxIssues(saved) }
+    return { working: { revision: 0 }, mdxIssues: server.mdxIssues(saved) }
   },
   getProjectContentMdxReport: async () => {
     await server.delay()

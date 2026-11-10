@@ -414,6 +414,51 @@
   caret-color: var(--dashboard-primary);
 }
 
+/* A block that an agent changed. A tint, with no side border, and the age of the change. */
+.doxa-write-content .doxa-agent-changed {
+  position: relative;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--success) 9%, transparent);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--success) 9%, transparent);
+}
+
+/* The edit that a person opened from the activity list. */
+.doxa-write-content .doxa-agent-reviewed {
+  background: color-mix(in srgb, var(--success) 20%, transparent);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--success) 20%, transparent);
+}
+
+/* On the top edge of the tint, so that it does not cover the text. */
+.doxa-write-content .doxa-agent-changed::after {
+  content: attr(data-agent-change);
+  position: absolute;
+  top: -18px;
+  right: 0;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--success) 35%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--success) 12%, var(--background));
+  color: color-mix(in srgb, var(--success) 60%, var(--foreground));
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* A table wrapper scrolls its content, so a label outside it would be cut. */
+.doxa-write-content .tableWrapper.doxa-agent-changed::after {
+  top: 4px;
+  right: 4px;
+}
+
 /* Empty-block hint: "Type '/' for commands…". */
 .doxa-write-content p.is-empty::before {
   content: attr(data-placeholder);
@@ -597,6 +642,23 @@
 .doxa-sync-new {
   clip-path: inset(0 100% 0 0);
   animation: doxa-sync-wipe 6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@keyframes doxa-agent-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 55%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 6px transparent; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .doxa-agent-dot-live {
+    animation: doxa-agent-pulse 1.8s ease-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doxa-agent-dot-live {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent);
+  }
 }
 
 @keyframes doxa-sync-draw {

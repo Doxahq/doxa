@@ -521,6 +521,8 @@ URLs. Rate limits count per Cloudflare location.
 - Each tool call logs one JSON line without tokens, props, or content.
 - Writes, actions, decisions, and approval setting changes add a row to
   `agent_activity`.
+- A successful call of a tool with `describeActivity` also adds rows to
+  `agent_live_events`. See `docs/current/agent-live-activity.md`.
 
 ## Local development
 

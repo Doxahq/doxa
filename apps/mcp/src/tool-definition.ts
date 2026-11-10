@@ -4,12 +4,26 @@ import type { ToolAnnotations } from "@modelcontextprotocol/server";
 import type { z } from "zod";
 import type { AgentActor } from "@doxahq/api/services/agent-access/actor";
 import type { Capability } from "@doxahq/api/services/agent-access/capabilities";
+import type { DocsPageChange } from "@doxahq/api/services/docs-content/page-changes";
 import type { AuthorizedProject } from "@doxahq/api/services/agent-access/project-access-policy";
 import type { McpServices } from "./services/mcp-services";
 import type { PlatformActions } from "./services/platform-actions";
 import type { AgentActionKind } from "@doxahq/contracts/approval-requests";
+import type { AgentLiveEventKind } from "@doxahq/contracts/agent-live-activity";
 
 export type ToolCost = "read" | "write" | "expensive";
+
+/** One line of the project's live activity. Never page content. */
+export interface ToolActivity {
+  readonly kind: AgentLiveEventKind;
+  readonly branchId?: string | null;
+  readonly pageHref?: string | null;
+  readonly pageTitle?: string | null;
+  readonly detail?: string | null;
+  /** The agent's own short explanation. */
+  readonly note?: string | null;
+  readonly branchRevision?: number | null;
+}
 
 export type ToolInputSchema = z.ZodObject<z.ZodRawShape, z.core.$strict>;
 
@@ -25,6 +39,8 @@ export interface ToolContext {
     capability: Capability,
   ): Promise<AuthorizedProject>;
   listAccessibleProjects(): Promise<ProjectDto[]>;
+  /** Pass to `applyEdits`, so that the live activity can show what changed. */
+  recordPageChanges(changes: readonly DocsPageChange[]): void;
 }
 
 export interface McpToolDefinition<
@@ -47,6 +63,16 @@ export interface McpToolDefinition<
    * null. Tasks clients get that request as an MCP task (spec v2 §9).
    */
   pendingRequestOf?(output: z.infer<TOutput>): string | null;
+  /**
+   * What a successful call shows in the live activity. A tool without it is
+   * silent; the registry tests list the silent project tools. `pageChanges`
+   * are the page edits that the call really saved.
+   */
+  describeActivity?(
+    input: z.infer<TInput>,
+    output: z.infer<TOutput>,
+    pageChanges: readonly DocsPageChange[],
+  ): readonly ToolActivity[];
   // Method syntax on purpose: it lets a list of tools with different schemas
   // share the erased `AnyMcpTool` type.
   run(context: ToolContext, input: z.infer<TInput>): Promise<z.infer<TOutput>>;

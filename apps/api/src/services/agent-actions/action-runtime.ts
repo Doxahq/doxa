@@ -14,6 +14,8 @@ import { ApprovalSweeper } from "./approval-sweeper";
 import { AgentActionGateway } from "./gateway";
 import { approvalPolicyFor } from "./policy/policy-sources";
 import { AGENT_ACTIONS } from "./registry";
+import { isAgentLiveActivityEnabled } from "@doxahq/contracts/agent-live-activity";
+import { AgentLiveEventRepository } from "../../repositories/agent-live-events";
 
 export interface AgentActionRuntime {
   readonly gateway: AgentActionGateway;
@@ -67,6 +69,9 @@ export function createAgentActionRuntime(env: Env, options: AgentActionRuntimeOp
       access,
       services,
       activity,
+      liveEvents: isAgentLiveActivityEnabled(env.AGENT_LIVE_ACTIVITY_ENABLED)
+        ? new AgentLiveEventRepository(env)
+        : undefined,
       flags: settings,
       users: new UserDirectoryRepository(env),
       defer: options.defer,

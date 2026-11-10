@@ -81,6 +81,7 @@ export function createDocsContentRoutes(): ApiApp {
           access.projectId,
           input.data.edits,
           input.data.branch,
+          { expectedRevision: input.data.expectedRevision },
         );
         // Spec 8.1: the save stands even when a page fails the MDX check. A
         // person edits in steps, so the issues come back for the editor.

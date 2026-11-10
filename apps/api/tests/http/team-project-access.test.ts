@@ -111,6 +111,7 @@ describe("dashboard routes for team members (spec §5)", () => {
       PROJECT,
       [pageEdit],
       "main",
+      { expectedRevision: undefined },
     );
   });
 

@@ -100,6 +100,8 @@ export interface Env extends AuthEnv {
   OAUTH_ISSUER?: string;
   /** Opens the auth.md agent signup flow. Only the exact value `true` opens it. */
   AGENT_SIGNUP_ENABLED?: string;
+  /** Only the exact value `true` opens the live agent activity panel. */
+  AGENT_LIVE_ACTIVITY_ENABLED?: string;
   MCP_RESOURCE_URL?: string;
 }
 

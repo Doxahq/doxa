@@ -9,6 +9,7 @@ import { MergeGenerationScheduler } from "./services/doxabot/merge-generations";
 import { DoxabotQueueOutboxPublisher } from "./services/doxabot/queue-outbox";
 import { EmailDeliverySweeper } from "./services/email/email-delivery-sweeper";
 import { EmailSuppressionSync, isFirstCronRunOfHour } from "./services/email/email-suppression-sync";
+import { purgeAgentLiveEvents } from "./services/agent-live/agent-live-purge";
 import { AgentSignupPurge } from "./services/agent-signup/agent-signup-purge";
 import { isAgentSignupEnabled } from "./services/agent-signup/agent-signup-config";
 import { resolveOAuthConfig } from "./services/oauth/oauth-config";
@@ -40,6 +41,7 @@ export function runScheduledJobs(scheduledTime: number, env: Env, context: Execu
   if (isAgentSignupEnabled(env)) {
     context.waitUntil(AgentSignupPurge.fromEnv(env).run());
   }
+  context.waitUntil(purgeAgentLiveEvents(env));
 }
 
 /** Async, so a failed setup rejects this job only and the other jobs still run. */

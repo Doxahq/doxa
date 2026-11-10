@@ -2,6 +2,7 @@ import type { ToolAnnotations } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { DocsContentError } from "@doxahq/api/services/docs-content/errors";
 import { HintedToolError } from "../errors";
+import { AGENT_LIVE_TEXT_MAX_LENGTH } from "@doxahq/contracts/agent-live-activity";
 
 export const READ_ONLY_ANNOTATIONS: ToolAnnotations = {
   readOnlyHint: true,
@@ -48,6 +49,14 @@ export const namedBranchInput = z
   .union([z.literal("main"), z.uuid()])
   .describe(
     'A branch ID from create_branch or list_branches. "main" is not accepted.',
+  );
+
+export const agentNoteInput = z
+  .string()
+  .max(AGENT_LIVE_TEXT_MAX_LENGTH)
+  .optional()
+  .describe(
+    "One short sentence for the person who watches this work: what you change and why. It appears in the Doxa dashboard.",
   );
 
 export const expectedRevisionInput = z

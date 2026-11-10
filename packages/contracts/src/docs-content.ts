@@ -126,6 +126,8 @@ export const docsContentPageDetailSchema = z
     publishedContent: z.string(),
     /** The branch source, or null when this page has no working change. */
     workingContent: z.string().nullable(),
+    /** The branch revision of this text, for the `expectedRevision` of a save. */
+    revision: z.number().int().nonnegative(),
   })
   .strict();
 
@@ -336,6 +338,8 @@ export const applyDocsContentEditsInputSchema = z
   .object({
     branch: z.union([z.literal("main"), z.uuid()]),
     edits: z.array(docsContentEditSchema).min(1).max(100),
+    /** Fails the save with 409 when the branch is no longer at this revision. */
+    expectedRevision: z.number().int().nonnegative().optional(),
   })
   .strict();
 

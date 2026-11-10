@@ -39,6 +39,7 @@ export const finishAssetUploadTool = defineMcpTool({
     })
     .strict(),
   output: docsAssetUploadResultSchema,
+  describeActivity: (_input, output) => [{ kind: "edit", detail: output.path }],
   async run(context, input) {
     const authorized = await context.authorize(input.projectId, "docs.write");
     // Only the connection that created the URL can finish it, on its project:

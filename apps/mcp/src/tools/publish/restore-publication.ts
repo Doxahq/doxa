@@ -9,6 +9,7 @@ export const restorePublicationTool = defineActionTool({
   title: "Restore a publication",
   description: "Rolls the live site back to an earlier publication from list_publications.",
   action: "docs.restore",
+  liveActivityKind: "publish",
   scope: "publish",
   annotations: destructiveActionAnnotations,
   input: z

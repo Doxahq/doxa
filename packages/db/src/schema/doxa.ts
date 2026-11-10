@@ -1602,6 +1602,48 @@ export const agentActivity = pgTable(
 );
 
 /**
+ * What agents do on a project, for the live panel in the Content tab. This
+ * is separate from `agent_activity`: it also has read tools and can hold a
+ * diff, so rows last 24 hours. `seq` orders the rows of one project; a writer
+ * takes it under a project lock, so that a reader never skips a row.
+ */
+export const agentLiveEvents = pgTable(
+  "agent_live_events",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    seq: bigint("seq", { mode: "number" }).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    branchId: uuid("branch_id").references(() => docsBranches.id, {
+      onDelete: "set null",
+    }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    grantRef: text("grant_ref").notNull(),
+    clientId: text("client_id").notNull(),
+    clientName: text("client_name").notNull(),
+    tool: text("tool").notNull(),
+    kind: text("kind").notNull(),
+    pageHref: text("page_href"),
+    pageTitle: text("page_title"),
+    detail: text("detail"),
+    note: text("note"),
+    linesAdded: integer("lines_added"),
+    linesRemoved: integer("lines_removed"),
+    branchRevision: integer("branch_revision"),
+    diff: text("diff"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.seq] }),
+    index("agent_live_events_occurred_idx").on(table.occurredAt),
+  ],
+);
+
+/**
  * The approval mode a project admin or a user picked for one agent action.
  * One row for each scope and action; no row means "not set". A project row
  * wins over a user row. `action_kind` is text, as in the request table.

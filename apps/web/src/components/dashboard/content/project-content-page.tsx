@@ -11,6 +11,7 @@ import { useNavigate } from "@tanstack/react-router"
 import { AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import type { DocsMdxIssue } from "@doxahq/contracts"
+import type { AgentLiveEvent } from "@doxahq/contracts/agent-live-activity"
 import type { BranchRef, DocsBranchPageDiff } from "@doxahq/contracts/docs-branches"
 import type { GenerationReviewPage } from "@doxahq/contracts/generation-reviews"
 
@@ -25,6 +26,9 @@ import { BranchSwitcher } from "~/components/dashboard/content/branches/branch-s
 import { CreateBranchDialog } from "~/components/dashboard/content/branches/create-branch-dialog"
 import { DiscardChangesDialog } from "~/components/dashboard/content/branches/discard-changes-dialog"
 import { HistoryPanel } from "~/components/dashboard/content/branches/history-panel"
+import { AgentActivityButton } from "~/components/dashboard/content/agent-activity/agent-activity-button"
+import { AgentActivityPanel } from "~/components/dashboard/content/agent-activity/agent-activity-panel"
+import { AgentBranchBanner } from "~/components/dashboard/content/agent-activity/agent-branch-banner"
 import type { PublishMenuView } from "~/components/dashboard/content/branches/publish-menu"
 import { SyncDialog } from "~/components/dashboard/content/branches/sync-dialog"
 import { EditorTopBar, hostOf, pageUrl } from "~/components/dashboard/content/editor-top-bar"
@@ -41,6 +45,7 @@ import type { PageIconEdit } from "~/components/dashboard/content/write-editor/p
 import type { PageSlugEdit } from "~/components/dashboard/content/write-editor/page-slug-field"
 import { SidebarViewHeader } from "~/components/dashboard/shell/sidebar-view-stack"
 import { Alert, AlertDescription } from "~/components/ui/alert"
+import { Button } from "~/components/ui/button"
 import { EditorSkeleton, PreviewSkeleton, SourceSkeleton } from "~/components/dashboard/content/editor-skeleton"
 import { useSidebar } from "~/components/ui/sidebar"
 import { buildContentTree, contentHomeHref, findPagePath, firstChangedHref, type ContentTreeSection } from "~/lib/dashboard/content-navigation"
@@ -52,6 +57,12 @@ import { ReviewPageMarksProvider } from "~/lib/dashboard/review-page-marks-conte
 import { isEditableTarget, useShell } from "~/lib/dashboard/shell-context"
 import { useSaveBeforeLeavingEditor } from "~/lib/dashboard/use-save-before-leaving-editor"
 import { useSidebarPanel } from "~/lib/dashboard/sidebar-panel-context"
+import { isAgentEditingBranch, livePageHref, workingAgentOnBranch } from "~/lib/dashboard/agent-activity-model"
+import type { AgentChangeView } from "~/lib/editor/agent-change-highlight"
+import { AgentLivePageProvider } from "~/lib/dashboard/agent-live-page-context"
+import { useAgentActivity } from "~/lib/dashboard/use-agent-activity"
+import { useAgentBranchListRefresh } from "~/lib/dashboard/use-agent-branch-list-refresh"
+import { useAgentEditorSync } from "~/lib/dashboard/use-agent-editor-sync"
 import { useAgentPublishRequest } from "~/lib/dashboard/use-agent-publish-request"
 import { useBranchPreview } from "~/lib/dashboard/use-branch-preview"
 import { useBranchStatus } from "~/lib/dashboard/use-branch-status"
@@ -69,6 +80,8 @@ import { hasLightMode, siteCanvasTheme, useCanvasMode, type CanvasSettings } fro
 const MdxCodeEditor = lazy(() => import("~/components/dashboard/content/mdx-code-editor"))
 const MdxPreview = lazy(() => import("~/components/dashboard/content/mdx-preview"))
 const NO_REVIEW_PAGES: readonly GenerationReviewPage[] = []
+/** The width below which the agent panel fills the window. Same as its `max-[820px]` classes. */
+const AGENT_PANEL_COVERS_EDITOR = "(max-width: 820px)"
 // TipTap and the MDX bridge stay out of the other dashboard routes, but Write
 // is the default mode, so the download starts as soon as this screen's code
 // runs, in parallel with the content requests. The page keeps its skeleton
@@ -134,7 +147,10 @@ export function ProjectContentPage({
   onReviewEntryHandled?: () => void
 }) {
   const branches = useProjectBranch()
-  const state = useProjectContent(projectId, branches.branchRef, { requestedHref: pageHref })
+  const state = useProjectContent(projectId, branches.branchRef, {
+    requestedHref: pageHref,
+    guardRevision: branches.selectedBranch?.createdBy.kind === "agent",
+  })
   // The URL follows the open page, so a reload opens it again.
   useEffect(() => {
     if (state.selectedHref && state.selectedHref !== pageHref) onPageShown?.(state.selectedHref)
@@ -184,6 +200,27 @@ export function ProjectContentPage({
     view: "review",
   })
   const [isDiscardOpen, setIsDiscardOpen] = useState(false)
+  const agentActivity = useAgentActivity(projectId)
+  const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false)
+  const agentSync = useAgentEditorSync({
+    projectId,
+    branch: branches.branchRef,
+    snapshot: agentActivity.snapshot,
+    state,
+  })
+  useAgentBranchListRefresh({
+    projectId,
+    snapshot: agentActivity.snapshot,
+    listedBranches: branches.branches,
+  })
+  const agentSnapshot = agentActivity.snapshot
+  const agentOnBranch = agentSnapshot ? workingAgentOnBranch(agentSnapshot, branches.branchRef) : null
+  const agentIsEditing = agentSnapshot ? isAgentEditingBranch(agentSnapshot, branches.branchRef) : false
+  const agentLiveHref = agentSnapshot ? livePageHref(agentSnapshot, branches.branchRef) : null
+  const agentPageTitles = useMemo(
+    () => new Map(state.pages.map((page) => [page.href, page.title])),
+    [state.pages],
+  )
 
   // The sidebar panel must not change per keystroke, so its callbacks read the
   // latest editor state through refs instead of closing over it.
@@ -201,6 +238,22 @@ export function ProjectContentPage({
     if (!(await stateRef.current.saveBuffer())) return
     branchesRef.current.selectBranch(branch)
   }, [branchesRef, stateRef])
+
+  /** The list that started a review goes away with the panel, so the review ends too. */
+  const closeAgentPanel = () => {
+    setIsAgentPanelOpen(false)
+    agentSync.reviewEdit(null)
+  }
+
+  const reviewAgentEdit = (edit: AgentLiveEvent | null) => {
+    agentSync.reviewEdit(edit)
+    if (edit === null) return
+    // Only the Write editor can mark an edit.
+    if (state.viewMode === "split") state.setViewMode("write")
+    if (edit.branchId !== null) void switchBranch(edit.branchId)
+    // On a narrow window the panel covers the editor.
+    if (window.matchMedia(AGENT_PANEL_COVERS_EDITOR).matches) setIsAgentPanelOpen(false)
+  }
 
   // Review mode: the open generation review, while its branch is checked out.
   const review = useContentReview({
@@ -395,7 +448,7 @@ export function ProjectContentPage({
         />
       )
       return (
-      <>
+      <AgentLivePageProvider href={agentLiveHref}>
         <SidebarViewHeader
           label="Content"
           backLabel="Back to overview"
@@ -434,10 +487,11 @@ export function ProjectContentPage({
         ) : (
           pageList
         )}
-      </>
+      </AgentLivePageProvider>
       )
     },
     [
+      agentLiveHref,
       branches.branchRef,
       branches.branches,
       canPublish,
@@ -483,7 +537,19 @@ export function ProjectContentPage({
       tree={tree}
       isMounted={isMounted}
       WriteEditor={WriteEditor}
-      readOnly={!canWrite}
+      readOnly={!canWrite || agentIsEditing}
+      agentChanges={
+        agentSnapshot === null
+          ? null
+          : {
+              changes: agentSync.changes,
+              now: agentSnapshot.serverTime,
+              reveal: agentSync.follow,
+              reviewed: agentSync.reviewed,
+              // On a narrow window a review closes the panel, so that the editor shows.
+              showMarks: isAgentPanelOpen || agentSync.reviewed !== null,
+            }
+      }
       canvas={canvas}
       previewHost={previewHost}
       liveDocsUrl={liveDocsUrl}
@@ -513,6 +579,16 @@ export function ProjectContentPage({
           onBranchErased={() => branches.selectBranch("main")}
           onOpenDiscard={() => setIsDiscardOpen(true)}
           onOpenPageDiff={openPageDiff}
+          agentActivityButton={
+            agentActivity.snapshot === null ? null : (
+              <AgentActivityButton
+                presence={agentActivity.presence}
+                agentCount={agentActivity.snapshot.agents.length}
+                open={isAgentPanelOpen}
+                onToggle={() => (isAgentPanelOpen ? closeAgentPanel() : setIsAgentPanelOpen(true))}
+              />
+            )
+          }
           review={
             session
               ? {
@@ -573,6 +649,14 @@ export function ProjectContentPage({
           }}
         />
 
+        {agentOnBranch && !session ? (
+          <AgentBranchBanner
+            agent={agentOnBranch}
+            follow={agentSync.follow}
+            onFollowChange={agentSync.setFollow}
+          />
+        ) : null}
+
         {/* The review strip spans the main area, so it reads as a state of the editor. */}
         {session ? (
           <ReviewBanner projectId={projectId} review={session.review} onExit={() => void review.exit()} />
@@ -584,7 +668,14 @@ export function ProjectContentPage({
           {state.error ? (
             <Alert variant="destructive">
               <AlertCircle aria-hidden="true" />
-              <AlertDescription>{state.error}</AlertDescription>
+              <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <span>{state.error}</span>
+                {state.hasRevisionConflict ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => void state.loadLatestPage()}>
+                    Load the latest version
+                  </Button>
+                ) : null}
+              </AlertDescription>
             </Alert>
           ) : null}
 
@@ -603,39 +694,69 @@ export function ProjectContentPage({
           ) : null}
         </div>
 
-        {/* While the content loads, the editor panes draw the skeleton, so it is
-            the same one until the page arrives, with nothing remounting. */}
-        {!state.isLoading && state.pages.length === 0 ? (
-          <ContentEmptyState projectId={projectId} />
-        ) : session ? (
-          <ReviewModeArea
-            projectId={projectId}
-            session={session}
-            actions={review.actions}
-            decisions={decisions}
-            canWrite={canWrite}
-            viewMode={state.viewMode}
-            onViewModeChange={state.setViewMode}
-            canvas={canvas}
-            host={previewHost}
-            liveDocsUrl={liveDocsUrl}
-            onStep={review.focusOn}
-            onFinish={() => review.finish.setOpen(true)}
-            editor={editorPanes}
-            editorPageHref={state.isPageLoading ? null : state.selectedHref}
-          />
-        ) : shownPageDiff ? (
-          <BranchPageDiffPane
-            projectId={projectId}
-            branch={branches.branchRef}
-            branchName={branchName}
-            page={shownPageDiff}
-            onClose={closePageDiff}
-            onBackToRequest={approvalRequest ? backToRequest : undefined}
-          />
-        ) : (
-          editorPanes
-        )}
+        <div className="relative flex min-h-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {/* While the content loads, the editor panes draw the skeleton, so it is
+                the same one until the page arrives, with nothing remounting. */}
+            {!state.isLoading && state.pages.length === 0 ? (
+              <ContentEmptyState projectId={projectId} />
+            ) : session ? (
+              <ReviewModeArea
+                projectId={projectId}
+                session={session}
+                actions={review.actions}
+                decisions={decisions}
+                canWrite={canWrite}
+                viewMode={state.viewMode}
+                onViewModeChange={state.setViewMode}
+                canvas={canvas}
+                host={previewHost}
+                liveDocsUrl={liveDocsUrl}
+                onStep={review.focusOn}
+                onFinish={() => review.finish.setOpen(true)}
+                editor={editorPanes}
+                editorPageHref={state.isPageLoading ? null : state.selectedHref}
+              />
+            ) : shownPageDiff ? (
+              <BranchPageDiffPane
+                projectId={projectId}
+                branch={branches.branchRef}
+                branchName={branchName}
+                page={shownPageDiff}
+                onClose={closePageDiff}
+                onBackToRequest={approvalRequest ? backToRequest : undefined}
+              />
+            ) : (
+              editorPanes
+            )}
+          </div>
+          {isAgentPanelOpen && agentActivity.snapshot !== null ? (
+            <AgentActivityPanel
+              projectId={projectId}
+              snapshot={agentActivity.snapshot}
+              titles={agentPageTitles}
+              connection={agentActivity.connection}
+              openBranch={branches.branchRef}
+              onOpenBranch={(branchId) => void switchBranch(branchId)}
+              onReviewEdit={reviewAgentEdit}
+              branchActions={
+                agentOnBranch
+                  ? {
+                      canBuildPreview: canWrite && preview.canBuild,
+                      onBuildPreview: openPreview,
+                      onReviewChanges: canPublish
+                        ? () => {
+                            changePublishMenuView("review")
+                            changePublishMenuOpen(true)
+                          }
+                        : null,
+                    }
+                  : null
+              }
+              onClose={closeAgentPanel}
+            />
+          ) : null}
+        </div>
       </div>
     </EditorAssetsProvider>
   )
@@ -654,6 +775,7 @@ function EditorPanes({
   isMounted,
   WriteEditor,
   readOnly,
+  agentChanges,
   canvas,
   previewHost,
   liveDocsUrl,
@@ -665,6 +787,8 @@ function EditorPanes({
   WriteEditor: WriteEditorComponent | null
   /** True for a role without `docs.write`: the page reads, never edits. */
   readOnly: boolean
+  /** An agent's edits of the open page, for the marks in the Write editor. */
+  agentChanges: AgentChangeView | null
   canvas: CanvasSettings
   /** The address that the Split preview shows before the page path. */
   previewHost: string
@@ -796,6 +920,7 @@ function EditorPanes({
               onChange={state.setText}
               onSave={() => void state.saveBuffer()}
               readOnly={readOnly || state.isDiscarding}
+              agentChanges={agentChanges}
               page={{
                 href: state.selectedHref,
                 status: state.page?.status ?? null,

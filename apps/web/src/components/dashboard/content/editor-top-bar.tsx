@@ -89,6 +89,8 @@ interface EditorTopBarProps {
   onOpenPageDiff: (page: DocsBranchPageDiff) => void
   /** Set in review mode. */
   review: EditorTopBarReview | null
+  /** Null while the live agent activity is off for this project. */
+  agentActivityButton: ReactNode
 }
 
 /** The top bar of the content editor. */
@@ -141,6 +143,7 @@ export function EditorTopBar(props: EditorTopBarProps) {
       }
       actions={
         <>
+          {review ? null : props.agentActivityButton}
           <ModeSwitch modes={modes} mode={state.viewMode} onChange={state.setViewMode} />
           {review ? review.actions : capabilities.can("docs.publish") ? (
             <PublishMenu

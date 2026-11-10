@@ -21,6 +21,7 @@ export interface McpFailureLogEntry {
   event:
     | "mcp_tool_internal_error"
     | "mcp_activity_write_failed"
+    | "mcp_live_event_write_failed"
     | "mcp_task_create_failed"
     | "mcp_task_internal_error";
   requestId: string;

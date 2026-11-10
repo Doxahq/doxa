@@ -293,6 +293,14 @@ passes 4.5:1 on `card`.
   hover fill changes in 100ms. The project name above the rows reads as a
   title at rest. On hover it gets the same fill and an up-down arrow, and a
   click opens the project list.
+- **Agent activity:** the Agent button sits before the Write and Split switch and
+  uses the `Sparkles` icon. Its dot is green and pulses for an active agent,
+  `warning` for one that waits for a person, and `muted-foreground` for an idle
+  agent. With Reduce Motion, the dot stays still. The panel docks at the right of
+  the editor, 400px wide, and covers the editor below 820px.
+  While the panel is open, a block that an agent changed has a `success` tint and a small mono label with
+  the age of the change, such as "JUST NOW". An edit that a person opens from the
+  activity list has a stronger tint, and the editor scrolls to it.
 - **Scrollbars:** use `scrollbar-subtle` on dark scroll surfaces. Its transparent
   track and square 6px thumb use `scrollbar-thumb`, then lift to
   `scrollbar-thumb-hover` on hover.

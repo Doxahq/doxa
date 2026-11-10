@@ -7,6 +7,7 @@ import {
   requireNamedBranch,
   writeAnnotations,
 } from "../shared";
+import { liveBranchId } from "../../live-activity";
 
 export const buildPreviewTool = defineMcpTool({
   name: "build_preview",
@@ -20,6 +21,9 @@ export const buildPreviewTool = defineMcpTool({
     .object({ projectId: projectIdInput, branch: namedBranchInput })
     .strict(),
   output: docsBranchPreviewResultSchema,
+  describeActivity: (input) => [
+    { kind: "preview", branchId: liveBranchId(input.branch) },
+  ],
   async run(context, input) {
     const authorized = await context.authorize(input.projectId, "docs.write");
     return context.services.branches.buildPreview({

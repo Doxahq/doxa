@@ -50,6 +50,7 @@ import {
 } from "../services/generation-event-stream";
 import { parseGenerationPageRequest } from "../utils/generation-pagination";
 import { createDocsContentRoutes } from "./docs-content";
+import { createAgentActivityRoutes } from "./agent-activity";
 import { createDocsBranchRoutes } from "./docs-branches";
 import { createGenerationReviewRoutes } from "./generation-reviews";
 import { createGenerationChangesRoutes } from "./generation-changes";
@@ -196,6 +197,7 @@ export function createProjectRoutes(): ApiApp {
 
   app.route("/:projectId/content", createDocsContentRoutes());
   app.route("/:projectId/branches", createDocsBranchRoutes());
+  app.route("/:projectId/agent-activity", createAgentActivityRoutes());
   app.route("/:projectId/generation-review", createGenerationReviewRoutes());
   app.route("/:projectId/generations", createGenerationChangesRoutes());
   app.route("/:projectId/page-locks", createPageLockRoutes());

@@ -14,6 +14,7 @@ import {
   writeAnnotations,
 } from "../shared";
 import { OWN_BRANCH_ONLY, requireOwnBranch } from "./branch-ownership";
+import { liveBranchId } from "../../live-activity";
 
 const MAX_RESOLUTIONS = 500;
 const syncFields = syncDocsBranchInputSchema.shape;
@@ -53,6 +54,8 @@ export const syncBranchTool = defineMcpTool({
         .optional(),
     })
     .strict(),
+  describeActivity: (input) =>
+    input.dryRun ? [] : [{ kind: "branch", branchId: liveBranchId(input.branch) }],
   async run(context, input) {
     const authorized = await context.authorize(input.projectId, "docs.write");
     const scope = { userId: authorized.ownerUserId, projectId: authorized.projectId };

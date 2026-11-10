@@ -29,6 +29,7 @@ import {
 } from "./fake-actions-rpc";
 import type { McpServices } from "../../src/services/mcp-services";
 import type { AgentActivityRecord } from "@doxahq/api/repositories/agent-activity";
+import type { NewAgentLiveEvent } from "@doxahq/api/repositories/agent-live-events";
 import type { AgentActor } from "@doxahq/api/services/agent-access/actor";
 import { MembershipProjectAccessPolicy } from "@doxahq/api/services/agent-access/membership-project-access-policy";
 import type { TeamRole } from "@doxahq/contracts/teams";
@@ -51,6 +52,8 @@ import {
 export const RESOURCE_URL = "http://localhost:8791/mcp";
 export const REQUEST_ID = "99999999-9999-4999-8999-999999999999";
 
+export type RecordedLiveEvent = NewAgentLiveEvent & { projectId: string };
+
 export interface HarnessOptions {
   userId?: string;
   scopes?: readonly string[];
@@ -72,6 +75,7 @@ export interface Harness {
   /** Edits the fake docs service wrote (dry runs are not recorded). */
   readonly written: AppliedEdits[];
   readonly activity: AgentActivityRecord[];
+  readonly liveEvents: RecordedLiveEvent[];
   readonly toolCalls: ToolCallLogEntry[];
   readonly failures: McpFailureLogEntry[];
   readonly limiterCalls: string[];
@@ -118,6 +122,7 @@ interface HarnessState {
   calls: ServiceCall[];
   written: AppliedEdits[];
   activity: AgentActivityRecord[];
+  liveEvents: RecordedLiveEvent[];
   toolCalls: ToolCallLogEntry[];
   failures: McpFailureLogEntry[];
   limiterCalls: string[];
@@ -131,6 +136,7 @@ function createState(): HarnessState {
     calls: [],
     written: [],
     activity: [],
+    liveEvents: [],
     toolCalls: [],
     failures: [],
     limiterCalls: [],
@@ -206,6 +212,10 @@ function testContext(
       },
     },
     activity: { append: async (record) => void state.activity.push(record) },
+    liveEvents: {
+      append: async (projectId, events) =>
+        void state.liveEvents.push(...events.map((event) => ({ ...event, projectId }))),
+    },
     logger: {
       toolCall: (entry) => state.toolCalls.push(entry),
       failure: (entry) => state.failures.push(entry),

@@ -194,6 +194,7 @@ describe("docs content routes", () => {
       status: "published",
       publishedContent: "# Rest API\n",
       workingContent: null,
+      revision: 0,
     });
 
     const response = await worker.fetch(
@@ -241,6 +242,28 @@ describe("docs content routes", () => {
       "11111111-1111-4111-8111-111111111111",
       [{ type: "set_page_content", href: "/", content: "# Overview\n" }],
       "main",
+      { expectedRevision: undefined },
+    );
+  });
+
+  test("passes the revision that the editor loaded to the save", async () => {
+    mocks.docsContentService.applyEdits.mockResolvedValue(null);
+    await worker.fetch(
+      createMutationRequest("/projects/11111111-1111-4111-8111-111111111111/content/edits", {
+        body: JSON.stringify({
+          expectedRevision: 4,
+          edits: [{ type: "set_page_content", href: "/", content: "# Overview\n" }],
+        }),
+      }),
+      createEnv(),
+      createExecutionContext(),
+    );
+    expect(mocks.docsContentService.applyEdits).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      "main",
+      { expectedRevision: 4 },
     );
   });
 

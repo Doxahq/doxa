@@ -9,6 +9,7 @@ export const addDomainTool = defineActionTool({
   description:
     "Adds a custom domain to the docs site. When it completes, the result lists the DNS records that the user must create.",
   action: "domain.add",
+  liveActivityKind: "domain",
   scope: "domains:write",
   annotations: additiveActionAnnotations,
   input: z

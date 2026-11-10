@@ -24,6 +24,8 @@ export const deleteBranchTool = defineMcpTool({
     .object({ projectId: projectIdInput, branch: namedBranchInput })
     .strict(),
   output: z.object({ deletedBranchId: z.uuid() }).strict(),
+  // The branch no longer exists, so the event cannot reference it.
+  describeActivity: () => [{ kind: "branch" }],
   async run(context, input) {
     const branchId = requireNamedBranch(input.branch);
     const authorized = await context.authorize(input.projectId, "docs.write");

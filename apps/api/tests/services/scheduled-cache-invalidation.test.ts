@@ -50,6 +50,9 @@ vi.mock("../../src/services/doxabot/merge-generations", () => ({
   },
 }));
 
+vi.mock("../../src/services/agent-live/agent-live-purge", () => ({
+  purgeAgentLiveEvents: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("../../src/services/agent-actions/action-runtime", () => ({
   createAgentActionRuntime: () => ({ sweeper: { run: pending.approvalSweeps } }),
 }));
@@ -89,6 +92,7 @@ describe("scheduled cache invalidation", () => {
         value: { expired: 0, removedKinds: 0, interrupted: 0, stale: 0 },
       },
       { status: "fulfilled", value: 0 },
+      { status: "fulfilled", value: undefined },
     ]);
     expect(pending.purges).toHaveBeenCalledOnce();
     expect(pending.hostnameMaps).toHaveBeenCalledOnce();

@@ -1,6 +1,6 @@
 /**
- * The last time an agent acted under a grant. Backed by `agent_activity`
- * once that table exists (spec 11.2); until then no grant has activity.
+ * The last time an agent acted under a grant. `AgentActivityRepository`
+ * implements this. `noAgentActivity` is for tests that do not need it.
  */
 export interface AgentActivityLookup {
   lastActivityByGrantRef(

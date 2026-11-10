@@ -125,6 +125,7 @@ describe("DocsContentService branch storage", () => {
     const page = await env.service.getPage(actor, projectId, "/");
     expect(page.workingContent).toBe("# Edited");
     expect(page.publishedContent).toContain("# Home");
+    expect(page.revision).toBeGreaterThan(0);
   });
 
   test("a rejected edit and a base-equivalent edit do not create a branch", async () => {

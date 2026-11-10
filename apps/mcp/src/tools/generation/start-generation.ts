@@ -9,6 +9,7 @@ export const startGenerationTool = defineActionTool({
   description:
     "Starts writing the docs from the connected GitHub repository. The generated docs go live when the run completes. Follow it with get_generation.",
   action: "generation.start",
+  liveActivityKind: "generation",
   scope: "generation:run",
   annotations: additiveActionAnnotations,
   input: z

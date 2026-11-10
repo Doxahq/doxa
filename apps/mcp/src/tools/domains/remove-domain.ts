@@ -8,6 +8,7 @@ export const removeDomainTool = defineActionTool({
   title: "Remove a custom domain",
   description: "Removes a custom domain. The site stops at that address.",
   action: "domain.remove",
+  liveActivityKind: "domain",
   scope: "domains:write",
   annotations: destructiveActionAnnotations,
   input: z

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { BRANCH_SCAN_LIMITS } from "../../services/branch-search-scan";
 import { defineMcpTool } from "../../tool-definition";
 import { branchInput, projectIdInput, READ_ONLY_ANNOTATIONS } from "../shared";
+import { liveBranchId } from "../../live-activity";
 
 const MAX_SCAN_MB = BRANCH_SCAN_LIMITS.maxBytes / (1024 * 1024);
 
@@ -39,6 +40,9 @@ export const searchDocsTool = defineMcpTool({
       truncatedReason: z.enum(["page_limit", "size_limit"]).nullable(),
     })
     .strict(),
+  describeActivity: (input) => [
+    { kind: "search", branchId: liveBranchId(input.branch), detail: input.query },
+  ],
   async run(context, input) {
     const authorized = await context.authorize(input.projectId, "docs.read");
     const outcome = await context.services.search.search({

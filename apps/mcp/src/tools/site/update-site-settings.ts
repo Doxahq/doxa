@@ -13,6 +13,7 @@ import {
 } from "../shared";
 import { applyMergePatch } from "./merge-patch";
 import { OWN_BRANCH_ONLY, requireOwnBranch } from "../branches/branch-ownership";
+import { liveBranchId } from "../../live-activity";
 
 // The contract schema resolves defaults with transforms, which JSON Schema
 // cannot express. The doxa://schemas/site-config resource has the schema.
@@ -70,6 +71,9 @@ export const updateSiteSettingsTool = defineMcpTool({
       working: docsContentWorkingSchema,
     })
     .strict(),
+  describeActivity: (input) => [
+    { kind: "edit", branchId: liveBranchId(input.branch), detail: "Site settings" },
+  ],
   async run(context, input) {
     const authorized = await context.authorize(input.projectId, "site.write");
     const target: UpdateTarget = {

@@ -11,6 +11,7 @@ import {
   READ_ONLY_ANNOTATIONS,
 } from "../shared";
 import { docsActorFor } from "./docs-actor";
+import { liveBranchId } from "../../live-activity";
 
 export const readPageTool = defineMcpTool({
   name: "read_page",
@@ -41,6 +42,14 @@ export const readPageTool = defineMcpTool({
       revision: z.number().int().nonnegative(),
     })
     .strict(),
+  describeActivity: (input, output) => [
+    {
+      kind: "read",
+      branchId: liveBranchId(input.branch),
+      pageHref: output.href,
+      pageTitle: output.title,
+    },
+  ],
   async run(context, input) {
     const authorized = await context.authorize(input.projectId, "docs.read");
     const { branch, options } = branchView(input.branch);

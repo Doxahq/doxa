@@ -8,6 +8,7 @@ import type {
   DocsContentPageDetailDto,
 } from "@doxahq/contracts"
 import { branchRefSchema, type BranchRef } from "@doxahq/contracts/docs-branches"
+import { ApiRequestError } from "~/lib/api-errors"
 import {
   getDocsBranchErrorMessage,
   isMissingPageError,
@@ -20,6 +21,7 @@ import {
   projectContentQueryOptions,
 } from "~/lib/queries/dashboard"
 import { docsBranchQueryKeys } from "~/lib/queries/docs-branches"
+import { fetchLatest } from "~/lib/queries/fetch-latest"
 import {
   applyProjectContentEdits,
   discardProjectContentBranch,
@@ -40,6 +42,11 @@ import {
 } from "~/lib/dashboard/page-slug"
 import { useContentStructure } from "~/lib/dashboard/use-content-structure"
 import { useDraftBuffer, type DraftBufferSource } from "~/lib/dashboard/use-draft-buffer"
+import {
+  useTrackPageRevision,
+  type LoadedPageSource,
+  type PageRevisions,
+} from "~/lib/dashboard/use-track-page-revision"
 import { issuesForPage, withSavedPageIssues } from "~/lib/dashboard/mdx-issues"
 
 /**
@@ -74,6 +81,14 @@ interface PageClick {
   href: string
 }
 
+const AGENT_BRANCH_CHANGED_MESSAGE =
+  "An agent changed this branch, so your edit was not saved. Copy your text, then load the latest version."
+
+/** The server refused a save because the branch moved past the text in the editor. */
+function isRevisionConflict(error: unknown): boolean {
+  return error instanceof ApiRequestError && error.code === "conflict"
+}
+
 /**
  * Owns the docs content editor state for one project.
  *
@@ -89,9 +104,14 @@ export function useProjectContent(
      * page that does not exist on the branch falls back to the default page.
      */
     requestedHref?: string | null
+    /**
+     * Saves fail on a branch that changed since the editor loaded it. Set for
+     * an agent branch, so that a person's save cannot overwrite an agent edit.
+     */
+    guardRevision?: boolean
   } = {},
 ) {
-  const { requestedHref = null } = options
+  const { requestedHref = null, guardRevision = false } = options
   const queryClient = useQueryClient()
   // The page from the URL loads at once, in parallel with the overview. The
   // overview then confirms it, or the effect below opens the default page.
@@ -165,8 +185,8 @@ export function useProjectContent(
   }, [loadedOverview, renamedFrom, selectedHref])
 
   const editMutation = useMutation({
-    mutationFn: (input: { branch: BranchRef; edits: DocsContentEdit[] }) =>
-      applyProjectContentEdits(projectId, { branch: input.branch, edits: input.edits }),
+    mutationFn: (input: { branch: BranchRef; edits: DocsContentEdit[]; expectedRevision?: number }) =>
+      applyProjectContentEdits(projectId, input),
     onSuccess: (_working, input) => {
       void queryClient.invalidateQueries({
         queryKey: dashboardQueryKeys.content(projectId, input.branch),
@@ -180,13 +200,18 @@ export function useProjectContent(
 
   // The buffer loads once per branch and page. Working text wins over the base
   // text so an editor returning to a page continues where they stopped.
-  const pageSource = useMemo((): DraftBufferSource<string> | null => {
+  const pageSource = useMemo((): LoadedPageSource | null => {
     const page = pageQuery.data
     return page
-      ? { key: pageBufferKey(branch, page.href), value: page.workingContent ?? page.publishedContent }
+      ? {
+          key: pageBufferKey(branch, page.href),
+          value: page.workingContent ?? page.publishedContent,
+          revision: page.revision,
+        }
       : null
   }, [branch, pageQuery.data])
 
+  const [pageRevisions] = useState<PageRevisions>(() => new Map())
   const buffer = useDraftBuffer<string>({
     source: pageSource,
     save: async (text, key) => {
@@ -195,7 +220,9 @@ export function useProjectContent(
       const saved = await editMutation.mutateAsync({
         branch: target.branch,
         edits: [{ type: "set_page_content", href: target.href, content: text }],
+        ...(guardRevision ? { expectedRevision: pageRevisions.get(key) ?? 0 } : {}),
       })
+      pageRevisions.set(key, saved.working.revision)
       // The save stands even with MDX issues; its result shows them at once.
       queryClient.setQueryData(
         dashboardQueryKeys.contentMdxReport(projectId, target.branch),
@@ -205,13 +232,56 @@ export function useProjectContent(
       queryClient.setQueryData(
         dashboardQueryKeys.contentPage(projectId, target.branch, target.href),
         (page: DocsContentPageDetailDto | undefined) =>
-          page ? { ...page, status: "edited" as const, workingContent: text } : page,
+          page ? { ...page, status: "edited" as const, workingContent: text, revision: saved.working.revision } : page,
       )
     },
   })
 
+  const { replaceClean, replace: replaceBuffer } = buffer
+  const { reset: clearEditError } = editMutation
   const isDirty = buffer.isDirty
   const working = overview?.working ?? null
+  useTrackPageRevision({ enabled: guardRevision, revisions: pageRevisions, loaded: pageSource, buffer })
+
+  // An edit from elsewhere can show first in the overview. Reading the page
+  // again lets the revision check compare its text with the buffer.
+  const pageRevision = pageQuery.data?.revision
+  const branchRevision = working?.revision
+  useEffect(() => {
+    if (!guardRevision || selectedHref === null || pageRevision === undefined || branchRevision === undefined) return
+    if (branchRevision <= pageRevision) return
+    void queryClient.invalidateQueries({
+      queryKey: dashboardQueryKeys.contentPage(projectId, branch, selectedHref),
+      exact: true,
+    })
+  }, [branch, branchRevision, guardRevision, pageRevision, projectId, queryClient, selectedHref])
+
+  /** The open page as the server holds it. Null when it cannot load. */
+  const fetchOpenPage = useCallback(async (): Promise<DraftBufferSource<string> | null> => {
+    if (selectedHref === null) return null
+    const page = await fetchLatest(queryClient, projectContentPageQueryOptions(projectId, branch, selectedHref))
+    return page && { key: pageBufferKey(branch, page.href), value: page.workingContent ?? page.publishedContent }
+  }, [branch, projectId, queryClient, selectedHref])
+
+  /**
+   * Loads the open page again after an outside change, in place. Keeps unsaved
+   * edits. Gives the new text, or null when it cannot load: the editor then
+   * keeps its text, and the revision check stops a save over the newer text.
+   */
+  const reloadOpenPage = useCallback(async (): Promise<string | null> => {
+    const page = await fetchOpenPage()
+    if (page === null) return null
+    replaceClean(page.key, page.value)
+    return page.value
+  }, [fetchOpenPage, replaceClean])
+
+  /** After a refused save: drops the unsaved edits and shows the newer text. */
+  const loadLatestPage = useCallback(async (): Promise<void> => {
+    const page = await fetchOpenPage()
+    if (page === null) return
+    clearEditError()
+    replaceBuffer(page.key, page.value)
+  }, [clearEditError, fetchOpenPage, replaceBuffer])
   /** True when anything is unpublished, saved to the branch or still in the buffer. */
   const hasChanges = isDirty || (working?.changeCount ?? 0) > 0
 
@@ -396,6 +466,7 @@ export function useProjectContent(
     structureMutations,
   ])
 
+  const hasRevisionConflict = guardRevision && isRevisionConflict(editMutation.error)
   const errors = [
     overviewQuery.error && !isUnpublishedSiteError(overviewQuery.error, branch)
       ? getDocsBranchErrorMessage(overviewQuery.error, "Failed to load docs content.")
@@ -403,9 +474,11 @@ export function useProjectContent(
     pageQuery.error && !isRequestUnconfirmed && !isMissingPageError(pageQuery.error)
       ? getDocsBranchErrorMessage(pageQuery.error, "Failed to load this page.")
       : null,
-    editMutation.error
-      ? getDocsBranchErrorMessage(editMutation.error, "Failed to save the changes.")
-      : null,
+    hasRevisionConflict
+      ? AGENT_BRANCH_CHANGED_MESSAGE
+      : editMutation.error
+        ? getDocsBranchErrorMessage(editMutation.error, "Failed to save the changes.")
+        : null,
     discardMutation.error
       ? getDocsBranchErrorMessage(discardMutation.error, "Failed to discard the changes.")
       : null,
@@ -440,6 +513,9 @@ export function useProjectContent(
     resetPage,
     discardAllChanges,
     resetAfterExternalChange,
+    reloadOpenPage,
+    hasRevisionConflict,
+    loadLatestPage,
     structure,
     /** Changed pages that fail the MDX check; a publish waits until it is empty. */
     mdxIssuePages: mdxReportQuery.data?.pages ?? NO_MDX_ISSUE_PAGES,

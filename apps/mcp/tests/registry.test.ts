@@ -131,4 +131,25 @@ describe("MCP import boundaries", () => {
     );
     expect(offenders.map((path) => relative(MCP_ROOT, path))).toEqual([]);
   });
+
+  it("gives every project tool a live activity line, or lists it as silent", () => {
+    const silent = new Set([
+      "cancel_approval_request",
+      "check_domain",
+      "create_asset_upload",
+      "delete_project",
+      "get_branch_status",
+      "get_generation",
+      "get_project",
+      "list_branches",
+      "list_domains",
+      "list_publications",
+    ]);
+    const projectTools = TOOLS.filter((tool) => "projectId" in tool.input.shape);
+    for (const tool of projectTools.filter((item) => !silent.has(item.name))) {
+      expect(tool.describeActivity, tool.name).toBeDefined();
+    }
+    const unknown = [...silent].filter((name) => !TOOLS.some((tool) => tool.name === name));
+    expect(unknown).toEqual([]);
+  });
 });

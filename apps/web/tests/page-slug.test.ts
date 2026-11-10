@@ -113,6 +113,7 @@ describe("renamed page detail", () => {
     status: "published",
     publishedContent: "Published body.",
     workingContent: null,
+    revision: 4,
   }
 
   test("moves the body to the new href as an edit", () => {
@@ -123,6 +124,7 @@ describe("renamed page detail", () => {
       status: "edited",
       publishedContent: "",
       workingContent: "Published body.",
+      revision: 4,
     })
   })
 

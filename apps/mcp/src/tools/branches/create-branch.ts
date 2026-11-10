@@ -30,6 +30,9 @@ export const createBranchTool = defineMcpTool({
     })
     .strict(),
   output: agentBranchOutput,
+  describeActivity: (input, output) => [
+    { kind: "branch", branchId: output.id, detail: input.name },
+  ],
   async run(context, input) {
     const authorized = await context.authorize(input.projectId, "docs.write");
     const owner = {

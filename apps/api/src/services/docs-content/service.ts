@@ -43,6 +43,7 @@ import { branchMdxIssues } from "./page-mdx-issues";
 import { readPublishedSiteConfig } from "./site-config";
 import { withRequestReadCache, type DocsContentStore } from "./store";
 import { unmeasured, type MeasureStep } from "../request-timing";
+import { describePageChanges, type DocsPageChange } from "./page-changes";
 
 export {
   DocsContentError,
@@ -64,6 +65,11 @@ export interface ApplyEditsOptions {
   expectedRevision?: number;
   /** Validates the edits and computes their writes, then writes nothing. */
   dryRun?: boolean;
+  /**
+   * Called once after a successful write with the changed pages. Reading the
+   * old pages costs storage reads, so only a caller that needs them passes it.
+   */
+  onPagesChanged?: (changes: readonly DocsPageChange[]) => void;
 }
 
 export interface DocsContentReadOptions {
@@ -245,6 +251,7 @@ export class DocsContentService {
       status: change?.kind === "upsert" ? "edited" : "published",
       publishedContent: publishedContent ?? "",
       workingContent: change?.kind === "upsert" ? change.content : null,
+      revision: branchRevision(context),
     };
   }
 
@@ -351,6 +358,10 @@ export class DocsContentService {
 
       if (result === "too_many_changes" || result === "branch_too_large") {
         throw new SiteConfigValidationError([createValidationIssue(result)]);
+      }
+
+      if (options.onPagesChanged) {
+        options.onPagesChanged(await describePageChanges(tree, writes, hrefMoves));
       }
 
       const updated = await this.resolver.resolve({

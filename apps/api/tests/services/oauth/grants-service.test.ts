@@ -163,4 +163,12 @@ describe("GrantsService with agent tokens", () => {
     expect(await service.revoke(OWNER, "agent-token-'; DROP TABLE x;--")).toEqual({ kind: "not_found" });
     expect(revoke).toHaveBeenCalledTimes(1);
   });
+
+  it("revokes an agent token by its grant reference, for its owner only", async () => {
+    const revoke = vi.fn(async () => true);
+    const service = serviceWith({ listActive: async () => [record], revoke });
+    expect(await service.revokeByGrantRef(OWNER, GRANT_REF)).toEqual({ kind: "revoked" });
+    expect(revoke).toHaveBeenCalledWith(OWNER, tokenId, NOW);
+    expect(await service.revokeByGrantRef(OWNER, "other-ref")).toEqual({ kind: "not_found" });
+  });
 });

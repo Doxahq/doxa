@@ -1,13 +1,15 @@
 import type { GrantSummary } from "@cloudflare/workers-oauth-provider";
 import { isOAuthScope, projectScopeClaimSchema, type AgentGrantSummary } from "@doxahq/contracts/agent-access";
+import { isAgentLiveActivityEnabled } from "@doxahq/contracts/agent-live-activity";
 import type { Env } from "../../env";
+import { AgentActivityRepository } from "../../repositories/agent-activity";
 import {
   agentTokenEndsAt,
   AgentTokenRepository,
   type AgentTokenRecord,
   type AgentTokenStore,
 } from "../../repositories/agent-tokens";
-import { noAgentActivity, type AgentActivityLookup } from "./agent-activity-lookup";
+import type { AgentActivityLookup } from "./agent-activity-lookup";
 import { oauthApiFromEnv, type OAuthApi } from "./authorization-server";
 import { agentGrantMetadataSchema, type AgentGrantMetadata } from "./grant-metadata";
 
@@ -40,7 +42,9 @@ export class GrantsService {
   static fromEnv(env: Env): GrantsService {
     return new GrantsService({
       oauth: oauthApiFromEnv(env),
-      activity: noAgentActivity,
+      activity: new AgentActivityRepository(env, {
+        includeLiveEvents: isAgentLiveActivityEnabled(env.AGENT_LIVE_ACTIVITY_ENABLED),
+      }),
       agentTokens: new AgentTokenRepository(env),
       now: () => new Date(),
     });
@@ -69,6 +73,23 @@ export class GrantsService {
     if (!(await this.ownsGrant(userId, grantId))) return { kind: "not_found" };
     await this.deps.oauth.revokeGrant(grantId, userId);
     return { kind: "revoked" };
+  }
+
+  /** For the live panel, which knows an agent by the reference on its events. */
+  async revokeByGrantRef(userId: string, grantRef: string): Promise<GrantRevocation> {
+    const tokens = await this.deps.agentTokens.listActive(userId, this.deps.now(), MAX_LISTED_GRANTS);
+    const token = tokens.find((candidate) => candidate.grantRef === grantRef);
+    if (token !== undefined) {
+      const revoked = await this.deps.agentTokens.revoke(userId, token.id, this.deps.now());
+      return revoked ? { kind: "revoked" } : { kind: "not_found" };
+    }
+    for await (const grant of this.agentGrants(userId)) {
+      if (grant.metadata.grantRef === grantRef) {
+        await this.deps.oauth.revokeGrant(grant.summary.id, userId);
+        return { kind: "revoked" };
+      }
+    }
+    return { kind: "not_found" };
   }
 
   private async revokeAgentToken(userId: string, grantId: string): Promise<GrantRevocation> {

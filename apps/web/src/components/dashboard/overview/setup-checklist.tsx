@@ -2,9 +2,8 @@ import { useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { Check } from "lucide-react"
 
-import { McpConnectCard } from "~/components/dashboard/new-project/mcp-connect-card"
+import { McpConnectDialog } from "~/components/dashboard/new-project/mcp-connect-dialog"
 import { Button } from "~/components/ui/button"
-import { Dialog, DialogBody, DialogContent, DialogTitle } from "~/components/ui/dialog"
 import { countFinishedSteps, type SetupStep, type SetupStepId } from "~/lib/dashboard/project-setup-model"
 import { cn } from "~/lib/utils"
 
@@ -148,14 +147,7 @@ export function SetupChecklist(props: SetupChecklistProps) {
         ))}
       </ol>
 
-      <Dialog open={isAgentDialogOpen} onOpenChange={setIsAgentDialogOpen}>
-        <DialogContent className="overscroll-contain shadow-none sm:max-w-[1000px]">
-          <DialogTitle className="sr-only">Connect an agent with MCP</DialogTitle>
-          <DialogBody className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto">
-            <McpConnectCard insideDialog />
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
+      <McpConnectDialog open={isAgentDialogOpen} onOpenChange={setIsAgentDialogOpen} />
     </section>
   )
 }

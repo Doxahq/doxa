@@ -26,6 +26,8 @@ export interface UseDraftBufferOptions<TValue> {
 export interface DraftBuffer<TValue> {
   key: string | null
   value: TValue | null
+  /** The last value that the server holds, as far as this buffer knows. */
+  saved: TValue | null
   setValue: (value: TValue) => void
   /** Derives the next value from the latest one, even within one event. */
   update: (recipe: (value: TValue) => TValue) => void
@@ -35,6 +37,13 @@ export interface DraftBuffer<TValue> {
   cancelAutosave: () => void
   /** Drops the buffer, so the next source loads fresh. */
   reset: () => void
+  /**
+   * Loads a newer stored value in place, with no empty state in between.
+   * Unsaved edits stay, also ones typed while the value was loading.
+   */
+  replaceClean: (key: string, value: TValue) => void
+  /** Drops the unsaved edits and continues from a newer stored value. */
+  replace: (key: string, value: TValue) => void
   /**
    * Moves the buffer to a new key and keeps its text, for a value that the
    * server stored under a new key (a renamed page). A source with the new key
@@ -149,6 +158,22 @@ export function useDraftBuffer<TValue>({
     setBuffer(null)
   }, [cancelAutosave])
 
+  const replaceClean = useCallback((key: string, value: TValue) => {
+    setBuffer((current) =>
+      current?.key === key && isEqualRef.current(current.value, current.saved)
+        ? { key, value, saved: value }
+        : current,
+    )
+  }, [])
+
+  const replace = useCallback(
+    (key: string, value: TValue) => {
+      cancelAutosave()
+      setBuffer({ key, value, saved: value })
+    },
+    [cancelAutosave],
+  )
+
   const rekey = useCallback((from: string, to: string) => {
     setBuffer((current) => (current?.key === from ? { ...current, key: to } : current))
   }, [])
@@ -167,12 +192,15 @@ export function useDraftBuffer<TValue>({
   return {
     key: buffer?.key ?? null,
     value: buffer?.value ?? null,
+    saved: buffer?.saved ?? null,
     setValue,
     update,
     isDirty,
     flush: stableFlush,
     cancelAutosave,
     reset,
+    replaceClean,
+    replace,
     rekey,
     suspend,
     waitForPendingSaves,

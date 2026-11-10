@@ -31,6 +31,8 @@ export interface McpEnv {
   DOCS_RENDERER_BASE_URL?: string;
   /** Lets `list_domains` show the CNAME record a custom domain needs. */
   DOCS_CUSTOM_DOMAIN_CNAME_TARGET?: string;
+  /** Only the exact value `true` records live agent activity. */
+  AGENT_LIVE_ACTIVITY_ENABLED?: string;
   /** Local development only. The production config must never set it. */
   MCP_DEV_AUTH_BYPASS?: string;
 }

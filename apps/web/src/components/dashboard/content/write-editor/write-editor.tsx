@@ -32,6 +32,12 @@ import { CodeHighlight } from "~/lib/editor/code-highlight"
 import { releaseBlockSelection } from "~/lib/editor/block-selection"
 import { createImageUpload } from "~/lib/editor/image-upload"
 import { MdxPaste } from "~/lib/editor/mdx-paste"
+import {
+  AgentChangeHighlight,
+  refreshChangeAges,
+  showAgentChanges,
+  type AgentChangeView,
+} from "~/lib/editor/agent-change-highlight"
 import { createWriteExtensions } from "~/lib/editor/write-extensions"
 import { cn } from "~/lib/utils"
 
@@ -42,6 +48,8 @@ export interface WriteEditorProps {
   onChange: (value: string) => void
   onSave: () => void
   readOnly?: boolean
+  /** An agent's edits of this page. The blocks that they changed get a tint and an age label. */
+  agentChanges?: AgentChangeView | null
   page: {
     href: string | null
     status: "published" | "edited" | null
@@ -79,6 +87,7 @@ export default function WriteEditor({
   onChange,
   onSave,
   readOnly = false,
+  agentChanges = null,
   page,
   showOutline,
   canvas,
@@ -97,6 +106,9 @@ export default function WriteEditor({
   metaRef.current = meta
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const agentChangesRef = useRef(agentChanges)
+  agentChangesRef.current = agentChanges
+  const revealedAgentChangeRef = useRef<string | null>(null)
   const onSaveRef = useRef(onSave)
   onSaveRef.current = onSave
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -117,6 +129,7 @@ export default function WriteEditor({
         // Before the MDX paste: a copied file also brings its name as text.
         createImageUpload({ getUploader: () => uploaderRef.current }),
         MdxPaste,
+        AgentChangeHighlight,
         createSlashCommand(slashStore),
         Extension.create({
           name: "saveShortcut",
@@ -165,8 +178,25 @@ export default function WriteEditor({
     lastEmittedRef.current = value
     setMeta({ title: next.title, description: next.description })
     editor.commands.setContent(next.content, { emitUpdate: false })
+    // The whole page was replaced, so the selection landed on the last block.
+    releaseBlockSelection(editor)
     originalsRef.current = captureOriginalBlocks(editor.getJSON())
+    showAgentChanges(editor, next.content, agentChangesRef.current, revealedAgentChangeRef)
   }, [editor, value])
+
+  // A followed page opens as a new editor, so its marks come from here. This
+  // runs after the effect above, so it sees the current document.
+  const agentPageChanges = agentChanges?.changes ?? null
+  const reviewedAgentChange = agentChanges?.reviewed ?? null
+  const showAgentMarks = agentChanges?.showMarks ?? false
+  useEffect(() => {
+    if (editor) showAgentChanges(editor, documentRef.current.content, agentChangesRef.current, revealedAgentChangeRef)
+  }, [editor, agentPageChanges, reviewedAgentChange, showAgentMarks])
+
+  const agentClock = agentChanges?.now ?? null
+  useEffect(() => {
+    if (editor && agentClock) refreshChangeAges(editor, agentClock)
+  }, [editor, agentClock])
 
   useEffect(() => {
     // `setEditable` sends an update event unless told not to. An update is

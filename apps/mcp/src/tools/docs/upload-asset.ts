@@ -14,6 +14,7 @@ import {
 } from "../shared";
 import { OWN_BRANCH_ONLY, requireOwnBranch } from "../branches/branch-ownership";
 import { ALT_TEXT_DESCRIPTION, imageMarkdown } from "./asset-markdown";
+import { liveBranchId } from "../../live-activity";
 
 const MAX_MB = DOCS_ASSET_LIMITS.maxBytes / (1024 * 1024);
 const INLINE_KB = AGENT_ASSET_UPLOAD_LIMITS.inlineBytesHint / 1024;
@@ -52,6 +53,9 @@ export const uploadAssetTool = defineMcpTool({
     })
     .strict(),
   output: docsAssetUploadResultSchema,
+  describeActivity: (input) => [
+    { kind: "edit", branchId: liveBranchId(input.branch), detail: input.fileName },
+  ],
   async run(context, input) {
     const authorized = await context.authorize(input.projectId, "docs.write");
     const bytes = decodeAssetBase64(input.contentBase64);

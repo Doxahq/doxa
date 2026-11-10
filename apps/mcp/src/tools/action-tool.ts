@@ -1,5 +1,6 @@
 import { actionToolOutputSchema, type AgentActionKind } from "@doxahq/contracts/approval-requests";
 import type { OAuthScope } from "@doxahq/contracts/agent-access";
+import type { AgentLiveEventKind } from "@doxahq/contracts/agent-live-activity";
 import type { ToolAnnotations } from "@modelcontextprotocol/server";
 import type { z } from "zod";
 import type { PerformActionRpcOutput } from "@doxahq/api/services/agent-actions/rpc-contract";
@@ -22,6 +23,8 @@ export interface ActionToolSpec<TInput extends ToolInputSchema, TResult extends 
   readonly input: TInput;
   /** The action's own result schema, so the tool and doxa-api agree. */
   readonly result: TResult;
+  /** Shows the action in the live activity. Without it the tool is silent. */
+  readonly liveActivityKind?: AgentLiveEventKind;
   toCall(input: z.infer<TInput>): ActionCall;
 }
 
@@ -47,6 +50,13 @@ export function defineActionTool<TInput extends ToolInputSchema, TResult extends
     output,
     action: spec.action,
     pendingRequestOf: (result) => (result.outcome === "approval_required" ? (result.request?.id ?? null) : null),
+    describeActivity: (_input, result) =>
+      spec.liveActivityKind === undefined
+        ? []
+        : [{
+            kind: result.outcome === "approval_required" ? "approval" : spec.liveActivityKind,
+            detail: spec.title,
+          }],
     async run(context, input) {
       const call = spec.toCall(input);
       const outcome = await context.actions.perform({

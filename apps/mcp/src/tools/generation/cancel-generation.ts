@@ -8,6 +8,7 @@ export const cancelGenerationTool = defineActionTool({
   title: "Cancel a generation",
   description: "Stops a running generation. The live site does not change.",
   action: "generation.cancel",
+  liveActivityKind: "generation",
   scope: "generation:run",
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   input: z

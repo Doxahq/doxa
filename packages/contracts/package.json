@@ -18,6 +18,7 @@
     "./project-overview": "./src/project-overview.ts",
     "./docs-assets": "./src/docs-assets.ts",
     "./agent-access": "./src/agent-access.ts",
+    "./agent-live-activity": "./src/agent-live-activity.ts",
     "./approval-requests": "./src/approval-requests.ts",
     "./approval-settings": "./src/approval-settings.ts",
     "./teams": "./src/teams.ts",

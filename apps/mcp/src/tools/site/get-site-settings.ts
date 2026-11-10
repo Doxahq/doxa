@@ -8,6 +8,7 @@ import {
   projectIdInput,
   READ_ONLY_ANNOTATIONS,
 } from "../shared";
+import { liveBranchId } from "../../live-activity";
 
 // The contract schema resolves defaults with transforms, which JSON Schema
 // cannot express. The resource carries the exact schema instead.
@@ -37,6 +38,9 @@ export const getSiteSettingsTool = defineMcpTool({
       revision: z.number().int().nonnegative(),
     })
     .strict(),
+  describeActivity: (input) => [
+    { kind: "read", branchId: liveBranchId(input.branch), detail: "Site settings" },
+  ],
   async run(context, input) {
     const authorized = await context.authorize(input.projectId, "docs.read");
     const view = branchView(input.branch);

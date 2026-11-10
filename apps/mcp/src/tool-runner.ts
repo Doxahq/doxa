@@ -14,9 +14,16 @@ import {
   type ToolErrorBody,
 } from "./errors";
 import { failureEntry } from "./logger";
-import { createToolContext, type McpRequestContext } from "./request-context";
+import { liveEventFor } from "./live-activity";
+import {
+  createToolContext,
+  newToolCallRecord,
+  type McpRequestContext,
+  type ToolCallRecord,
+} from "./request-context";
 import { createApprovalTask } from "./tasks/task-handlers";
-import type { AnyMcpTool } from "./tool-definition";
+import type { DocsPageChange } from "@doxahq/api/services/docs-content/page-changes";
+import type { AnyMcpTool, ToolActivity } from "./tool-definition";
 import { toolFailure, toolSuccess, toolTask } from "./tool-result";
 
 export type ToolInput = Record<string, unknown>;
@@ -44,7 +51,8 @@ export async function runTool(
   call: ToolCallProtocol = PLAIN_TOOL_CALL,
 ): Promise<CallToolResult> {
   const startedAt = context.now();
-  const run = await settle(tool, context, input);
+  const record = newToolCallRecord();
+  const run = await settle(tool, context, input, record);
   const summary: ToolCallSummary = {
     tool: tool.name,
     projectId: readProjectId(input),
@@ -53,6 +61,9 @@ export async function runTool(
     action: actionFactsFor(tool.action, run.kind === "succeeded" ? run.output : null),
   };
   report(tool, context, summary, input, run);
+  if (run.kind === "succeeded" && tool.describeActivity !== undefined) {
+    context.waitUntil(writeLiveEvents(tool, context, input, run.output, record));
+  }
   return run.kind === "succeeded"
     ? present(tool, context, run.output, call)
     : toolFailure(run.error);
@@ -78,9 +89,10 @@ async function settle(
   tool: AnyMcpTool,
   context: McpRequestContext,
   input: ToolInput,
+  record: ToolCallRecord,
 ): Promise<ToolRun> {
   try {
-    return { kind: "succeeded", output: await execute(tool, context, input) };
+    return { kind: "succeeded", output: await execute(tool, context, input, record) };
   } catch (cause) {
     return {
       kind: "failed",
@@ -94,6 +106,7 @@ async function execute(
   tool: AnyMcpTool,
   context: McpRequestContext,
   input: ToolInput,
+  record: ToolCallRecord,
 ): Promise<Record<string, unknown>> {
   // Mandatory: the SDK scope challenge runs only for 2026 clients, so this
   // is the check that 2025 clients see, as a tool error.
@@ -104,7 +117,7 @@ async function execute(
     throw new ToolRateLimitedError();
   }
   const output = tool.output.parse(
-    await tool.run(createToolContext(context), input),
+    await tool.run(createToolContext(context, record), input),
   );
   if (!isRecord(output)) {
     throw new TypeError(`Tool ${tool.name} returned a non-object result.`);
@@ -166,6 +179,53 @@ async function writeActivity(
       ),
     );
   }
+}
+
+/**
+ * A false project here would put events in the feed of another project, so
+ * the raw input counts only for action tools: doxa-api authorizes those, and
+ * a successful result proves it. Other tools report what the policy allowed.
+ */
+function verifiedProjectId(
+  tool: AnyMcpTool,
+  input: ToolInput,
+  record: ToolCallRecord,
+): string | null {
+  return tool.action === undefined ? record.projectId : readProjectId(input);
+}
+
+/** Runs after the response. A failure here must never fail the tool. */
+async function writeLiveEvents(
+  tool: AnyMcpTool,
+  context: McpRequestContext,
+  input: ToolInput,
+  output: Record<string, unknown>,
+  record: ToolCallRecord,
+): Promise<void> {
+  try {
+    const projectId = verifiedProjectId(tool, input, record);
+    const activities = tool.describeActivity?.(input, output, record.pageChanges) ?? [];
+    if (projectId === null || activities.length === 0) return;
+    await context.liveEvents.append(
+      projectId,
+      activities.map((activity) =>
+        liveEventFor(context.actor, tool.name, activity, pageChangeFor(activity, record)),
+      ),
+    );
+  } catch (error) {
+    // Not `failureEntry`: a failed query carries its parameters, here a page diff.
+    context.logger.failure({
+      event: "mcp_live_event_write_failed",
+      requestId: context.requestId,
+      tool: tool.name,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      stack: null,
+    });
+  }
+}
+
+function pageChangeFor(activity: ToolActivity, record: ToolCallRecord): DocsPageChange | null {
+  return record.pageChanges.find((change) => change.href === activity.pageHref) ?? null;
 }
 
 function readProjectId(input: ToolInput): string | null {

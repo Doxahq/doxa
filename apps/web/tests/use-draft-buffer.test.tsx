@@ -35,6 +35,36 @@ describe("useDraftBuffer", () => {
     expect(hook.result.current).toMatchObject({ key: "b", value: "two", isDirty: false })
   })
 
+  test("replace drops unsaved edits and stops their autosave", () => {
+    const save = vi.fn(async () => undefined)
+    const hook = renderBuffer({ source: source("a", "one"), save })
+    act(() => hook.result.current.setValue("my words"))
+    expect(hook.result.current.saved).toBe("one")
+    act(() => hook.result.current.replace("a", "newer"))
+    expect(hook.result.current).toMatchObject({ value: "newer", saved: "newer", isDirty: false })
+    act(() => vi.advanceTimersByTime(DRAFT_AUTOSAVE_DELAY_MS))
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  test("replaceClean loads a newer value in place, with no empty state", () => {
+    const hook = renderBuffer({ source: source("a", "one"), save: vi.fn(async () => undefined) })
+    act(() => hook.result.current.replaceClean("a", "newer"))
+    expect(hook.result.current.value).toBe("newer")
+    expect(hook.result.current.isDirty).toBe(false)
+  })
+
+  test("replaceClean keeps edits typed before it runs, and ignores another key", () => {
+    const hook = renderBuffer({ source: source("a", "one"), save: vi.fn(async () => undefined) })
+    act(() => {
+      // The same batch: the edit is not in the hook's last render yet.
+      hook.result.current.setValue("my words")
+      hook.result.current.replaceClean("a", "newer")
+    })
+    expect(hook.result.current.value).toBe("my words")
+    act(() => hook.result.current.replaceClean("b", "other"))
+    expect(hook.result.current.value).toBe("my words")
+  })
+
   test("autosaves only after the idle delay, and each change restarts the timer", async () => {
     const save = vi.fn(async () => undefined)
     const hook = renderBuffer({ source: source("a", ""), save })

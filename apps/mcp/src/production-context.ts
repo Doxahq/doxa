@@ -1,5 +1,7 @@
 import { createRequestDbScope } from "@doxahq/db";
 import { AgentActivityRepository } from "@doxahq/api/repositories/agent-activity";
+import { AgentLiveEventRepository, noLiveEvents } from "@doxahq/api/repositories/agent-live-events";
+import { isAgentLiveActivityEnabled } from "@doxahq/contracts/agent-live-activity";
 import type { AgentActor } from "@doxahq/api/services/agent-access/actor";
 import { MembershipProjectAccessPolicy } from "@doxahq/api/services/agent-access/membership-project-access-policy";
 import type { OpenedRequestContext } from "./authenticated-request";
@@ -32,6 +34,9 @@ export function openProductionContext(
         expensive: env.MCP_EXPENSIVE_LIMITER,
       }),
       activity: new AgentActivityRepository(scope.env),
+      liveEvents: isAgentLiveActivityEnabled(env.AGENT_LIVE_ACTIVITY_ENABLED)
+        ? new AgentLiveEventRepository(scope.env)
+        : noLiveEvents,
       logger: consoleMcpLogger,
       waitUntil,
       now: () => Date.now(),

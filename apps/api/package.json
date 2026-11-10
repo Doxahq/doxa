@@ -7,6 +7,8 @@
     "./env": "./src/env.ts",
     "./http/bounded-body": "./src/http/bounded-body.ts",
     "./repositories/agent-activity": "./src/repositories/agent-activity.ts",
+    "./repositories/agent-live-events": "./src/repositories/agent-live-events.ts",
+    "./services/docs-content/page-changes": "./src/services/docs-content/page-changes.ts",
     "./repositories/docs-branch-management": "./src/repositories/docs-branch-management.ts",
     "./repositories/docs-branch-records": "./src/repositories/docs-branch-records.ts",
     "./repositories/docs-branch-status": "./src/repositories/docs-branch-status.ts",

@@ -11,6 +11,7 @@ import {
   projectIdInput,
   READ_ONLY_ANNOTATIONS,
 } from "../shared";
+import { liveBranchId } from "../../live-activity";
 
 export const getBranchDiffTool = defineMcpTool({
   name: "get_branch_diff",
@@ -23,6 +24,9 @@ export const getBranchDiffTool = defineMcpTool({
     .object({ projectId: projectIdInput, branch: namedBranchInput })
     .strict(),
   output: docsBranchDiffSchema,
+  describeActivity: (input) => [
+    { kind: "read", branchId: liveBranchId(input.branch), detail: "Branch changes" },
+  ],
   async run(context, input) {
     if (input.branch === "main") {
       throw new HintedToolError(

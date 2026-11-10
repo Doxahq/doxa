@@ -52,6 +52,8 @@ export function docsBranchListQueryOptions(projectId: string) {
     queryFn: (context) => fromProjectShell(context, projectId, "branches", () => listDocsBranches(projectId)),
     staleTime: 5_000,
     retry: false,
+    // An agent can add a branch while this tab is in the background.
+    refetchOnWindowFocus: true,
   })
 }
 

@@ -13,6 +13,7 @@ import {
   READ_ONLY_ANNOTATIONS,
 } from "../shared";
 import { docsActorFor } from "./docs-actor";
+import { liveBranchId } from "../../live-activity";
 
 export const getDocsStructureTool = defineMcpTool({
   name: "get_docs_structure",
@@ -35,6 +36,9 @@ export const getDocsStructureTool = defineMcpTool({
       navigation: z.array(docsContentNavigationSectionSchema),
     })
     .strict(),
+  describeActivity: (input) => [
+    { kind: "read", branchId: liveBranchId(input.branch), detail: "Page list" },
+  ],
   async run(context, input) {
     const authorized = await context.authorize(input.projectId, "docs.read");
     const view = branchView(input.branch);

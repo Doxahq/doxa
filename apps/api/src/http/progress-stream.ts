@@ -39,6 +39,11 @@ export function streamProgress<TStage, TResult>(
     await send(await outcome);
   });
 
+  return asEventStreamResponse(context, response);
+}
+
+/** The headers that keep a stream unbuffered and uncached through the edge. */
+export function asEventStreamResponse(context: ApiContext, response: Response): Response {
   context.res = response;
   context.header("Cache-Control", "no-store, no-transform");
   context.header("Content-Encoding", "Identity");

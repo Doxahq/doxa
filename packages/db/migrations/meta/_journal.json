@@ -316,6 +316,13 @@
       "when": 1794227059123,
       "tag": "0044_agent_signup",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1794247965912,
+      "tag": "0045_agent_live_events",
+      "breakpoints": true
     }
   ]
 }

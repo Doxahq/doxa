@@ -88,6 +88,7 @@ function probeContext(
         probe.activity.push(record);
       },
     },
+    liveEvents: { append: async () => undefined },
     logger: {
       toolCall: (entry) => probe.events.push(`log:${entry.outcome}`),
       failure: (entry) => probe.failures.push(entry.event),

@@ -14,6 +14,8 @@ import { PAGE_LABEL_CLASS } from "~/components/dashboard/content/content-row-cla
 import { cn } from "~/lib/utils"
 import { ContentRowActions } from "~/components/dashboard/content/content-row-actions"
 import { useReviewPageMark } from "~/lib/dashboard/review-page-marks-context"
+import { useIsAgentLivePage } from "~/lib/dashboard/agent-live-page-context"
+import { AgentStatusDot } from "~/components/dashboard/content/agent-activity/agent-status-dot"
 
 interface ContentPageRowProps {
   page: DocsContentPageDto
@@ -53,6 +55,7 @@ export const ContentPageRow = memo(function ContentPageRow({
   // replaces the edited dot, because every generated page is an edit. It
   // stays on hover, so its tooltip can open.
   const reviewMark = useReviewPageMark(page.href)
+  const isAgentHere = useIsAgentLivePage(page.href)
 
   return (
     <div
@@ -97,6 +100,11 @@ export const ContentPageRow = memo(function ContentPageRow({
       ) : null}
       {/* It stays on hover, so its tooltip can open. The row actions have their own space. */}
       {isLocked ? <AgentLockMark /> : null}
+      {isAgentHere ? (
+        <span role="img" aria-label="An agent is working on this page" className="flex shrink-0">
+          <AgentStatusDot presence="active" />
+        </span>
+      ) : null}
       {reviewMark ? (
         <ReviewChangeDot change={reviewMark.change} />
       ) : page.status === "edited" ? (

@@ -216,6 +216,7 @@ export function pageDetail(href: string): DocsContentPageDetailDto {
     status: "edited",
     publishedContent: "# Install\n\nPublished.",
     workingContent: "# Install\n\nWorking.",
+    revision: 0,
   };
 }
 

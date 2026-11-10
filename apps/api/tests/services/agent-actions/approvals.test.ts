@@ -61,6 +61,7 @@ function setup(
   }));
   const policy = new ApprovalPolicyResolver([new PlatformOverrideSource(overrides)], AGENT_ACTIONS.rulesFor, vi.fn());
   const activity = { append: vi.fn(async () => undefined) };
+  const liveEvents = { append: vi.fn(async () => undefined) };
   const clock = { now: NOW };
   const now = () => clock.now;
   const notifier = { requested: vi.fn<ApprovalNotifier["requested"]>(), decided: vi.fn<ApprovalNotifier["decided"]>() };
@@ -80,6 +81,7 @@ function setup(
     access,
     services: fakes.services,
     activity,
+    liveEvents,
     flags,
     users: { namesFor: async (ids) => new Map(ids.filter((id) => id in USER_NAMES).map((id) => [id, USER_NAMES[id]])) },
     defer: () => undefined,
@@ -87,7 +89,7 @@ function setup(
     notifier,
   });
   const sweeper = new ApprovalSweeper({ registry: AGENT_ACTIONS, requests, access, services: fakes.services, policy, now });
-  return { requests, fakes, gateway, approvals, sweeper, activity, flags, notifier, clock };
+  return { requests, fakes, gateway, approvals, sweeper, activity, liveEvents, flags, notifier, clock };
 }
 
 const USER_NAMES: Record<string, string> = { [OWNER]: "Olivia Owner", [EDITOR]: "Eddie Editor" };
@@ -276,6 +278,15 @@ describe("approval service", () => {
     await env.approvals.reject(ownerDashboard(), pending.id, "Fix the examples first.");
     const seen = await env.approvals.get(ownerAgent(), pending.id);
     expect(seen).toMatchObject({ status: "rejected", decisionNote: "Fix the examples first." });
+  });
+
+  it("shows a rejection in the live activity of the project", async () => {
+    const env = setup();
+    const { pending } = await pendingPublish(env);
+    await env.approvals.reject(ownerDashboard(), pending.id);
+    expect(env.liveEvents.append).toHaveBeenCalledWith(PROJECT, [
+      expect.objectContaining({ tool: "approval_decision", kind: "approval", detail: "Rejected" }),
+    ]);
   });
 
   it("needs the typed project name to delete a project", async () => {

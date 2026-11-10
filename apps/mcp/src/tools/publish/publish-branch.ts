@@ -10,6 +10,7 @@ export const publishBranchTool = defineActionTool({
   description:
     "Publishes a named branch to the live site. The user reviews the changes in the Doxa dashboard before they go live.",
   action: "docs.publish",
+  liveActivityKind: "publish",
   scope: "publish",
   annotations: destructiveActionAnnotations,
   input: z

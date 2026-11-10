@@ -35,6 +35,8 @@ import type { PreparedAction } from "./registered-action";
 import type { ActionRegistry } from "./registry";
 import { ApprovalRequestAccess } from "./request-access";
 import { bindRecord, namedUserIds, toDetail, toSummary } from "./request-view";
+import { AGENT_APPROVAL_DECISION_TOOL } from "@doxahq/contracts/agent-live-activity";
+import type { AgentLiveEventStore } from "../../repositories/agent-live-events";
 
 export interface ApprovalServiceDeps {
   readonly registry: ActionRegistry;
@@ -42,6 +44,8 @@ export interface ApprovalServiceDeps {
   readonly access: ActionAccessPolicy;
   readonly services: ActionServices;
   readonly activity: Pick<AgentActivityStore, "append">;
+  /** Shows the decision in the live activity of the project. */
+  readonly liveEvents?: AgentLiveEventStore;
   /** Reads `require_other_decider` of the request's project. */
   readonly flags: Pick<ApprovalSettingsStore, "projectFlags">;
   /** Names the member who asked and the one who decided. */
@@ -267,6 +271,26 @@ export class ApprovalService {
     const write = this.deps.activity
       .append(decisionActivity({ request, tool, durationMs, persisted }))
       .catch((error: unknown) => console.error("Agent decision activity write failed.", error));
+    this.deps.defer(write);
+    this.writeDecisionEvent(request, tool);
+  }
+
+  private writeDecisionEvent(request: ApprovalRequestRecord, tool: DecisionTool): void {
+    if (request.projectId === null || this.deps.liveEvents === undefined) return;
+    const write = this.deps.liveEvents
+      .append(request.projectId, [
+        {
+          branchId: null,
+          userId: request.requestedByUserId,
+          grantRef: request.grantRef,
+          clientId: request.requestedByClientId,
+          clientName: request.requestedByClientName,
+          tool: AGENT_APPROVAL_DECISION_TOOL,
+          kind: "approval",
+          detail: tool === "approve_request" ? "Approved" : "Rejected",
+        },
+      ])
+      .catch((error: unknown) => console.error("Agent decision live event write failed.", error));
     this.deps.defer(write);
   }
 }

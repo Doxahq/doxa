@@ -243,6 +243,9 @@ A pnpm monorepo in TypeScript.
 | Testing | [docs/testing-strategy.md](docs/testing-strategy.md) |
 | GitHub App | [docs/github-app.md](docs/github-app.md) |
 
+> [!TIP]
+> **Fun fact:** Doxa writes its own docs. Doxabot generated [docs.doxa.so](https://docs.doxa.so) from this repository, and Doxa hosts it. When we merge a change here, Doxabot updates the affected pages there. Yes, we eat our own dog food. 🐶 This way, every change to Doxa gets a real test on our own docs, and we find what to improve first.
+
 ## Contributing
 
 Issues and pull requests are welcome.

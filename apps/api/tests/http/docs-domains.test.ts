@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
     refreshForProject: vi.fn(),
     deleteForProject: vi.fn(),
   },
+  docsDomainDnsHostService: {
+    detectForProject: vi.fn(),
+  },
 }));
 
 vi.mock("../../src/services/agent-access/project-access-repository", async () => {
@@ -47,6 +50,10 @@ vi.mock("../../src/services/docs-domain-lifecycle", async (importOriginal) => {
     DocsDomainLifecycleService: vi.fn(() => mocks.docsDomainLifecycleService),
   };
 });
+
+vi.mock("../../src/services/docs-domain-dns-host", () => ({
+  DocsDomainDnsHostService: vi.fn(() => mocks.docsDomainDnsHostService),
+}));
 
 vi.mock("../../src/repositories/docs", () => ({
   DocsRepository: vi.fn(),
@@ -116,6 +123,11 @@ describe("docs domain routes", () => {
       createDomain({ verificationStatus: "verified" }),
     );
     mocks.docsDomainLifecycleService.deleteForProject.mockResolvedValue(true);
+    mocks.docsDomainDnsHostService.detectForProject.mockResolvedValue({
+      provider: "cloudflare",
+      zone: "example.com",
+      nameservers: ["ada.ns.cloudflare.com", "bob.ns.cloudflare.com"],
+    });
   });
 
   test("lists docs domains for an owned project", async () => {
@@ -246,6 +258,42 @@ describe("docs domain routes", () => {
 
     const response = await worker.fetch(
       new Request("https://api.doxa.so/projects/33333333-3333-4333-8333-333333333333/docs-domains"),
+      createEnv(),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  test("returns the DNS host of a docs domain", async () => {
+    const response = await worker.fetch(
+      new Request("https://api.doxa.so/projects/11111111-1111-4111-8111-111111111111/docs-domains/domain-1/dns-host"),
+      createEnv(),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(
+      mocks.docsDomainDnsHostService.detectForProject,
+    ).toHaveBeenCalledWith({
+      userId: "user-1",
+      projectId: "11111111-1111-4111-8111-111111111111",
+      domainId: "domain-1",
+    });
+    await expect(response.json()).resolves.toEqual({
+      dnsHost: {
+        provider: "cloudflare",
+        zone: "example.com",
+        nameservers: ["ada.ns.cloudflare.com", "bob.ns.cloudflare.com"],
+      },
+    });
+  });
+
+  test("returns 404 for the DNS host of a domain outside the project", async () => {
+    mocks.docsDomainDnsHostService.detectForProject.mockResolvedValue(null);
+
+    const response = await worker.fetch(
+      new Request("https://api.doxa.so/projects/11111111-1111-4111-8111-111111111111/docs-domains/domain-9/dns-host"),
       createEnv(),
       createExecutionContext(),
     );

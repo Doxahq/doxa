@@ -12,6 +12,8 @@ import type {
   DocsContentOverviewDto,
   DocsContentPageDetailDto,
   DocsDomainCollectionDto,
+  DocsDomainDnsHost,
+  DocsDomainDnsHostResponse,
   DocsDomainDto,
   DocsPreviewVisibility,
   DoxabotSettingsDto,
@@ -419,6 +421,15 @@ export async function refreshDocsDomain(projectId: string, domainId: string): Pr
     signal: AbortSignal.timeout(30_000),
   });
   return result.domain;
+}
+
+/** The DNS host of a custom domain, from the nameservers of its zone. */
+export async function getDocsDomainDnsHost(projectId: string, domainId: string): Promise<DocsDomainDnsHost> {
+  const result = await apiFetch<DocsDomainDnsHostResponse>(
+    `/projects/${projectId}/docs-domains/${domainId}/dns-host`,
+    { signal: AbortSignal.timeout(15_000) },
+  );
+  return result.dnsHost;
 }
 
 export async function getProjectContent(

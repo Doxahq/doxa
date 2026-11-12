@@ -8,6 +8,7 @@ import {
 import { parseValidatedJson } from "../http/validation";
 import { error, json, notFound } from "../http/response";
 import { CreateCustomDocsDomainError } from "../repositories/docs-domains";
+import { DocsDomainDnsHostService } from "../services/docs-domain-dns-host";
 import {
   DocsDomainLifecycleService,
   DocsDomainProvisioningError,
@@ -52,6 +53,21 @@ export function createDocsDomainRoutes(): ApiApp {
         }
         throw err;
       }
+    }),
+  );
+
+  app.get("/:domainId/dns-host", (context) =>
+    withProjectAccess(context, "domains.read", async ({ ownerUserId: userId }) => {
+      const projectId = context.req.param("projectId");
+      if (!projectId) return notFound();
+
+      const dnsHost = await new DocsDomainDnsHostService(context.env).detectForProject({
+        userId,
+        projectId,
+        domainId: context.req.param("domainId"),
+      });
+      if (!dnsHost) return notFound();
+      return json({ dnsHost });
     }),
   );
 

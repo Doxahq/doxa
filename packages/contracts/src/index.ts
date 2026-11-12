@@ -51,6 +51,7 @@ import type {
 } from "./review-runs";
 
 export * from "./docs-content";
+export * from "./docs-domain-dns-host";
 export * from "./doxabot";
 export * from "./doxabot-instructions";
 export * from "./doxabot-instruction-screening";

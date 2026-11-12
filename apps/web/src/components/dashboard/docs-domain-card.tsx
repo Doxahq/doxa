@@ -1,25 +1,19 @@
-import type { ReactNode } from "react"
 import {
   AlertCircle,
   Check,
   CircleDashed,
-  Copy,
   ExternalLink,
   Loader2,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react"
 import type { DocsDomainDto } from "@doxahq/contracts"
-import { toast } from "sonner"
 
 import { DomainPill } from "~/components/dashboard/dashboard-status"
 import { DocsDomainDeleteDialog } from "~/components/dashboard/docs-domain-delete-dialog"
+import { DnsSetupGuide } from "~/components/dashboard/dns-setup-guide"
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
-import {
-  getOwnershipRecords,
-  type VerificationRecord,
-} from "~/lib/dashboard/model"
 import {
   getDocsDomainStatus,
   type DocsDomainStage,
@@ -143,9 +137,7 @@ function DomainStage({ stage, hasDivider }: { stage: DocsDomainStage; hasDivider
 function DomainDetails({ domain }: { domain: DocsDomainDto }) {
   const needsDnsSetup = domain.kind === "custom_domain"
     && domain.verificationStatus !== "verified"
-  const ownershipRecords = getOwnershipRecords(domain)
   const hasDetails = needsDnsSetup
-    || ownershipRecords.length > 0
     || domain.verificationError !== null
     || domain.routingError !== null
     || domain.routingCheckedAt !== null
@@ -164,10 +156,6 @@ function DomainDetails({ domain }: { domain: DocsDomainDto }) {
         <DomainError title="Delivery check failed" message={domain.routingError} />
       ) : null}
 
-      {ownershipRecords.length > 0 ? (
-        <VerificationRecordGroup title="Ownership" records={ownershipRecords} />
-      ) : null}
-
       {domain.routingCheckedAt ? (
         <p className="font-mono text-[11px] tracking-[0.16em] text-label uppercase">
           Last delivery check{" "}
@@ -184,26 +172,17 @@ function DnsSetupDetails({ domain }: { domain: DocsDomainDto }) {
   const record = domain.dnsRecord
 
   return (
-    <DomainRecordGroup
-      title="DNS setup"
-      description="Create this CNAME at your DNS provider. Keep the record in DNS-only mode."
-    >
+    <section aria-label="DNS setup" className="flex flex-col gap-2">
+      <p className="font-mono text-[11px] tracking-[0.16em] text-label uppercase">DNS setup</p>
       {record ? (
         <>
-          <dl className="grid gap-2 md:grid-cols-2">
-            <DomainRecordField label="Type" value={record.type} />
-            <DomainRecordField label="Name" value={record.name} copyLabel="DNS name" />
-            <DomainRecordField label="Target" value={record.target} copyLabel="DNS target" />
-            <DomainRecordField label="Proxy" value="DNS only" />
-          </dl>
+          <DnsSetupGuide domain={domain} record={record} />
           <div
             aria-label="Automatic certificate issuance"
             className="flex items-start gap-2 text-xs leading-5 text-muted-foreground"
           >
             <ShieldCheck aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-            <p>
-              The SSL certificate will be issued automatically once the DNS setup is complete.
-            </p>
+            <p>Doxa issues the SSL certificate automatically after the record works.</p>
           </div>
         </>
       ) : (
@@ -215,84 +194,7 @@ function DnsSetupDetails({ domain }: { domain: DocsDomainDto }) {
           </AlertDescription>
         </Alert>
       )}
-    </DomainRecordGroup>
-  )
-}
-
-function DomainRecordGroup({
-  title,
-  description,
-  children,
-}: {
-  title: string
-  description?: string
-  children: ReactNode
-}) {
-  return (
-    <section aria-label={title} className="flex flex-col gap-2">
-      <div>
-        <p className="font-mono text-[11px] tracking-[0.16em] text-label uppercase">
-          {title}
-        </p>
-        {description ? (
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {description}
-          </p>
-        ) : null}
-      </div>
-      {children}
     </section>
-  )
-}
-
-function DomainRecordField({
-  label,
-  value,
-  copyLabel,
-}: {
-  label: string
-  value: string
-  copyLabel?: string
-}) {
-  return (
-    <div className="min-w-0 rounded-md border border-border bg-muted/10 px-3 py-2">
-      <dt className="font-mono text-[11px] tracking-[0.16em] text-label uppercase">
-        {label}
-      </dt>
-      <dd className="mt-1 flex min-w-0 items-center justify-between gap-2">
-        <span className="min-w-0 break-all font-mono text-xs leading-5 text-foreground">
-          {value}
-        </span>
-        {copyLabel ? (
-          <CopyDnsValueButton label={copyLabel} value={value} />
-        ) : null}
-      </dd>
-    </div>
-  )
-}
-
-function CopyDnsValueButton({ label, value }: { label: string; value: string }) {
-  async function copyValue(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(value)
-      toast.success(`${label} copied`)
-    } catch {
-      toast.error(`Could not copy ${label.toLowerCase()}.`)
-    }
-  }
-
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="size-7! shrink-0"
-      aria-label={`Copy ${label}`}
-      title={`Copy ${label}`}
-      onClick={() => void copyValue()}
-    >
-      <Copy aria-hidden="true" className="size-3.5" />
-    </Button>
   )
 }
 
@@ -303,21 +205,5 @@ function DomainError({ title, message }: { title: string; message: string }) {
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription className="break-words">{message}</AlertDescription>
     </Alert>
-  )
-}
-
-function VerificationRecordGroup({ title, records }: { title: string; records: VerificationRecord[] }) {
-  return (
-    <DomainRecordGroup title={title}>
-      <dl className="grid gap-2 md:grid-cols-2">
-        {records.map((record) => (
-          <DomainRecordField
-            key={`${record.label}:${record.value}`}
-            label={record.label}
-            value={record.value}
-          />
-        ))}
-      </dl>
-    </DomainRecordGroup>
   )
 }

@@ -14,6 +14,7 @@ import {
   getProjectGenerationCache,
   getProjectPreviewVisibility,
   getProjectGeneration,
+  getDocsDomainDnsHost,
   listDocsDomains,
   listJobEvents,
   listPendingMerges,
@@ -56,6 +57,9 @@ export const dashboardQueryKeys = {
   contentMdxReport: (projectId: string, branch: BranchRef) =>
     [...dashboardQueryKeys.content(projectId, branch), "mdx-issues"] as const,
   domains: (projectId: string) => [...dashboardQueryKeys.project(projectId), "domains"] as const,
+  /** Under the project key, so Check again also looks up the DNS host again. */
+  domainDnsHost: (projectId: string, domainId: string) =>
+    [...dashboardQueryKeys.project(projectId), "domain-dns-host", domainId] as const,
   doxabot: (projectId: string) => [...dashboardQueryKeys.project(projectId), "doxabot"] as const,
   /** Not under `doxabot`, so saving a setting does not list the branches again. */
   repositoryBranches: (projectId: string) =>
@@ -150,6 +154,17 @@ export function docsDomainsQueryOptions(projectId: string) {
     queryKey: dashboardQueryKeys.domains(projectId),
     queryFn: (context) => fromProjectShell(context, projectId, "docsDomains", () => listDocsDomains(projectId)),
     staleTime: 5_000,
+  })
+}
+
+export function docsDomainDnsHostQueryOptions(projectId: string, domainId: string) {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.domainDnsHost(projectId, domainId),
+    queryFn: () => getDocsDomainDnsHost(projectId, domainId),
+    // Nameservers rarely change. The lookup runs again only after an invalidation.
+    staleTime: Infinity,
+    // A failed lookup only hides the provider steps, so do not delay the generic steps.
+    retry: false,
   })
 }
 

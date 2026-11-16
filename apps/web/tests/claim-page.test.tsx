@@ -67,10 +67,11 @@ describe("claim page", () => {
     expect(getAgentClaim).not.toHaveBeenCalled()
   })
 
-  test("says where the code is and marks the agent as unverified", async () => {
+  test("says where the code is and warns that the agent chose its own name", async () => {
     show()
     expect(await screen.findByText("Claude Code")).toBeTruthy()
-    expect(screen.getByText("unverified")).toBeTruthy()
+    expect(screen.queryByText("unverified")).toBeNull()
+    expect(screen.getByText(/It chose its own name/)).toBeTruthy()
     expect(screen.getByText("Find this code in your agent chat. Doxa does not send it by email.")).toBeTruthy()
   })
 

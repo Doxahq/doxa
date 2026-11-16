@@ -1,5 +1,5 @@
 import { EMBERS } from "~/lib/marketing/home"
-import { GITHUB_URL } from "~/lib/marketing/links"
+import { DOCS_URL, GITHUB_URL } from "~/lib/marketing/links"
 
 /** The closing scene: a framed night sky with a rocket lifting off out of it. */
 export function HomeImagine() {
@@ -46,7 +46,7 @@ export function HomeImagine() {
           You review, it publishes.
         </p>
         <div className="row">
-          <a className="btn btn--light" href="#">
+          <a className="btn btn--light" href={DOCS_URL}>
             See how it works ›
           </a>
           <a className="btn btn--line" href={GITHUB_URL}>

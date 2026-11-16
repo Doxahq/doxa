@@ -16,8 +16,10 @@
 .pg--home .dot { width: 6px; height: 6px; background: var(--accent); flex-shrink: 0; }
 .pg--home .blink { animation: mk-blink 1.4s steps(1) infinite; }
 .pg--home .caret { display: inline-block; width: 2px; height: 0.9em; margin-left: 3px; background: currentColor; vertical-align: -0.1em; animation: mk-blink 1s steps(1) infinite; }
+/* The logo lines up with the hero copy, which sits 40px in from the rail. */
+.pg--home .nav { padding: 0 40px; }
 .pg--home .nav__links { display: flex; gap: 28px; font-size: 14px; color: #c7c7c7; }
-.pg--home .nav__links a { display: inline-flex; align-items: center; gap: 6px; }
+.pg--home .nav__links > a { display: inline-flex; align-items: center; gap: 6px; }
 .pg--home .nav__tag { padding: 2px 4px; font-family: var(--mono); font-size: 9px; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase; color: #ffffff; background: var(--accent); }
 .pg--home .nav__actions { display: flex; gap: 8px; }
 
@@ -31,16 +33,25 @@
    thin rainbow streak. Keep the canvas shape of the first doxa.so hero (about
    0.72 tall per 1 wide, never shorter than the hero plus 200px). The hero clips the rest.
    The scene puts its glow at the right edge of the canvas. Move the canvas left so the glow
-   sits inside the hero column, and fade its right edge so the cut does not show. */
-.pg--home .hero__aurora { position: absolute; top: 0; left: 0; width: 100%; height: max(calc(100% + 200px), 72vw); z-index: -2; pointer-events: none; transform: translateX(-18%); -webkit-mask-image: linear-gradient(90deg, #000 84%, transparent 100%); mask-image: linear-gradient(90deg, #000 84%, transparent 100%); }
+   sits inside the hero column, and fade its right edge so the cut does not show.
+   It was -18%; on 2026-11-16 it moved 5% to the right, nearer the art column. */
+.pg--home .hero__aurora { position: absolute; top: 0; left: 0; width: 100%; height: max(calc(100% + 200px), 72vw); z-index: -2; pointer-events: none; transform: translateX(-13%); -webkit-mask-image: linear-gradient(90deg, #000 84%, transparent 100%); mask-image: linear-gradient(90deg, #000 84%, transparent 100%); }
 .pg--home .hero__scrim { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(90deg, rgba(10, 10, 10, 0.72) 0%, rgba(10, 10, 10, 0.35) 38%, rgba(10, 10, 10, 0) 64%), linear-gradient(180deg, rgba(10, 10, 10, 0.4) 0%, rgba(10, 10, 10, 0) 16%, rgba(10, 10, 10, 0) 62%, var(--night) 100%); }
 .pg--home .hero__grid { position: relative; z-index: 2; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 45%); min-height: 780px; }
-.pg--home .hero__copy { display: flex; flex-direction: column; justify-content: center; gap: 28px; padding: 72px 48px 96px 0; }
+.pg--home .hero__copy { display: flex; flex-direction: column; justify-content: center; gap: 28px; padding: 72px 48px 96px 40px; }
 .pg--home .pill { display: inline-flex; align-items: center; gap: 10px; width: fit-content; height: 28px; padding: 0 10px 0 4px; border: 1px solid var(--line-strong); background: rgba(10, 10, 10, 0.5); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: #c7c7c7; }
 .pg--home .pill b { font-weight: 400; font-size: 10px; padding: 3px 6px; background: var(--accent); color: #ffffff; }
 .pg--home .hero h1 { font-size: 76px; line-height: 0.98; }
 .pg--home .hero__lede { max-width: 480px; font-size: 17px; line-height: 27px; color: #b5b5b5; }
 .pg--home .hero__ctas { display: flex; flex-wrap: wrap; gap: 10px; }
+/* "Agent setup": overlapping agent logos, then the label. A click copies the setup prompt. */
+.pg--home .hero__connect { gap: 12px; padding-left: 10px; cursor: pointer; }
+.pg--home .hero__connect-logos { display: inline-flex; }
+.pg--home .hero__connect-logo { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 2px solid #0a0a0a; border-radius: 999px; background: #1c1c1f; }
+.pg--home .hero__connect-logo + .hero__connect-logo { margin-left: -7px; }
+.pg--home .hero__connect-logo img { display: block; width: 12px; height: 12px; }
+.pg--home .hero__connect:active { transform: scale(0.98); }
+.pg--home .hero__connect.is-copied { border-color: rgba(127, 214, 160, 0.6); }
 /* Hero outlines, like baseten.co: the top and bottom edge of each copy row runs from off the
    left of the page to the cards' line, behind the text. The hero clips the lines at the page
    edge. The art column has no outlines, so it is open to the right. */
@@ -56,7 +67,8 @@
 
 /* ---------- Works with ---------- */
 .pg--home .works { display: grid; grid-template-columns: 200px minmax(0, 1fr); }
-.pg--home .works__label { display: flex; align-items: center; padding-right: 24px; }
+.pg--home .works__label { display: flex; align-items: center; justify-content: center; padding: 0 16px; text-align: center; }
+.pg--home .works__label .label { font-size: 10px; letter-spacing: 0.1em; white-space: nowrap; }
 .pg--home .works__grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .pg--home .works__grid > * { background-image: var(--dash-y), var(--dash-x); background-size: 1px 8px, 8px 1px; background-position: left top, left bottom; background-repeat: repeat-y, repeat-x; }
 .pg--home .wk { display: flex; align-items: center; justify-content: center; gap: 10px; height: 76px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #c7c7c7; }
@@ -187,7 +199,8 @@
 
 /* ---------- Imagine (tavus-inspired) ---------- */
 .pg--home .imagine { position: relative; overflow: hidden; isolation: isolate; padding: 110px 0 120px; }
-.pg--home .imagine__dots { position: absolute; inset: 0; z-index: -1; pointer-events: none; background-image: radial-gradient(circle, rgba(156, 194, 255, 0.26) 0.9px, transparent 1.4px); background-size: 7px 7px; -webkit-mask-image: radial-gradient(ellipse 16% 22% at 12% 26%, #000 25%, transparent 72%), radial-gradient(ellipse 13% 18% at 24% 14%, #000 25%, transparent 72%), radial-gradient(ellipse 18% 20% at 36% 30%, #000 20%, transparent 70%), radial-gradient(ellipse 17% 22% at 66% 20%, #000 25%, transparent 72%), radial-gradient(ellipse 15% 20% at 80% 30%, #000 25%, transparent 72%), radial-gradient(ellipse 14% 16% at 90% 14%, #000 25%, transparent 72%), radial-gradient(ellipse 22% 16% at 8% 82%, #000 20%, transparent 72%), radial-gradient(ellipse 20% 16% at 92% 86%, #000 20%, transparent 72%); mask-image: radial-gradient(ellipse 16% 22% at 12% 26%, #000 25%, transparent 72%), radial-gradient(ellipse 13% 18% at 24% 14%, #000 25%, transparent 72%), radial-gradient(ellipse 18% 20% at 36% 30%, #000 20%, transparent 70%), radial-gradient(ellipse 17% 22% at 66% 20%, #000 25%, transparent 72%), radial-gradient(ellipse 15% 20% at 80% 30%, #000 25%, transparent 72%), radial-gradient(ellipse 14% 16% at 90% 14%, #000 25%, transparent 72%), radial-gradient(ellipse 22% 16% at 8% 82%, #000 20%, transparent 72%), radial-gradient(ellipse 20% 16% at 92% 86%, #000 20%, transparent 72%); }
+/* The dot clouds stay between the page rails. Their mask positions are percentages of this box, so on wide screens they do not drift out past the rails. */
+.pg--home .imagine__dots { position: absolute; top: 0; bottom: 0; left: var(--gutter); right: var(--gutter); z-index: -1; pointer-events: none; background-image: radial-gradient(circle, rgba(156, 194, 255, 0.26) 0.9px, transparent 1.4px); background-size: 7px 7px; -webkit-mask-image: radial-gradient(ellipse 16% 22% at 12% 26%, #000 25%, transparent 72%), radial-gradient(ellipse 13% 18% at 24% 14%, #000 25%, transparent 72%), radial-gradient(ellipse 18% 20% at 36% 30%, #000 20%, transparent 70%), radial-gradient(ellipse 17% 22% at 66% 20%, #000 25%, transparent 72%), radial-gradient(ellipse 15% 20% at 80% 30%, #000 25%, transparent 72%), radial-gradient(ellipse 14% 16% at 90% 14%, #000 25%, transparent 72%), radial-gradient(ellipse 22% 16% at 8% 82%, #000 20%, transparent 72%), radial-gradient(ellipse 20% 16% at 92% 86%, #000 20%, transparent 72%); mask-image: radial-gradient(ellipse 16% 22% at 12% 26%, #000 25%, transparent 72%), radial-gradient(ellipse 13% 18% at 24% 14%, #000 25%, transparent 72%), radial-gradient(ellipse 18% 20% at 36% 30%, #000 20%, transparent 70%), radial-gradient(ellipse 17% 22% at 66% 20%, #000 25%, transparent 72%), radial-gradient(ellipse 15% 20% at 80% 30%, #000 25%, transparent 72%), radial-gradient(ellipse 14% 16% at 90% 14%, #000 25%, transparent 72%), radial-gradient(ellipse 22% 16% at 8% 82%, #000 20%, transparent 72%), radial-gradient(ellipse 20% 16% at 92% 86%, #000 20%, transparent 72%); }
 .pg--home .imagine__title { padding: 0 24px; text-align: center; font-family: var(--display); font-weight: 700; font-size: 52px; line-height: 1.08; letter-spacing: -0.03em; text-transform: uppercase; color: #fafafa; }
 .pg--home .imagine__title em { display: inline-block; min-height: 1.08em; font-style: normal; color: var(--accent); }
 .pg--home .imagine__stage { position: relative; height: 680px; margin-top: 190px; }
@@ -232,7 +245,7 @@
   /* One column: the copy has no right line to end at, so drop the outlines, like baseten.co. */
   .pg--home .hero__row::before, .pg--home .hero__row::after { display: none; }
   .pg--home .works { grid-template-columns: minmax(0, 1fr); }
-  .pg--home .works__label { padding: 24px 0 12px; }
+  .pg--home .works__label { justify-content: flex-start; padding: 24px 0 12px; text-align: left; }
   .pg--home .feature { grid-template-columns: minmax(0, 1fr); }
   .pg--home .products { grid-template-columns: minmax(0, 1fr); }
   .pg--home .products > div + div { background-image: var(--dash-x); background-size: 8px 1px; background-repeat: repeat-x; }
@@ -246,6 +259,7 @@
 }
 @media (max-width: 760px) {
   .pg--home { --gutter: 16px; }
+  .pg--home .nav { padding: 0 16px; }
   .pg--home .nav__links { display: none; }
   .pg--home .nav__actions .btn--line { display: none; }
   .pg--home .hero h1 { font-size: 42px; }
@@ -285,7 +299,10 @@
 .pg--home .hero__copy { position: relative; z-index: 1; }
 .pg--home .hero__stage { position: relative; z-index: 0; min-width: 0; }
 .pg--home .hero__solve { position: absolute; top: 0; left: 50%; z-index: -1; display: block; width: 1200px; height: 100%; margin-left: -600px; pointer-events: none; }
-.pg--home .hero__solve-toggle { position: absolute; right: 24px; bottom: 24px; cursor: pointer; }
+.pg--home .hero__stage.is-toggleable { cursor: pointer; }
+/* Hidden for now: a click on the art pauses it. The button shows only on keyboard focus. */
+.pg--home .hero__solve-toggle { position: absolute; right: 24px; bottom: 24px; cursor: pointer; opacity: 0; pointer-events: none; }
+.pg--home .hero__solve-toggle:focus-visible { opacity: 1; pointer-events: auto; }
 @media (max-width: 1100px) {
   .pg--home .hero__stage { height: 480px; }
   .pg--home .hero__solve { width: 100vw; margin-left: -50vw; }

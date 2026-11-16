@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react"
 
-/** Agents in the "Works with your agent" row. Logos live in /marketing/logos. */
+/** Agents in the "Works with any agent" row. Logos live in /marketing/logos. */
 export const AGENT_LOGOS = [
   { name: "Claude", logo: "/marketing/logos/claude.svg" },
   { name: "Cursor", logo: "/marketing/logos/cursor.svg" },

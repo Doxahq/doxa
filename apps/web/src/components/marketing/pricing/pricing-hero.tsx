@@ -1,6 +1,6 @@
 import { Hr, Ticks } from "~/components/marketing/guides"
 import { SiteNav } from "~/components/marketing/site-nav"
-import { CONTACT_URL, GET_STARTED_URL } from "~/lib/marketing/links"
+import { DEMO_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 import { FOUNDER_PRICE_NOTE } from "~/lib/marketing/pricing"
 
 export function PricingHero() {
@@ -27,7 +27,7 @@ export function PricingHero() {
             <a className="btn btn--light" href={GET_STARTED_URL}>
               Start free ›
             </a>
-            <a className="btn btn--line" href={CONTACT_URL}>
+            <a className="btn btn--line" href={DEMO_URL}>
               Talk to us ›
             </a>
           </div>

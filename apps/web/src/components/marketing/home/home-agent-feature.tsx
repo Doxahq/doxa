@@ -1,5 +1,5 @@
 import { AGENT_DIAGRAM } from "~/lib/marketing/home"
-import { GET_STARTED_URL } from "~/lib/marketing/links"
+import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 
 /** Doxa Agent: copy on the left, the merge → preview → live diagram on the right. */
 export function HomeAgentFeature() {
@@ -21,7 +21,7 @@ export function HomeAgentFeature() {
             <a className="btn btn--light" href={GET_STARTED_URL}>
               Start free ›
             </a>
-            <a className="btn btn--line" href="#">
+            <a className="btn btn--line" href={DOCS_URL}>
               Learn more ›
             </a>
           </div>

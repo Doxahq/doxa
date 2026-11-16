@@ -1,9 +1,10 @@
 import { Link } from "@tanstack/react-router"
 import { Aurora } from "~/components/marketing/aurora"
 import { Hr } from "~/components/marketing/guides"
+import { ConnectAgentButton } from "~/components/marketing/home/connect-agent-button"
 import { HeroSolve } from "~/components/marketing/home/hero-solve"
 import { SiteNav } from "~/components/marketing/site-nav"
-import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
+import { GET_STARTED_URL } from "~/lib/marketing/links"
 
 export function HomeHero() {
   return (
@@ -36,9 +37,7 @@ export function HomeHero() {
               <a className="btn btn--light" href={GET_STARTED_URL}>
                 Get started ›
               </a>
-              <a className="btn btn--line" href={DOCS_URL}>
-                View demo docs ›
-              </a>
+              <ConnectAgentButton />
             </div>
           </div>
           <HeroSolve />

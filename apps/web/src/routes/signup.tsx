@@ -10,6 +10,7 @@ interface SignupSearch {
 }
 
 export const Route = createFileRoute("/signup")({
+  head: () => ({ meta: [{ title: "Create your account — Doxa" }] }),
   validateSearch: (search: Record<string, unknown>): SignupSearch =>
     typeof search.redirect === "string" ? { redirect: search.redirect } : {},
   beforeLoad: ({ search }) => redirectIfSignedIn(search.redirect),

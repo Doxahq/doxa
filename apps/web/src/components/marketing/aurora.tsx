@@ -2,6 +2,11 @@ import { useEffect, useId, useRef } from "react"
 
 const SDK_URL = "/webgl/unicornStudio.umd.js"
 const SCENE_URL = "/webgl/hero-aurora.json"
+/**
+ * The aurora drifts slowly, so 30 frames a second looks the same as 60 at half the
+ * GPU work. The SDK scales its clock by the frame rate, so the speed does not change.
+ */
+const AURORA_FPS = 30
 
 type UnicornScene = { destroy?: () => void }
 type UnicornStudio = {
@@ -50,7 +55,7 @@ export function Aurora({ className = "hero__aurora", dpi = 1.5 }: { className?: 
           filePath: SCENE_URL,
           scale: 1,
           dpi,
-          fps: 60,
+          fps: AURORA_FPS,
           lazyLoad: false,
           production: true,
         })

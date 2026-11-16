@@ -2,11 +2,11 @@ import { Link } from "@tanstack/react-router"
 import type { ReactNode } from "react"
 import { DoxaMark } from "~/components/marketing/doxa-mark"
 import { Hr } from "~/components/marketing/guides"
+import { OnboardAgentButton } from "~/components/marketing/onboard-agent-button"
 import {
   CODERONE_URL,
   CONTACT_EMAIL,
   CONTACT_URL,
-  DISCORD_URL,
   DOCS_URL,
   GITHUB_URL,
   LLMS_TXT_URL,
@@ -41,7 +41,6 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
     links: [
       { label: "GitHub", href: GITHUB_URL },
       { label: "X / Twitter", href: X_URL },
-      { label: "Discord", href: DISCORD_URL },
     ],
   },
   {
@@ -66,7 +65,7 @@ function FooterAnchor({ link }: { link: FooterLink }): ReactNode {
   return <a href={link.href}>{link.label}</a>
 }
 
-/** The footer of every marketing page, ending in the large "DOXA" mark. */
+/** The footer of every marketing page, ending in the large "DOXA" mark with "Onboard your agent" on top. */
 export function SiteFooter() {
   return (
     <footer className="foot">
@@ -87,15 +86,11 @@ export function SiteFooter() {
                 </svg>
               </a>
               <a href={X_URL} aria-label="X">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-                  <path d="M2 2l12 12M14 2L2 14" />
-                </svg>
-              </a>
-              <a href={DISCORD_URL} aria-label="Discord">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
-                  <path d="M4 4.5c3-1.4 7-1.4 10 0l1.5 7.5c-1.5 1.3-3.2 2-4.5 2.2L10 12.6M8 12.6l-1 1.6c-1.3-.2-3-.9-4.5-2.2z" />
-                  <circle cx="6.6" cy="9" r="1" />
-                  <circle cx="11.4" cy="9" r="1" />
+                <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+                  />
                 </svg>
               </a>
             </div>
@@ -124,8 +119,9 @@ export function SiteFooter() {
         </div>
       </div>
       <Hr />
-      <div className="foot__mark" aria-hidden="true">
-        <span>DOXA</span>
+      <div className="foot__mark">
+        <span aria-hidden="true">DOXA</span>
+        <OnboardAgentButton className="foot__agent" />
       </div>
     </footer>
   )

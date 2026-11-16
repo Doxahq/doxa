@@ -204,7 +204,7 @@ export const PLANS: Plan[] = [
       ["Unlimited MCP tool calls"],
     ],
     hosts: [{ label: "DEDICATED HOSTING" }, { label: "YOUR BRAND" }],
-    cta: { label: "Upgrade to Pro ›", className: "btn btn--blue", action: "upgrade" },
+    cta: { label: "Start trial ›", className: "btn btn--blue", action: "upgrade" },
   },
   {
     id: "enterprise",

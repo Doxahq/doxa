@@ -11,7 +11,7 @@ export function HomeProductCards() {
           <div className="products__copy">
             <h3>Docs Platform</h3>
             <p>Branches, previews and edge publishing for MDX, on your own domain.</p>
-            <a className="btn btn--line btn--sm" href="#">
+            <a className="btn btn--line btn--sm" href={DOCS_URL}>
               Learn more ›
             </a>
           </div>

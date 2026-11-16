@@ -358,13 +358,13 @@ describe("math", () => {
 
 describe("canvasPixelRatio", () => {
   it("keeps the normal cap in a normal window", () => {
-    expect(canvasPixelRatio(2, 1440, 884)).toBe(1.5)
+    expect(canvasPixelRatio(2, 1440, 884)).toBe(1.25)
     expect(canvasPixelRatio(1, 1440, 884)).toBe(1)
   })
 
   it("holds a very wide window to the pixel budget", () => {
     const ratio = canvasPixelRatio(2, 2527, 884)
-    expect(ratio).toBeLessThan(1.5)
+    expect(ratio).toBeLessThan(1.25)
     expect(2527 * ratio * 884 * ratio).toBeLessThanOrEqual(3_000_001)
   })
 })

@@ -10,6 +10,7 @@ interface ResetPasswordSearch {
 }
 
 export const Route = createFileRoute("/reset-password")({
+  head: () => ({ meta: [{ title: "Reset password — Doxa" }] }),
   validateSearch: (search: Record<string, unknown>): ResetPasswordSearch => ({
     ...(typeof search.token === "string" ? { token: search.token } : {}),
     ...(typeof search.error === "string" ? { error: search.error } : {}),

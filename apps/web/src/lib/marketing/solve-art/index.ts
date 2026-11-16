@@ -13,8 +13,11 @@ const CUBE_MIN_PX = 96
 const CUBE_MAX_PX = 190
 /** The side of the cube in world units. */
 const CUBE_SIDE = 3
-/** The sharpest pixel ratio. MSAA keeps the edges clean below it. */
-const MAX_PIXEL_RATIO = 1.5
+/**
+ * The sharpest pixel ratio. MSAA keeps the edges clean below it. 1.25 draws about 30%
+ * fewer pixels than 1.5, and the hands still look sharp on a retina screen.
+ */
+const MAX_PIXEL_RATIO = 1.25
 /** The most pixels in the canvas. A very wide window would otherwise hold a large MSAA buffer in GPU memory. */
 const MAX_PIXELS = 3_000_000
 
@@ -25,6 +28,11 @@ export function canvasPixelRatio(deviceRatio: number, width: number, height: num
 
 export type SolveArt = ArtLoop
 
+export interface SolveArtOptions {
+  /** The size of the cube and hands against the default, for example 0.8 for 20% smaller. */
+  scale?: number
+}
+
 /**
  * Draws two robotic hands that solve a cube, in `canvas`, with the cube centered
  * over `stage`. The parts of one frame are about 230 boxes and cylinders, in two
@@ -33,7 +41,8 @@ export type SolveArt = ArtLoop
  *
  * Returns null when the browser has no WebGL2.
  */
-export function attachSolveArt(canvas: HTMLCanvasElement, stage: HTMLElement): SolveArt | null {
+export function attachSolveArt(canvas: HTMLCanvasElement, stage: HTMLElement, options: SolveArtOptions = {}): SolveArt | null {
+  const scale = options.scale ?? 1
   const renderer = createRenderer(canvas)
   if (!renderer) {
     // With no art, the empty stage goes too.
@@ -56,7 +65,7 @@ export function attachSolveArt(canvas: HTMLCanvasElement, stage: HTMLElement): S
       canvas.height = height
     }
     const area = stage.getBoundingClientRect()
-    const cubePx = Math.min(CUBE_MAX_PX, Math.max(CUBE_MIN_PX, Math.min(area.width, area.height) * CUBE_SHARE))
+    const cubePx = scale * Math.min(CUBE_MAX_PX, Math.max(CUBE_MIN_PX, Math.min(area.width, area.height) * CUBE_SHARE))
     camera = {
       focal: (cubePx * 2 * DISTANCE) / (CUBE_SIDE * box.height),
       aspect: box.width / box.height,

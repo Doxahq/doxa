@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router"
-import { GET_STARTED_URL } from "~/lib/marketing/links"
+import { DEMO_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 import { FOUNDER_PRICE_NOTE } from "~/lib/marketing/pricing"
 
 export function HomeCta() {
@@ -14,7 +14,7 @@ export function HomeCta() {
           <Link className="btn btn--line" to="/pricing">
             See pricing ›
           </Link>
-          <a className="btn btn--line" href="#">
+          <a className="btn btn--line" href={DEMO_URL}>
             Book a demo ›
           </a>
         </div>

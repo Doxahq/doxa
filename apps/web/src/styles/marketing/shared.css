@@ -8,6 +8,9 @@
 .pg a { color: inherit; text-decoration: none; }
 .pg a:hover { color: #ffffff; }
 
+/* A section off screen pauses its CSS animations (usePauseOffscreenAnimations). */
+.pg > [data-offscreen], .pg > [data-offscreen] *, .pg > [data-offscreen] *::before, .pg > [data-offscreen] *::after { animation-play-state: paused !important; }
+
 /* ---------- Guide lines ---------- */
 .pg .rails { position: absolute; top: 0; bottom: 0; left: var(--gutter); right: var(--gutter); z-index: 6; pointer-events: none; background-image: var(--dash-y), var(--dash-y); background-size: 1px 8px, 1px 8px; background-position: left top, right top; background-repeat: repeat-y; }
 .pg .hr { position: relative; z-index: 6; height: 1px; background-image: var(--dash-x); background-size: 8px 1px; background-repeat: repeat-x; }
@@ -22,7 +25,7 @@
 .pg .mark { background: var(--accent); color: #ffffff; padding: 0 0.1em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 
 /* ---------- Nav ---------- */
-.pg .nav { position: relative; z-index: 7; display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 64px; }
+.pg .nav { position: relative; z-index: 7; display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 64px; padding: 0 32px; }
 
 /* The Resources dropdown of the top bar, after baseten.co: the open trigger fills, and each dashed column is one category. The panel's top padding keeps the hover alive between the trigger and the columns. */
 .pg .navmenu { position: relative; }
@@ -70,11 +73,23 @@
 .pg .status { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border: 1px solid rgba(127, 214, 160, 0.5); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: #7fd6a0; }
 .pg .status i { width: 6px; height: 6px; background: #7fd6a0; animation: mk-blink 1.6s steps(1) infinite; }
 .pg .foot__mark { position: relative; height: clamp(120px, 16vw, 250px); overflow: hidden; }
-.pg .foot__mark span { position: absolute; left: 50%; top: 0; transform: translateX(-50%); font-family: var(--display); font-weight: 700; font-size: min(26vw, 380px); line-height: 0.8; letter-spacing: -0.05em; color: rgba(255, 255, 255, 0.05); white-space: nowrap; user-select: none; }
+.pg .foot__mark > span { position: absolute; left: 50%; top: 0; transform: translateX(-50%); font-family: var(--display); font-weight: 700; font-size: min(26vw, 380px); line-height: 0.8; letter-spacing: -0.05em; color: rgba(255, 255, 255, 0.05); white-space: nowrap; user-select: none; }
+/* "Onboard your agent": a pill that copies the agent setup prompt, after context.dev. Used in the footer and the home hero. */
+.pg .agent-cta { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 18px; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 999px; background: rgba(10, 10, 10, 0.72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); color: #ededed; font-family: var(--sans); font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.1s ease; }
+.pg .agent-cta svg { flex-shrink: 0; color: #a1a1a1; transition: color 0.15s ease; }
+.pg .agent-cta:hover { border-color: rgba(156, 194, 255, 0.7); background: rgba(24, 32, 52, 0.85); color: #ffffff; }
+.pg .agent-cta:hover svg { color: #9cc2ff; }
+.pg .agent-cta:active { transform: scale(0.97); }
+.pg .agent-cta:focus-visible { outline: 2px solid #3d7bff; outline-offset: 3px; }
+.pg .agent-cta.is-copied, .pg .agent-cta.is-copied:hover { border-color: rgba(127, 214, 160, 0.6); color: #ffffff; }
+.pg .agent-cta.is-copied svg { color: #7fd6a0; }
+.pg .foot__agent { position: absolute; left: 50%; top: 42%; z-index: 1; transform: translate(-50%, -50%); }
+.pg .foot__agent:active { transform: translate(-50%, -50%) scale(0.97); }
 @media (max-width: 1100px) {
   .pg .foot__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
+  .pg .nav { padding: 0 16px; }
   .pg .foot__grid { grid-template-columns: minmax(0, 1fr); padding: 48px 16px 32px; }
   .pg .foot__base { flex-direction: column; align-items: flex-start; padding: 20px 16px; }
 }

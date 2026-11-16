@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { attachSolveArt, type SolveArt } from "~/lib/marketing/solve-art"
+import { attachSolveArt, type SolveArt, type SolveArtOptions } from "~/lib/marketing/solve-art"
 
 /** Start the art one screen before it arrives, so it never draws in view. */
 const ATTACH_MARGIN = "100% 0px"
@@ -10,7 +10,8 @@ const ATTACH_MARGIN = "100% 0px"
  * is the area that the cube centers over. `playing` is null until the art has drawn, so
  * a button never controls art that is not there.
  */
-export function useSolveArt() {
+export function useSolveArt(options: SolveArtOptions = {}) {
+  const scale = options.scale
   const canvas = useRef<HTMLCanvasElement>(null)
   const stage = useRef<HTMLDivElement>(null)
   const art = useRef<SolveArt | null>(null)
@@ -30,7 +31,7 @@ export function useSolveArt() {
       ([entry]) => {
         if (!entry.isIntersecting) return
         near.disconnect()
-        art.current = attachSolveArt(surface, area)
+        art.current = attachSolveArt(surface, area, { scale })
         if (art.current) setPlaying(art.current.playing)
       },
       { rootMargin: ATTACH_MARGIN },
@@ -41,7 +42,7 @@ export function useSolveArt() {
       art.current?.stop()
       art.current = null
     }
-  }, [])
+  }, [scale])
 
   return { canvas, stage, playing, toggle }
 }

@@ -1,4 +1,5 @@
 import { REVIEW_FILES, SAMPLE_DIFF } from "~/lib/marketing/home"
+import { DOCS_URL } from "~/lib/marketing/links"
 
 /** Two panes: the code diff that triggers a sync, and the review that gates the publish. */
 export function HomeSync() {
@@ -11,7 +12,7 @@ export function HomeSync() {
               <h3>Code changes. Docs follow.</h3>
               <p>The agent reads the diff and finds every page that mentions the changed code.</p>
             </div>
-            <a className="btn btn--line btn--sm" href="#">
+            <a className="btn btn--line btn--sm" href={DOCS_URL}>
               Learn more ›
             </a>
           </div>
@@ -48,7 +49,7 @@ export function HomeSync() {
               <h3>You approve every publish.</h3>
               <p>Rewrites land on a branch with a preview. Nothing goes live until you say so.</p>
             </div>
-            <a className="btn btn--line btn--sm" href="#">
+            <a className="btn btn--line btn--sm" href={DOCS_URL}>
               Learn more ›
             </a>
           </div>

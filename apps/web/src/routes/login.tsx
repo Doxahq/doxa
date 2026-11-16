@@ -19,6 +19,7 @@ const NOTICES: Record<NonNullable<LoginSearch["notice"]>, string> = {
 }
 
 export const Route = createFileRoute("/login")({
+  head: () => ({ meta: [{ title: "Sign in — Doxa" }] }),
   validateSearch: (search: Record<string, unknown>): LoginSearch => ({
     ...(typeof search.redirect === "string" ? { redirect: search.redirect } : {}),
     ...(typeof search.error === "string" ? { error: search.error } : {}),

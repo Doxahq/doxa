@@ -8,6 +8,8 @@ const FONTS_URL =
 
 export const Route = createFileRoute("/_marketing")({
   head: () => ({
+    // Replaces the `noindex` default of the root route.
+    meta: [{ name: "robots", content: "index, follow, max-image-preview:large" }],
     links: [
       { rel: "stylesheet", href: FONTS_URL },
       { rel: "stylesheet", href: marketingCss },

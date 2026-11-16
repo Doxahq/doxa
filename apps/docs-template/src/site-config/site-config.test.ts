@@ -179,7 +179,7 @@ describe("customized fixture chrome", () => {
     const payload = {
       config: client,
       configHash: await hashSiteConfig(config),
-      head: siteHead(config),
+      head: siteHead(config, "https://docs.example.com"),
       delivery: null,
     };
     expect(

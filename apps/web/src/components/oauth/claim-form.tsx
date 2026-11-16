@@ -4,7 +4,6 @@ import type { AgentClaimDetails, OAuthScope } from "@doxahq/contracts/agent-acce
 
 import { ConsentProjectPicker } from "~/components/oauth/consent-project-picker"
 import { ConsentScopeList } from "~/components/oauth/consent-scope-list"
-import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
 import { Label } from "~/components/ui/label"
@@ -116,10 +115,7 @@ function ClaimAgentIdentity({ clientName, tokenName }: { clientName: string; tok
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <p className="min-w-0 text-2xl leading-tight font-semibold break-words text-foreground">{clientName}</p>
-          <Badge variant="warning">unverified</Badge>
-        </div>
+        <p className="min-w-0 text-2xl leading-tight font-semibold break-words text-foreground">{clientName}</p>
         <p className="text-sm text-muted-foreground">
           wants to use your Doxa account. Its token will be named{" "}
           <span className="font-mono break-words text-body">{tokenName}</span>.

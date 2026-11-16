@@ -25,13 +25,16 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       {
         title: matches.some((match) => match._notFound || match.status === "notFound")
           ? "Page not found — Doxa"
-          : "Doxa — Documentation that Updates Itself",
+          : "Doxa — Documentation that updates itself",
       },
       {
         name: "description",
         content:
           "Doxa keeps your documentation in sync with your codebase, with templates and an AI agent that watches your PRs.",
       },
+      // Only the marketing pages belong in search results. The marketing layout
+      // turns indexing on; sign-in, the dashboard and the 404 page stay out.
+      { name: "robots", content: "noindex, nofollow" },
     ],
     links: [
       { rel: "stylesheet", href: globalsCss },

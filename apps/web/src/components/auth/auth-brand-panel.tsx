@@ -1,6 +1,8 @@
+import { Link } from "@tanstack/react-router"
 import type { ReactNode } from "react"
 
 import { PixelDishArt } from "~/components/auth/auth-dish-art"
+import { AuthDunesArt } from "~/components/auth/auth-dunes-art"
 import { PixelDocsArt } from "~/components/auth/auth-pixel-art"
 import { LogoMark } from "~/components/navigation/logo"
 import { SAMPLE_DIFF } from "~/lib/marketing/home"
@@ -10,46 +12,58 @@ const MARK_SIZE = 26
 
 /**
  * The art the panel shows on wide screens. Change this value to switch:
+ * - "dunes": a figure on night dunes, faded into the page (`auth-dunes-art.tsx`).
  * - "dish": the MCP page's antenna dish in pixels under twinkling stars (`auth-dish-art.tsx`).
  * - "pixels": a dithered docs page that breaks into pixels (`auth-pixel-art.tsx`).
  * - "sync": a code diff above the logo and the docs page it changes below.
  */
-type PanelArt = "dish" | "pixels" | "sync"
-const PANEL_ART = "sync" as PanelArt
+type PanelArt = "dunes" | "dish" | "pixels" | "sync"
+const PANEL_ART = "dunes" as PanelArt
 
 /**
  * The right-hand panel of the login page, after planetscale.com: the Doxa logo
  * sits on the panel's left line, and the line stops above and below it. On wide
- * screens the panel also shows art (`PANEL_ART`). Hidden on small screens, where
- * the card's own mark is enough.
+ * screens the panel also shows art (`PANEL_ART`). The logo and the word are one
+ * link to the home page. Hidden on small screens, where the card's own mark is enough.
  */
 export function AuthBrandPanel() {
   const sync = PANEL_ART === "sync"
   return (
-    <aside className="relative hidden w-1/3 shrink-0 flex-col md:flex" aria-hidden="true">
+    <aside className="relative hidden w-1/3 shrink-0 flex-col md:flex">
       {/* Starts 1px in, so the line stays visible. */}
+      {PANEL_ART === "dunes" ? <AuthDunesArt className="absolute inset-y-0 right-0 left-px overflow-hidden" /> : null}
       {PANEL_ART === "dish" ? (
-        <PixelDishArt className="absolute inset-y-0 right-0 left-px hidden overflow-hidden xl:block" />
+        <div aria-hidden="true">
+          <PixelDishArt className="absolute inset-y-0 right-0 left-px hidden overflow-hidden xl:block" />
+        </div>
       ) : null}
       {PANEL_ART === "pixels" ? (
-        <PixelDocsArt className="absolute inset-y-0 right-0 left-px hidden overflow-hidden xl:block" />
+        <div aria-hidden="true">
+          <PixelDocsArt className="absolute inset-y-0 right-0 left-px hidden overflow-hidden xl:block" />
+        </div>
       ) : null}
-      <span className="flex-1 border-l border-border" />
+      <span className="flex-1 border-l border-border" aria-hidden="true" />
 
       {sync ? <SyncTop /> : null}
 
       {/* Pulled left by half the mark, so the mark's center sits on the line. `relative`
           paints it above the card frame and the art, which are positioned too. */}
-      <div className="relative flex items-center gap-3 py-4" style={{ marginLeft: -(MARK_SIZE / 2 - 0.5) }}>
-        <span className={cn("flex", sync && "doxa-sync-mark")}>
-          <LogoMark size={MARK_SIZE} />
-        </span>
-        <span className="font-mono text-2xl font-bold tracking-[0.22em] text-foreground uppercase">doxa</span>
+      <div className="relative flex py-4" style={{ marginLeft: -(MARK_SIZE / 2 - 0.5) }}>
+        <Link
+          to="/"
+          aria-label="Doxa home"
+          className="flex items-center gap-3 text-foreground transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+        >
+          <span className={cn("flex", sync && "doxa-sync-mark")}>
+            <LogoMark size={MARK_SIZE} />
+          </span>
+          <span className="font-mono text-2xl font-bold tracking-[0.22em] uppercase">doxa</span>
+        </Link>
       </div>
 
       {sync ? <SyncBottom /> : null}
 
-      <span className="flex-1 border-l border-border" />
+      <span className="flex-1 border-l border-border" aria-hidden="true" />
     </aside>
   )
 }
@@ -116,7 +130,7 @@ function SyncBottom() {
 /** A pane 40px right of the line. Its top and bottom edges run as dashed lines from the line to the page edge. */
 function SyncRow({ children }: { children: ReactNode }) {
   return (
-    <div className="doxa-sync-row relative hidden border-l border-border xl:block">
+    <div className="doxa-sync-row relative hidden border-l border-border xl:block" aria-hidden="true">
       <div className="relative z-[1] ml-10 w-[380px] max-w-[calc(100%-40px)] overflow-hidden border border-border bg-editor">
         {children}
       </div>
@@ -127,7 +141,7 @@ function SyncRow({ children }: { children: ReactNode }) {
 /** The stretch of line between a pane and the logo, with the dot that runs down it. */
 function SyncRun({ dot }: { dot: string }) {
   return (
-    <div className="relative hidden h-[72px] border-l border-border xl:block">
+    <div className="relative hidden h-[72px] border-l border-border xl:block" aria-hidden="true">
       <span className={`doxa-sync-dot ${dot}`} />
     </div>
   )

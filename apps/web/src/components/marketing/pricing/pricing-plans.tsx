@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { CONTACT_URL, GET_STARTED_URL, SIGN_IN_URL } from "~/lib/marketing/links"
+import { DEMO_URL, GET_STARTED_URL, SIGN_IN_URL } from "~/lib/marketing/links"
 import {
   DEFAULT_BILLING,
   DEFAULT_PRO_OFFER,
@@ -27,7 +27,7 @@ import { RichText } from "./rich-text"
  */
 function actionUrl(action: PlanAction, billing: BillingPeriod, paymentsOpen: boolean): string {
   if (action === "upgrade") return paymentsOpen ? upgradeUrl(billing, SIGN_IN_URL) : GET_STARTED_URL
-  return action === "contact" ? CONTACT_URL : GET_STARTED_URL
+  return action === "contact" ? DEMO_URL : GET_STARTED_URL
 }
 
 /** The live Pro offer from `GET /billing/offers` (spec 7.5). Until it answers, or if it fails, the catalog prices. */

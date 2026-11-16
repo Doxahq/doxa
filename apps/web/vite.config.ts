@@ -58,6 +58,8 @@ export default defineConfig(({ command, mode }) => {
       }),
       tailwindcss(),
       tanstackStart({
+        // No page links to the sitemap, so the prerender crawl does not find it.
+        pages: [{ path: "/sitemap.xml" }],
         prerender: {
           enabled: true,
           crawlLinks: true,

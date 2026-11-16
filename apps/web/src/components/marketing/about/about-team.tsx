@@ -1,5 +1,5 @@
 import { GithubIcon } from "~/components/marketing/about/github-icon"
-import { CONTACT_EMAIL, DISCORD_URL, GITHUB_URL } from "~/lib/marketing/links"
+import { CONTACT_EMAIL, GITHUB_URL } from "~/lib/marketing/links"
 
 const FACTS: { term: string; value: string; href?: string }[] = [
   { term: "Company", value: "CoderOne Labs" },
@@ -25,9 +25,6 @@ export function AboutTeam() {
             <a className="btn btn--light btn--sm" href={GITHUB_URL}>
               <GithubIcon />
               Star on GitHub
-            </a>
-            <a className="btn btn--line btn--sm" href={DISCORD_URL}>
-              Join the Discord ›
             </a>
           </div>
         </div>

@@ -62,6 +62,7 @@ import { createGenerationChangesRoutes } from "./generation-changes";
 import { createPageLockRoutes } from "./page-locks";
 import { createDocsHistoryRoutes } from "./docs-history";
 import { createSiteAssetsRoutes } from "./site-assets";
+import { createDocsExportRoutes } from "./docs-export";
 import { createDocsDomainRoutes } from "./docs-domains";
 import { createProjectApprovalRequestRoutes } from "./approval-requests";
 import { createProjectApprovalSettingsRoutes } from "./approval-settings";
@@ -210,6 +211,7 @@ export function createProjectRoutes(): ApiApp {
   app.route("/:projectId/history", createDocsHistoryRoutes());
   app.route("/:projectId/warm-status", createDocsWarmStatusRoutes());
   app.route("/:projectId/assets", createSiteAssetsRoutes());
+  app.route("/:projectId/export", createDocsExportRoutes());
   app.route("/:projectId/docs-domains", createDocsDomainRoutes());
   app.route("/:projectId/doxabot", createDoxabotRoutes());
   app.route("/:projectId/approval-requests", createProjectApprovalRequestRoutes());

@@ -11,6 +11,7 @@ import type {
   OfferSlot,
   OverrideRecord,
   OwnerKind,
+  ExportClaimResult,
   Page,
   PaygInvoice,
   PaygUsageReport,
@@ -103,6 +104,21 @@ export interface BillingStore {
    */
   incrementUsageCounter(key: UsageCounterKey): Promise<number>;
   readUsageCounter(key: UsageCounterKey): Promise<number>;
+
+  /**
+   * The rolling docs export window. One statement: `INSERT ... ON CONFLICT
+   * (account_id) DO UPDATE SET previous_export_at = last_export_at,
+   * last_export_at = now WHERE last_export_at IS NULL OR last_export_at <=
+   * now - window`. Two parallel claims of one account can never both pass.
+   */
+  claimExport(input: { accountId: string; now: Date; windowMs: number }): Promise<ExportClaimResult>;
+  /** The time of the last export of the account. Null for none. */
+  readLastExport(accountId: string): Promise<Date | null>;
+  /**
+   * Gives back the claim made at `at`: the row goes back to the export
+   * before it. Changes nothing if a newer claim replaced it.
+   */
+  releaseExport(input: { accountId: string; at: Date }): Promise<void>;
 
   findOfferSlotByCheckout(checkoutSessionId: string): Promise<OfferSlot | null>;
   getOfferSlot(offerKey: string, accountId: string): Promise<OfferSlot | null>;

@@ -104,6 +104,19 @@ describe("resolveEntitlements", () => {
     expect(oneSecondAfter.features["site.remove_powered_by"]).toBe(true);
   });
 
+  it("gives a past-due account the Free export window after the grace period, keeps the rest of the plan", () => {
+    const pastDueSince = new Date(now.getTime() - 7 * DAY_MS);
+    const subscription = sub("past_due", { pastDueSince });
+    const inGrace = resolve(subscription, [], new Date(now.getTime() - 1000));
+    expect(inGrace.limits["docs.export_window_hours"]).toBe(1);
+    const after = resolve(subscription, [], new Date(now.getTime() + 1000));
+    expect(after.limits["docs.export_window_hours"]).toBe(24);
+    expect(after.limits["site.custom_domains"]).toBe(DOXA_CATALOG.plans.pro.limits["site.custom_domains"]);
+    // An override still wins.
+    const overridden = resolve(subscription, [override("docs.export_window_hours", 1)], new Date(now.getTime() + 1000));
+    expect(overridden.limits["docs.export_window_hours"]).toBe(1);
+  });
+
   it("denies docs chat with coming_soon on every plan while the action is planned", () => {
     for (const plan of PLAN_KEYS) {
       const result = resolve(null, [override("plan", plan), override("ai.docs_chat", true)]);

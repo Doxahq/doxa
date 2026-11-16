@@ -4,6 +4,7 @@ import { ChevronRight, ShieldCheck } from "lucide-react"
 
 import { PageBody, PageHeading } from "~/components/dashboard/dashboard-header"
 import { ProjectDeleteCard } from "~/components/dashboard/project-delete-card"
+import { ProjectExportCard } from "~/components/dashboard/project-export-card"
 import { ProjectTeamCard } from "~/components/dashboard/project-team-card"
 import { Button } from "~/components/ui/button"
 import {
@@ -16,6 +17,7 @@ import { canMoveProjectToTeam } from "~/lib/dashboard/teams-model"
 import { useProjectCapabilities } from "~/lib/dashboard/use-project-capabilities"
 import { projectDetailQueryOptions } from "~/lib/queries/dashboard"
 import { teamsQueryOptions } from "~/lib/queries/teams"
+import { docsExportStatusQueryOptions } from "~/lib/queries/docs-export"
 import { ProjectSettingsSkeleton } from "~/components/dashboard/skeletons/settings-skeletons"
 import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
 
@@ -33,12 +35,16 @@ export function ProjectSettingsPage({ projectId }: { projectId: string }) {
     : false
   const teamsQuery = useQuery({ ...teamsQueryOptions(), enabled: canMoveToTeam })
   const { can } = useProjectCapabilities(projectId)
+  // An export spends the quota of the project's account: editors and up.
+  const canExport = can("docs.write")
+  const exportQuery = useQuery({ ...docsExportStatusQueryOptions(projectId), enabled: canExport })
 
   // The page waits for every card's data, so it shows one skeleton and then
   // every card at once, not cards popping in one by one.
   const isFirstLoad = useIsFirstLoad([
     projectQuery,
     { isPending: canMoveToTeam && teamsQuery.isPending },
+    { isPending: canExport && exportQuery.isPending },
   ])
 
   if (isFirstLoad) return <ProjectSettingsSkeleton />
@@ -48,13 +54,15 @@ export function ProjectSettingsPage({ projectId }: { projectId: string }) {
       <PageHeading
         label="Project"
         title="Settings"
-        description="Who works on this project and what agents can do in it."
+        description="Who works on this project, what agents can do in it, and how to export it."
       />
 
       <section className="flex flex-col gap-4">
         <AgentApprovalsCard projectId={projectId} />
 
         <ProjectTeamCard projectId={projectId} />
+
+        {canExport ? <ProjectExportCard projectId={projectId} status={exportQuery} /> : null}
 
         {can("project.delete") ? (
           <ProjectDeleteCard

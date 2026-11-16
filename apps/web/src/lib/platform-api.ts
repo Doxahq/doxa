@@ -98,6 +98,11 @@ export function getApiUrl(path: string): string {
   return `${API_BASE_URL.replace(/\/+$/, "")}${path}`;
 }
 
+/** True in local dev when requests sign in with the `x-doxa-user-id` header, not a cookie. */
+export function usesDevUserHeader(): boolean {
+  return Boolean(DEV_USER_ID);
+}
+
 export function getApiRequestHeaders(initialHeaders?: HeadersInit): Headers {
   const headers = new Headers(initialHeaders);
   if (DEV_USER_ID) headers.set("x-doxa-user-id", DEV_USER_ID);

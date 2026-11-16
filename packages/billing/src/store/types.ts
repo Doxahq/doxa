@@ -249,6 +249,11 @@ export interface UsageCounterKey {
   readonly windowStart: Date;
 }
 
+/** The result of `BillingStore.claimExport`. */
+export type ExportClaimResult =
+  | { readonly claimed: true; readonly at: Date }
+  | { readonly claimed: false; readonly lastExportAt: Date };
+
 export interface Page<T> {
   readonly items: readonly T[];
   readonly nextCursor: string | null;

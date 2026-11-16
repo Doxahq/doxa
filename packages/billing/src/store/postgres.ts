@@ -1,6 +1,7 @@
 import type { DoxaDb } from "@doxahq/db";
 import {
   billingAccounts,
+  billingExportClaims,
   billingOffers,
   billingOfferSlots,
   billingOverrides,
@@ -53,6 +54,7 @@ import type {
   SubscriptionRecord,
   SubscriptionStatus,
   UsageCounterKey,
+  ExportClaimResult,
 } from "./types";
 
 /**
@@ -355,6 +357,55 @@ export class PostgresBillingStore implements BillingStore {
         ),
       );
     return row?.count ?? 0;
+  }
+
+  async claimExport(input: { accountId: string; now: Date; windowMs: number }): Promise<ExportClaimResult> {
+    requireUuid(input.accountId, "Billing account");
+    const at = new Date(input.now);
+    const cutoff = new Date(at.getTime() - input.windowMs);
+    return guard(async () => {
+      const [row] = await this.db
+        .insert(billingExportClaims)
+        .values({ accountId: input.accountId, lastExportAt: at, previousExportAt: null, updatedAt: at })
+        .onConflictDoUpdate({
+          target: billingExportClaims.accountId,
+          set: {
+            previousExportAt: sql`${billingExportClaims.lastExportAt}`,
+            lastExportAt: at,
+            updatedAt: at,
+          },
+          setWhere: or(isNull(billingExportClaims.lastExportAt), lte(billingExportClaims.lastExportAt, cutoff)),
+        })
+        .returning({ lastExportAt: billingExportClaims.lastExportAt });
+      if (row) return { claimed: true as const, at };
+      const lastExportAt = await this.readLastExport(input.accountId);
+      // A refund can clear the row between the two statements: then the
+      // window is open, but this claim stays denied. The client asks again.
+      return { claimed: false as const, lastExportAt: lastExportAt ?? at };
+    });
+  }
+
+  async readLastExport(accountId: string): Promise<Date | null> {
+    if (!isUuid(accountId)) return null;
+    const [row] = await this.db
+      .select({ lastExportAt: billingExportClaims.lastExportAt })
+      .from(billingExportClaims)
+      .where(eq(billingExportClaims.accountId, accountId));
+    return row?.lastExportAt ?? null;
+  }
+
+  async releaseExport(input: { accountId: string; at: Date }): Promise<void> {
+    if (!isUuid(input.accountId)) return;
+    await guard(async () => {
+      await this.db
+        .update(billingExportClaims)
+        .set({
+          lastExportAt: sql`${billingExportClaims.previousExportAt}`,
+          previousExportAt: null,
+          updatedAt: sql`now()`,
+        })
+        .where(and(eq(billingExportClaims.accountId, input.accountId), eq(billingExportClaims.lastExportAt, input.at)));
+    });
   }
 
   // Offers -------------------------------------------------------------------

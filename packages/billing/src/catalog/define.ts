@@ -146,7 +146,14 @@ export interface Catalog {
    * spec: the D5 grace period (7 days) has no place in the 7.1 sketch; it lives here so the
    * catalog stays the one file for billing numbers.
    */
-  readonly subscriptions: { readonly pastDueGraceDays: number };
+  readonly subscriptions: {
+    readonly pastDueGraceDays: number;
+    /**
+     * Limits that replace the plan values once a past-due subscription is
+     * past its grace period. An override still wins over them.
+     */
+    readonly pastDueLimits?: Readonly<Partial<Record<LimitKey, LimitValue>>>;
+  };
   readonly actions: Readonly<Record<ActionKey, ActionDefinition>>;
   readonly safety: { readonly maxDailyModelCostUsdPerAccount: number };
 }
@@ -257,6 +264,12 @@ export function findCatalogProblems(catalog: Catalog): string[] {
   }
   if (!isPositiveInt(catalog.usage.extendStepCredits)) problem("usage.extendStepCredits must be a positive integer");
   if (!isNonNegativeInt(catalog.subscriptions.pastDueGraceDays)) problem("subscriptions.pastDueGraceDays must be a non-negative integer");
+  for (const [key, value] of Object.entries(catalog.subscriptions.pastDueLimits ?? {})) {
+    if (!(LIMIT_KEYS as readonly string[]).includes(key)) problem(`subscriptions.pastDueLimits has an unknown limit ${key}`);
+    else if (value === undefined || (!isUnlimited(value) && !isNonNegativeInt(value))) {
+      problem(`subscriptions.pastDueLimits.${key} must be a non-negative integer or UNLIMITED`);
+    }
+  }
 
   for (const actionKey of ACTION_KEYS) {
     const action = catalog.actions[actionKey];

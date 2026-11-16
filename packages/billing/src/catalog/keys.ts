@@ -31,6 +31,11 @@ export const LIMIT_KEYS = [
   "site.custom_domains",
   "team.seats",
   "mcp.tool_calls_per_day",
+  /**
+   * Hours in one docs export window (decided 2026-11-16): one export per
+   * window and billing account. 0 means no export quota.
+   */
+  "docs.export_window_hours",
 ] as const;
 export type LimitKey = (typeof LIMIT_KEYS)[number];
 

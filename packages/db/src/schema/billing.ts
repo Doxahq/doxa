@@ -704,6 +704,22 @@ export const billingUsageCounters = pgTable(
 );
 
 /**
+ * The last docs export of each billing account, for the rolling export window
+ * (docs/current/docs-export.md). `previous_export_at` holds the export before
+ * the last one, so a refund can restore it. One row per account.
+ */
+export const billingExportClaims = pgTable("billing_export_claims", {
+  accountId: uuid("account_id")
+    .primaryKey()
+    .references(() => billingAccounts.id, { onDelete: "cascade" }),
+  lastExportAt: timestamp("last_export_at", { withTimezone: true }),
+  previousExportAt: timestamp("previous_export_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
  * Provider webhook events, stored before processing against replays
  * (section 14.1). Kept 90 days.
  */

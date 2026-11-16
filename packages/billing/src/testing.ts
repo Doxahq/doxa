@@ -478,6 +478,48 @@ export function describeBillingStoreContract(name: string, makeStore: () => Prom
       expect(results.filter((result) => result.allowed)).toHaveLength(100);
     });
 
+    it("claims one export per rolling window and restores the earlier one on release", async () => {
+      const s = await services();
+      const account = await owner(s, "exp");
+      const hour = 60 * 60 * 1000;
+      const t0 = new Date("2026-11-16T10:30:00.000Z");
+      expect(await s.store.readLastExport(account.id)).toBeNull();
+      expect(await s.store.claimExport({ accountId: account.id, now: t0, windowMs: hour })).toEqual({ claimed: true, at: t0 });
+      const early = new Date(t0.getTime() + hour - 1);
+      expect(await s.store.claimExport({ accountId: account.id, now: early, windowMs: hour })).toEqual({ claimed: false, lastExportAt: t0 });
+      const t1 = new Date(t0.getTime() + hour);
+      expect(await s.store.claimExport({ accountId: account.id, now: t1, windowMs: hour })).toEqual({ claimed: true, at: t1 });
+      // A release of the old claim changes nothing: a newer claim replaced it.
+      await s.store.releaseExport({ accountId: account.id, at: t0 });
+      expect(await s.store.readLastExport(account.id)).toEqual(t1);
+      await s.store.releaseExport({ accountId: account.id, at: t1 });
+      expect(await s.store.readLastExport(account.id)).toEqual(t0);
+      // A second release finds no matching claim.
+      await s.store.releaseExport({ accountId: account.id, at: t1 });
+      expect(await s.store.readLastExport(account.id)).toEqual(t0);
+    });
+
+    it("lets exactly one of 20 parallel export claims pass", async () => {
+      const s = await services();
+      const account = await owner(s, "exp-race");
+      const now = new Date("2026-11-16T10:30:00.000Z");
+      const results = await Promise.all(
+        Array.from({ length: 20 }, () => s.store.claimExport({ accountId: account.id, now, windowMs: 24 * 60 * 60 * 1000 })),
+      );
+      expect(results.filter((result) => result.claimed)).toHaveLength(1);
+    });
+
+    it("frees the window when the only export claim is released", async () => {
+      const s = await services();
+      const account = await owner(s, "exp-free");
+      const now = new Date("2026-11-16T10:30:00.000Z");
+      const windowMs = 24 * 60 * 60 * 1000;
+      await s.store.claimExport({ accountId: account.id, now, windowMs });
+      await s.store.releaseExport({ accountId: account.id, at: now });
+      expect(await s.store.readLastExport(account.id)).toBeNull();
+      expect((await s.store.claimExport({ accountId: account.id, now, windowMs })).claimed).toBe(true);
+    });
+
     it("gives exactly 50 of 60 parallel founder holds a slot", async () => {
       const s = await services();
       const accounts = await Promise.all(Array.from({ length: 60 }, (_, index) => owner(s, `f${index}`)));

@@ -621,6 +621,7 @@ const LIMIT_LABELS: Record<string, string> = {
   "site.custom_domains": "custom domains",
   "team.seats": "team seats",
   "mcp.tool_calls_per_day": "MCP tool calls today",
+  "docs.export_window_hours": "docs exports",
   "ai.credits_monthly": "AI credits",
 }
 
@@ -641,9 +642,18 @@ export function formatLimitValue(key: string, value: number | "unlimited"): stri
 }
 
 function formatLimitNumber(key: string, value: number): string {
+  if (key === "docs.export_window_hours") return formatExportWindow(value)
   if (!BYTE_LIMITS.has(key)) return formatCredits(value)
   const mb = value / (1024 * 1024)
   return mb >= 1024 ? `${Math.round(mb / 1024)} GB` : `${Math.round(mb)} MB`
+}
+
+/** "Once every 24 hours", "Once an hour", or "Unlimited" for a window of 0 hours. */
+function formatExportWindow(hours: number): string {
+  if (hours === 0) return "Unlimited"
+  if (hours === 24) return "Once every 24 hours"
+  if (hours === 1) return "Once an hour"
+  return `Once every ${hours} hours`
 }
 
 /** "You use 1 of 1 custom domains on Free." or "Doxabot needs Pro." */

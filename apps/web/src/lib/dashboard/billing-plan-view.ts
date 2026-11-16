@@ -193,6 +193,7 @@ const PLAN_LIMITS: readonly { key: string; label: string }[] = [
   { key: "docs.branches_per_site", label: "Branches per site" },
   { key: "docs.storage_bytes", label: "Docs storage" },
   { key: "mcp.tool_calls_per_day", label: "MCP tool calls a day" },
+  { key: "docs.export_window_hours", label: "Docs exports" },
   { key: "team.seats", label: "Team seats" },
 ]
 

@@ -394,6 +394,7 @@ export const DOXA_CATALOG = defineCatalog({
         "site.custom_domains": 1,
         "team.seats": 1,
         "mcp.tool_calls_per_day": 100,
+        "docs.export_window_hours": 24,
       },
     },
     pro: {
@@ -407,6 +408,7 @@ export const DOXA_CATALOG = defineCatalog({
         "site.custom_domains": 4,
         "team.seats": UNLIMITED,
         "mcp.tool_calls_per_day": UNLIMITED,
+        "docs.export_window_hours": 1,
         "docs.storage_bytes": UNLIMITED,
         "site.asset_bytes": UNLIMITED, // decision D20
         "site.asset_files": UNLIMITED,
@@ -669,7 +671,7 @@ subscription row, its override rows, the catalog and the clock.
 | Subscription status | Effective plan |
 |---|---|
 | `trialing`, `active` | The price's plan |
-| `past_due` | The price's plan for the grace period (decision D5), then the plan with AI paused |
+| `past_due` | The price's plan for the grace period (decision D5), then the plan with AI paused and the limits of `subscriptions.pastDueLimits` (`docs.export_window_hours` = 24) |
 | `incomplete`, `incomplete_expired`, `canceled`, `unpaid`, `paused` | `BILLING_DEFAULT_PLAN` |
 
 3. Else `BILLING_DEFAULT_PLAN`.
@@ -706,6 +708,7 @@ interface.
 | `docs.publish_approvals` | Approval settings | None |
 | `ai.docs_chat` | Chat endpoint (when it exists). Denied with `coming_soon` while the action is `planned` (section 10.9). | None |
 | `mcp.tool_calls_per_day` | MCP tool runner (section 11) | None |
+| `docs.export_window_hours` | Docs export route, `ExportQuota` (429 `export_limit`, see `docs/current/docs-export.md`). One export per rolling window, from the last export (`billing_export_claims`). Free 24, paid 1, self-hosted 0 (no quota). Past due after the grace period: 24 (`subscriptions.pastDueLimits`). | None |
 | `agents.approval_rules` | Approval rule editor | None |
 
 A denial returns the error code `plan_limit` (HTTP 403) or `credits_exhausted`

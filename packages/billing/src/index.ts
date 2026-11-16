@@ -118,6 +118,14 @@ export {
 
 export { CHECKOUT_HOLD_MS, OfferSlots, type HoldResult } from "./offers/founder";
 export { UsageQuota, type QuotaResult } from "./quotas/daily-quota";
+export {
+  EXPORT_WINDOW_LIMIT_KEY,
+  EXPORTS_PER_WINDOW,
+  ExportQuota,
+  exportWindowHours,
+  type ExportQuotaReservation,
+  type ExportQuotaStatus,
+} from "./quotas/export-quota";
 
 export { BillingNotConfiguredError, NOT_TRIALING, PAYMENT_FAILED, ProviderRejectedError, ProviderSignatureError, ProviderUnavailableError } from "./provider/errors";
 export * from "./provider/provider";

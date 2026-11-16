@@ -36,6 +36,7 @@ export const DOXA_CATALOG = defineCatalog({
         "site.custom_domains": 1,
         "team.seats": 1,
         "mcp.tool_calls_per_day": 100,
+        "docs.export_window_hours": 24,
       },
     },
     pro: {
@@ -54,6 +55,7 @@ export const DOXA_CATALOG = defineCatalog({
         "site.custom_domains": 4,
         "team.seats": UNLIMITED,
         "mcp.tool_calls_per_day": UNLIMITED,
+        "docs.export_window_hours": 1,
       },
       trial: { days: 7, credits: 1_000, requiresPaymentMethod: true }, // decision D3
     },
@@ -72,6 +74,7 @@ export const DOXA_CATALOG = defineCatalog({
         "site.custom_domains": UNLIMITED,
         "team.seats": UNLIMITED,
         "mcp.tool_calls_per_day": UNLIMITED,
+        "docs.export_window_hours": 1,
       },
     },
     self_hosted: {
@@ -89,6 +92,7 @@ export const DOXA_CATALOG = defineCatalog({
         "site.custom_domains": UNLIMITED,
         "team.seats": UNLIMITED,
         "mcp.tool_calls_per_day": UNLIMITED,
+        "docs.export_window_hours": 0,
       },
     },
   },
@@ -132,7 +136,11 @@ export const DOXA_CATALOG = defineCatalog({
   // Section 10.5. One markup for every model. Decision D11.
   usage: { markup: 3, extendStepCredits: 250 },
 
-  subscriptions: { pastDueGraceDays: 7 }, // decision D5
+  subscriptions: {
+    pastDueGraceDays: 7, // decision D5
+    // After the grace period, a past-due account exports like Free (decided 2026-11-16).
+    pastDueLimits: { "docs.export_window_hours": 24 },
+  },
 
   actions: {
     "generation.run": {

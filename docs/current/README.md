@@ -22,6 +22,7 @@ describe the implemented state.
 - [Documentation branching](docs-branching.md)
 - [Generation reviews](generation-reviews.md)
 - [Docs search](docs-search.md)
+- [Docs export](docs-export.md)
 - [Storage garbage collection](storage-garbage-collection.md)
 - [MDX formatting](mdx-formatting.md)
 - [MCP server](mcp-server.md)

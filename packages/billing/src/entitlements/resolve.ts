@@ -115,6 +115,11 @@ export function resolveEntitlements(input: ResolveEntitlementsInput): Entitlemen
   const features: Record<FeatureKey, boolean> = { ...definition.features };
   const limits: Record<LimitKey, LimitValue> = { ...definition.limits };
   const reasons: Partial<Record<FeatureKey, FeatureDenialReason>> = {};
+  if (pastDueOver) {
+    for (const [key, value] of Object.entries(catalog.subscriptions.pastDueLimits ?? {})) {
+      if (value !== undefined && isLimitKey(key)) limits[key] = value;
+    }
+  }
 
   const keys = new Set(input.overrides.filter((row) => row.key !== "plan" && isActive(row, now)).map((row) => row.key));
   for (const key of keys) {

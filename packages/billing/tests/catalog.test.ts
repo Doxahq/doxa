@@ -105,6 +105,15 @@ describe("defineCatalog refuses", () => {
     expect(findCatalogProblems(catalog as Catalog).join("\n")).toMatch(message);
   };
 
+  it("an unknown or invalid past-due limit", () => {
+    refuses((catalog) => {
+      (catalog.subscriptions as { pastDueLimits: Record<string, unknown> }).pastDueLimits = { "docs.nope": 1 };
+    }, /pastDueLimits has an unknown limit docs\.nope/);
+    refuses((catalog) => {
+      (catalog.subscriptions as { pastDueLimits: Record<string, unknown> }).pastDueLimits = { "docs.export_window_hours": -1 };
+    }, /pastDueLimits\.docs\.export_window_hours must be/);
+  });
+
   it("a live action with unset pricing", () => {
     refuses((catalog) => {
       (catalog.actions as Record<string, { status: string }>)["docs_chat.answer"]!.status = "live";

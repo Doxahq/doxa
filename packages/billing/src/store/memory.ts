@@ -30,6 +30,7 @@ import type {
   SubscriptionRecord,
   SubscriptionStatus,
   UsageCounterKey,
+  ExportClaimResult,
 } from "./types";
 
 interface AccountData {
@@ -99,6 +100,7 @@ export class MemoryBillingStore implements BillingStore {
     invoiceIds: new Map(),
   };
   private readonly counters = new Map<string, number>();
+  private readonly exportClaims = new Map<string, { last: Date | null; previous: Date | null }>();
   private readonly offerSlots = new Map<string, Map<string, OfferSlot>>();
   private readonly events = new Map<string, ProviderEventRecord>();
   private readonly cursors = new Map<string, string | null>();
@@ -387,6 +389,26 @@ export class MemoryBillingStore implements BillingStore {
 
   async readUsageCounter(key: UsageCounterKey): Promise<number> {
     return this.counters.get(counterId(key)) ?? 0;
+  }
+
+  async claimExport(input: { accountId: string; now: Date; windowMs: number }): Promise<ExportClaimResult> {
+    const row = this.exportClaims.get(input.accountId);
+    if (row?.last && row.last.getTime() > input.now.getTime() - input.windowMs) {
+      return { claimed: false, lastExportAt: row.last };
+    }
+    const at = new Date(input.now);
+    this.exportClaims.set(input.accountId, { last: at, previous: row?.last ?? null });
+    return { claimed: true, at };
+  }
+
+  async readLastExport(accountId: string): Promise<Date | null> {
+    return this.exportClaims.get(accountId)?.last ?? null;
+  }
+
+  async releaseExport(input: { accountId: string; at: Date }): Promise<void> {
+    const row = this.exportClaims.get(input.accountId);
+    if (!row?.last || row.last.getTime() !== input.at.getTime()) return;
+    this.exportClaims.set(input.accountId, { last: row.previous, previous: null });
   }
 
   // Offers -------------------------------------------------------------------

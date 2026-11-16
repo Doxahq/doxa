@@ -110,6 +110,10 @@ describe("sending streams", () => {
       ["verify-email", "transactional"],
       ["reset-password", "transactional"],
       ["agent-connected", "transactional"],
+      ["credits-low", "notifications"],
+      ["payg-started", "notifications"],
+      ["payg-limit", "notifications"],
+      ["credits-exhausted", "notifications"],
     ]);
   });
 });

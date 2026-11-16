@@ -21,10 +21,13 @@ import type {
 } from "../../src/repositories/webhook-deliveries";
 import {
   DoxabotWebhookOrchestrator,
+  billingStopCheck,
   resolveDoxabotExecutionConfig,
   type DoxabotWebhookDependencies,
+  type PreviewRunBilling,
   type ProcessGitHubWebhookInput,
 } from "../../src/services/doxabot/webhook-orchestrator";
+import { CreditsExhaustedError, PlanLimitError } from "@doxahq/billing";
 import type { ChangeProposalSnapshot } from "../../src/services/doxabot/change-proposal-state";
 import type { GenerationCancellationInput } from "../../src/services/generation-cancellation";
 import { describe, expect, test, vi } from "vitest";
@@ -116,6 +119,7 @@ function createHarness(
     versionId: string;
     sourceRevision: string;
   } | null = null,
+  previewBilling?: PreviewRunBilling,
 ) {
   const claimedDeliveries = new Set<string>();
   const normalizedEvents = new Map<
@@ -341,6 +345,7 @@ function createHarness(
     mergeTriggers,
     previewJobs,
     previewChannels,
+    ...(previewBilling ? { previewBilling } : {}),
     now: () => new Date(closedAt),
   } satisfies DoxabotWebhookDependencies;
 
@@ -1234,6 +1239,58 @@ describe("Doxabot webhook orchestrator", () => {
     expect(harness.queue.send).toHaveBeenCalledTimes(2);
     expect(harness.queue.send).toHaveBeenLastCalledWith(expect.objectContaining({ jobId: "job-2" }));
     expect(harness.getProposal()).toMatchObject({ headRevision: thirdHeadSha });
+  });
+
+  test("a preview that cannot reserve credits ends neutral with a billing link and is not queued", async () => {
+    const refusal = new CreditsExhaustedError({ accountId: "acct_1", available: 10, needed: 220, reason: "max_debt", resetsAt: null });
+    const billing: PreviewRunBilling = {
+      admit: vi.fn(async () => refusal),
+      stop: vi.fn(async () => "https://doxa.test/dashboard/billing/acct_1"),
+    };
+    const harness = createHarness(createAutomationContext(), null, billing);
+
+    await expect(
+      harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-no-credits" })),
+    ).resolves.toEqual({ outcome: "billing_refused", jobId: "job-1" });
+
+    expect(billing.admit).toHaveBeenCalledWith({ jobId: "job-1", projectId, baselineVersionId });
+    expect(billing.stop).toHaveBeenCalledWith({ jobId: "job-1", projectId, refusal });
+    expect(harness.reviewRuns.create).toHaveBeenCalledWith("job-1", expect.objectContaining({
+      status: "completed",
+      conclusion: "neutral",
+      title: "AI credits ran out",
+      detailsUrl: "https://doxa.test/dashboard/billing/acct_1",
+    }));
+    expect(harness.queue.send).not.toHaveBeenCalled();
+    expect(harness.deliveries.markProcessed).toHaveBeenCalled();
+  });
+
+  test("a preview with credits is queued as before", async () => {
+    const billing: PreviewRunBilling = { admit: vi.fn(async () => null), stop: vi.fn(async () => null) };
+    const harness = createHarness(createAutomationContext(), null, billing);
+    await expect(
+      harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-with-credits" })),
+    ).resolves.toEqual({ outcome: "enqueued", jobId: "job-1" });
+    expect(billing.stop).not.toHaveBeenCalled();
+    expect(harness.queue.send).toHaveBeenCalledOnce();
+  });
+
+  test("a preview without a baseline is admitted cold, so billing meters it as a full generation", async () => {
+    const billing: PreviewRunBilling = { admit: vi.fn(async () => null), stop: vi.fn(async () => null) };
+    const harness = createHarness(createAutomationContext({ publishedBaseline: null }), null, billing);
+    await expect(
+      harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-cold" })),
+    ).resolves.toEqual({ outcome: "enqueued", jobId: "job-1" });
+    expect(billing.admit).toHaveBeenCalledWith({ jobId: "job-1", projectId, baselineVersionId: null });
+  });
+
+  test("a cold preview refused for ai.doxa_agent says the plan has no full generations", () => {
+    expect(billingStopCheck(new PlanLimitError({ key: "ai.doxa_agent", limit: false, used: null }))).toMatchObject({
+      title: "Full generation is not in the plan",
+    });
+    expect(billingStopCheck(new PlanLimitError({ key: "ai.doxabot", limit: false, used: null }))).toMatchObject({
+      title: "Doxabot is not in the plan",
+    });
   });
 
   test("keeps generation recoverable when GitHub check creation fails", async () => {

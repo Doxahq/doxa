@@ -1,4 +1,4 @@
-import type { GenerationJobTrigger, SourceProvider } from "@doxahq/contracts";
+import type { GenerationJobDto, GenerationJobTrigger, SourceProvider } from "@doxahq/contracts";
 import {
   createDb,
   schema,
@@ -24,7 +24,7 @@ export interface PreviewBaselineCandidate {
   sourceTreeHash: string | null;
   versionGeneratorFingerprint: string | null;
   generationStatePrefix: string;
-  jobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  jobStatus: GenerationJobDto["status"];
   jobTrigger: GenerationJobTrigger;
   jobPublicationMode: "production" | "preview";
   jobProvider: SourceProvider | null;

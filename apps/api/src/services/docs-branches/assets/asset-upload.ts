@@ -21,7 +21,7 @@ import {
   type DocsContentStore,
 } from "../../docs-content/store";
 import type { StorageLimitsService } from "../../entitlements";
-import { freePlanStorageLimits } from "../../free-plan-entitlements";
+import { planSeamsFromEnv } from "../../billing/plan-seams";
 import { SiteConfigValidationError } from "../../site-config-validation";
 import { BranchResolver, type ResolvedBranchContext } from "../branch-resolver";
 import type { ImageCompressor } from "../../site-assets/image-compression";
@@ -108,7 +108,7 @@ export class DocsBranchAssetUpload {
     return new DocsBranchAssetUpload({
       branches: new DocsBranchesRepository(env),
       store: createR2DocsContentStore(env.DOCS_BUCKET),
-      storageLimits: freePlanStorageLimits,
+      storageLimits: planSeamsFromEnv(env).storageLimits,
       registerFolder: (folder) => gcEntries.enqueueBranchAssetFolder(folder),
       compressor: env.IMAGE_COMPRESSOR ?? null,
       svgCleaner: env.SVG_CLEANER ?? null,

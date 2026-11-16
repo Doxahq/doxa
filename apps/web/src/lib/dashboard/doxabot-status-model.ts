@@ -30,6 +30,7 @@ const JOB_STATUS: Record<GenerationJobDto["status"], { value: string; tone: Doxa
   succeeded: { value: "Completed", tone: "success" },
   failed: { value: "Failed", tone: "destructive" },
   cancelled: { value: "Cancelled", tone: "warning" },
+  stopped_credits: { value: "Stopped: out of credits", tone: "warning" },
 }
 
 /** The four facts at the top of the Doxabot page: repository, last generation, instructions, previews. */

@@ -168,7 +168,7 @@ function Bar({ className, style }: { className?: string; style?: CSSProperties }
     <span
       aria-hidden="true"
       style={{ ...style, ...SKELETON_PULSE_STYLE }}
-      className={cn("block bg-muted motion-safe:animate-pulse", className)}
+      className={cn("block bg-muted animate-pulse", className)}
     />
   )
 }

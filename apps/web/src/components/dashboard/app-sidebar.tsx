@@ -3,6 +3,7 @@ import { Plus } from "lucide-react"
 
 import { LogoWordmark } from "~/components/navigation/logo"
 import { ContentSidebarSkeleton } from "~/components/dashboard/content/content-sidebar-skeleton"
+import { AccountSidebarView } from "~/components/dashboard/shell/account-sidebar-view"
 import { ProjectSidebarView } from "~/components/dashboard/shell/project-sidebar-view"
 import { SiteSettingsButton, UserRow } from "~/components/dashboard/shell/sidebar-footer"
 import { SidebarSearchButton } from "~/components/dashboard/shell/sidebar-search-button"
@@ -16,7 +17,7 @@ import { useContentOverviewFailed } from "~/lib/dashboard/use-content-overview-f
 
 /**
  * The dashboard sidebar: a fixed header (logo over the search button) over
- * three sliding views (Project, Content, Site settings). The project title
+ * four sliding views (Project, Content, Site settings, Account). The project title
  * and the account menu in the footer switch projects.
  *
  * The Content view body comes from the content route, which owns the editor
@@ -69,6 +70,7 @@ export function AppSidebar({
               </>
             ) : null,
           site: projectId ? <SiteSettingsSidebarView projectId={projectId} /> : null,
+          account: <AccountSidebarView projectId={projectId} />,
         }}
       />
     </Sidebar>

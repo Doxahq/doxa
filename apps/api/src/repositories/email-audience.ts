@@ -32,9 +32,20 @@ export interface EmailAudience {
   generationAudience(jobId: string): Promise<GenerationAudience | null>;
 }
 
-const { projects, teamMembers, user, generationJobs } = schema;
+export interface TeamAudience {
+  readonly teamName: string;
+  readonly members: readonly ProjectMember[];
+}
 
-export class EmailAudienceRepository implements EmailAudience {
+/** Who can get a billing email: the owner of a personal account, or a team's members. */
+export interface BillingAudience {
+  contactsFor(userIds: readonly string[]): Promise<ReadonlyMap<string, EmailContact>>;
+  teamAudience(teamId: string): Promise<TeamAudience | null>;
+}
+
+const { projects, teamMembers, teams, user, generationJobs } = schema;
+
+export class EmailAudienceRepository implements EmailAudience, BillingAudience {
   constructor(private readonly db: DoxaDb) {}
 
   static fromEnv(env: DbEnv): EmailAudienceRepository {
@@ -60,6 +71,18 @@ export class EmailAudienceRepository implements EmailAudience {
       .where(eq(teamMembers.teamId, project.teamId))
       .orderBy(asc(teamMembers.createdAt));
     return { projectName: project.name, members };
+  }
+
+  async teamAudience(teamId: string): Promise<TeamAudience | null> {
+    const [team] = await this.db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!team) return null;
+    const members = await this.db
+      .select({ userId: teamMembers.userId, name: user.name, email: user.email, role: teamMembers.role })
+      .from(teamMembers)
+      .innerJoin(user, eq(user.id, teamMembers.userId))
+      .where(eq(teamMembers.teamId, teamId))
+      .orderBy(asc(teamMembers.createdAt));
+    return { teamName: team.name, members };
   }
 
   async contactsFor(userIds: readonly string[]): Promise<ReadonlyMap<string, EmailContact>> {

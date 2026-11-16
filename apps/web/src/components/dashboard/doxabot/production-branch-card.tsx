@@ -119,7 +119,7 @@ function ProductionBranchForm({
         disabled={isSaving || draft === productionBranch}
         onClick={() => void save()}
       >
-        {isSaving ? <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : null}
+        {isSaving ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
         Save branch
       </Button>
     </div>

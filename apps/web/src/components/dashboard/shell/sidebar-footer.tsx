@@ -1,5 +1,17 @@
 import { Link, useNavigate } from "@tanstack/react-router"
-import { BookText, Check, ChevronRight, ChevronsUpDown, Github, LogOut, PanelsTopLeft, Plus, UserRound, Users } from "lucide-react"
+import {
+  BookText,
+  Check,
+  ChevronRight,
+  ChevronsUpDown,
+  CreditCard,
+  Github,
+  LogOut,
+  PanelsTopLeft,
+  Plus,
+  UserRound,
+  Users,
+} from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar"
 import {
@@ -86,6 +98,12 @@ export function UserRow({ projectId, showLinks = true }: { projectId: string | n
             <Link to="/dashboard/settings">
               <UserRound />
               Account settings
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to="/dashboard/billing">
+              <CreditCard />
+              Billing
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>

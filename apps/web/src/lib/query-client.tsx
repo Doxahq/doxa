@@ -1,12 +1,18 @@
 import type { ReactNode } from "react"
 import {
+  MutationCache,
   QueryClient,
   QueryClientProvider,
   environmentManager,
 } from "@tanstack/react-query"
 
+import { reportBillingDenial } from "~/lib/dashboard/billing-denials"
+
 function makeQueryClient() {
   return new QueryClient({
+    // A billing denial (402 credits, 403 plan limit) of any mutation opens the
+    // dashboard's billing dialog. The mutation's own error handling still runs.
+    mutationCache: new MutationCache({ onError: (error) => void reportBillingDenial(error) }),
     defaultOptions: {
       queries: {
         retry: 1,

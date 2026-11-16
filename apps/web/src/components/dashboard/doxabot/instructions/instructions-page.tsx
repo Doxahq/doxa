@@ -10,6 +10,7 @@ import {
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
 import { ROLE_RESTRICTED_MESSAGE, useProjectCapabilities } from "~/lib/dashboard/use-project-capabilities"
+import { useProjectAiAccess } from "~/lib/dashboard/use-ai-access"
 import { useDoxabotInstructions, type InstructionsWriteError } from "~/lib/dashboard/use-doxabot-instructions"
 import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
 
@@ -35,16 +36,20 @@ import { WritingRulesSection } from "./writing-rules-section"
  */
 export function DoxabotInstructionsPage({
   projectId,
-  startsGeneration = false,
+  startsGeneration: startRequested = false,
 }: {
   projectId: string
   startsGeneration?: boolean
 }) {
   const editor = useDoxabotInstructions(projectId)
+  // For an account without the Doxa Agent (Free), the start of the bar opens
+  // the Pro trial dialog. The plan is part of the first frame, so the bar does not change.
+  const aiAccess = useProjectAiAccess(projectId)
+  const startsGeneration = startRequested
   const canConfigure = useProjectCapabilities(projectId).can("instructions.configure")
   const disabled = !canConfigure || editor.isSaving || editor.isRestoring
 
-  const isFirstLoad = useIsFirstLoad([{ isPending: editor.isLoading }])
+  const isFirstLoad = useIsFirstLoad([{ isPending: editor.isLoading }, { isPending: aiAccess.kind === "loading" }])
   if (isFirstLoad) return <DoxabotInstructionsSkeleton />
 
   const current = editor.state?.current ?? null

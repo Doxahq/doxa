@@ -7,8 +7,8 @@
  * Cost: the still grid is drawn once to an offscreen layer and copied in one
  * call per frame. Only the cells under a ring are drawn on top. Glyphs come from
  * a pre-rendered strip (one row per opacity step), 15 frames a second, and
- * nothing while the canvas is off screen. With reduced motion, the still grid
- * draws once and the rings stay off.
+ * nothing while the canvas is off screen. It animates for every visitor, also
+ * with Reduce Motion on (a product decision).
  *
  * Returns a function that stops the loop and the observers.
  */
@@ -37,7 +37,6 @@ export function attachAsciiGrid(canvas: HTMLCanvasElement, core: HTMLElement | n
     const k = Math.min(1, Math.max(0, (x - a) / (b - a)))
     return k * k * (3 - 2 * k)
   }
-  const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false
 
   let dpr = 1
   let w = 0
@@ -145,7 +144,6 @@ export function attachAsciiGrid(canvas: HTMLCanvasElement, core: HTMLElement | n
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, w, h)
     if (base) ctx.drawImage(base, 0, 0, w, h)
-    if (still) return
     const travel = (now / 1000) * SPEED
     for (let i = 0; i < dist.length; i++) {
       const a = amp[i]
@@ -178,7 +176,7 @@ export function attachAsciiGrid(canvas: HTMLCanvasElement, core: HTMLElement | n
     draw(now)
   }
   const start = () => {
-    if (!raf && !still) raf = requestAnimationFrame(loop)
+    if (!raf) raf = requestAnimationFrame(loop)
   }
   const stop = () => {
     cancelAnimationFrame(raf)

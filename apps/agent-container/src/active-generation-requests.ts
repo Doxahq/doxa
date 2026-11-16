@@ -28,10 +28,22 @@ export class ActiveGenerationRequests {
     }
   }
 
+  /** Aborts the job's requests and refuses its next requests for 15 minutes. */
   cancel(jobId: string): boolean {
     this.removeExpiredTombstones();
     this.cancelledUntil.set(jobId, Date.now() + CANCELLATION_TOMBSTONE_TTL_MS);
+    return this.abortActive(jobId);
+  }
 
+  /**
+   * Aborts the job's requests, but accepts its next request: the job can
+   * continue later (a credit stop or a failed step).
+   */
+  stop(jobId: string): boolean {
+    return this.abortActive(jobId);
+  }
+
+  private abortActive(jobId: string): boolean {
     const controllers = this.controllers.get(jobId);
     if (!controllers || controllers.size === 0) return false;
 

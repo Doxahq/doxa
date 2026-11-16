@@ -79,6 +79,35 @@ describe("local agent container server", () => {
     expect(streamGeneration).not.toHaveBeenCalled();
   });
 
+  // 2026-11-16: a job continued within 15 minutes of a credit stop failed
+  // every write with "Generation was cancelled before it started."
+  test("a resumable destroy accepts the job's next request", async () => {
+    const streamGeneration = vi.fn(async (response: Parameters<Parameters<typeof createLocalAgentServer>[0]["streamGeneration"]>[0]) => {
+      response.writeHead(200, { "content-type": "application/x-ndjson" });
+      response.end();
+    });
+    const server = createLocalAgentServer({
+      generate: vi.fn(),
+      streamGeneration,
+      streamGenerationStage: vi.fn(),
+    });
+    servers.push(server);
+    const baseUrl = await listen(server);
+
+    const destroyResponse = await fetch(`${baseUrl}/admin/containers/${JOB_ID}/destroy?resumable=1`, {
+      method: "POST",
+    });
+    const generationResponse = await fetch(`${baseUrl}/generate/stream`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(validPayload()),
+    });
+
+    await expect(destroyResponse.json()).resolves.toEqual({ ok: true, stopped: false });
+    expect(generationResponse.status).toBe(200);
+    expect(streamGeneration).toHaveBeenCalledTimes(1);
+  });
+
   test("routes a validated write stage to the staged generation handler", async () => {
     const streamGenerationStage = vi.fn(async (
       response: Parameters<Parameters<typeof createLocalAgentServer>[0]["streamGenerationStage"]>[0],

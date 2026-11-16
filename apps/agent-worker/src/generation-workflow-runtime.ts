@@ -5,6 +5,7 @@ import {
   MAX_WRITE_GROUP_PAGES,
   NO_PROJECT_INSTRUCTIONS_FINGERPRINT,
   WORKFLOW_STEP_FAILED_EVENT_TYPE,
+  GENERATION_CREDIT_STOP_STEP_EVENT_TYPE,
   PUBLIC_DOCUMENTATION_POLICY_VERSION,
   WRITING_CONTRACT_VERSION,
   containerGenerationStageResultSchema,
@@ -23,6 +24,7 @@ import {
   type GenerationDatabaseCompatibility,
   type GenerationExecutionContext,
   type GenerationPageState,
+  type WorkflowStepFailure,
   type IncrementalGenerationPlan,
   type PreviousPageText,
   type ReusableGenerationState,
@@ -32,6 +34,7 @@ import {
   type StagedRuntimePage,
   type WriterHandoffManifest,
 } from "@doxahq/contracts";
+import type { GenerationStopReason } from "@doxahq/contracts";
 import { GENERATION_CHECKPOINT_PREFIX } from "@doxahq/contracts/storage-lifecycle";
 import type { PageNotice } from "@doxahq/contracts/generation-reviews";
 import {
@@ -40,12 +43,14 @@ import {
   runResumablePageBatch,
 } from "./generation-page-checkpoints";
 import {
+  PAGE_CACHE_REUSED_EVENT_TYPE,
   buildPageCacheDescriptor,
   createR2GenerationPageCache,
   pageDependencyPaths,
   preparePageBatchCacheContexts,
   runPageBatchWithCache,
   structureSourceEvidenceByPageId,
+  summarizePageCacheUse,
   type PageBatchCacheContext,
   type PageBatchCacheResult,
 } from "./generation-page-cache";
@@ -65,7 +70,12 @@ import {
 } from "@doxahq/docs-engine";
 import { z } from "zod";
 import { artifactReader, writeArtifactVersion } from "./artifact-storage";
-import { GenerationNonRetryableError } from "./generation-errors";
+import {
+  GenerationCreditsStoppedError,
+  GenerationNonRetryableError,
+  creditStopMessage,
+  creditStopReasonOf,
+} from "./generation-errors";
 import {
   generationModelIds,
   modelApiKeySecrets,
@@ -111,7 +121,7 @@ import {
   writingBudgetOf,
   type WriteGroupTimeouts,
 } from "./write-groups";
-import { trackWorkflowSteps } from "./workflow-step-tracker";
+import { isResumableStepError, trackWorkflowSteps } from "./workflow-step-tracker";
 import {
   MAX_WRITER_SLOT_TTL_MS,
   resolveWriterSlotLimiter,
@@ -314,13 +324,34 @@ interface WorkflowBatchDispatchInput<TBatch, TResult> {
    * Any other batch failure stays with its batch, and the rest still run.
    */
   isRunStopping: (error: unknown) => boolean;
+  /**
+   * True for a batch failure that fails the run, so the run can continue
+   * from that batch (`failsRunAtBatch`). Default: no batch failure does.
+   */
+  failsRun?: (error: unknown) => boolean;
+}
+
+/**
+ * A write batch that failed after every retry for a reason outside its pages
+ * (the container, the connection or storage) fails the run. The run can then
+ * continue from that batch, and its pages are not left out of the site. A
+ * non-retryable error comes from the batch itself and a second try repeats
+ * it, so its pages are flagged instead.
+ *
+ * 2026-11-16: a continue that the container refused failed every try of the
+ * last batch. The run ended `succeeded` with 42 of its 66 pages left out.
+ */
+export function failsRunAtBatch(error: unknown): boolean {
+  if (error instanceof GenerationNonRetryableError) return false;
+  return isResumableStepError(error);
 }
 
 /**
  * Runs every batch as its own Workflow step, `parallelism` at a time. A batch
  * that fails after its step retries settles as rejected; the caller decides
- * what its pages mean for the run. A run-stopping error starts no new batch
- * and is thrown once the running batches end.
+ * what its pages mean for the run. A run-stopping error, or one that
+ * `failsRun` accepts, starts no new batch and is thrown once the running
+ * batches end.
  */
 export async function dispatchWorkflowBatches<TBatch, TResult>(
   input: WorkflowBatchDispatchInput<TBatch, TResult>,
@@ -352,7 +383,7 @@ export async function dispatchWorkflowBatches<TBatch, TResult>(
         );
         results[index] = { status: "fulfilled", value };
       } catch (error) {
-        if (input.isRunStopping(error)) {
+        if (input.isRunStopping(error) || input.failsRun?.(error)) {
           stopping ??= { error };
           return;
         }
@@ -745,6 +776,7 @@ export class GenerationWorkflowRunner {
         parallelism: writeBatchParallelism,
         step,
         isRunStopping: isRunStoppingError,
+        failsRun: failsRunAtBatch,
         stepName: (index, total, group) =>
           `write ${writeGroupNoun(group)} batch ${index + 1} of ${total}`,
         stepConfig: (_index, group) =>
@@ -902,6 +934,7 @@ export class GenerationWorkflowRunner {
         modelApiKeySecrets(this.env),
       );
       const active = await this.env.API.isJobActive(input.jobId).catch(() => false);
+      const creditStop = active ? null : await resolveCreditStop(this.env, input.jobId, error);
       if (active) {
         await this.env.API.markJobFailed(input.jobId, message).catch(() => undefined);
         await this.env.API.addJobEvent(input.jobId, {
@@ -909,12 +942,20 @@ export class GenerationWorkflowRunner {
           message,
           source: "worker",
         }).catch(() => undefined);
+      } else if (creditStop) {
+        await markCreditStop(this.env, input.jobId, creditStop);
       }
+      // The job can continue (a credit stop or a failed step), so the
+      // container must accept its next request.
       await requestAgentContainerDestroy(input.jobId, {
         agentContainerBinding: this.env.AGENT_CONTAINER,
         agentContainerUrl: this.env.AGENT_CONTAINER_URL,
-      });
-      await deleteCheckpointPrefix(this.env.DOCS_BUCKET, checkpointPrefix).catch(() => undefined);
+      }, { resumable: true });
+      // A run that the meter stopped keeps its finished page checkpoints
+      // (billing spec 10.6); the R2 lifecycle rule of the prefix expires them.
+      if (!creditStop) {
+        await deleteCheckpointPrefix(this.env.DOCS_BUCKET, checkpointPrefix).catch(() => undefined);
+      }
       await logUsageSummarySafely(
         this.env,
         input.jobId,
@@ -1461,6 +1502,7 @@ export class GenerationWorkflowRunner {
         parallelism: writeBatchParallelism,
         step,
         isRunStopping: isRunStoppingError,
+        failsRun: failsRunAtBatch,
         stepName: (index, total, group) =>
           `write affected ${checkpointScope} ${writeGroupNoun(group)} batch ${index + 1} of ${total}`,
         stepConfig: (_index, group) =>
@@ -1558,6 +1600,22 @@ export class GenerationWorkflowRunner {
         boundedStepConfig(event.timestamp, overallTimeoutMs, 60_000),
         () => releaseWriterSlotLeases(writerSlots, batchResults),
       );
+      // The log says why a run with cached pages is quick and cheap: the
+      // pages came from earlier runs with the same inputs.
+      const pageCacheUse = summarizePageCacheUse(batchResults);
+      if (pageCacheUse.cachedPageCount > 0) {
+        await step.do(
+          `record ${checkpointScope} page cache use`,
+          boundedStepConfig(event.timestamp, overallTimeoutMs, 60_000),
+          () =>
+            this.env.API.addJobEvent(input.jobId, {
+              type: PAGE_CACHE_REUSED_EVENT_TYPE,
+              message: `Reused ${pageCacheUse.cachedPageCount} page(s) from earlier runs with the same inputs.`,
+              source: "worker",
+              data: { ...pageCacheUse },
+            }).then(() => undefined),
+        );
+      }
       const recordedWriteOutcome: RecordedWritePhaseOutcome = await step.do(
         `record flagged ${checkpointScope} pages`,
         boundedStepConfig(event.timestamp, overallTimeoutMs, 2 * 60_000),
@@ -2023,6 +2081,13 @@ export class GenerationWorkflowRunner {
             .isJobActive(input.jobId)
             .catch(() => false);
           if (!active) {
+            // Billing spec 10.6: the API ends the job as `stopped_credits`
+            // and finishes a preview's check `neutral`.
+            const creditStop = await resolveCreditStop(this.env, input.jobId, error);
+            if (creditStop) {
+              await markCreditStop(this.env, input.jobId, creditStop);
+              await recordCreditStopStep(this.env, input.jobId, stepTracker.failureOf(error));
+            }
             return;
           }
           await this.env.API.markJobFailed(input.jobId, message);
@@ -2056,11 +2121,13 @@ export class GenerationWorkflowRunner {
           overallTimeoutMs,
           2 * 60_000,
         ),
+        // The job can continue (a credit stop or a failed step), so the
+        // container must accept its next request.
         () =>
           requestAgentContainerDestroy(input.jobId, {
             agentContainerBinding: this.env.AGENT_CONTAINER,
             agentContainerUrl: this.env.AGENT_CONTAINER_URL,
-          }),
+          }, { resumable: true }),
       );
       throw error instanceof NonRetryableError
         ? error
@@ -2793,7 +2860,8 @@ function reviewRunState(state: DoxabotReviewRunState):
         | "success"
         | "failure"
         | "cancelled"
-        | "action_required";
+        | "action_required"
+        | "neutral";
     } {
   if (state === "queued" || state === "in_progress") {
     return { status: state };
@@ -3017,11 +3085,68 @@ async function invokeStage(
   }
 }
 
-function usageFailureStatus(error: unknown): "failed" | "cancelled" {
+function usageFailureStatus(error: unknown): "failed" | "cancelled" | "stopped_credits" {
+  if (creditStopReasonOf(error)) return "stopped_credits";
   const message = error instanceof Error ? error.message : String(error);
   return /generation job is no longer active|generation is paused/i.test(message)
     ? "cancelled"
     : "failed";
+}
+
+/**
+ * Billing spec 10.5 step 4: the reason the credit meter stopped the run, from
+ * the error or, for an error that lost it, from the API. Null otherwise. An
+ * API without the method (an older deploy) answers null.
+ */
+async function resolveCreditStop(env: Env, jobId: string, error: unknown): Promise<GenerationStopReason | null> {
+  const fromError = creditStopReasonOf(error);
+  if (fromError) return fromError;
+  return readStopReason(env, jobId);
+}
+
+/** Null when the API cannot answer, so a billing outage or an older API never changes how a run ends. */
+async function readStopReason(env: Env, jobId: string): Promise<GenerationStopReason | null> {
+  try {
+    return (await env.API.getJobStopReason(jobId)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ends a run that the meter stopped as `stopped_credits` (billing spec 10.6). Its page checkpoints stay. */
+async function markCreditStop(env: Env, jobId: string, reason: GenerationStopReason): Promise<void> {
+  try {
+    await env.API.markJobStopped(jobId, { reason, message: creditStopMessage(reason) });
+  } catch (stopError) {
+    console.error(JSON.stringify({
+      service: "doxa-agent-worker",
+      eventType: "generation_credit_stop_failed",
+      jobId,
+      reason,
+      error: stopError instanceof Error ? stopError.message : String(stopError),
+    }));
+  }
+}
+
+/**
+ * Billing spec 10.6: the step where the meter stopped the run, so a person
+ * can continue it from there after raising the cap or the monthly limit. A
+ * credit stop is not a failure that a second try repeats, so the step can
+ * continue. Every earlier step keeps its result, and the finished pages are
+ * not written again.
+ */
+async function recordCreditStopStep(
+  env: Env,
+  jobId: string,
+  stoppedStep: WorkflowStepFailure | null,
+): Promise<void> {
+  if (!stoppedStep) return;
+  await env.API.addJobEvent(jobId, {
+    type: GENERATION_CREDIT_STOP_STEP_EVENT_TYPE,
+    message: `The run stopped for credits at "${stoppedStep.stepName}" and can continue from there.`,
+    source: "worker",
+    data: { ...stoppedStep, resumable: true },
+  }).catch(() => undefined);
 }
 
 export function assertGenerationDatabaseCompatible(
@@ -3058,9 +3183,12 @@ async function logUsageSummarySafely(
 }
 
 async function ensureJobActive(env: Env, jobId: string): Promise<void> {
-  if (!(await env.API.isJobActive(jobId))) {
-    throw new NonRetryableError("Generation job is no longer active.");
-  }
+  if (await env.API.isJobActive(jobId)) return;
+  // Billing spec 10.5 step 4: a stop reason ends the run as `stopped_credits`,
+  // not `cancelled`. No new model call starts after this throw.
+  const reason = await readStopReason(env, jobId);
+  if (reason) throw new GenerationCreditsStoppedError(reason);
+  throw new NonRetryableError("Generation job is no longer active.");
 }
 
 function ensureWithinOverallBudget(startedAt: Date, timeoutMs: number): void {

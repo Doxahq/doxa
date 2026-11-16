@@ -170,7 +170,27 @@ export const generationJobStatusSchema = z.enum([
   "succeeded",
   "failed",
   "cancelled",
+  /**
+   * The run ran out of AI credits or reached its credit cap (billing spec
+   * 10.6). It ended like a cancel, and its finished page checkpoints stay.
+   */
+  "stopped_credits",
 ]);
+
+/** Why the credit meter stopped a run (billing spec 10.5 step 4). */
+export const generationStopReasonSchema = z.enum(["credits_exhausted", "credit_cap"]);
+export type GenerationStopReason = z.infer<typeof generationStopReasonSchema>;
+
+/** The worker ends a run that the credit meter stopped (billing spec 10.6). */
+export const markJobStoppedInputSchema = z
+  .object({
+    reason: generationStopReasonSchema,
+    message: z.string().trim().min(1).max(2_000),
+    /** Pages that were written before the stop; their checkpoints stay. */
+    finishedPageCount: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type MarkJobStoppedInput = z.infer<typeof markJobStoppedInputSchema>;
 export const generationJobTriggerSchema = z.enum(["manual", "doxabot", "merge"]);
 export const generationPublicationModeSchema = z.enum([
   "production",
@@ -217,6 +237,13 @@ export const generationJobSchema = z.object({
   errorMessage: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /**
+   * The time that the job waited before its continues, in milliseconds:
+   * for each `generation_resumed` event, the time since the event before
+   * it. The duration of the job leaves it out. Only the generations list
+   * sends it; the generation page computes it from the events.
+   */
+  pausedMs: z.number().int().nonnegative().optional(),
 });
 
 export const ACTIVE_GENERATION_MESSAGE =
@@ -522,6 +549,13 @@ export const docsHostResolutionSchema = z.object({
    */
   searchProvider: docsSearchRemoteProviderSchema.optional(),
   searchIndexKey: docsSearchIndexKeySchema.optional(),
+  /**
+   * The hosting tier of the site's plan (billing spec 9.4): `shared` renders
+   * in the shared renderer isolate, `dedicated` in the site's own isolate.
+   * Present only with billing enforcement `on` (`shadow` only logs it): the
+   * dispatcher otherwise keeps its operator list (`DOXA_PROD_SHARED_ISOLATE_SITE_IDS`).
+   */
+  hostingTier: z.enum(["shared", "dedicated"]).optional(),
 });
 
 export const docsDomainKindSchema = z.enum(["doxa_subdomain", "custom_domain"]);
@@ -1326,6 +1360,13 @@ export interface InternalApiRpc {
   markJobCancelled(jobId: string, message: string): Promise<void>;
   markJobSuperseded(jobId: string, message: string): Promise<void>;
   isJobActive(jobId: string): Promise<boolean>;
+  /**
+   * Why the credit meter stopped the run, or null (billing spec 10.5). The
+   * worker asks it after `isJobActive` answered false.
+   */
+  getJobStopReason(jobId: string): Promise<GenerationStopReason | null>;
+  /** Ends a run that the credit meter stopped as `stopped_credits` (billing spec 10.6). */
+  markJobStopped(jobId: string, input: MarkJobStoppedInput): Promise<void>;
   /** When a person last continued the failed run, or null. Its time budget starts there. */
   getGenerationResumedAt(jobId: string): Promise<string | null>;
   getGenerationControl(): Promise<GenerationControlDto>;

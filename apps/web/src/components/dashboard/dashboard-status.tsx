@@ -6,10 +6,15 @@ import { Badge } from "~/components/ui/badge"
 type BadgeVariant = ComponentProps<typeof Badge>["variant"]
 export type DomainPillTone = "muted" | "success" | "warning" | "danger"
 
+/** Most statuses read as they are; a credit stop needs words. */
+const JOB_STATUS_LABEL: Partial<Record<GenerationJobDto["status"], string>> = {
+  stopped_credits: "out of credits",
+}
+
 export function JobStatusBadge({ status }: { status: GenerationJobDto["status"] }) {
   return (
     <Badge variant={getJobStatusBadgeVariant(status)}>
-      {status}
+      {JOB_STATUS_LABEL[status] ?? status}
     </Badge>
   )
 }
@@ -31,7 +36,7 @@ export function DomainPill({
 export function getJobStatusBadgeVariant(status: GenerationJobDto["status"]): BadgeVariant {
   if (status === "succeeded") return "success"
   if (status === "failed") return "destructive"
-  if (status === "cancelled") return "warning"
+  if (status === "cancelled" || status === "stopped_credits") return "warning"
   if (status === "queued") return "muted"
   return "outline"
 }

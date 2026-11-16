@@ -112,6 +112,40 @@ describe("shared-isolate rollout", () => {
   });
 });
 
+describe("hosting tier of the site's plan (billing spec 9.4)", () => {
+  const allowlist = readSharedIsolateRollout({
+    DOXA_PROD_SHARED_ISOLATE_MODE: "allowlist",
+    DOXA_PROD_SHARED_ISOLATE_SITE_IDS: SITE_A,
+  });
+
+  test("without a tier (billing enforcement off) the operator list decides exactly as before", () => {
+    expect(selectRendererIsolateScope(allowlist, SITE_A, undefined)).toBe("build");
+    expect(selectRendererIsolateScope(allowlist, "site-b", undefined)).toBe("site");
+    expect(selectRendererIsolateScope(readSharedIsolateRollout({}), SITE_A, undefined)).toBe("site");
+  });
+
+  test("with a tier the plan replaces the operator list", () => {
+    expect(selectRendererIsolateScope(allowlist, "site-b", "shared")).toBe("build");
+    expect(selectRendererIsolateScope(allowlist, SITE_A, "dedicated")).toBe("site");
+    expect(selectRendererIsolateScope(readSharedIsolateRollout({}), SITE_A, "shared")).toBe("build");
+  });
+
+  test("openRendererIsolate reads the tier from the resolution", async () => {
+    const { env, settle } = createEnv();
+    const content = { request: vi.fn() } as unknown as DocsRuntimeRpc;
+    const isolate = openRendererIsolate({
+      env,
+      resolution: { ...resolutionFor(SITE_A), hostingTier: "shared" },
+      content,
+      codeCache: vi.fn(),
+      timing: createServerTiming("false"),
+    });
+    isolate.getEntrypoint();
+    await settle();
+    expect(isolate.scope).toBe("build");
+  });
+});
+
 describe("openRendererIsolate", () => {
   test("site scope pins the content in the isolate env", async () => {
     const { env, get, getEntrypoint, loads, settle } = createEnv();

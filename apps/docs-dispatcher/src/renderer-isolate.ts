@@ -158,10 +158,21 @@ export function readSharedIsolateRollout(
   };
 }
 
+/**
+ * Billing spec 9.4: the API adds the hosting tier of the site's plan to the
+ * resolution only with billing enforcement `on`. A `shared` site renders in
+ * the shared build isolate, a `dedicated` site in its own isolate, and the
+ * operator list no longer decides. A resolution without a tier (enforcement
+ * `off` or `shadow`, where the API only logs the tier, or an entry written
+ * before billing) keeps the operator list exactly.
+ */
 export function selectRendererIsolateScope(
   rollout: SiteRollout,
   siteId: string,
+  hostingTier?: DocsHostResolution["hostingTier"],
 ): RendererIsolateScope {
+  if (hostingTier === "shared") return "build";
+  if (hostingTier === "dedicated") return "site";
   return isSiteInRollout(rollout, siteId) ? "build" : "site";
 }
 
@@ -191,6 +202,7 @@ export function openRendererIsolate(input: {
   const scope = selectRendererIsolateScope(
     readSharedIsolateRollout(env),
     resolution.siteId,
+    resolution.hostingTier,
   );
   const workerId =
     scope === "build"

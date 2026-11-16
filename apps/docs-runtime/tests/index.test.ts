@@ -1514,6 +1514,8 @@ function createEnv(input: {
       markJobCancelled: async () => undefined,
       markJobSuperseded: async () => undefined,
       isJobActive: async () => true,
+      getJobStopReason: async () => null,
+      markJobStopped: async () => undefined,
       getGenerationResumedAt: async () => null,
       getGenerationControl: async () => ({
         status: "enabled",

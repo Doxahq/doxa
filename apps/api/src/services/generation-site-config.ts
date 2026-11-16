@@ -2,7 +2,7 @@ import type { GenerationContext } from "@doxahq/contracts";
 import { parseDocsManifestText, readSiteConfig } from "@doxahq/docs-engine";
 import type { Env } from "../env";
 import { DocsRepository } from "../repositories/docs";
-import { freePlanEntitlements } from "./free-plan-entitlements";
+import { planSeamsFromEnv } from "./billing/plan-seams";
 import { createR2DocsContentStore } from "./docs-content/store";
 
 /** The published version owns settings, not the incremental source baseline. */
@@ -13,7 +13,7 @@ export async function withGenerationSiteConfig<T extends GenerationContext>(
   if (!context) return null;
   const [resolution, entitlements] = await Promise.all([
     new DocsRepository(env).resolveByProjectId(context.project.id),
-    freePlanEntitlements.getProjectEntitlements(context.project.id),
+    planSeamsFromEnv(env).entitlements.getProjectEntitlements(context.project.id),
   ]);
   if (!resolution) return { ...context, entitlements };
   if (

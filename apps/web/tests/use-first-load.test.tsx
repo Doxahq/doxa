@@ -3,7 +3,7 @@ import { act, cleanup, render, renderHook, screen, waitFor } from "@testing-libr
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query"
 import { afterEach, describe, expect, test, vi } from "vitest"
 
-import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
+import { useIsFirstLoad, useLoadPhase } from "~/lib/dashboard/use-first-load"
 
 afterEach(cleanup)
 
@@ -45,5 +45,35 @@ describe("useIsFirstLoad", () => {
     await act(() => new Promise((resolve) => setTimeout(resolve, 100)))
     expect(screen.queryByText("Skeleton")).toBeNull()
     expect(queryFn.mock.calls.length).toBeLessThanOrEqual(2)
+  })
+})
+
+describe("useLoadPhase", () => {
+  const phaseOf = ({ pending, key }: { pending: boolean; key: string }) => useLoadPhase([{ isPending: pending }], key)
+
+  test("first load, then a switch to another key keeps the frame until that key settles", () => {
+    const { result, rerender } = renderHook(phaseOf, { initialProps: { pending: true, key: "a" } })
+    expect(result.current).toBe("first")
+    rerender({ pending: false, key: "a" })
+    expect(result.current).toBe("ready")
+    // The switcher opens account b: its queries are new and pending.
+    rerender({ pending: true, key: "b" })
+    expect(result.current).toBe("switching")
+    rerender({ pending: false, key: "b" })
+    expect(result.current).toBe("ready")
+  })
+
+  test("a settled key does not go back to a loading view when its query refetches", () => {
+    const { result, rerender } = renderHook(phaseOf, { initialProps: { pending: false, key: "a" } })
+    expect(result.current).toBe("ready")
+    rerender({ pending: true, key: "a" })
+    expect(result.current).toBe("ready")
+  })
+
+  test("a switch back to a cached key is ready at once", () => {
+    const { result, rerender } = renderHook(phaseOf, { initialProps: { pending: false, key: "a" } })
+    rerender({ pending: false, key: "b" })
+    rerender({ pending: false, key: "a" })
+    expect(result.current).toBe("ready")
   })
 })

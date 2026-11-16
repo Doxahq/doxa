@@ -2,6 +2,9 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react"
 import { Outlet, useParams } from "@tanstack/react-router"
 
 import { AppSidebar } from "~/components/dashboard/app-sidebar"
+import { BillingDenialDialogHost } from "~/components/dashboard/billing/billing-denial-dialog"
+import { ProTrialDialogProvider } from "~/components/dashboard/billing/pro-trial-dialog"
+import { ProjectBillingBanner } from "~/components/dashboard/billing/project-billing-banner"
 import { CommandMenuProvider } from "~/components/dashboard/command-menu/command-menu"
 import { registerDashboardPendingViews } from "~/components/dashboard/pending-view"
 import { DASHBOARD_PENDING_VIEWS } from "~/components/dashboard/skeletons/pending-views"
@@ -33,10 +36,13 @@ export function DashboardLayout() {
 
   return (
     <DashboardAuthProvider devSession={dashboardEntry.devSession} identityHint={dashboardEntry.identityHint}>
-      <SidebarPanelProvider>
-        <DashboardShell />
-      </SidebarPanelProvider>
-      <Toaster />
+      <ProTrialDialogProvider>
+        <SidebarPanelProvider>
+          <DashboardShell />
+        </SidebarPanelProvider>
+        <Toaster />
+        <BillingDenialDialogHost />
+      </ProTrialDialogProvider>
     </DashboardAuthProvider>
   )
 }
@@ -66,6 +72,7 @@ function DashboardShell() {
             <AppSidebar projectId={projectId} sidebarWidth={sidebarWidth} />
             <SidebarInset className="h-svh min-h-0 min-w-0 overflow-hidden">
               <main className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-subtle">
+                <ProjectBillingBanner projectId={projectId} />
                 <Outlet />
               </main>
               <StatusBar />

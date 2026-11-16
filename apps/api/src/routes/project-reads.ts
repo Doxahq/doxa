@@ -4,6 +4,7 @@ import { json, notFound } from "../http/response";
 import { JobsRepository } from "../repositories/jobs";
 import { ProjectOverviewRepository } from "../repositories/project-overview";
 import { ProjectsRepository } from "../repositories/projects";
+import { readProjectBilling } from "../services/billing/project-billing";
 import { buildProjectOverview } from "../services/project-overview";
 import { createDocsHostnameUrl } from "../utils/docs-url";
 import type { GenerationPageRequest } from "../utils/generation-pagination";
@@ -24,14 +25,17 @@ export async function readProjectDetail(
     access.projectId,
   );
   if (!project) return notFound();
-  const job = await new JobsRepository(context.env).latestForProject(
-    project.id,
-  );
+  const [job, billing] = await Promise.all([
+    new JobsRepository(context.env).latestForProject(project.id),
+    readProjectBilling(context.env, project.id),
+  ]);
   return json({
     project: await withPreferredDocsUrl(project, context.env),
     latestJob: job,
     // The viewer's role, so the dashboard hides what it cannot do.
     role: access.role,
+    // Billing spec 15.1: the paying account and its plan; null while billing is off.
+    billing,
   });
 }
 

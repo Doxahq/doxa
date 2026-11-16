@@ -5,6 +5,11 @@ export interface GenerationLogLine {
   phase: GenerationLogPhase;
   message: string;
   level: GenerationLogLevel;
+  /**
+   * The `data` fields that this line keeps for the dashboard. Only a rule
+   * names them; every other field of the stored event stays hidden.
+   */
+  data?: Record<string, unknown>;
 }
 
 /** A rule returns it for an event that the log does not show. */

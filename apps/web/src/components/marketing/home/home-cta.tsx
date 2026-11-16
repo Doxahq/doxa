@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import { GET_STARTED_URL } from "~/lib/marketing/links"
+import { FOUNDER_PRICE_NOTE } from "~/lib/marketing/pricing"
 
 export function HomeCta() {
   return (
@@ -17,7 +18,7 @@ export function HomeCta() {
             Book a demo ›
           </a>
         </div>
-        <span className="label">Free · Pro · Enterprise · Founder price for the first 100 customers</span>
+        <span className="label">Free · Pro · Enterprise · {FOUNDER_PRICE_NOTE}</span>
       </div>
     </section>
   )

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMAIL_KINDS } from "../src/catalog";
+import { EMAIL_KINDS, isNotificationCategory } from "../src/catalog";
 import { EMAIL_TEMPLATES, findEmailTemplate, renderEmailTemplate, type EmailTemplate } from "../src/mailer-entry";
 
 /** Each component's `PreviewProps` doubles as a valid fixture for its kind. */
@@ -20,12 +20,12 @@ describe("every email template", () => {
     expect(rendered.text.length).toBeGreaterThan(0);
   });
 
-  it("shows the unsubscribe link on notification emails only", async () => {
+  it("shows the unsubscribe link on notification emails only (not on transactional or billing emails)", async () => {
     const templates: [string, EmailTemplate][] = Object.entries(EMAIL_TEMPLATES);
     for (const [name, template] of templates) {
       const props = template.kind.props.parse(await previewPropsOf(name));
       const { html } = await renderEmailTemplate(template, props);
-      expect(html.includes("Unsubscribe from these emails")).toBe(template.kind.category !== "transactional");
+      expect(html.includes("Unsubscribe from these emails")).toBe(isNotificationCategory(template.kind.category));
     }
   });
 });

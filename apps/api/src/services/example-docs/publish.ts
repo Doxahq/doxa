@@ -3,7 +3,7 @@ import type { ExampleDocsTemplate } from "@doxahq/contracts";
 import type { Env } from "../../env";
 import { DocsRepository } from "../../repositories/docs";
 import { createR2DocsContentStore } from "../docs-content/store";
-import { freePlanEntitlements } from "../free-plan-entitlements";
+import { planSeamsFromEnv } from "../billing/plan-seams";
 import { createExampleDocsPages, getExampleDocsNavigation } from "./template";
 
 export interface ExampleDocsTarget {
@@ -31,7 +31,7 @@ export async function publishExampleDocs(
     versionId,
     projectSlug: project.slug,
     projectName: project.name,
-    entitlements: await freePlanEntitlements.getProjectEntitlements(
+    entitlements: await planSeamsFromEnv(env).entitlements.getProjectEntitlements(
       project.projectId,
     ),
     features: { apiPlayground: true },

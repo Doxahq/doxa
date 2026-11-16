@@ -34,7 +34,8 @@ export type SettledBatch<T> =
 
 /**
  * Joins the outcome of every write batch. A batch whose Workflow step failed
- * after its retries counts each of its pages as failed with that error.
+ * with a non-retryable error counts each of its pages as failed with that
+ * error. Any other batch failure fails the run first (`failsRunAtBatch`).
  */
 export function collectPageBatchOutcomes(
   batches: readonly (readonly string[])[],
@@ -172,7 +173,7 @@ export function isRunStoppingError(error: unknown): boolean {
   return RUN_STOPPING_MESSAGE.test(message) || isRunStoppingModelErrorMessage(message);
 }
 
-const RUN_STOPPING_MESSAGE = /generation job is no longer active|generation is paused|overall budget/i;
+const RUN_STOPPING_MESSAGE = /generation job is no longer active|generation is paused|overall budget|generation stopped for credits/i;
 
 /** One job event per flagged page, which the generation review lists. */
 export async function recordFlaggedPages(input: {

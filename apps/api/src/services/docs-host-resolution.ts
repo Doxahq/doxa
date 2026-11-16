@@ -2,6 +2,7 @@ import type { DocsDomainResolution } from "@doxahq/contracts";
 import { DocsRepository, type DocsRepositoryEnv } from "../repositories/docs";
 import { DocsDomainsRepository } from "../repositories/docs-domains";
 import { PreviewChannelsRepository } from "../repositories/preview-channels";
+import { withHostingTier } from "./billing/hosting-tier";
 import {
   parseGeneratedDocsSubdomain,
   parseGenerationPreviewSubdomain,
@@ -32,7 +33,7 @@ export async function resolveDocsHost(
     hostname,
   );
   if (explicitDomain) {
-    return { ...explicitDomain, renderTarget: "production" };
+    return withHostingTier(env, { ...explicitDomain, renderTarget: "production" });
   }
 
   const preview = await new PreviewChannelsRepository(env).resolveByHostname(
@@ -56,11 +57,11 @@ export async function resolveDocsHost(
   const canonicalHostname = await new DocsDomainsRepository(
     env,
   ).findCanonicalHostname(site.siteId);
-  return {
+  return withHostingTier(env, {
     ...site,
     hostname: generatedSubdomain.hostname,
     domainKind: "doxa_subdomain",
     renderTarget: "production",
     ...(canonicalHostname ? { canonicalHostname } : {}),
-  };
+  });
 }

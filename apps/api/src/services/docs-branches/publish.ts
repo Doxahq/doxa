@@ -18,7 +18,7 @@ import {
 import { DocsVersionGcEntriesRepository } from "../../repositories/docs-version-gc-entries";
 import type { PublicationAttribution } from "../../repositories/docs-publications";
 import { buildDocsWarmHint } from "../docs-warm-hint";
-import { createEntitlements } from "../free-plan-entitlements";
+import { planSeamsFromEnv } from "../billing/plan-seams";
 import {
   createR2SiteAssetStore,
   type SiteAssetStore,
@@ -86,7 +86,7 @@ export class DocsBranchPublish {
       store: withRequestReadCache(
         createR2DocsContentStore(env.DOCS_BUCKET),
       ),
-      entitlements: createEntitlements(env),
+      entitlements: planSeamsFromEnv(env).entitlements,
       assets: createR2SiteAssetStore(env.DOCS_BUCKET),
       publish: (input) => repository.publish(input),
       collectStorage: createCollectStorageNow(env),

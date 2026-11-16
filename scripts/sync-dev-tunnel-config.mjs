@@ -69,6 +69,9 @@ function createIngressConfig() {
         { hostname, path: "^/teams.*$", service: apiOrigin },
         { hostname, path: "^/team-invites.*$", service: apiOrigin },
         { hostname, path: "^/email-preferences.*$", service: apiOrigin },
+        // The web app owns /dashboard/billing; the API serves /billing
+        // (offers, accounts, Checkout, Portal and the Stripe webhook).
+        { hostname, path: "^/billing.*$", service: apiOrigin },
         // Not /email: the web app serves the /email/unsubscribe page, and the
         // API's POST /email/unsubscribe shares that path, which a tunnel route
         // cannot split by method. The one-click unsubscribe from the page does

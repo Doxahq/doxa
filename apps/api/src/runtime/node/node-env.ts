@@ -6,6 +6,8 @@ import { S3R2Bucket, createR2S3Client } from "./bindings/r2-s3-bucket";
 import { ValkeyKvNamespace } from "./bindings/valkey-kv-namespace";
 import { ProcessImageWorker } from "./image-processing/process-image-worker";
 import { modelTokenBrokerFromVars } from "./model-access/model-token-broker-from-vars";
+import { billingConfigFor } from "../../services/billing/config";
+import { createNodeBillingPayments } from "./billing";
 import { readApiVars, type DocsBucketSource, type NodeServerConfig } from "./config";
 
 /** The API env on Node, and what must close at shutdown. */
@@ -23,10 +25,15 @@ export interface NodeEnv {
  *   MODEL_TOKEN_BROKER  Anthropic tokens from the task role, when federation is set up
  *   IMAGE_COMPRESSOR    sharp, in child processes
  *   SVG_CLEANER         the SVG cleaning, in the same child processes
+ *   BILLING_PAYMENTS    Checkout, Portal, invoices, webhooks and billing jobs
  *
  * `vars` holds the string variables, as the Worker gets them.
  */
 export async function createNodeEnv(config: NodeServerConfig, vars: Record<string, unknown>): Promise<NodeEnv> {
+  const apiVars = readApiVars(vars);
+  // Billing spec 6.3: read once at start-up; a wrong value or a missing
+  // provider secret fails start-up with BillingConfigurationError.
+  const billingPayments = createNodeBillingPayments({ config: billingConfigFor(apiVars) });
   const valkey = new Redis(config.valkeyUrl, {
     // Fail a command after a few reconnect attempts instead of queueing it forever.
     maxRetriesPerRequest: 3,
@@ -45,7 +52,8 @@ export async function createNodeEnv(config: NodeServerConfig, vars: Record<strin
   });
 
   const env: Env = {
-    ...readApiVars(vars),
+    ...apiVars,
+    BILLING_PAYMENTS: billingPayments,
     DOCS_BUCKET: docsBucket.bucket,
     AUTH_KV: new ValkeyKvNamespace(valkey, "auth"),
     OAUTH_KV: new ValkeyKvNamespace(valkey, "oauth"),

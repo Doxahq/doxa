@@ -32,11 +32,14 @@ import { Route as MarketingBlogSlugRouteImport } from './routes/_marketing/blog/
 import { Route as MarketingLegalIndexRouteImport } from './routes/_marketing/legal/index'
 import { Route as MarketingLegalPrivacyRouteImport } from './routes/_marketing/legal/privacy'
 import { Route as MarketingLegalTermsRouteImport } from './routes/_marketing/legal/terms'
+import { Route as DashboardBillingIndexRouteImport } from './routes/dashboard/billing/index'
 import { Route as DashboardProjectsIndexRouteImport } from './routes/dashboard/projects/index'
 import { Route as DashboardProjectsProjectIdRouteRouteImport } from './routes/dashboard/projects/$projectId/route'
 import { Route as DashboardProjectsNewRouteImport } from './routes/dashboard/projects/new'
 import { Route as DashboardTeamsIndexRouteImport } from './routes/dashboard/teams/index'
 import { Route as DashboardTeamsTeamIdRouteImport } from './routes/dashboard/teams/$teamId'
+import { Route as DashboardBillingAccountIdIndexRouteImport } from './routes/dashboard/billing/$accountId/index'
+import { Route as DashboardBillingAccountIdCreditsRouteImport } from './routes/dashboard/billing/$accountId/credits'
 import { Route as DashboardProjectsProjectIdIndexRouteImport } from './routes/dashboard/projects/$projectId/index'
 import { Route as DashboardProjectsProjectIdContentRouteImport } from './routes/dashboard/projects/$projectId/content'
 import { Route as DashboardProjectsProjectIdDomainsRouteImport } from './routes/dashboard/projects/$projectId/domains'
@@ -174,6 +177,11 @@ const MarketingLegalTermsRoute = MarketingLegalTermsRouteImport.update({
   path: '/legal/terms',
   getParentRoute: () => MarketingRouteRoute,
 } as any)
+const DashboardBillingIndexRoute = DashboardBillingIndexRouteImport.update({
+  id: '/billing/',
+  path: '/billing/',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
 const DashboardProjectsIndexRoute = DashboardProjectsIndexRouteImport.update({
   id: '/projects/',
   path: '/projects/',
@@ -200,6 +208,18 @@ const DashboardTeamsTeamIdRoute = DashboardTeamsTeamIdRouteImport.update({
   path: '/teams/$teamId',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
+const DashboardBillingAccountIdIndexRoute =
+  DashboardBillingAccountIdIndexRouteImport.update({
+    id: '/billing/$accountId/',
+    path: '/billing/$accountId/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardBillingAccountIdCreditsRoute =
+  DashboardBillingAccountIdCreditsRouteImport.update({
+    id: '/billing/$accountId/credits',
+    path: '/billing/$accountId/credits',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
 const DashboardProjectsProjectIdIndexRoute =
   DashboardProjectsProjectIdIndexRouteImport.update({
     id: '/',
@@ -359,13 +379,16 @@ export interface FileRoutesByFullPath {
   '/dashboard/teams/$teamId': typeof DashboardTeamsTeamIdRoute
   '/blog/': typeof MarketingBlogIndexRoute
   '/legal/': typeof MarketingLegalIndexRoute
+  '/dashboard/billing/': typeof DashboardBillingIndexRoute
   '/dashboard/projects/': typeof DashboardProjectsIndexRoute
   '/dashboard/teams/': typeof DashboardTeamsIndexRoute
   '/dashboard/projects/$projectId/site': typeof DashboardProjectsProjectIdSiteRouteRouteWithChildren
+  '/dashboard/billing/$accountId/credits': typeof DashboardBillingAccountIdCreditsRoute
   '/dashboard/projects/$projectId/content': typeof DashboardProjectsProjectIdContentRoute
   '/dashboard/projects/$projectId/domains': typeof DashboardProjectsProjectIdDomainsRoute
   '/dashboard/projects/$projectId/project': typeof DashboardProjectsProjectIdProjectRoute
   '/dashboard/projects/$projectId/review': typeof DashboardProjectsProjectIdReviewRoute
+  '/dashboard/billing/$accountId/': typeof DashboardBillingAccountIdIndexRoute
   '/dashboard/projects/$projectId/': typeof DashboardProjectsProjectIdIndexRoute
   '/dashboard/projects/$projectId/doxabot/instructions': typeof DashboardProjectsProjectIdDoxabotInstructionsRoute
   '/dashboard/projects/$projectId/generations/$generationId': typeof DashboardProjectsProjectIdGenerationsGenerationIdRoute
@@ -408,12 +431,15 @@ export interface FileRoutesByTo {
   '/dashboard/teams/$teamId': typeof DashboardTeamsTeamIdRoute
   '/blog': typeof MarketingBlogIndexRoute
   '/legal': typeof MarketingLegalIndexRoute
+  '/dashboard/billing': typeof DashboardBillingIndexRoute
   '/dashboard/projects': typeof DashboardProjectsIndexRoute
   '/dashboard/teams': typeof DashboardTeamsIndexRoute
+  '/dashboard/billing/$accountId/credits': typeof DashboardBillingAccountIdCreditsRoute
   '/dashboard/projects/$projectId/content': typeof DashboardProjectsProjectIdContentRoute
   '/dashboard/projects/$projectId/domains': typeof DashboardProjectsProjectIdDomainsRoute
   '/dashboard/projects/$projectId/project': typeof DashboardProjectsProjectIdProjectRoute
   '/dashboard/projects/$projectId/review': typeof DashboardProjectsProjectIdReviewRoute
+  '/dashboard/billing/$accountId': typeof DashboardBillingAccountIdIndexRoute
   '/dashboard/projects/$projectId': typeof DashboardProjectsProjectIdIndexRoute
   '/dashboard/projects/$projectId/doxabot/instructions': typeof DashboardProjectsProjectIdDoxabotInstructionsRoute
   '/dashboard/projects/$projectId/generations/$generationId': typeof DashboardProjectsProjectIdGenerationsGenerationIdRoute
@@ -460,13 +486,16 @@ export interface FileRoutesById {
   '/dashboard/teams/$teamId': typeof DashboardTeamsTeamIdRoute
   '/_marketing/blog/': typeof MarketingBlogIndexRoute
   '/_marketing/legal/': typeof MarketingLegalIndexRoute
+  '/dashboard/billing/': typeof DashboardBillingIndexRoute
   '/dashboard/projects/': typeof DashboardProjectsIndexRoute
   '/dashboard/teams/': typeof DashboardTeamsIndexRoute
   '/dashboard/projects/$projectId/site': typeof DashboardProjectsProjectIdSiteRouteRouteWithChildren
+  '/dashboard/billing/$accountId/credits': typeof DashboardBillingAccountIdCreditsRoute
   '/dashboard/projects/$projectId/content': typeof DashboardProjectsProjectIdContentRoute
   '/dashboard/projects/$projectId/domains': typeof DashboardProjectsProjectIdDomainsRoute
   '/dashboard/projects/$projectId/project': typeof DashboardProjectsProjectIdProjectRoute
   '/dashboard/projects/$projectId/review': typeof DashboardProjectsProjectIdReviewRoute
+  '/dashboard/billing/$accountId/': typeof DashboardBillingAccountIdIndexRoute
   '/dashboard/projects/$projectId/': typeof DashboardProjectsProjectIdIndexRoute
   '/dashboard/projects/$projectId/doxabot/instructions': typeof DashboardProjectsProjectIdDoxabotInstructionsRoute
   '/dashboard/projects/$projectId/generations/$generationId': typeof DashboardProjectsProjectIdGenerationsGenerationIdRoute
@@ -513,13 +542,16 @@ export interface FileRouteTypes {
     | '/dashboard/teams/$teamId'
     | '/blog/'
     | '/legal/'
+    | '/dashboard/billing/'
     | '/dashboard/projects/'
     | '/dashboard/teams/'
     | '/dashboard/projects/$projectId/site'
+    | '/dashboard/billing/$accountId/credits'
     | '/dashboard/projects/$projectId/content'
     | '/dashboard/projects/$projectId/domains'
     | '/dashboard/projects/$projectId/project'
     | '/dashboard/projects/$projectId/review'
+    | '/dashboard/billing/$accountId/'
     | '/dashboard/projects/$projectId/'
     | '/dashboard/projects/$projectId/doxabot/instructions'
     | '/dashboard/projects/$projectId/generations/$generationId'
@@ -562,12 +594,15 @@ export interface FileRouteTypes {
     | '/dashboard/teams/$teamId'
     | '/blog'
     | '/legal'
+    | '/dashboard/billing'
     | '/dashboard/projects'
     | '/dashboard/teams'
+    | '/dashboard/billing/$accountId/credits'
     | '/dashboard/projects/$projectId/content'
     | '/dashboard/projects/$projectId/domains'
     | '/dashboard/projects/$projectId/project'
     | '/dashboard/projects/$projectId/review'
+    | '/dashboard/billing/$accountId'
     | '/dashboard/projects/$projectId'
     | '/dashboard/projects/$projectId/doxabot/instructions'
     | '/dashboard/projects/$projectId/generations/$generationId'
@@ -613,13 +648,16 @@ export interface FileRouteTypes {
     | '/dashboard/teams/$teamId'
     | '/_marketing/blog/'
     | '/_marketing/legal/'
+    | '/dashboard/billing/'
     | '/dashboard/projects/'
     | '/dashboard/teams/'
     | '/dashboard/projects/$projectId/site'
+    | '/dashboard/billing/$accountId/credits'
     | '/dashboard/projects/$projectId/content'
     | '/dashboard/projects/$projectId/domains'
     | '/dashboard/projects/$projectId/project'
     | '/dashboard/projects/$projectId/review'
+    | '/dashboard/billing/$accountId/'
     | '/dashboard/projects/$projectId/'
     | '/dashboard/projects/$projectId/doxabot/instructions'
     | '/dashboard/projects/$projectId/generations/$generationId'
@@ -816,6 +854,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MarketingLegalTermsRouteImport
       parentRoute: typeof MarketingRouteRoute
     }
+    '/dashboard/billing/': {
+      id: '/dashboard/billing/'
+      path: '/billing'
+      fullPath: '/dashboard/billing/'
+      preLoaderRoute: typeof DashboardBillingIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
     '/dashboard/projects/': {
       id: '/dashboard/projects/'
       path: '/projects'
@@ -849,6 +894,20 @@ declare module '@tanstack/react-router' {
       path: '/teams/$teamId'
       fullPath: '/dashboard/teams/$teamId'
       preLoaderRoute: typeof DashboardTeamsTeamIdRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/billing/$accountId/': {
+      id: '/dashboard/billing/$accountId/'
+      path: '/billing/$accountId'
+      fullPath: '/dashboard/billing/$accountId/'
+      preLoaderRoute: typeof DashboardBillingAccountIdIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/billing/$accountId/credits': {
+      id: '/dashboard/billing/$accountId/credits'
+      path: '/billing/$accountId/credits'
+      fullPath: '/dashboard/billing/$accountId/credits'
+      preLoaderRoute: typeof DashboardBillingAccountIdCreditsRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/projects/$projectId/': {
@@ -1133,8 +1192,11 @@ interface DashboardRouteRouteChildren {
   DashboardProjectsProjectIdRouteRoute: typeof DashboardProjectsProjectIdRouteRouteWithChildren
   DashboardProjectsNewRoute: typeof DashboardProjectsNewRoute
   DashboardTeamsTeamIdRoute: typeof DashboardTeamsTeamIdRoute
+  DashboardBillingIndexRoute: typeof DashboardBillingIndexRoute
   DashboardProjectsIndexRoute: typeof DashboardProjectsIndexRoute
   DashboardTeamsIndexRoute: typeof DashboardTeamsIndexRoute
+  DashboardBillingAccountIdCreditsRoute: typeof DashboardBillingAccountIdCreditsRoute
+  DashboardBillingAccountIdIndexRoute: typeof DashboardBillingAccountIdIndexRoute
 }
 
 const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
@@ -1144,8 +1206,11 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
     DashboardProjectsProjectIdRouteRouteWithChildren,
   DashboardProjectsNewRoute: DashboardProjectsNewRoute,
   DashboardTeamsTeamIdRoute: DashboardTeamsTeamIdRoute,
+  DashboardBillingIndexRoute: DashboardBillingIndexRoute,
   DashboardProjectsIndexRoute: DashboardProjectsIndexRoute,
   DashboardTeamsIndexRoute: DashboardTeamsIndexRoute,
+  DashboardBillingAccountIdCreditsRoute: DashboardBillingAccountIdCreditsRoute,
+  DashboardBillingAccountIdIndexRoute: DashboardBillingAccountIdIndexRoute,
 }
 
 const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(

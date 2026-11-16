@@ -9,7 +9,9 @@ import type {
   UpdateReviewRunInput,
   GenerationRepairDiagnostic,
   GenerationUsageRecord,
+  MarkJobStoppedInput,
 } from "@doxahq/contracts";
+import { markJobStoppedInputSchema } from "@doxahq/contracts";
 import type { GenerationInternalApi } from "@doxahq/generation";
 import type { Env } from "../env";
 import { DocsRepository } from "../repositories/docs";
@@ -35,6 +37,9 @@ import { withDoxabotInstructions } from "./doxabot/generation-instructions";
 import { createRepositoryReadAccess } from "./repository-read-access";
 import { GenerationReviewService } from "./generation-reviews/review-service";
 import { PendingMergesRepository } from "../repositories/pending-merges";
+import { generationMeteringFromEnv } from "./billing/generation-metering-env";
+import type { GenerationMetering, RunOutcome } from "./billing/generation-metering";
+import { closeStoppedPreviewCheck } from "./billing/stopped-preview-check";
 import {
   assertSafeArtifactKey,
   createR2DocsArtifactReader,
@@ -110,6 +115,14 @@ export class InternalApi extends WorkerEntrypoint<Env> implements InternalApiRpc
     return isJobActive(this.env, jobId);
   }
 
+  getJobStopReason(jobId: string) {
+    return generationMeteringFromEnv(this.env).stopReason(jobId);
+  }
+
+  markJobStopped(jobId: string, input: MarkJobStoppedInput) {
+    return markJobStopped(this.env, jobId, input);
+  }
+
   getGenerationResumedAt(jobId: string) {
     return new JobsRepository(this.env).latestEventAt(jobId, GENERATION_RESUMED_EVENT_TYPE);
   }
@@ -132,8 +145,7 @@ export class InternalApi extends WorkerEntrypoint<Env> implements InternalApiRpc
   }
 
   recordGenerationUsage(record: GenerationUsageRecord) {
-    return new GenerationObservabilityRepository(this.env)
-      .recordUsage(record);
+    return recordGenerationUsage(this.env, record);
   }
 
   recordGenerationDiagnostic(
@@ -269,7 +281,36 @@ async function markJobRunning(env: Env, jobId: string): Promise<void> {
 
 async function markJobFailed(env: Env, jobId: string, message: string): Promise<void> {
   const failed = await new JobsRepository(env).markFailed(jobId, message);
+  if (failed) await settleRun(env, jobId, "failed");
   if (failed) await generationNotifierFromEnv(env).finished(jobId, "failed", message);
+}
+
+/** Billing spec 10.5 step 5. The meter never throws here: the job has ended either way. */
+function settleRun(env: Env, jobId: string, outcome?: RunOutcome, metering?: GenerationMetering): Promise<void> {
+  return (metering ?? generationMeteringFromEnv(env)).settle(jobId, outcome);
+}
+
+/** Billing spec 10.5 step 2: the usage record first, then the meter, keyed by the call ID. */
+async function recordGenerationUsage(env: Env, record: GenerationUsageRecord): Promise<void> {
+  await new GenerationObservabilityRepository(env).recordUsage(record);
+  await generationMeteringFromEnv(env).accrue({
+    jobId: record.jobId,
+    callId: record.callId,
+    costUsd: record.costUsd,
+  });
+}
+
+/**
+ * Billing spec 10.6: the worker ends a run that the meter stopped. The run
+ * keeps its finished page checkpoints, a preview's check finishes `neutral`
+ * (it never fails the customer's CI), and the settle charges base + usage.
+ */
+async function markJobStopped(env: Env, jobId: string, rawInput: MarkJobStoppedInput): Promise<void> {
+  const input = markJobStoppedInputSchema.parse(rawInput);
+  const jobs = new JobsRepository(env);
+  if (!(await jobs.markStoppedCredits(jobId, input))) return;
+  await settleRun(env, jobId, "stopped");
+  await closeStoppedPreviewCheck(env, jobs, ReviewRunsService.fromEnv(env), { jobId, reason: input.reason });
 }
 
 /**
@@ -280,6 +321,7 @@ async function markJobCancelled(env: Env, jobId: string, message: string): Promi
   const jobs = new JobsRepository(env);
   const check = { title: CANCELLED_PREVIEW_CHECK.title, summary: message };
   if (!(await jobs.markCancelled(jobId, message, "generation_cancelled", undefined, check))) return;
+  await settleRun(env, jobId, "cancelled");
   await closePreviewCheck(jobs, ReviewRunsService.fromEnv(env), { jobId, message, check });
 }
 
@@ -289,17 +331,26 @@ async function markJobSuperseded(
   jobId: string,
   message: string,
 ): Promise<void> {
-  await new JobsRepository(env).markCancelled(
+  const superseded = await new JobsRepository(env).markCancelled(
     jobId,
     message,
     "doxabot_superseded",
     undefined,
     SUPERSEDED_PREVIEW_CHECK,
   );
+  if (superseded) await settleRun(env, jobId, "superseded");
 }
 
-function isJobActive(env: Env, jobId: string): Promise<boolean> {
-  return new JobsRepository(env).isActive(jobId);
+/**
+ * False once the job ended, and, with `BILLING_ENFORCEMENT=on`, once the
+ * credit meter stopped the run (billing spec 10.5 step 4). The worker then
+ * asks `getJobStopReason` and ends the run as `stopped_credits`.
+ */
+async function isJobActive(env: Env, jobId: string): Promise<boolean> {
+  if (!(await new JobsRepository(env).isActive(jobId))) return false;
+  const metering = generationMeteringFromEnv(env);
+  if (metering.mode !== "on") return true;
+  return (await metering.stopReason(jobId)) === null;
 }
 
 function getGenerationControl(env: Env) {
@@ -323,6 +374,7 @@ async function publishJobOutput(env: Env, jobId: string, input: PublishJobInput)
     artifactPrefix: input.artifactPrefix,
     manifestPath: input.manifestPath,
   });
+  await settleRun(env, jobId, "succeeded");
   await generationNotifierFromEnv(env).finished(jobId, "succeeded");
 
   return { versionId: version.id };
@@ -347,6 +399,8 @@ async function completeJobOutput(
     // The run covers every pull request merged before it started.
     await new PendingMergesRepository(env).clearCoveredByJob(jobId);
   }
+  // Decision D12: a Doxabot run that changed no page pays the usage only.
+  await settleRun(env, jobId, input.regeneratedPageCount === 0 ? "no_change" : "pages_changed");
   await generationNotifierFromEnv(env).finished(jobId, "succeeded");
   return completed;
 }

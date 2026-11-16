@@ -12,11 +12,16 @@ import {
 } from "../repositories/jobs";
 import { getResumeBlockedReason, isOffProductionBranch } from "./generation-actions";
 import type { GenerationQueue } from "./generation-dispatch";
+import type { BillingRefusal, GenerationMetering, MeterAdmission } from "./billing/generation-metering";
+import { meteredActionOf, requiredFeaturesOf, runModels } from "./billing/generation-metering";
+import { generationMeteringFromEnv } from "./billing/generation-metering-env";
 
 export type GenerationResumeOutcome =
   | { outcome: "not_found" }
   | { outcome: "blocked"; reason: GenerationActionBlockedReason }
-  | { outcome: "resumed"; fromStep: string };
+  | { outcome: "resumed"; fromStep: string }
+  /** Billing refused the continued run (spec 10.5: a continue is a new admission). */
+  | { outcome: "billing_refused"; error: BillingRefusal };
 
 export interface GenerationResumeInput {
   /** The project owner, who pays for the run. */
@@ -36,6 +41,10 @@ export interface GenerationResumeDependencies {
   };
   queue: GenerationQueue;
   now: () => Date;
+  /** The credit meter. Absent: no metering, as with `BILLING_ENFORCEMENT=off`. */
+  metering?: Pick<GenerationMetering, "mode" | "admit" | "abandon" | "heldActionOf" | "settle">;
+  /** The fallback writer of the run's models. */
+  runModels?: (config: { plannerModel: string; writerModel: string }) => string[];
 }
 
 /**
@@ -52,6 +61,8 @@ export class GenerationResumeService {
       jobs: new JobsRepository(env),
       queue: env.GENERATION_QUEUE,
       now: () => new Date(),
+      metering: generationMeteringFromEnv(env),
+      runModels: (config) => runModels(env, config),
     });
   }
 
@@ -63,11 +74,42 @@ export class GenerationResumeService {
     const blocked = resumeBlockedReason(run, stepFailure, this.deps.now());
     if (blocked || !stepFailure) return { outcome: "blocked", reason: blocked ?? "not_resumable" };
 
+    // Billing spec 10.5: the continued run holds credits again under its own key.
+    const { metering } = this.deps;
+    const metered = metering !== undefined && metering.mode !== "off";
+    let admission: MeterAdmission | null = null;
+    if (metered) {
+      const models = run.plannerModel && run.writerModel
+        ? this.deps.runModels?.({ plannerModel: run.plannerModel, writerModel: run.writerModel }) ?? [run.plannerModel, run.writerModel]
+        : [];
+      // The continued run keeps the action of its first admission. Its
+      // baseline can be gone by now (a collected version clears the column),
+      // so the job's row decides only when the meter holds nothing for it.
+      const action = (await metering.heldActionOf(run.id)) ?? meteredActionOf(run);
+      // The run ended, so a hold that its last try left (a settle that
+      // failed) is charged now, with its own missed usage. A job holds
+      // credits once at a time: a continue then opens the only hold.
+      if (metering.mode === "on") await metering.settle(run.id);
+      admission = await metering.admit({
+        jobId: run.id,
+        projectId: run.projectId,
+        action,
+        features: requiredFeaturesOf(run, action),
+        models,
+        attempt: `resume:${crypto.randomUUID()}`,
+      });
+      if (admission.kind === "refused") return { outcome: "billing_refused", error: admission.error };
+      // Another continue of this job holds credits: it runs, this one does not.
+      if (admission.kind === "busy") return { outcome: "blocked", reason: "in_progress" };
+    }
+
     try {
       if (!(await this.deps.jobs.reopenFailedJob(run.id))) {
+        if (metered && admission) await metering.abandon(run.id, admission);
         return { outcome: "blocked", reason: "not_resumable" };
       }
     } catch (error) {
+      if (metered && admission) await metering.abandon(run.id, admission);
       if (error instanceof ActiveGenerationConflictError) {
         return { outcome: "blocked", reason: "in_progress" };
       }

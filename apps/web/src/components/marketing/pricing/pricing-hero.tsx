@@ -1,6 +1,7 @@
 import { Hr, Ticks } from "~/components/marketing/guides"
 import { SiteNav } from "~/components/marketing/site-nav"
 import { CONTACT_URL, GET_STARTED_URL } from "~/lib/marketing/links"
+import { FOUNDER_PRICE_NOTE } from "~/lib/marketing/pricing"
 
 export function PricingHero() {
   return (
@@ -32,7 +33,7 @@ export function PricingHero() {
           </div>
           <span className="hero__note">
             <i />
-            Founder price for the first 100 customers
+            {FOUNDER_PRICE_NOTE}
           </span>
         </div>
       </div>

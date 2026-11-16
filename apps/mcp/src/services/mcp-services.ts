@@ -54,6 +54,7 @@ import {
 } from "@doxahq/api/services/docs-content/store";
 import { DocsDomainLifecycleService } from "@doxahq/api/services/docs-domain-lifecycle";
 import { TeamService } from "@doxahq/api/services/teams/team-service";
+import { mcpBillingFromEnv, type McpBilling } from "@doxahq/api/services/billing/mcp-billing";
 import { DocsSearch, type DocsSearchReader } from "./docs-search";
 
 interface ProjectScopedInput {
@@ -155,6 +156,11 @@ export interface McpServices {
     /** The user's teams and roles, for get_account. */
     listForUser(userId: string): Promise<TeamSummary[]>;
   };
+  /**
+   * Billing spec 11 and 15.3: the daily tool-call quota and the accounts of
+   * get_account. Absent in tests that do not need it: no quota, no accounts.
+   */
+  readonly billing?: Pick<McpBilling, "mode" | "consumeToolCall" | "accountsFor">;
 }
 
 export interface McpServiceOptions {
@@ -195,6 +201,16 @@ export function createMcpServices(
     domains: { listForProject: (input) => domains.listForProject(input) },
     generations: createGenerationReader(env),
     teams: { listForUser: (userId) => TeamService.fromEnv(env).list(userId) },
+    billing: createBillingServices(env),
+  };
+}
+
+function createBillingServices(env: Env): Pick<McpBilling, "mode" | "consumeToolCall" | "accountsFor"> {
+  const billing = mcpBillingFromEnv(env);
+  return {
+    mode: billing.mode,
+    consumeToolCall: (projectId) => billing.consumeToolCall(projectId),
+    accountsFor: (userId, teams) => billing.accountsFor(userId, teams),
   };
 }
 

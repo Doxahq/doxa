@@ -148,6 +148,26 @@ function failedGenerationItem({ projectId, latestJob }: AttentionQueueInput): At
   }
 }
 
+/** Billing spec 10.6: a run that AI credits stopped keeps its finished pages for Continue run. */
+function stoppedGenerationItem({ projectId, latestJob }: AttentionQueueInput): AttentionItem | null {
+  if (latestJob?.status !== "stopped_credits") return null
+  return {
+    id: "stopped-generation",
+    tone: "warning",
+    icon: CircleX,
+    title: "The last generation ran out of credits",
+    detail: "Raise the monthly limit or the cap, then continue the run to finish it.",
+    action: actionLink(
+      <Link
+        to="/dashboard/projects/$projectId/generations/$generationId"
+        params={{ projectId, generationId: latestJob.id }}
+      >
+        View run
+      </Link>,
+    ),
+  }
+}
+
 function domainItem({ projectId, domains }: AttentionQueueInput): AttentionItem | null {
   const unhealthy = domains.filter((domain) => {
     if (domain.kind !== "custom_domain") return false
@@ -171,7 +191,7 @@ function domainItem({ projectId, domains }: AttentionQueueInput): AttentionItem 
   }
 }
 
-const ITEM_BUILDERS = [reviewItem, mergesItem, approvalsItem, mdxItem, failedGenerationItem, domainItem]
+const ITEM_BUILDERS = [reviewItem, mergesItem, approvalsItem, mdxItem, failedGenerationItem, stoppedGenerationItem, domainItem]
 
 export function buildAttentionItems(input: AttentionQueueInput): AttentionItem[] {
   return ITEM_BUILDERS.flatMap((build) => build(input) ?? [])

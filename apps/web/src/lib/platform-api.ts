@@ -24,6 +24,7 @@ import type {
   GitHubRepositoryDto,
   JobEventDto,
   ProjectDto,
+  ProjectGenerationCache,
   RepositoryBranchesDto,
   UpdateDoxabotSettingsInput,
   UpdateDocsPreviewVisibilityInput,
@@ -31,6 +32,7 @@ import type {
 import type { BranchRef } from "@doxahq/contracts/docs-branches";
 import type { ProjectOverview } from "@doxahq/contracts/project-overview";
 import type { TeamRole } from "@doxahq/contracts/teams";
+import type { ProjectBilling } from "@doxahq/contracts/billing";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8787";
 const CONFIGURED_DOCS_BASE_DOMAIN = import.meta.env.VITE_DOCS_BASE_DOMAIN;
@@ -182,7 +184,14 @@ export async function deleteProject(projectId: string): Promise<void> {
 
 /** `role` is the viewer's role on the project; `owner` for their own personal project. */
 export async function getProject(projectId: string) {
-  return apiFetch<{ project: ProjectDto; latestJob: GenerationJobDto | null; role: TeamRole }>(`/projects/${projectId}`);
+  // `billing` is null while billing is off on the server (billing spec 15.1),
+  // and missing from an older API: both hide every billing control.
+  return apiFetch<{
+    project: ProjectDto;
+    latestJob: GenerationJobDto | null;
+    role: TeamRole;
+    billing?: ProjectBilling | null;
+  }>(`/projects/${projectId}`);
 }
 
 /**
@@ -321,10 +330,8 @@ export async function listDocsDomains(projectId: string): Promise<DocsDomainColl
   return apiFetch<DocsDomainCollectionDto>(`/projects/${projectId}/docs-domains`);
 }
 
-export interface GenerationCacheDto {
-  siteId: string
-  clearedAt: string | null
-}
+/** The generation cache with the temperature of the next runs (billing decision D21). */
+export type GenerationCacheDto = ProjectGenerationCache
 
 export interface ProjectPreviewVisibilityDto {
   previewVisibility: DocsPreviewVisibility

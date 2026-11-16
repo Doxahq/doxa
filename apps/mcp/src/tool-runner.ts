@@ -36,6 +36,17 @@ export interface ToolCallProtocol {
 
 export const PLAIN_TOOL_CALL: ToolCallProtocol = { tasks: false };
 
+/**
+ * Billing spec 11: the tools without a project do not count against the
+ * daily tool-call quota. The per-minute abuse limits still apply to them.
+ */
+export const QUOTA_EXEMPT_TOOLS: ReadonlySet<string> = new Set([
+  "list_projects",
+  "get_account",
+  "create_project",
+  "list_github_repositories",
+]);
+
 type ToolRun =
   | { kind: "succeeded"; output: Record<string, unknown> }
   | { kind: "failed"; error: ToolErrorBody; cause: unknown };
@@ -117,7 +128,10 @@ async function execute(
     throw new ToolRateLimitedError();
   }
   const output = tool.output.parse(
-    await tool.run(createToolContext(context, record), input),
+    await tool.run(
+      createToolContext(context, record, { countsToolCall: !QUOTA_EXEMPT_TOOLS.has(tool.name) }),
+      input,
+    ),
   );
   if (!isRecord(output)) {
     throw new TypeError(`Tool ${tool.name} returned a non-object result.`);

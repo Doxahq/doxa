@@ -7,6 +7,7 @@ import {
 } from "./notifications";
 import { agentConnectedEmail, resetPasswordEmail, verifyEmailEmail } from "./account";
 import { teamInviteEmail } from "./team-invite";
+import { creditsExhaustedEmail, creditsLowEmail, paygLimitEmail, paygStartedEmail } from "./billing";
 
 export {
   EMAIL_NOTIFICATION_CATEGORIES,
@@ -38,6 +39,18 @@ export {
   type ResetPasswordEmailProps,
   type VerifyEmailEmailProps,
 } from "./account";
+export {
+  PAYG_LIMIT_PERCENTS,
+  creditsExhaustedEmail,
+  creditsLowEmail,
+  paygLimitEmail,
+  paygStartedEmail,
+  type CreditsExhaustedEmailProps,
+  type CreditsLowEmailProps,
+  type PaygLimitEmailProps,
+  type PaygLimitPercent,
+  type PaygStartedEmailProps,
+} from "./billing";
 export { TEAM_INVITE_ROLES, teamInviteEmail, type TeamInviteEmailProps, type TeamInviteRole } from "./team-invite";
 
 /** Every kind of email that Doxa sends. Add a new kind here and its template in `templates/`. */
@@ -50,6 +63,10 @@ export const EMAIL_KINDS = [
   verifyEmailEmail,
   resetPasswordEmail,
   agentConnectedEmail,
+  creditsLowEmail,
+  paygStartedEmail,
+  paygLimitEmail,
+  creditsExhaustedEmail,
 ] as const satisfies readonly EmailKind[];
 
 export type EmailKindName = (typeof EMAIL_KINDS)[number]["name"];

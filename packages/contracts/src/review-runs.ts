@@ -11,6 +11,8 @@ export const reviewRunConclusionSchema = z.enum([
   "failure",
   "cancelled",
   "action_required",
+  /** Billing spec 10.6: a run that AI credits stopped never fails the customer's CI. */
+  "neutral",
 ]);
 
 export const doxabotReviewRunStateSchema = z.enum([
@@ -20,6 +22,7 @@ export const doxabotReviewRunStateSchema = z.enum([
   "failure",
   "cancelled",
   "action_required",
+  "neutral",
 ]);
 
 export const reviewRunMetricsSchema = z

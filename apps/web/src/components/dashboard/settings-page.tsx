@@ -2,47 +2,53 @@ import { Link } from "@tanstack/react-router"
 import { ChevronRight, Github, Link2, Users } from "lucide-react"
 
 import {
-  DashboardHeader,
   FieldList,
   FieldRow,
   PageBody,
+  PageHeading,
   SectionLabel,
 } from "~/components/dashboard/dashboard-header"
 import { ConnectedAgentsSection } from "~/components/dashboard/settings/connected-agents-section"
 import { EmailNotificationsSection } from "~/components/dashboard/settings/email-notifications-section"
 import { UserApprovalSettingsSection } from "~/components/dashboard/settings/user-approval-settings-section"
+import { AccountTopBar } from "~/components/dashboard/shell/top-bar"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { useDashboardAuth } from "~/lib/auth/dashboard-auth-context"
 import { useQuery } from "@tanstack/react-query"
-import { AccountSettingsSkeleton } from "~/components/dashboard/skeletons/account-skeletons"
+import { ACCOUNT_SETTINGS_DESCRIPTION, AccountSettingsSkeleton } from "~/components/dashboard/skeletons/account-skeletons"
 import { agentGrantsQueryOptions } from "~/lib/queries/agent-access"
+import { billingAccountsQueryOptions } from "~/lib/queries/billing"
 import { userApprovalSettingsQueryOptions } from "~/lib/queries/approval-settings"
 import { emailPreferencesQueryOptions } from "~/lib/queries/email-preferences"
 import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
 import { useGitHub } from "~/lib/dashboard/use-github"
 
+/** `/dashboard/settings`: Account settings. Billing has its own pages in the Account sidebar. */
 export function SettingsPage() {
   const auth = useDashboardAuth()
   const { user } = auth
   const github = useGitHub()
   // The sections read these too. The page waits for all of them, so it shows
-  // one skeleton and then every section at once.
+  // one skeleton and then every section at once. The billing accounts fill the
+  // Account sidebar's BILLING group, so it shows with the page.
   const isFirstLoad = useIsFirstLoad([
     { isPending: auth.isPending },
     { isPending: github.isLoading },
     useQuery(emailPreferencesQueryOptions()),
     useQuery(agentGrantsQueryOptions()),
     useQuery(userApprovalSettingsQueryOptions()),
+    useQuery(billingAccountsQueryOptions()),
   ])
 
   if (isFirstLoad) return <AccountSettingsSkeleton />
 
   return (
     <>
-      <DashboardHeader title="Settings" />
+      <AccountTopBar crumbs={["Account settings"]} />
 
       <PageBody>
+        <PageHeading label="Account" title="Account settings" description={ACCOUNT_SETTINGS_DESCRIPTION} />
         <AccountSection name={user?.name ?? null} email={user?.email ?? null} />
         <GitHubConnectionSection
           isConnected={github.isConnected}
@@ -88,7 +94,7 @@ function AccountSection({
 }) {
   return (
     <section className="flex flex-col gap-3">
-      <SectionLabel>Account</SectionLabel>
+      <SectionLabel>Profile</SectionLabel>
       <FieldList>
         <FieldRow label="Name">{name || "—"}</FieldRow>
         <FieldRow label="Email">{email || "—"}</FieldRow>

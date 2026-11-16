@@ -16,7 +16,7 @@ Important facts:
 
 - [Doxabot](https://doxa.so/agent): The agent that writes docs from a repository and updates the affected pages after a merge.
 - [MCP server](https://doxa.so/mcp): How to connect an AI agent to Doxa, what the tools do, and which actions need approval.
-- [Pricing](https://doxa.so/pricing): Free, Pro, and Enterprise plans. Pro costs $179 per month, or $149 per month when billed yearly. Doxabot needs the Pro plan or the Enterprise plan.
+- [Pricing](https://doxa.so/pricing): Free, Pro, and Enterprise plans. Pro costs $159 per month, or $129 per month when billed yearly. Doxabot needs the Pro plan or the Enterprise plan.
 
 ## Documentation
 

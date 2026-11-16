@@ -110,7 +110,7 @@ export function GenerationCancelDialog({
             className="touch-manipulation"
           >
             {isCancelling ? (
-              <Loader2 aria-hidden="true" className="motion-safe:animate-spin" />
+              <Loader2 aria-hidden="true" className="animate-spin" />
             ) : null}
             {isCancelling ? "Cancelling…" : "Cancel generation"}
           </Button>

@@ -31,7 +31,10 @@ export function GenerationWelcome({
 }: {
   isStarting: boolean
   isGenerating: boolean
-  /** Null for a role that cannot run generations: the page explains instead. */
+  /**
+   * Null for a role that cannot run generations: the page explains instead.
+   * For a Free account the start opens the Pro trial dialog (`useGenerationStartFlow`).
+   */
   onStart: (() => void) | null
   className?: string
 }) {

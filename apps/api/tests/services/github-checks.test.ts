@@ -13,7 +13,9 @@ import {
   GitHubChecksAdapter,
 } from "../../src/services/doxabot/github-checks";
 import {
+  checkAgreesWithJob,
   mapDoxabotReviewRunState,
+  reviewRunPresentationFor,
   ReviewRunsService,
   type ReviewRunProviderAdapter,
 } from "../../src/services/doxabot/review-runs";
@@ -569,6 +571,30 @@ describe("provider-neutral review runs", () => {
       });
     });
 
+    test("finishes a check that AI credits stopped as neutral with the billing link (billing spec 10.6)", async () => {
+      const context = createContext({ externalReviewRunId: "9001", status: "stopped_credits" });
+      const { service, update } = serviceFor(context);
+
+      await expect(
+        service.finish(jobId, "neutral", { title: "AI credits ran out", summary: "Out of credits.", detailsUrl: "https://doxa.test/dashboard/billing/acct_1" }),
+      ).resolves.toBe(true);
+      expect(update).toHaveBeenCalledWith(context, {
+        externalRunId: "9001",
+        status: "completed",
+        conclusion: "neutral",
+        title: "AI credits ran out",
+        summary: "Out of credits.\n\nBilling: https://doxa.test/dashboard/billing/acct_1",
+        detailsUrl: "https://doxa.test/dashboard/billing/acct_1",
+        sourceRevision: headRevision,
+      });
+    });
+
+    test("a stopped_credits job accepts only a neutral check", () => {
+      expect(checkAgreesWithJob("stopped_credits", { status: "completed", conclusion: "neutral" })).toBe(true);
+      expect(checkAgreesWithJob("stopped_credits", { status: "completed", conclusion: "failure" })).toBe(false);
+      expect(reviewRunPresentationFor("stopped_credits")).toMatchObject({ conclusion: "neutral", title: "AI credits ran out" });
+    });
+
     test.each([
       ["a production job", null],
       ["a preview whose check was never created", createContext()],
@@ -591,6 +617,7 @@ describe("provider-neutral review runs", () => {
       "action_required",
       { status: "completed", conclusion: "action_required" },
     ],
+    ["neutral", { status: "completed", conclusion: "neutral" }],
   ] as const)("maps %s to provider-neutral status fields", (state, expected) => {
     expect(mapDoxabotReviewRunState(state)).toEqual(expected);
   });

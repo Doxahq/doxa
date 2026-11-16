@@ -9,7 +9,7 @@ import type { Env } from "../../env";
 import { ProjectsRepository } from "../../repositories/projects";
 import { DocsContentError } from "../docs-content/errors";
 import type { StorageLimitsService } from "../entitlements";
-import { freePlanStorageLimits } from "../free-plan-entitlements";
+import { planSeamsFromEnv } from "../billing/plan-seams";
 import { SiteConfigValidationError } from "../site-config-validation";
 import { prepareSiteAssetIsolated, type PreparedSiteAsset } from "./content";
 import {
@@ -54,7 +54,7 @@ export class SiteAssetsService {
     return new SiteAssetsService({
       sites: new ProjectsRepository(env),
       store: createR2SiteAssetStore(env.DOCS_BUCKET),
-      storageLimits: freePlanStorageLimits,
+      storageLimits: planSeamsFromEnv(env).storageLimits,
       compressor: env.IMAGE_COMPRESSOR ?? null,
       svgCleaner: env.SVG_CLEANER ?? null,
     });

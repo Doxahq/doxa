@@ -50,6 +50,10 @@ function failedRun(overrides: Partial<GenerationRerunSource> = {}): GenerationRe
     changeExternalId: "pr-9",
     change: { state: "open", baseRef: "main" },
     productionBranch: "main",
+    trigger: "doxabot",
+    baselineVersionId: "version-1",
+    plannerModel: null,
+    writerModel: null,
     ...overrides,
   };
 }
@@ -102,8 +106,17 @@ function previewSetup(input: {
   context?: Partial<DoxabotAutomationContext>;
   /** The pull request on GitHub now; by default it matches the record. "unavailable" makes GitHub fail. */
   live?: Partial<ChangeProposalSnapshot> | "unavailable";
+  /** The last successful preview of the pull request (the warm baseline), or null. */
+  previewBaseline?: { versionId: string; sourceRevision: string } | null;
+  /** Meter the run (BILLING_ENFORCEMENT=on). */
+  metered?: boolean;
 } = {}) {
   const admitted: PreviewRerunJobInput[] = [];
+  const metering = {
+    mode: "on" as const,
+    admit: vi.fn(async () => ({ kind: "admitted" as const, metered: true, capCredits: 500, reservationId: "hold-1" })),
+    abandon: vi.fn(async () => undefined),
+  };
   const jobs = {
     isGenerationPaused: vi.fn(async () => false),
     activeForConcurrencyKey: vi.fn(async () => input.active ?? null),
@@ -129,7 +142,10 @@ function previewSetup(input: {
     changeProposals: {
       getByIdentity: vi.fn(async () => (input.proposal === undefined ? proposal() : input.proposal)),
     },
-    previewBaselines: { findSuccessfulCompatiblePreview: vi.fn(async () => null) },
+    previewBaselines: {
+      findSuccessfulCompatiblePreview: vi.fn(async () => (input.previewBaseline ?? null) as never),
+    },
+    ...(input.metered ? { metering } : {}),
     queue,
     reviewRuns,
     deploymentPolicy: { enabled: true, publicRepositoriesEnabled: false },
@@ -159,7 +175,7 @@ function previewSetup(input: {
       }),
     },
   };
-  return { service: new PreviewGenerationRerunService(deps), admitted, jobs, queue, reviewRuns };
+  return { service: new PreviewGenerationRerunService(deps), admitted, jobs, queue, reviewRuns, metering };
 }
 
 describe("preview generation re-run", () => {
@@ -261,6 +277,31 @@ describe("preview generation re-run", () => {
 
     await expect(service.rerun(failedRun())).resolves.toMatchObject({ outcome: "started" });
     expect(admitted[0]).toMatchObject({ baselineVersionId: null, baselineRevision: null });
+  });
+
+  test("a re-run without a baseline is metered as a full generation (generation.run)", async () => {
+    const { service, admitted, metering } = previewSetup({ context: { publishedBaseline: null }, metered: true });
+    await expect(service.rerun(failedRun())).resolves.toMatchObject({ outcome: "started" });
+    expect(metering.admit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "generation.run", features: ["ai.doxabot", "ai.doxa_agent"] }),
+    );
+    expect(admitted[0]).toMatchObject({ baselineVersionId: null });
+  });
+
+  test("a re-run with a baseline stays a doxabot.run, from the last preview or the published version", async () => {
+    const published = previewSetup({ metered: true });
+    await published.service.rerun(failedRun());
+    expect(published.metering.admit).toHaveBeenCalledWith(expect.objectContaining({ action: "doxabot.run", features: ["ai.doxabot"] }));
+    expect(published.admitted[0]).toMatchObject({ baselineVersionId: "version-live" });
+
+    const preview = previewSetup({
+      context: { publishedBaseline: null },
+      previewBaseline: { versionId: "version-preview", sourceRevision: "e".repeat(40) },
+      metered: true,
+    });
+    await preview.service.rerun(failedRun());
+    expect(preview.metering.admit).toHaveBeenCalledWith(expect.objectContaining({ action: "doxabot.run" }));
+    expect(preview.admitted[0]).toMatchObject({ baselineVersionId: "version-preview" });
   });
 
   test("opens the active run of the pull request instead of a second one", async () => {

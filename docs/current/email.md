@@ -80,6 +80,18 @@ Preview the templates with `pnpm --filter @doxahq/email email:dev`
 | `approval-decided` | approvals | A member approves or rejects | The requester, unless they decided |
 | `generation-finished` | generations | A job succeeds (`completeJobOutput`, `publishJobOutput`) or fails (`markJobFailed` that changed the row) | `generation_jobs.requested_by_user_id`; nothing for a Doxabot run without a linked author |
 | `domain-status-changed` | domains | A refresh (a person, an agent, or the cron domain check) moves `verificationStatus` to `verified` or `failed` | Members with `domains.write` |
+| `credits-low` | billing | A settle leaves 80% or more of the monthly allowance used, before any debt in the window | Personal: the owner. Team: members with `billing.manage` (owner, admins) |
+| `payg-started` | billing | A settle leaves debt in the allowance window (pay-as-you-go started) | Same as `credits-low` |
+| `payg-limit` | billing | A settle brings the window's debt to 50%, 80% or 100% of the monthly limit (the highest step reached) | Same as `credits-low` |
+| `credits-exhausted` | billing | A trial account's admission is refused with `trial_credits`, or a settle leaves the trial with no credits | Same as `credits-low` |
+
+Billing emails (billing spec 10.7) always send (no preference switch, no
+unsubscribe link) from the notifications stream. Each one is sent at most once
+a window: the dedupe key is `billing:<kind>:<accountId>:<window>[:<limitCents>:<percent>]:<userId>`.
+`BILLING_ENFORCEMENT=off` sends none, `shadow` logs `billing.notification_shadow`
+and sends none, `on` sends. The hooks are in
+`apps/api/src/services/billing/generation-metering.ts`; the rules are in
+`packages/billing/src/credits/notifications.ts`.
 
 A cancelled generation sends nothing.
 

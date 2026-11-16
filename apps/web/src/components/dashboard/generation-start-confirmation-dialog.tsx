@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import type { GenerationConfirmationReason } from "@doxahq/contracts"
 import { AlertCircle, ExternalLink, Loader2 } from "lucide-react"
 
@@ -115,6 +115,7 @@ export function GenerationStartConfirmationContent({
   message,
   isPending,
   error,
+  estimate,
   onCancel,
   onConfirm,
 }: {
@@ -122,6 +123,11 @@ export function GenerationStartConfirmationContent({
   message: string
   isPending: boolean
   error: string | null
+  /**
+   * The credit estimate panel. No caller passes it since 2026-11-15: the
+   * estimate is hidden until there is data for a reliable range.
+   */
+  estimate?: ReactNode
   onCancel: () => void
   onConfirm: (choice: GenerationStartChoice) => void
 }) {
@@ -168,6 +174,7 @@ export function GenerationStartConfirmationContent({
             <ExternalLink aria-hidden="true" className="size-3.5" />
           </a>
         ) : null}
+        {estimate}
         {error ? (
           <Alert variant="destructive" aria-live="polite">
             <AlertCircle aria-hidden="true" />

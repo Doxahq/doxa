@@ -9,6 +9,7 @@ import {
 import { getWebOrigin } from "../http/access";
 import { createApiRouter, type ApiApp, type ApiContext } from "../http/app";
 import { withUser } from "../http/auth";
+import { billingErrorResponse } from "../http/billing-errors";
 import { error, json, notFound } from "../http/response";
 import { parseValidatedJson } from "../http/validation";
 import {
@@ -140,7 +141,7 @@ function withTeamUser(context: ApiContext, handler: (userId: string) => Promise<
     try {
       return await handler(userId);
     } catch (cause) {
-      const response = teamErrorResponse(cause);
+      const response = teamErrorResponse(cause) ?? billingErrorResponse(cause, { returnBaseUrl: webOriginOf(context) });
       if (response) return response;
       throw cause;
     }

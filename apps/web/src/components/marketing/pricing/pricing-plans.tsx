@@ -1,21 +1,40 @@
 import { useState } from "react"
-import { CONTACT_URL, GET_STARTED_URL } from "~/lib/marketing/links"
+import { useQuery } from "@tanstack/react-query"
+import { CONTACT_URL, GET_STARTED_URL, SIGN_IN_URL } from "~/lib/marketing/links"
 import {
-  BILLING_OPTIONS,
   DEFAULT_BILLING,
+  DEFAULT_PRO_OFFER,
+  FOUNDER_OFFER_KEY,
   PLANS,
+  billingOptions,
+  founderOfferLine,
+  proPricing,
+  upgradeUrl,
   type BillingPeriod,
+  type OfferPrices,
   type Plan,
   type PlanAction,
   type PlanPricing,
 } from "~/lib/marketing/pricing"
+import { billingOffersQueryOptions } from "~/lib/queries/billing"
 import { RichText } from "./rich-text"
 
-// Upgrading starts in the dashboard too, until checkout exists.
-const ACTION_URL: Record<PlanAction, string> = {
-  start: GET_STARTED_URL,
-  upgrade: GET_STARTED_URL,
-  contact: CONTACT_URL,
+/**
+ * "Upgrade to Pro" opens sign-in, then Checkout, only when the server takes
+ * payments: `GET /billing/offers` answered. Without a payment provider it
+ * answers 503 `billing_not_configured`, and the button keeps today's link
+ * (get started), so it never leads to a billing error page.
+ */
+function actionUrl(action: PlanAction, billing: BillingPeriod, paymentsOpen: boolean): string {
+  if (action === "upgrade") return paymentsOpen ? upgradeUrl(billing, SIGN_IN_URL) : GET_STARTED_URL
+  return action === "contact" ? CONTACT_URL : GET_STARTED_URL
+}
+
+/** The live Pro offer from `GET /billing/offers` (spec 7.5). Until it answers, or if it fails, the catalog prices. */
+function useProOffer() {
+  const offersQuery = useQuery(billingOffersQueryOptions())
+  const live = offersQuery.data?.find((offer) => offer.offerKey === FOUNDER_OFFER_KEY) ?? null
+  return { prices: (live ?? DEFAULT_PRO_OFFER) as OfferPrices, live, paymentsOpen: offersQuery.data !== undefined }
 }
 
 function Check() {
@@ -43,10 +62,18 @@ function PlanPrice({ pricing }: { pricing: PlanPricing }) {
   )
 }
 
-function BillingToggle({ value, onChange }: { value: BillingPeriod; onChange: (value: BillingPeriod) => void }) {
+function BillingToggle({
+  value,
+  offer,
+  onChange,
+}: {
+  value: BillingPeriod
+  offer: OfferPrices
+  onChange: (value: BillingPeriod) => void
+}) {
   return (
     <div className="bill" role="radiogroup" aria-label="Billing period">
-      {BILLING_OPTIONS.map((option) => {
+      {billingOptions(offer).map((option) => {
         const on = option.id === value
         return (
           <button
@@ -69,10 +96,13 @@ function BillingToggle({ value, onChange }: { value: BillingPeriod; onChange: (v
 function PlanCard({ plan }: { plan: Plan }) {
   const pro = plan.id === "pro"
   const [billing, setBilling] = useState<BillingPeriod>(DEFAULT_BILLING)
-  const pricing = plan.billing?.[billing] ?? plan
+  const offer = useProOffer()
+  const livePricing = pro ? proPricing(offer.prices) : plan.billing
+  const pricing = livePricing?.[billing] ?? plan
+  const offerLine = pro ? (offer.live ? founderOfferLine(offer.live) : plan.offer) : plan.offer
   return (
     <div className={pro ? "plan plan--pro" : "plan"}>
-      {pro ? (
+      {pro && (offer.live?.open ?? true) ? (
         <span
           className="plan__tag chip"
           style={{ background: "#0a0a0a", color: "#9cc2ff", borderColor: "rgba(61, 123, 255, 0.6)" }}
@@ -83,7 +113,7 @@ function PlanCard({ plan }: { plan: Plan }) {
       <div>
         <div className="plan__top">
           <div className="plan__name">{pro ? <span className="mark">{plan.name}</span> : plan.name}</div>
-          {plan.billing ? <BillingToggle value={billing} onChange={setBilling} /> : null}
+          {plan.billing ? <BillingToggle value={billing} offer={offer.prices} onChange={setBilling} /> : null}
         </div>
         <p className="plan__desc" style={{ marginTop: 10 }}>
           {plan.desc}
@@ -91,7 +121,7 @@ function PlanCard({ plan }: { plan: Plan }) {
       </div>
       <PlanPrice pricing={pricing} />
       <p className="price__sub">{pricing.sub}</p>
-      {plan.offer ? <p className="price__offer">{plan.offer}</p> : null}
+      {offerLine ? <p className="price__offer">{offerLine}</p> : null}
       <h4>{plan.includes}</h4>
       <ul className="checks">
         {plan.checks.map((runs, i) => (
@@ -116,7 +146,7 @@ function PlanCard({ plan }: { plan: Plan }) {
             </span>
           ))}
         </div>
-        <a className={plan.cta.className} href={ACTION_URL[plan.cta.action]}>
+        <a className={plan.cta.className} href={actionUrl(plan.cta.action, billing, offer.paymentsOpen)}>
           {plan.cta.label}
         </a>
       </div>

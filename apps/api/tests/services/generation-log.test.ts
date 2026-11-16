@@ -168,7 +168,7 @@ describe("generation log", () => {
       "write info Improving \"Quickstart\": a shell variable in an example has no value (fix 1 of 2).",
       "write info Finished: 6 pages written.",
       "publish warning The page /self-hosting links to /rest-api/index, which is not in the navigation.",
-      "publish info Docs published: 47 pages written, 0 reused.",
+      "publish info Docs published: 47 pages from this run, 0 kept from the published docs.",
     ]);
   });
 
@@ -233,7 +233,7 @@ describe("generation log", () => {
       "plan info Reused the published structure: 77 pages.",
       "plan info Structure ready: 77 pages in 3 sections. 22 pages to write. 55 pages stay as they are.",
       "write info Finished: 22 pages written.",
-      "publish info Preview published: 22 pages written, 55 reused.",
+      "publish info Preview published: 22 pages from this run, 55 kept from the published docs.",
     ]);
   });
 
@@ -273,6 +273,30 @@ describe("generation log", () => {
       "plan info Reused the plan of an earlier run of the same code and settings.",
       "write warning A writing step failed. Trying it again.",
       "setup warning Getting the source code failed. Trying again (attempt 2 of 3).",
+    ]);
+  });
+
+  // 2026-11-16: a run of the same code took 2s and charged only the base fee.
+  // The log said "87 pages written" and did not say why it was so quick.
+  test("says that pages came from the page cache, and why", () => {
+    expect(lines([
+      event("page_cache_reused", "Reused 87 page(s) from earlier runs with the same inputs.", {
+        cachedPageCount: 87,
+        writtenPageCount: 0,
+      }, "worker"),
+      event("page_cache_reused", "Reused 60 page(s) from earlier runs with the same inputs.", {
+        cachedPageCount: 60,
+        writtenPageCount: 27,
+      }, "worker"),
+      event("page_cache_reused", "Nothing reused.", { cachedPageCount: 0, writtenPageCount: 12 }, "worker"),
+      event("staged_for_review", "The generated docs are ready for review.", {
+        regeneratedPageCount: 87,
+        reusedPageCount: 0,
+      }),
+    ])).toEqual([
+      "write info Reused 87 pages from earlier runs. Their source files, plan, links and Doxabot instructions did not change, so Doxa did not write them again.",
+      "write info Reused 60 pages from earlier runs. Their source files, plan, links and Doxabot instructions did not change, so Doxa did not write them again. Doxa wrote the other 27 pages.",
+      "review info The docs are ready for review: 87 pages from this run, 0 kept from the published docs.",
     ]);
   });
 
@@ -329,5 +353,72 @@ describe("generation log lines for the Doxabot instructions", () => {
       "plan warning Left out 1 planned page that the project instructions rule out: \"FAQ\".",
       "write warning Guide may not follow the Doxabot instructions: Say \"repository\".",
     ]);
+  });
+});
+
+describe("generation log lines for AI credits (billing spec 10.5, 10.6)", () => {
+  const credits = { usedCredits: 1240, holdCredits: 1500, capCredits: 3000, fromPaygCredits: 40 };
+
+  test("keeps the live meter numbers of a credits event and nothing else", () => {
+    const stored = event("credits", "Credits.", { ...credits, shadow: false, accountId: "acct-1", modelCostUsd: "0.41" }, "api");
+
+    expect(toGenerationLogEvent(stored)).toEqual({
+      id: stored.id,
+      jobId: stored.jobId,
+      sequence: stored.sequence,
+      source: "api",
+      type: "credits",
+      message: "1,240 credits used so far.",
+      // An event from before the job total reads its try as the total.
+      data: { ...credits, jobUsedCredits: credits.usedCredits, shadow: false },
+      createdAt: stored.createdAt,
+      phase: "run",
+      level: "info",
+    });
+  });
+
+  test("a continued run's line shows the job total, not the try", () => {
+    const stored = event("credits", "Credits.", { ...credits, usedCredits: 60, jobUsedCredits: 1_300, shadow: false }, "api");
+    expect(toGenerationLogEvent(stored)).toMatchObject({
+      message: "1,300 credits used so far.",
+      data: { usedCredits: 60, jobUsedCredits: 1_300 },
+    });
+  });
+
+  test("hides a shadow credits event and a malformed one", () => {
+    expect(toGenerationLog([
+      event("credits", "Credits.", { ...credits, shadow: true }, "api"),
+      event("credits", "Credits.", { usedCredits: "many" }, "api"),
+      event("credits", "Credits.", null, "api"),
+    ])).toEqual([]);
+  });
+
+  test("keeps the reason and the finished pages of a credits_stopped event", () => {
+    const stored = event("credits_stopped", "Stopped: the AI credits ran out.", {
+      reason: "credit_cap",
+      finishedPageCount: 12,
+      outcome: "stopped_credits",
+      terminal: true,
+    }, "api");
+
+    expect(toGenerationLogEvent(stored)).toMatchObject({
+      type: "credits_stopped",
+      message: "The run stopped at its credit cap. 12 pages are finished.",
+      data: { reason: "credit_cap", finishedPageCount: 12 },
+      phase: "run",
+      level: "warning",
+    });
+    expect(toGenerationLogEvent(event("credits_stopped", "Stopped.", { reason: "credits_exhausted" }, "api"))).toMatchObject({
+      message: "The run stopped because the AI credits ran out.",
+      data: { reason: "credits_exhausted" },
+    });
+  });
+
+  test("shows an unknown credit stop reason without its data", () => {
+    expect(toGenerationLogEvent(event("credits_stopped", "Stopped.", { reason: "secret_internal" }, "api"))).toMatchObject({
+      message: "The run stopped for AI credits.",
+      data: null,
+      level: "warning",
+    });
   });
 });

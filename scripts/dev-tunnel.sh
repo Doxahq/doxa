@@ -110,6 +110,9 @@ ingress:
     path: ^/email-preferences.*$
     service: ${DOXA_API_ORIGIN}
   - hostname: ${DOXA_DEV_HOSTNAME}
+    path: ^/billing.*$
+    service: ${DOXA_API_ORIGIN}
+  - hostname: ${DOXA_DEV_HOSTNAME}
     service: ${DOXA_WEB_ORIGIN}
   - service: http_status:404
 YAML

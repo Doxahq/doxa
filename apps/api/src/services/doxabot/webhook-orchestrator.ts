@@ -55,11 +55,17 @@ import {
   mapDoxabotReviewRunState,
   reviewRunPresentationFor,
   ReviewRunsService,
+  STOPPED_CREDITS_CHECK,
   type ReviewRunReporter,
 } from "./review-runs";
 import {
   resolveGenerationExecutionConfig,
 } from "../generation-execution-config";
+import { CreditsExhaustedError, PlanLimitError } from "@doxahq/billing";
+import type { BillingRefusal } from "../billing/generation-metering";
+import { meteredActionOf, requiredFeaturesOf, runModels } from "../billing/generation-metering";
+import { generationMeteringFromEnv } from "../billing/generation-metering-env";
+import { billingPageUrlForProject } from "../billing/stopped-preview-check";
 import {
   cancelGenerationJob,
   finishGenerationCancellation,
@@ -73,7 +79,24 @@ export type DoxabotWebhookResult =
   | { outcome: "malformed"; reason: "invalid_payload" }
   | { outcome: "enqueued"; jobId: string }
   | { outcome: "replayed"; jobId: string }
-  | { outcome: "enqueue_failed"; jobId: string };
+  | { outcome: "enqueue_failed"; jobId: string }
+  /** Billing refused the preview: the job ended `stopped_credits` and its check is `neutral` (spec 10.6). */
+  | { outcome: "billing_refused"; jobId: string };
+
+/**
+ * The credit meter of a preview run (billing spec 10.5 and 10.6). The job
+ * exists first, so a refused preview still gets its `neutral` check.
+ */
+export interface PreviewRunBilling {
+  /** Null when the run may start (also with `BILLING_ENFORCEMENT=off` or `shadow`). */
+  /**
+   * `baselineVersionId` is the job's baseline: a preview without one is cold
+   * and is metered as a full generation (`generation.run`).
+   */
+  admit(input: { jobId: string; projectId: string; baselineVersionId: string | null }): Promise<BillingRefusal | null>;
+  /** Ends the refused job as `stopped_credits`; the billing page link for its check. */
+  stop(input: { jobId: string; projectId: string; refusal: BillingRefusal }): Promise<string | null>;
+}
 
 export type DoxabotWebhookIngressResult =
   | { outcome: "claimed" }
@@ -151,6 +174,8 @@ export interface DoxabotWebhookDependencies {
   mergeTriggers: Pick<MergeGenerationScheduler, "recordMerge">;
   previewJobs: PreviewJobCanceller;
   previewChannels: PreviewChannelCloser;
+  /** Absent: no credit metering, as with `BILLING_ENFORCEMENT=off`. */
+  previewBilling?: PreviewRunBilling;
   now(): Date;
 }
 
@@ -185,6 +210,7 @@ export class DoxabotWebhookOrchestrator {
         },
       },
       previewChannels: new PreviewChannelClosureRepository(env),
+      previewBilling: previewRunBillingFromEnv(env, jobs),
       now: () => new Date(),
     });
   }
@@ -572,6 +598,24 @@ export class DoxabotWebhookOrchestrator {
       });
     }
 
+    // Billing spec 10.5 step 1. A replayed delivery found its job, and that
+    // job's own admission already holds its credits.
+    if (admission.outcome === "created" && this.dependencies.previewBilling) {
+      const billing = this.dependencies.previewBilling;
+      const refusal = await billing.admit({
+        jobId: admission.job.id,
+        projectId: context.projectId,
+        // The created job has the baseline of this admission input.
+        baselineVersionId: admissionInput.baselineVersionId,
+      });
+      if (refusal) {
+        const detailsUrl = await billing.stop({ jobId: admission.job.id, projectId: context.projectId, refusal });
+        await this.reportBillingStop(admission.job.id, event, refusal, detailsUrl);
+        await this.dependencies.deliveries.markProcessed(identity);
+        return { outcome: "billing_refused", jobId: admission.job.id };
+      }
+    }
+
     const externalReviewRunId = await this.reconcileReviewRun(
       admission.job,
       event,
@@ -640,6 +684,34 @@ export class DoxabotWebhookOrchestrator {
         "system",
       );
       return null;
+    }
+  }
+
+  /**
+   * Billing spec 10.6: a preview that cannot reserve credits finishes its
+   * check `neutral` with a billing link, so it never fails the customer's CI.
+   */
+  private async reportBillingStop(
+    jobId: string,
+    event: NormalizedChangeProposalEvent,
+    refusal: BillingRefusal,
+    detailsUrl: string | null,
+  ): Promise<void> {
+    try {
+      await this.dependencies.reviewRuns.create(jobId, {
+        ...mapDoxabotReviewRunState("neutral"),
+        ...billingStopCheck(refusal),
+        detailsUrl,
+        sourceRevision: event.change.headRevision.commitSha,
+      });
+    } catch (error) {
+      await this.dependencies.jobs.addEvent(
+        jobId,
+        "review_run_create_failed",
+        "Doxabot could not create the external review run.",
+        { error: errorMessage(error) },
+        "system",
+      );
     }
   }
 
@@ -942,4 +1014,54 @@ async function sha256(value: string): Promise<string> {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown review-run error.";
+}
+
+/** The check text of a preview that billing refused (billing spec 10.6). */
+export function billingStopCheck(refusal: BillingRefusal): { title: string; summary: string } {
+  if (refusal instanceof CreditsExhaustedError) return { ...STOPPED_CREDITS_CHECK };
+  if (refusal instanceof PlanLimitError && refusal.details.key === "ai.doxa_agent") {
+    return {
+      title: "Full generation is not in the plan",
+      summary:
+        "This pull request has no generation cache yet, so its preview is a full generation, and the account's plan does not include full generations. Upgrade the plan on the billing page to get this preview.",
+    };
+  }
+  if (refusal instanceof PlanLimitError) {
+    return {
+      title: "Doxabot is not in the plan",
+      summary: "The account's plan does not include Doxabot previews. Upgrade the plan on the billing page to get previews.",
+    };
+  }
+  return {
+    title: "Documentation preview paused",
+    summary: "Doxa paused AI runs for this account, so it did not generate a preview. The billing page has the details.",
+  };
+}
+
+/** The preview billing port over the credit meter and the jobs table. */
+export function previewRunBillingFromEnv(env: Env, jobs: JobsRepository): PreviewRunBilling | undefined {
+  const metering = generationMeteringFromEnv(env);
+  if (metering.mode === "off") return undefined;
+  const config = resolveDoxabotExecutionConfig(env);
+  return {
+    async admit({ jobId, projectId, baselineVersionId }) {
+      const job = { publicationMode: "preview", trigger: "doxabot", baselineVersionId } as const;
+      const verdict = await metering.admit({
+        jobId,
+        projectId,
+        action: meteredActionOf(job),
+        features: requiredFeaturesOf(job),
+        models: runModels(env, config),
+      });
+      return verdict.kind === "refused" ? verdict.error : null;
+    },
+    async stop({ jobId, projectId, refusal }) {
+      await jobs.markStoppedCredits(jobId, {
+        reason: refusal instanceof CreditsExhaustedError ? "credits_exhausted" : refusal.code,
+        message: billingStopCheck(refusal).summary,
+        finishedPageCount: 0,
+      });
+      return billingPageUrlForProject(env, projectId);
+    },
+  };
 }

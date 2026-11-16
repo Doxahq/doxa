@@ -4,7 +4,7 @@ import { DocsRepository } from "../repositories/docs";
 import { JobsRepository } from "../repositories/jobs";
 import { ProjectsRepository } from "../repositories/projects";
 import { createR2DocsContentStore } from "./docs-content/store";
-import { freePlanEntitlements } from "./free-plan-entitlements";
+import { planSeamsFromEnv } from "./billing/plan-seams";
 
 export async function publishStarterDocs(
   env: Env,
@@ -28,7 +28,7 @@ export async function publishStarterDocs(
     versionId,
     projectSlug: project.slug,
     projectName: project.name,
-    entitlements: await freePlanEntitlements.getProjectEntitlements(project.id),
+    entitlements: await planSeamsFromEnv(env).entitlements.getProjectEntitlements(project.id),
     pages: [
       { title: project.name, route: "/", content: overviewContent },
       {

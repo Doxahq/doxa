@@ -38,8 +38,8 @@ export function createLocalAgentServer(handlers: LocalAgentHandlers): Server {
   const activeRequests = new ActiveGenerationRequests();
 
   return createServer(async (request, response) => {
-    const pathname = new URL(request.url ?? "/", "http://agent-container.local").pathname
-      .replace(/\/+$/, "") || "/";
+    const url = new URL(request.url ?? "/", "http://agent-container.local");
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
 
     if (request.method === "GET" && pathname === "/health") {
       sendJson(response, 200, { ok: true, service: "doxa-agent-container" });
@@ -54,7 +54,10 @@ export function createLocalAgentServer(handlers: LocalAgentHandlers): Server {
         return;
       }
 
-      const stopped = activeRequests.cancel(jobId);
+      // `resumable=1`: the job can continue, so its next request must run.
+      const stopped = url.searchParams.get("resumable") === "1"
+        ? activeRequests.stop(jobId)
+        : activeRequests.cancel(jobId);
       sendJson(response, 200, { ok: true, stopped });
       return;
     }

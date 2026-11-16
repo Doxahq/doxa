@@ -2,6 +2,9 @@ import { Loader2, Play } from "lucide-react"
 
 import { GenerationStartConfirmationDialog } from "~/components/dashboard/generation-start-confirmation-dialog"
 import { Button } from "~/components/ui/button"
+import { PRO_REASON_GENERATION } from "~/lib/dashboard/ai-access"
+import { useProGate } from "~/lib/dashboard/pro-trial-dialog"
+import { useProjectAiAccess } from "~/lib/dashboard/use-ai-access"
 import { useDoxabotInstructions } from "~/lib/dashboard/use-doxabot-instructions"
 import { useGenerationStarter } from "~/lib/dashboard/use-generation-starter"
 import { useProjectGenerations } from "~/lib/dashboard/use-project-generations"
@@ -26,6 +29,8 @@ export function saveAndStartNote(input: {
 /**
  * The instructions bar when the page is a step before a generation. The person
  * already answered the instructions offer, so the start does not ask again.
+ * For an account without the Doxa Agent (Free), the click opens the Pro trial
+ * dialog before it saves anything.
  */
 export function SaveAndStartBar({
   projectId,
@@ -37,8 +42,10 @@ export function SaveAndStartBar({
   const generations = useProjectGenerations(projectId)
   const { startGeneration, confirmationDialogProps } = useGenerationStarter(projectId, generations)
   const isBusy = editor.isSaving || generations.isStarting
+  const proGate = useProGate(useProjectAiAccess(projectId))
 
   async function saveAndStart(): Promise<void> {
+    if (proGate(PRO_REASON_GENERATION)) return
     if (editor.isDirty && !(await editor.save())) return
     await startGeneration()
   }

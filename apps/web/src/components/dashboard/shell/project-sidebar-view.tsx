@@ -101,6 +101,7 @@ export function ProjectSidebarView({ projectId }: { projectId: string }) {
 function LatestGenerationHint({ job }: { job: GenerationJobDto | null }) {
   if (job?.status === "failed") return <SidebarNavHint tone="danger">failed</SidebarNavHint>
   if (job?.status === "cancelled") return <SidebarNavHint tone="warning">cancelled</SidebarNavHint>
+  if (job?.status === "stopped_credits") return <SidebarNavHint tone="warning">out of credits</SidebarNavHint>
   if (job?.status === "running" || job?.status === "queued") {
     return <SidebarNavHint>{job.status}</SidebarNavHint>
   }

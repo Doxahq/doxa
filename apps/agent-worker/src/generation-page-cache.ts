@@ -135,6 +135,31 @@ export interface PageBatchCacheResult extends ResumablePageBatchResult {
   generated: number;
 }
 
+export const PAGE_CACHE_REUSED_EVENT_TYPE = "page_cache_reused";
+
+/** How many pages of a write phase came from the page cache, and how many the writer wrote. */
+export interface PageCacheUse {
+  cachedPageCount: number;
+  writtenPageCount: number;
+}
+
+/** Sums the cache counts of the batches that finished. A failed batch adds nothing. */
+export function summarizePageCacheUse(
+  results: readonly (
+    | { status: "fulfilled"; value: Pick<PageBatchCacheResult, "exactHits" | "crossModelHits" | "generated"> }
+    | { status: "rejected"; reason: unknown }
+  )[],
+): PageCacheUse {
+  let cachedPageCount = 0;
+  let writtenPageCount = 0;
+  for (const result of results) {
+    if (result.status !== "fulfilled") continue;
+    cachedPageCount += result.value.exactHits + result.value.crossModelHits;
+    writtenPageCount += result.value.generated;
+  }
+  return { cachedPageCount, writtenPageCount };
+}
+
 interface PageCacheBucket {
   get(key: string): Promise<R2ObjectBody | null>;
   put(

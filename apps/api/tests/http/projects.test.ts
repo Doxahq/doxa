@@ -6,8 +6,11 @@ import type {
   JobEventDto,
   ProjectDto,
 } from "@doxahq/contracts";
+import { projectGenerationCacheSchema } from "@doxahq/contracts";
 import type { DoxabotProjectSettingsState } from "../../src/repositories/doxabot-settings";
 import { ActiveGenerationConflictError } from "../../src/repositories/jobs";
+import { resolveCompatibleProductionBaseline } from "../../src/repositories/production-baselines";
+import { meteredActionOf } from "../../src/services/billing/generation-metering";
 
 const mocks = vi.hoisted(() => ({
   getSessionUser: vi.fn(),
@@ -43,10 +46,18 @@ const mocks = vi.hoisted(() => ({
   doxabotSettingsRepository: {
     getProjectState: vi.fn(),
     update: vi.fn(),
+    getPublishedPreviewBaseline: vi.fn(),
   },
   previewVisibilityRepository: {
     getForProject: vi.fn(),
     updateForProject: vi.fn(),
+  },
+  generationCacheRepository: {
+    getForProject: vi.fn(),
+    clearForProject: vi.fn(),
+  },
+  productionBaselinesRepository: {
+    findCompatiblePublished: vi.fn(),
   },
 }));
 
@@ -86,6 +97,19 @@ vi.mock("../../src/repositories/jobs", async (importOriginal) => {
 vi.mock("../../src/repositories/doxabot-settings", () => ({
   DoxabotSettingsRepository: vi.fn(() => mocks.doxabotSettingsRepository),
 }));
+
+vi.mock("../../src/repositories/generation-cache", () => ({
+  GenerationCacheRepository: vi.fn(() => mocks.generationCacheRepository),
+}));
+
+vi.mock("../../src/repositories/production-baselines", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../src/repositories/production-baselines")>();
+  return {
+    ...actual,
+    ProductionBaselinesRepository: vi.fn(() => mocks.productionBaselinesRepository),
+  };
+});
 
 vi.mock("../../src/repositories/preview-visibility", () => ({
   PreviewVisibilityRepository: vi.fn(() => mocks.previewVisibilityRepository),
@@ -701,6 +725,8 @@ describe("project routes docs URLs", () => {
       }),
       latestJob: null,
       role: "owner",
+      // Billing spec 15.1; null while billing is off (the default).
+      billing: null,
     });
   });
 
@@ -722,6 +748,8 @@ describe("project routes docs URLs", () => {
       }),
       latestJob: null,
       role: "owner",
+      // Billing spec 15.1; null while billing is off (the default).
+      billing: null,
     });
   });
 
@@ -1387,6 +1415,101 @@ describe("project routes docs URLs", () => {
     expect(body).toContain("event: complete");
   });
 
+  test("lists credit events with their meter data and leaves shadow credit events out", async () => {
+    mocks.jobsRepository.listEvents.mockResolvedValueOnce([
+      createJobEvent({
+        id: "event-1",
+        sequence: 1,
+        source: "api",
+        type: "credits",
+        message: "Credits.",
+        data: { usedCredits: 9, holdCredits: 20, capCredits: 30, fromPaygCredits: 0, shadow: true },
+      }),
+      createJobEvent({
+        id: "event-2",
+        sequence: 2,
+        source: "api",
+        type: "credits",
+        message: "Credits.",
+        data: { usedCredits: 120, holdCredits: 300, capCredits: 3000, fromPaygCredits: 5, shadow: false, accountId: "acct-1" },
+      }),
+      createJobEvent({
+        id: "event-3",
+        sequence: 3,
+        source: "api",
+        type: "credits_stopped",
+        message: "Stopped.",
+        data: { reason: "credits_exhausted", finishedPageCount: 4, outcome: "stopped_credits", terminal: true },
+      }),
+    ]);
+
+    const response = await worker.fetch(
+      new Request(
+        "https://api.doxa.so/projects/11111111-1111-4111-8111-111111111111/generations/job-1/events",
+      ),
+      createEnv(),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { events: JobEventDto[] };
+    expect(body.events.map((event) => [event.type, event.data])).toEqual([
+      ["credits", { usedCredits: 120, jobUsedCredits: 120, holdCredits: 300, capCredits: 3000, fromPaygCredits: 5, shadow: false }],
+      ["credits_stopped", { reason: "credits_exhausted", finishedPageCount: 4 }],
+    ]);
+  });
+
+  test("streams credit events with their meter data and leaves shadow credit events out", async () => {
+    mocks.jobsRepository.listEventsAfter
+      .mockResolvedValueOnce([
+        createJobEvent({
+          id: "event-1",
+          sequence: 1,
+          source: "api",
+          type: "credits",
+          message: "Credits.",
+          data: { usedCredits: 9, holdCredits: 20, capCredits: 30, fromPaygCredits: 0, shadow: true },
+        }),
+        createJobEvent({
+          id: "event-2",
+          sequence: 2,
+          source: "api",
+          type: "credits",
+          message: "Credits.",
+          data: { usedCredits: 120, holdCredits: 300, capCredits: 3000, fromPaygCredits: 5, shadow: false, accountId: "acct-1" },
+        }),
+        createJobEvent({
+          id: "event-3",
+          sequence: 3,
+          source: "api",
+          type: "credits_stopped",
+          message: "Stopped.",
+          data: { reason: "credit_cap", finishedPageCount: 7, outcome: "stopped_credits", terminal: true },
+        }),
+      ])
+      .mockResolvedValue([]);
+
+    const response = await worker.fetch(
+      new Request(
+        "https://api.doxa.so/projects/11111111-1111-4111-8111-111111111111/generations/job-1/stream",
+        {
+          headers: { origin: "https://doxa.so", "last-event-id": "0" },
+        },
+      ),
+      createEnv({ GENERATION_STREAM_TERMINAL_GRACE_MS: "0" }),
+      createExecutionContext(),
+    );
+
+    const body = await response.text();
+    expect(body).not.toContain("id: 1\n");
+    expect(body).not.toContain('"shadow":true');
+    expect(body).not.toContain("acct-1");
+    expect(body).toContain("id: 2\n");
+    expect(body).toContain('"data":{"usedCredits":120,"jobUsedCredits":120,"holdCredits":300,"capCredits":3000,"fromPaygCredits":5,"shadow":false}');
+    expect(body).toContain("id: 3\n");
+    expect(body).toContain('"data":{"reason":"credit_cap","finishedPageCount":7}');
+  });
+
   test("rejects generation streams from untrusted origins before authentication", async () => {
     const response = await worker.fetch(
       new Request(
@@ -1587,6 +1710,162 @@ describe("project routes docs URLs", () => {
         }),
       ],
     });
+  });
+});
+
+describe("project generation cache: the next pull request run (decision D21)", () => {
+  const cache = { siteId: "site-1", clearedAt: null };
+  const baseline = {
+    versionId: "version-1",
+    sourceRevision: "abc123",
+    sourceTreeHash: "tree-1",
+    generatorFingerprint: null,
+    siteId: "site-1",
+    generationStatePrefix: "sites/site-1/generation-state/version-1",
+  };
+  const published = { versionId: "version-1", sourceRevision: "abc123" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSessionUser.mockResolvedValue({ id: "user-1", email: "user@doxa.so" });
+    mocks.projectsRepository.getForUser.mockResolvedValue(createProject());
+    mocks.jobsRepository.latestForProject.mockResolvedValue(null);
+    mocks.generationCacheRepository.getForProject.mockResolvedValue(cache);
+  });
+
+  async function readCache(): Promise<Response> {
+    return worker.fetch(
+      new Request("https://api.doxa.so/projects/11111111-1111-4111-8111-111111111111/generation-cache"),
+      createEnv(),
+      createExecutionContext(),
+    );
+  }
+
+  async function readCacheBody() {
+    const response = await readCache();
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { generationCache: unknown };
+    return projectGenerationCacheSchema.parse(body.generationCache);
+  }
+
+  test("is cold, a Full generation, without a published baseline", async () => {
+    mocks.doxabotSettingsRepository.getPublishedPreviewBaseline.mockResolvedValue(null);
+    mocks.productionBaselinesRepository.findCompatiblePublished.mockResolvedValue(null);
+    expect(await readCacheBody()).toEqual({
+      ...cache,
+      nextPullRequestRunCold: true,
+      nextPullRequestRunAction: "generation.run",
+      nextGenerationRunCold: true,
+    });
+    expect(mocks.doxabotSettingsRepository.getPublishedPreviewBaseline).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+    );
+    expect(mocks.productionBaselinesRepository.findCompatiblePublished).toHaveBeenCalledWith({
+      projectId: "11111111-1111-4111-8111-111111111111",
+    });
+  });
+
+  test("is warm, an Update run, with a compatible published baseline", async () => {
+    mocks.doxabotSettingsRepository.getPublishedPreviewBaseline.mockResolvedValue(published);
+    mocks.productionBaselinesRepository.findCompatiblePublished.mockResolvedValue(baseline);
+    expect(await readCacheBody()).toMatchObject({
+      nextPullRequestRunCold: false,
+      nextPullRequestRunAction: "doxabot.run",
+      nextGenerationRunCold: false,
+    });
+  });
+
+  test("a published version without saved run state: the page says warm, and a pull request run bills as an Update run", async () => {
+    // Pull request admission reads this row as `context.publishedBaseline`.
+    const row = {
+      publishedVersionId: "version-1",
+      publishedSourceRevision: "abc123",
+      publishedVersionCreatedAt: new Date("2026-11-10T00:00:00.000Z"),
+      generationBaselineResetAt: null,
+    };
+    const { toPublishedPreviewBaseline } = await vi.importActual<
+      typeof import("../../src/repositories/doxabot-settings")
+    >("../../src/repositories/doxabot-settings");
+    const admissionBaseline = toPublishedPreviewBaseline(row);
+    expect(admissionBaseline).toEqual(published);
+    // The stricter rule of a generation that a person starts finds no saved run state.
+    const compatible = resolveCompatibleProductionBaseline(
+      {
+        projectId: "11111111-1111-4111-8111-111111111111",
+        publishedVersionId: "version-1",
+        versionId: "version-1",
+        siteId: "site-1",
+        versionChannel: "production",
+        sourceRevision: "abc123",
+        sourceTreeHash: null,
+        generatorFingerprint: null,
+        generationStatePrefix: "",
+        versionCreatedAt: row.publishedVersionCreatedAt,
+        generationBaselineResetAt: null,
+      },
+      { projectId: "11111111-1111-4111-8111-111111111111" },
+    );
+    expect(compatible).toBeNull();
+
+    mocks.doxabotSettingsRepository.getPublishedPreviewBaseline.mockResolvedValue(admissionBaseline);
+    mocks.productionBaselinesRepository.findCompatiblePublished.mockResolvedValue(compatible);
+    const view = await readCacheBody();
+    expect(view).toMatchObject({
+      nextPullRequestRunCold: false,
+      nextPullRequestRunAction: "doxabot.run",
+      nextGenerationRunCold: true,
+    });
+    // The preview job that admission creates from this baseline is metered as the page says.
+    expect(
+      meteredActionOf({
+        publicationMode: "preview",
+        trigger: "doxabot",
+        baselineVersionId: admissionBaseline?.versionId ?? null,
+      }),
+    ).toBe(view.nextPullRequestRunAction);
+  });
+
+  test("Clear cache answers the cache with the next runs cold", async () => {
+    const clearedAt = "2026-11-15T10:00:00.000Z";
+    mocks.generationCacheRepository.clearForProject.mockResolvedValue({ ...cache, clearedAt });
+    // Both lookups ignore versions from before the clear.
+    mocks.doxabotSettingsRepository.getPublishedPreviewBaseline.mockResolvedValue(null);
+    mocks.productionBaselinesRepository.findCompatiblePublished.mockResolvedValue(null);
+    const response = await worker.fetch(
+      createMutationRequest("/projects/11111111-1111-4111-8111-111111111111/generation-cache/clear"),
+      createEnv(),
+      createExecutionContext(),
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { generationCache: unknown };
+    expect(projectGenerationCacheSchema.parse(body.generationCache)).toEqual({
+      siteId: "site-1",
+      clearedAt,
+      nextPullRequestRunCold: true,
+      nextPullRequestRunAction: "generation.run",
+      nextGenerationRunCold: true,
+    });
+  });
+
+  test("a version from before Clear cache is no pull request baseline", async () => {
+    const { toPublishedPreviewBaseline } = await vi.importActual<
+      typeof import("../../src/repositories/doxabot-settings")
+    >("../../src/repositories/doxabot-settings");
+    expect(
+      toPublishedPreviewBaseline({
+        publishedVersionId: "version-1",
+        publishedSourceRevision: "abc123",
+        publishedVersionCreatedAt: new Date("2026-11-10T00:00:00.000Z"),
+        generationBaselineResetAt: new Date("2026-11-15T10:00:00.000Z"),
+      }),
+    ).toBeNull();
+  });
+
+  test("answers 404 for a project without a site, and reads no baseline", async () => {
+    mocks.generationCacheRepository.getForProject.mockResolvedValue(null);
+    expect((await readCache()).status).toBe(404);
+    expect(mocks.productionBaselinesRepository.findCompatiblePublished).not.toHaveBeenCalled();
+    expect(mocks.doxabotSettingsRepository.getPublishedPreviewBaseline).not.toHaveBeenCalled();
   });
 });
 

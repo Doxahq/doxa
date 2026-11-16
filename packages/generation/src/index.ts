@@ -605,14 +605,27 @@ function createContainerIdleDeadline(
   };
 }
 
+export interface AgentContainerDestroyOptions {
+  /**
+   * True when the job can continue later (a credit stop or a failed step).
+   * The local container then stops the running requests but accepts the
+   * next request of the job. Without it, the local container refuses the
+   * job for 15 minutes, so a queue that delivers a cancelled job again
+   * cannot start it. A deployed container starts again on the next request
+   * either way.
+   */
+  readonly resumable?: boolean;
+}
+
 export async function requestAgentContainerDestroy(
   jobId: string,
   deps: Pick<
     RunRealGenerationDeps,
     "agentContainerBinding" | "agentContainerUrl" | "fetch"
   >,
+  options: AgentContainerDestroyOptions = {},
 ): Promise<boolean> {
-  const pathname = `/admin/containers/${encodeURIComponent(jobId)}/destroy`;
+  const pathname = `/admin/containers/${encodeURIComponent(jobId)}/destroy${options.resumable ? "?resumable=1" : ""}`;
 
   if (deps.agentContainerBinding) {
     try {

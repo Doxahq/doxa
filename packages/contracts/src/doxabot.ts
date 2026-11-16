@@ -117,3 +117,42 @@ export type DoxabotBatchQuietMinutes = z.infer<
   typeof doxabotBatchQuietMinutesSchema
 >;
 export type PendingMerges = z.infer<typeof pendingMergesSchema>;
+
+/** The metered AI action that the next pull request or merge run is charged as (billing decision D21). */
+export const nextPullRequestRunActionSchema = z.enum(["generation.run", "doxabot.run"]);
+export type NextPullRequestRunAction = z.infer<typeof nextPullRequestRunActionSchema>;
+
+/**
+ * `GET /projects/:projectId/generation-cache` and
+ * `POST /projects/:projectId/generation-cache/clear`, as `{ generationCache }`.
+ */
+export const projectGenerationCacheSchema = z.object({
+  siteId: z.string().min(1),
+  /** The last Clear cache, or null. Baselines from before it are ignored. */
+  clearedAt: z.string().nullable(),
+  /**
+   * Decision D21: true when the next pull request run has no baseline, so
+   * it analyzes the whole repository and is charged as a Full generation
+   * (`generation.run`). It follows the rule of pull request admission: the
+   * published version is the baseline unless Clear cache retired it, so the
+   * project is cold before the first publish and after Clear cache. A pull
+   * request that already has a successful preview runs warm from that
+   * preview, whatever this says.
+   */
+  nextPullRequestRunCold: z.boolean(),
+  /**
+   * The action of that run: `generation.run` when cold (Full generation),
+   * else `doxabot.run` (Update run). Read its estimate from
+   * `GET /projects/:projectId/credit-estimate?action=<this>`.
+   */
+  nextPullRequestRunAction: nextPullRequestRunActionSchema,
+  /**
+   * True when the next generation that a person starts analyzes the whole
+   * repository: no published production version with its saved run state
+   * (before the first generation, after Clear cache, or when only written or
+   * starter pages are published). Such a run is always a Full generation;
+   * this only says whether it starts cold.
+   */
+  nextGenerationRunCold: z.boolean(),
+}).strict();
+export type ProjectGenerationCache = z.infer<typeof projectGenerationCacheSchema>;

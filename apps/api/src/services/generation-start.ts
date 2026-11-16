@@ -6,6 +6,7 @@ import type {
   ProjectDto,
 } from "@doxahq/contracts";
 import type { Env } from "../env";
+import type { BillingRefusal } from "./billing/generation-metering";
 import {
   ActiveGenerationConflictError,
   JobsRepository,
@@ -45,7 +46,9 @@ export type GenerationStartOutcome =
       message: string;
     }
   | { outcome: "started"; job: GenerationJobDto }
-  | { outcome: "dispatch_failed"; message: string };
+  | { outcome: "dispatch_failed"; message: string }
+  /** Billing refused the run (spec 10.6): no job was created. */
+  | { outcome: "billing_refused"; error: BillingRefusal };
 
 export interface GenerationStartProjectsStore {
   getForUser(userId: string, projectId: string): Promise<ProjectDto | null>;

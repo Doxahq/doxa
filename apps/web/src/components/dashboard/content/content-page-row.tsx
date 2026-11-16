@@ -87,7 +87,7 @@ export const ContentPageRow = memo(function ContentPageRow({
         <Loader2
           role="status"
           aria-label="Setting the default page"
-          className="size-3.5 shrink-0 text-muted-foreground motion-safe:animate-spin"
+          className="size-3.5 shrink-0 text-muted-foreground animate-spin"
         />
       ) : isHome ? (
         // The row actions show on hover, so the label steps aside.

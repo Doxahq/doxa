@@ -15,11 +15,15 @@ import { useSidebar } from "~/components/ui/sidebar"
 import { useRenderedPathname } from "~/lib/dashboard/use-rendered-pathname"
 
 /** The sidebar views, in the order they slide: left to right. */
-export const SIDEBAR_VIEWS = ["project", "content", "site"] as const
+export const SIDEBAR_VIEWS = ["project", "content", "site", "account"] as const
 export type SidebarView = (typeof SIDEBAR_VIEWS)[number]
+
+/** The account pages: Account settings, Teams, and every billing page. */
+const ACCOUNT_PATH = /^\/dashboard\/(?:settings|teams|billing)(?:\/|$)/
 
 /** The view a route opens. */
 export function sidebarViewForPath(pathname: string): SidebarView {
+  if (ACCOUNT_PATH.test(pathname)) return "account"
   if (/^\/dashboard\/projects\/[^/]+\/content(?:\/|$)/.test(pathname)) return "content"
   // The changes of a pull request preview list their pages where the editor lists its pages.
   if (/^\/dashboard\/projects\/[^/]+\/generations\/[^/]+\/changes(?:\/|$)/.test(pathname)) return "content"

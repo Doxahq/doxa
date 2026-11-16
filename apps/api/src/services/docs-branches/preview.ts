@@ -11,7 +11,7 @@ import {
   type DocsContentStore,
 } from "../docs-content/store";
 import type { EntitlementsService } from "../entitlements";
-import { createEntitlements } from "../free-plan-entitlements";
+import { planSeamsFromEnv } from "../billing/plan-seams";
 import {
   createR2SiteAssetStore,
   type SiteAssetStore,
@@ -37,7 +37,7 @@ export class DocsBranchPreview {
     return new DocsBranchPreview({
       previews: new DocsBranchPreviewRepository(env),
       store: createR2DocsContentStore(env.DOCS_BUCKET),
-      entitlements: createEntitlements(env),
+      entitlements: planSeamsFromEnv(env).entitlements,
       assets: createR2SiteAssetStore(env.DOCS_BUCKET),
       docsBaseDomain: env.DOCS_BASE_DOMAIN,
       docsRendererBaseUrl: env.DOCS_RENDERER_BASE_URL,

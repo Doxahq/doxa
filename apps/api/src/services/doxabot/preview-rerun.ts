@@ -44,6 +44,9 @@ import {
   resolveDoxabotExecutionConfig,
   type DoxabotJobQueue,
 } from "./webhook-orchestrator";
+import type { BillingRefusal, GenerationMetering, MeterAdmission } from "../billing/generation-metering";
+import { meteredActionOf, requiredFeaturesOf, runModels } from "../billing/generation-metering";
+import { generationMeteringFromEnv } from "../billing/generation-metering-env";
 
 export type PreviewRerunOutcome =
   | { outcome: "started"; job: GenerationJobDto }
@@ -52,7 +55,9 @@ export type PreviewRerunOutcome =
   | { outcome: "not_found" }
   | { outcome: "paused" }
   | { outcome: "active_conflict" }
-  | { outcome: "dispatch_failed"; message: string };
+  | { outcome: "dispatch_failed"; message: string }
+  /** Billing refused the run (spec 10.6): no job was created. */
+  | { outcome: "billing_refused"; error: BillingRefusal };
 
 export interface PreviewRerunJobsStore {
   isGenerationPaused(): Promise<boolean>;
@@ -79,6 +84,9 @@ export interface PreviewRerunDependencies {
   executionConfig: GenerationExecutionConfig;
   /** The pull request as GitHub has it now. */
   pullRequests: Pick<GitHubPullRequestStateResolver, "getCurrentForJob">;
+  /** The credit meter (billing spec 10.5). Absent: no metering, as with `BILLING_ENFORCEMENT=off`. */
+  metering?: Pick<GenerationMetering, "mode" | "admit" | "abandon">;
+  runModels?: (config: GenerationExecutionConfig) => string[];
 }
 
 const QUEUE_FAILED_MESSAGE = "Doxa could not queue the preview generation. Try again.";
@@ -110,6 +118,8 @@ export class PreviewGenerationRerunService {
       deploymentPolicy: resolveDoxabotDeploymentPolicy(env),
       executionConfig: resolveDoxabotExecutionConfig(env),
       pullRequests: GitHubPullRequestStateResolver.fromEnv(env),
+      metering: generationMeteringFromEnv(env),
+      runModels: (config) => runModels(env, config),
     });
   }
 
@@ -177,7 +187,72 @@ export class PreviewGenerationRerunService {
       provider,
       changeExternalId,
     });
-    const admission = await this.deps.jobs.admitPreviewRerun({
+    // Billing spec 10.5 step 1: a person starts this run, so a refusal
+    // answers them (402) and leaves no job behind.
+    const { metering } = this.deps;
+    const metered = metering !== undefined && metering.mode !== "off";
+    const jobId = metered ? crypto.randomUUID() : undefined;
+    let verdict: MeterAdmission | null = null;
+    if (metered && jobId) {
+      // The same baseline as the job below: a re-run without one is cold and
+      // is metered as a full generation.
+      const job = {
+        publicationMode: "preview",
+        trigger: "doxabot",
+        baselineVersionId: previewBaselineVersionId(baseline, context),
+      } as const;
+      verdict = await metering.admit({
+        jobId,
+        projectId: previous.projectId,
+        action: meteredActionOf(job),
+        features: requiredFeaturesOf(job),
+        models: this.deps.runModels?.(executionConfig) ?? [executionConfig.plannerModel, executionConfig.writerModel],
+      });
+      if (verdict.kind === "refused") return { outcome: "billing_refused", error: verdict.error };
+      // A new job ID has no hold yet, so this cannot happen; never run without one.
+      if (verdict.kind === "busy") throw new Error(`Job ${jobId} already holds credits.`);
+    }
+    let admission: DoxabotGenerationJobAdmission;
+    try {
+      admission = await this.admit(previous, proposal, context, baseline, concurrencyKey, jobId);
+    } catch (error) {
+      if (metered && jobId && verdict) await metering.abandon(jobId, verdict);
+      throw error;
+    }
+    if (metered && jobId && verdict && admission.outcome !== "created") await metering.abandon(jobId, verdict);
+    if (admission.outcome === "stale_change") {
+      return { outcome: "blocked", reason: BLOCKED_REASON_FOR_STOP[admission.reason] };
+    }
+    if (admission.outcome === "concurrency_conflict") {
+      const winner = await this.deps.jobs.activeForConcurrencyKey(concurrencyKey);
+      return winner ? { outcome: "already_active", job: winner } : { outcome: "active_conflict" };
+    }
+
+    const { job } = admission;
+    const externalRunId = await this.createReviewRun(job, proposal.headRevision);
+    try {
+      await this.deps.queue.send({ jobId: job.id, projectId: previous.projectId, userId: context.ownerUserId });
+    } catch {
+      await this.deps.jobs.markFailed(job.id, QUEUE_FAILED_MESSAGE);
+      if (externalRunId) await this.reportQueueFailure(job.id, externalRunId, proposal.headRevision);
+      return { outcome: "dispatch_failed", message: QUEUE_FAILED_MESSAGE };
+    }
+    return { outcome: "started", job };
+  }
+
+  private admit(
+    previous: GenerationRerunSource,
+    proposal: ChangeProposalRecord,
+    context: DoxabotAutomationContext,
+    baseline: Awaited<ReturnType<PreviewBaselinesStore["findSuccessfulCompatiblePreview"]>>,
+    concurrencyKey: string,
+    jobId: string | undefined,
+  ): Promise<DoxabotGenerationJobAdmission> {
+    const { executionConfig } = this.deps;
+    const provider = previous.sourceProvider as NonNullable<GenerationRerunSource["sourceProvider"]>;
+    const changeExternalId = previous.changeExternalId as string;
+    return this.deps.jobs.admitPreviewRerun({
+      ...(jobId ? { jobId } : {}),
       projectId: previous.projectId,
       provider,
       sourceInstallationExternalId: proposal.installationExternalId,
@@ -189,7 +264,7 @@ export class PreviewGenerationRerunService {
         : context.publishedBaseline?.sourceRevision ?? null,
       targetRevision: proposal.headRevision,
       sourceTreeHash: null,
-      baselineVersionId: baseline?.versionId ?? context.publishedBaseline?.versionId ?? null,
+      baselineVersionId: previewBaselineVersionId(baseline, context),
       plannerModel: executionConfig.plannerModel,
       writerModel: executionConfig.writerModel,
       generationProfile: executionConfig.generationProfile,
@@ -211,24 +286,6 @@ export class PreviewGenerationRerunService {
       // above already decided.
       guard: { seen: proposal, productionBranch: context.productionBranch },
     });
-    if (admission.outcome === "stale_change") {
-      return { outcome: "blocked", reason: BLOCKED_REASON_FOR_STOP[admission.reason] };
-    }
-    if (admission.outcome === "concurrency_conflict") {
-      const winner = await this.deps.jobs.activeForConcurrencyKey(concurrencyKey);
-      return winner ? { outcome: "already_active", job: winner } : { outcome: "active_conflict" };
-    }
-
-    const { job } = admission;
-    const externalRunId = await this.createReviewRun(job, proposal.headRevision);
-    try {
-      await this.deps.queue.send({ jobId: job.id, projectId: previous.projectId, userId: context.ownerUserId });
-    } catch {
-      await this.deps.jobs.markFailed(job.id, QUEUE_FAILED_MESSAGE);
-      if (externalRunId) await this.reportQueueFailure(job.id, externalRunId, proposal.headRevision);
-      return { outcome: "dispatch_failed", message: QUEUE_FAILED_MESSAGE };
-    }
-    return { outcome: "started", job };
   }
 
   private async readLivePullRequest(
@@ -289,4 +346,12 @@ export class PreviewGenerationRerunService {
       );
     }
   }
+}
+
+/** The baseline of a preview re-run: the last successful preview of the pull request, else the published version. */
+function previewBaselineVersionId(
+  baseline: { versionId: string } | null,
+  context: Pick<DoxabotAutomationContext, "publishedBaseline">,
+): string | null {
+  return baseline?.versionId ?? context.publishedBaseline?.versionId ?? null;
 }

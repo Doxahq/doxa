@@ -296,7 +296,7 @@ passes 4.5:1 on `card`.
 - **Agent activity:** the Agent button sits before the Write and Split switch and
   uses the `Sparkles` icon. Its dot is green and pulses for an active agent,
   `warning` for one that waits for a person, and `muted-foreground` for an idle
-  agent. With Reduce Motion, the dot stays still. The panel docks at the right of
+  agent. The panel docks at the right of
   the editor, 400px wide, and covers the editor below 820px.
   While the panel is open, a block that an agent changed has a `success` tint and a small mono label with
   the age of the change, such as "JUST NOW". An edit that a person opens from the
@@ -500,3 +500,6 @@ convert Tailwind-v3 `[--var]` classes to the v4 `(--var)` form.
 - Don't make buttons uppercase/mono, and don't scatter blue or green as decoration.
 - Don't reinvent layout markup when the kit (DashboardHeader, PageBody,
   SectionLabel, FieldRow, Toolbar, EmptyState) already covers it.
+- Don't respect the Reduce Motion setting (`prefers-reduced-motion`,
+  `motion-reduce:`, `matchMedia`). Spinners, transitions and art move for every
+  visitor (a product decision). A still spinner reads as a stuck page.

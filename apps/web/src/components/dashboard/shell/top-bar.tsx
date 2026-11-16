@@ -70,6 +70,11 @@ export function TopBar({
   )
 }
 
+/** The top bar of an account page: "Account / Billing / Plan and invoices". */
+export function AccountTopBar({ crumbs }: { crumbs: readonly string[] }) {
+  return <TopBar crumbs={["Account", ...crumbs]} />
+}
+
 /** Opens and closes the sidebar. On mobile it opens the drawer. */
 export function SidebarToggle({ className }: { className?: string }) {
   const { toggleSidebar, open, isMobile, openMobile } = useSidebar()

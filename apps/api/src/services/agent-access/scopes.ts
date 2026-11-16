@@ -9,6 +9,8 @@ import type { Capability } from "./capabilities";
  * `team.manage` and `team.delete` are in no list on purpose: a human decides
  * approval requests, sets their gates, writes the instructions that steer
  * Doxabot and runs the team, so no OAuth scope can ever grant them to an agent.
+ * `billing.read` and `billing.manage` are in no list either (billing spec 8.2,
+ * 17): an agent never reads invoices or buys anything.
  */
 export const SCOPE_CAPABILITIES = {
   "projects:read": ["project.read", "domains.read", "generation.read"],

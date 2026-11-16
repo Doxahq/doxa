@@ -97,4 +97,18 @@ describe("processDelivery", () => {
 
     await expect(processDelivery("delivery-1", deps)).rejects.toThrow("API down");
   });
+
+  it.each([
+    ["credits-low", { billingUrl: "https://doxa.so/dashboard/billing/a", usedCredits: 4000, allowanceCredits: 5000, resetsOn: "December 1, 2026", paygOn: true }, "80% of your AI credits are used"],
+    ["payg-started", { billingUrl: "https://doxa.so/dashboard/billing/a", chargeAtUsd: "$5", monthlyLimitUsd: "$30", resetsOn: "December 1, 2026" }, "Pay-as-you-go started"],
+    ["payg-limit", { teamName: "Acme", billingUrl: "https://doxa.so/dashboard/billing/a", percent: 100, spentUsd: "$30", monthlyLimitUsd: "$30", chargeAtUsd: "$5", resetsOn: "December 1, 2026" }, "You reached your pay-as-you-go limit for Acme"],
+    ["credits-exhausted", { billingUrl: "https://doxa.so/dashboard/billing/a", trialCredits: 1000 }, "Your trial credits are used up"],
+  ] as const)("sends the billing kind %s from the notifications stream", async (kind, props, subject) => {
+    const { deps, transport, attempts } = setup({ claimed: { ...claim, kind, props: { ...props }, headers: {} } });
+
+    expect(await processDelivery("delivery-1", deps)).toEqual({ action: "ack" });
+    expect(transport.sent).toHaveLength(1);
+    expect(transport.sent[0]).toMatchObject({ subject, headers: { "X-Doxa-Template": kind } });
+    expect(attempts[0]?.result).toMatchObject({ ok: true });
+  });
 });

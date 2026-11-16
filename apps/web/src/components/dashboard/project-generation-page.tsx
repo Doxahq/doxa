@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import type { ReactNode } from "react"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
@@ -82,6 +83,14 @@ import { readFlaggedPages } from "~/lib/dashboard/flagged-pages"
 import { GenerationFlaggedPages } from "~/components/dashboard/generation-flagged-pages"
 import { readReferenceSource } from "~/lib/dashboard/reference-source"
 import { GenerationSpecProblems } from "~/components/dashboard/generation-spec-problems"
+import { GenerationCreditsField, GenerationCreditsStopped } from "~/components/dashboard/generation-credits"
+import {
+  generationLogEvents,
+  isStoppedForCredits,
+  readCreditMeter,
+  readCreditsStop,
+} from "~/lib/dashboard/generation-credits"
+import { projectDetailQueryOptions } from "~/lib/queries/dashboard"
 
 const GENERATION_DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -128,7 +137,13 @@ export function ProjectGenerationPage({
   const rerunLinks = state.generation ? getRerunLinks(state.generation) : null
   // A run that did not finish its work leads with running it again. A
   // succeeded run leads with its site and keeps Re-run in the menu.
-  const leadsWithRerun = state.generation?.status === "failed" || state.generation?.status === "cancelled"
+  const stoppedForCredits = isStoppedForCredits(state.generation)
+  const leadsWithRerun =
+    state.generation?.status === "failed" || state.generation?.status === "cancelled" || stoppedForCredits
+  // The meter hides itself in shadow mode; the log never shows its events.
+  const creditMeter = useMemo(() => readCreditMeter(state.events), [state.events])
+  const logEvents = useMemo(() => generationLogEvents(state.events), [state.events])
+  const billingAccountId = useQuery(projectDetailQueryOptions(projectId)).data?.billing?.accountId ?? null
 
   async function deleteGeneration(): Promise<boolean> {
     const deleted = await state.remove()
@@ -210,8 +225,9 @@ export function ProjectGenerationPage({
                       Open re-run
                     </Link>
                   </Button>
-                ) : canResume ? (
+                ) : canResume && !stoppedForCredits ? (
                   // The failed step can run again with every earlier step kept.
+                  // A run stopped for credits offers Continue run in its notice.
                   <Button size="sm" disabled={state.isResuming} onClick={() => void state.resume()}>
                     {state.isResuming ? (
                       <Loader2 aria-hidden="true" className="animate-spin" />
@@ -291,8 +307,25 @@ export function ProjectGenerationPage({
                 <MetaField label="Source" className="sm:col-span-2">
                   <GenerationSource generation={state.generation} />
                 </MetaField>
+                {creditMeter ? (
+                  <MetaField label="Credits">
+                    <GenerationCreditsField meter={creditMeter} billingAccountId={billingAccountId} />
+                  </MetaField>
+                ) : null}
               </dl>
             </div>
+
+            {stoppedForCredits ? (
+              <GenerationCreditsStopped
+                stop={readCreditsStop(state.events)}
+                usedCredits={creditMeter?.usedCredits ?? null}
+                message={state.generation.errorMessage}
+                billingAccountId={billingAccountId}
+                canResume={canResume}
+                isResuming={state.isResuming}
+                onResume={() => void state.resume()}
+              />
+            ) : null}
 
             {(state.generation.status === "failed" || state.generation.status === "cancelled") && state.generation.errorMessage ? (
               <Alert variant="destructive">
@@ -311,7 +344,7 @@ export function ProjectGenerationPage({
           </section>
 
           <GenerationEventLog
-            events={state.events}
+            events={logEvents}
             streamStatus={state.streamStatus}
           />
 
@@ -447,10 +480,10 @@ function GenerationActionsMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        {generation.status === "failed" ? (
+        {generation.status === "failed" || generation.status === "stopped_credits" ? (
           <GenerationActionItem
             icon={<StepForward aria-hidden="true" />}
-            label="Continue from failed step"
+            label={generation.status === "failed" ? "Continue from failed step" : "Continue run"}
             blockedMessage={
               !capabilities.can("generation.run")
                 ? ROLE_RESTRICTED_MESSAGE
@@ -903,7 +936,7 @@ function StreamStatus({ status }: { status: GenerationStreamStatus }) {
         aria-hidden="true"
         className={cn(
           "size-1.5 rounded-full bg-label",
-          status === "live" && "bg-success motion-safe:animate-pulse",
+          status === "live" && "bg-success animate-pulse",
           status === "fallback" && "bg-warning",
         )}
       />

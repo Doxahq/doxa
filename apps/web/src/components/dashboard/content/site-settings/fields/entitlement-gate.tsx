@@ -23,3 +23,24 @@ export function EntitlementBadge({ locked, reason }: { locked: boolean; reason: 
     </Tooltip>
   )
 }
+
+/**
+ * A plan limit that stopped an action (HTTP 403 `plan_limit`, billing spec
+ * 9.3): the limit, the use, and one action. A tinted card, not a stripe.
+ */
+export function PlanLimitGate({
+  sentence,
+  action,
+}: {
+  /** "You use 1 of 1 custom domains on Free." */
+  sentence: string
+  /** The one action: upgrade, or raise the monthly limit. */
+  action: ReactNode
+}): ReactNode {
+  return (
+    <div className="flex flex-col gap-3 border border-warning/35 bg-warning/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-[13px] leading-5 text-foreground">{sentence}</p>
+      <div className="shrink-0">{action}</div>
+    </div>
+  )
+}

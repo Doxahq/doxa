@@ -66,6 +66,19 @@ describe("active generation requests", () => {
     expect(second.signal.aborted).toBe(true);
   });
 
+  test("a stop aborts the job's requests but accepts its next request (a continued job)", () => {
+    const requests = new ActiveGenerationRequests();
+    const stopped = new AbortController();
+    const continued = new AbortController();
+
+    requests.register(JOB_ID, stopped);
+    expect(requests.stop(JOB_ID)).toBe(true);
+    expect(stopped.signal.aborted).toBe(true);
+
+    expect(requests.register(JOB_ID, continued)).toBe(true);
+    expect(continued.signal.aborted).toBe(false);
+  });
+
   test("keeps the cancellation tombstone after cancelling concurrent requests", () => {
     const requests = new ActiveGenerationRequests();
     const active = new AbortController();

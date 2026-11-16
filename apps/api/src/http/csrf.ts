@@ -9,7 +9,8 @@ const CSRF_EXEMPT_PREFIXES = ["/api/auth", "/internal"];
  * Origin header. Its signed link is the authorization, and it only turns off
  * one notification category.
  */
-const CSRF_EXEMPT_PATHS = new Set(["/github/webhook", "/email/unsubscribe"]);
+// The billing webhook is signed by the provider (billing spec 14.1); it has no browser origin.
+const CSRF_EXEMPT_PATHS = new Set(["/github/webhook", "/email/unsubscribe", "/billing/webhooks/stripe"]);
 
 export function enforceMutationCsrf(request: Request, env: Env, pathname: string): Response | null {
   if (SAFE_METHODS.has(request.method)) return null;

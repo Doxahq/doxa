@@ -1,0 +1,34 @@
+{
+  "name": "@doxahq/billing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./catalog": "./src/catalog/index.ts",
+    "./payments": "./src/payments/index.ts",
+    "./testing": "./src/testing.ts",
+    "./stripe": "./src/providers/stripe/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "catalog:sync": "node scripts/sync-catalog.mjs"
+  },
+  "dependencies": {
+    "@doxahq/contracts": "workspace:*",
+    "@doxahq/db": "workspace:*",
+    "stripe": "^23.1.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "fast-check": "^4.3.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

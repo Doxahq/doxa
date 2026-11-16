@@ -10,7 +10,8 @@ import {
   createCloudflareCustomHostnamesClient,
   type CloudflareCustomHostnamesClient,
 } from "./cloudflare-custom-hostnames";
-import { createDocsDomainLimitPolicy, type DocsDomainLimitPolicy } from "./docs-domain-limit-policy";
+import type { DocsDomainLimitPolicy } from "./docs-domain-limit-policy";
+import { planSeamsFromEnv } from "./billing/plan-seams";
 import { domainNotifierFromEnv, type DomainNotifier } from "./email/notifications";
 import {
   createDocsDomainRoutingProbe,
@@ -49,7 +50,7 @@ export class DocsDomainLifecycleService {
     this.customHostnamesConfigurationError = customHostnames.configurationError;
     this.customDomainCnameTarget = normalizeOptionalHostname(env.DOCS_CUSTOM_DOMAIN_CNAME_TARGET);
     this.routingProbe = createDocsDomainRoutingProbe();
-    this.domainLimitPolicy = dependencies.domainLimitPolicy ?? createDocsDomainLimitPolicy();
+    this.domainLimitPolicy = dependencies.domainLimitPolicy ?? planSeamsFromEnv(env).docsDomainLimit;
     this.domainNotifier = dependencies.domainNotifier ?? domainNotifierFromEnv(env);
   }
 

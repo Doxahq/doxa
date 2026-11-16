@@ -448,3 +448,89 @@ function instructionsUnchanged() {
 async function noHandWrittenVersion(): Promise<string | null> {
   return null;
 }
+
+describe("production generation admission with the credit meter (billing spec 10.5)", () => {
+  function meteredService(options: {
+    verdict: Awaited<ReturnType<NonNullable<ConstructorParameters<typeof ProductionGenerationAdmissionService>[0]["metering"]>["admit"]>>;
+    created?: "created" | "already_active";
+    baseline?: ProductionGenerationBaseline | null;
+    trigger?: "manual" | "merge";
+  }) {
+    const admit = vi.fn(async () => options.verdict);
+    const abandon = vi.fn(async () => undefined);
+    const create = vi.fn(async () => ({ outcome: options.created ?? ("created" as const), job: queuedJob() }));
+    const service = new ProductionGenerationAdmissionService({
+      source: { resolveTarget: async () => ({ revision: "b".repeat(40), treeHash: "c".repeat(40) }) },
+      baselines: { findCompatiblePublished: async () => options.baseline ?? null, handWrittenVersion: noHandWrittenVersion },
+      jobs: { create },
+      instructions: instructionsUnchanged(),
+      executionConfig,
+      metering: { mode: "on", admit, abandon },
+      runModels: (config) => [config.plannerModel, config.writerModel, "fallback-model"],
+    });
+    return { service, admit, abandon, create };
+  }
+
+  test("holds credits for the job ID first, then creates the job with it", async () => {
+    const { service, admit, create, abandon } = meteredService({
+      verdict: { kind: "admitted", metered: true, capCredits: 3_000, reservationId: "hold-1" },
+    });
+    await expect(service.admit({ projectId: "project-1", userId: "user-1" })).resolves.toMatchObject({ outcome: "created" });
+    const run = (admit.mock.calls[0] as unknown as [{ jobId: string }])[0];
+    expect(run).toMatchObject({
+      projectId: "project-1",
+      action: "generation.run",
+      models: [executionConfig.plannerModel, executionConfig.writerModel, "fallback-model"],
+    });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ id: run.jobId }));
+    expect(abandon).not.toHaveBeenCalled();
+  });
+
+  test("a refusal creates no job and returns the billing error", async () => {
+    const { PlanLimitError } = await import("@doxahq/billing");
+    const error = new PlanLimitError({ key: "ai.doxa_agent", limit: false, used: null });
+    const { service, create } = meteredService({ verdict: { kind: "refused", error } });
+    await expect(service.admit({ projectId: "project-1", userId: "user-1" })).resolves.toEqual({ outcome: "billing_refused", error });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  const warmBaseline: ProductionGenerationBaseline = {
+    versionId: "11111111-1111-4111-8111-111111111111",
+    sourceRevision: "a".repeat(40),
+    sourceTreeHash: "d".repeat(40),
+    generatorFingerprint: executionConfig.generatorFingerprint,
+    ...baselineState,
+  };
+
+  test("another active run frees the hold; a warm merge run is a doxabot.run (decision D7)", async () => {
+    const { service, admit, abandon } = meteredService({
+      verdict: { kind: "admitted", metered: true, capCredits: 500, reservationId: "hold-1" },
+      created: "already_active",
+      baseline: warmBaseline,
+    });
+    await service.admit({ projectId: "project-1", userId: "user-1", trigger: "merge" });
+    const run = (admit.mock.calls[0] as unknown as [{ jobId: string; action: string; features: string[] }])[0];
+    expect(run.action).toBe("doxabot.run");
+    expect(run.features).toEqual(["ai.doxabot"]);
+    expect(abandon).toHaveBeenCalledWith(run.jobId, expect.objectContaining({ reservationId: "hold-1" }));
+  });
+
+  test("a cold merge run (no compatible published baseline) is a generation.run", async () => {
+    const { service, admit, create } = meteredService({ verdict: { kind: "admitted", metered: true, capCredits: 3_000, reservationId: "hold-1" } });
+    await service.admit({ projectId: "project-1", userId: "user-1", trigger: "merge" });
+    const run = (admit.mock.calls[0] as unknown as [{ jobId: string; action: string; features: string[] }])[0];
+    expect(run.action).toBe("generation.run");
+    expect(run.features).toEqual(["ai.doxabot", "ai.doxa_agent"]);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ id: run.jobId, baselineVersionId: null }));
+  });
+
+  test("a manual run is a generation.run with or without a baseline", async () => {
+    for (const baseline of [null, warmBaseline]) {
+      const { service, admit } = meteredService({ verdict: { kind: "admitted", metered: true, capCredits: 3_000, reservationId: "hold-1" }, baseline });
+      await service.admit({ projectId: "project-1", userId: "user-1", force: true });
+      const run = (admit.mock.calls[0] as unknown as [{ action: string; features: string[] }])[0];
+      expect(run.action).toBe("generation.run");
+      expect(run.features).toEqual(["ai.doxa_agent"]);
+    }
+  });
+});

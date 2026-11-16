@@ -24,6 +24,8 @@ export const dashboardLinks = {
     `${links.webOrigin}/dashboard/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(jobId)}`,
   domains: (links: EmailLinks, projectId: string) =>
     `${links.webOrigin}/dashboard/projects/${encodeURIComponent(projectId)}/site/domains`,
+  /** The billing page of one billing account (billing spec 15.2). */
+  billing: (links: EmailLinks, accountId: string) => `${links.webOrigin}/dashboard/billing/${encodeURIComponent(accountId)}`,
   teamInvite: (links: EmailLinks, token: string) => `${links.webOrigin}/invite/${token}`,
   /** The page that confirms an unsubscribe link from an email footer. */
   unsubscribePage: (links: EmailLinks) => `${links.webOrigin}/email/unsubscribe`,

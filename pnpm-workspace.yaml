@@ -25,3 +25,10 @@ catalog:
 overrides:
   "@tanstack/react-start": "1.168.61"
   "@tanstack/react-router": "1.170.42"
+  # One copy of the Radix layer stack for every overlay (dialog, menu, popover,
+  # select, tooltip). With separate copies, a dialog does not see a popover or a
+  # menu opened inside it as a layer above it, and its "no clicks outside" rule
+  # blocks clicks in that popover (the branch picker in the repository dialog).
+  "@radix-ui/react-dismissable-layer": "1.1.20"
+  "@radix-ui/react-focus-scope": "1.2.0"
+  "@radix-ui/react-focus-guards": "1.1.6"

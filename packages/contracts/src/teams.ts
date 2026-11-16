@@ -58,6 +58,13 @@ export const CAPABILITIES = [
   /** Renames the team, invites, changes roles, removes members. */
   "team.manage",
   "team.delete",
+  /**
+   * Billing spec 8.2: read the plan, credits and invoices of the team's
+   * billing account. Owner and admin only. Never granted to an agent.
+   */
+  "billing.read",
+  /** Checkout, Customer Portal, pay-as-you-go settings and caps. Owner and admin only. Never granted to an agent. */
+  "billing.manage",
 ] as const;
 
 export const capabilitySchema = z.enum(CAPABILITIES);

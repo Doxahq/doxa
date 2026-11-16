@@ -3,7 +3,7 @@ import { createR2DocsContentStore } from "../docs-content/store";
 import { DocsSearchIndexesRepository } from "../../repositories/docs-search-indexes";
 import { isDocsPreviewGateEnabled, type Env } from "../../env";
 import { DocsSearchIndexWorker } from "./index-worker";
-import { createSearchPolicyService } from "./policy";
+import { planSeamsFromEnv } from "../billing/plan-seams";
 import { createDocsSearchWriters } from "./providers";
 
 export function createDocsSearchIndexWorker(env: Env): DocsSearchIndexWorker {
@@ -13,7 +13,7 @@ export function createDocsSearchIndexWorker(env: Env): DocsSearchIndexWorker {
   });
   return new DocsSearchIndexWorker({
     tasks: new DocsSearchIndexesRepository(env),
-    policy: createSearchPolicyService(env),
+    policy: planSeamsFromEnv(env).searchPolicy,
     writers: createDocsSearchWriters(env),
     read: (key) => store.read(key),
     isPublic: accessPolicy === "public",

@@ -75,7 +75,7 @@ export function DoxabotSettingsCard({ projectId }: { projectId: string }) {
               aria-hidden="true"
               className={cn(
                 "size-4 shrink-0 text-muted-foreground",
-                state.isSaving ? "animate-spin motion-reduce:animate-none" : "invisible",
+                state.isSaving ? "animate-spin" : "invisible",
               )}
             />
             <Switch

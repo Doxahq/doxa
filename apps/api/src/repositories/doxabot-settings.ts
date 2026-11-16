@@ -93,11 +93,49 @@ export interface DoxabotSettingsStore {
   }): Promise<DoxabotAutomationContext | null>;
 }
 
-export class DoxabotSettingsRepository implements DoxabotSettingsStore {
+/**
+ * The published baseline of a project, by the rule of pull request
+ * admission (`DoxabotAutomationContext.publishedBaseline`), so the dashboard
+ * names the same next-run temperature that the bill uses.
+ */
+export interface PublishedPreviewBaselineReader {
+  getPublishedPreviewBaseline(
+    projectId: string,
+  ): Promise<PublishedPreviewBaseline | null>;
+}
+
+export class DoxabotSettingsRepository
+  implements DoxabotSettingsStore, PublishedPreviewBaselineReader
+{
   private readonly db;
 
   constructor(env: DbEnv) {
     this.db = createDb(env);
+  }
+
+  async getPublishedPreviewBaseline(
+    projectId: string,
+  ): Promise<PublishedPreviewBaseline | null> {
+    const [row] = await this.db
+      .select({
+        publishedVersionId: schema.docsSites.publishedVersionId,
+        publishedSourceRevision: schema.docsVersions.sourceRevision,
+        publishedVersionCreatedAt: schema.docsVersions.createdAt,
+        generationBaselineResetAt:
+          schema.docsSites.generationBaselineResetAt,
+      })
+      .from(schema.docsSites)
+      .leftJoin(
+        schema.docsVersions,
+        eq(
+          schema.docsSites.publishedVersionId,
+          schema.docsVersions.id,
+        ),
+      )
+      .where(eq(schema.docsSites.projectId, projectId))
+      .limit(1);
+
+    return row ? toPublishedPreviewBaseline(row) : null;
   }
 
   async getProjectState(
@@ -300,7 +338,7 @@ export class DoxabotSettingsRepository implements DoxabotSettingsStore {
  * reusing pre-reset state. Previews stay available: the site still serves
  * the version.
  */
-function toPublishedPreviewBaseline(row: {
+export function toPublishedPreviewBaseline(row: {
   publishedVersionId: string | null;
   publishedSourceRevision: string | null;
   publishedVersionCreatedAt: Date | null;

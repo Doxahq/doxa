@@ -1,11 +1,13 @@
-import type {
-  GenerationActionBlockedReason,
-  GenerationDetailDto,
-  GenerationDomainDto,
-  GenerationJobDto,
-  GenerationRerunLinksDto,
-  GenerationStartResultDto,
-  GenerationsPageDto,
+import {
+  GENERATION_RESUMED_EVENT_TYPE,
+  type GenerationActionBlockedReason,
+  type GenerationDetailDto,
+  type GenerationDomainDto,
+  type GenerationJobDto,
+  type GenerationRerunLinksDto,
+  type GenerationStartResultDto,
+  type GenerationsPageDto,
+  type JobEventDto,
 } from "@doxahq/contracts"
 
 import { isTerminalJob } from "~/lib/dashboard/model"
@@ -38,10 +40,32 @@ export function dedupeGenerations(pages: GenerationsPageDto[]): GenerationJobDto
   return generations
 }
 
-export function getGenerationDurationMs(job: GenerationJobDto, nowMs = Date.now()): number {
+/**
+ * The time a generation worked: from its creation to its end (or now),
+ * without each wait before a continue. A run stopped for credits can wait
+ * for hours before the user continues it. With the job's events, a wait is
+ * the time from the event before a `generation_resumed` event to that
+ * event. Without them (the generations list), it is the job's `pausedMs`.
+ */
+export function getGenerationDurationMs(
+  job: GenerationJobDto,
+  nowMs = Date.now(),
+  events: readonly Pick<JobEventDto, "type" | "createdAt">[] = [],
+): number {
   const startedAt = new Date(job.createdAt).getTime()
   const endedAt = isTerminalJob(job) ? new Date(job.updatedAt).getTime() : nowMs
-  return Math.max(0, endedAt - startedAt)
+  const waitMs = events.length > 0 ? resumeWaitMs(events) : (job.pausedMs ?? 0)
+  return Math.max(0, endedAt - startedAt - waitMs)
+}
+
+function resumeWaitMs(events: readonly Pick<JobEventDto, "type" | "createdAt">[]): number {
+  let waitMs = 0
+  events.forEach((event, index) => {
+    const previous = events[index - 1]
+    if (event.type !== GENERATION_RESUMED_EVENT_TYPE || !previous) return
+    waitMs += Math.max(0, new Date(event.createdAt).getTime() - new Date(previous.createdAt).getTime())
+  })
+  return waitMs
 }
 
 export function formatGenerationDuration(milliseconds: number): string {
@@ -57,8 +81,9 @@ export function formatGenerationDuration(milliseconds: number): string {
 
 export function getDeploymentLabel(
   status: GenerationJobDto["status"],
-): "Successful" | "Failed" | "In progress" {
+): "Successful" | "Failed" | "Stopped" | "In progress" {
   if (status === "succeeded") return "Successful"
+  if (status === "stopped_credits") return "Stopped"
   if (status === "failed" || status === "cancelled") return "Failed"
   return "In progress"
 }

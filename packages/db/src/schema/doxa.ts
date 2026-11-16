@@ -25,6 +25,8 @@ export const generationJobStatus = pgEnum("generation_job_status", [
   "succeeded",
   "failed",
   "cancelled",
+  // Billing spec 10.6: AI credits or the run's credit cap stopped the run.
+  "stopped_credits",
 ]);
 
 export const docsVersionStatus = pgEnum("docs_version_status", [

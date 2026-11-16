@@ -4,7 +4,10 @@ import type { GenerationConfirmationReason } from "@doxahq/contracts"
 import { toast } from "sonner"
 
 import type { GenerationStartResultDto } from "@doxahq/contracts"
+import { PRO_REASON_GENERATION } from "~/lib/dashboard/ai-access"
 import { requiresGenerationConfirmation } from "~/lib/dashboard/generation-model"
+import { useProGate } from "~/lib/dashboard/pro-trial-dialog"
+import { useProjectAiAccess } from "~/lib/dashboard/use-ai-access"
 import type { GenerationStartOptions } from "~/lib/platform-api"
 
 /** Something that starts a generation: a new run, or a failed run again. */
@@ -19,6 +22,9 @@ export interface GenerationStartAction {
  * Starts a generation and opens its detail page. When the server asks for
  * confirmation (no source changes, or pages written in the editor), exposes
  * props for `GenerationStartConfirmationDialog`.
+ *
+ * An account without the Doxa Agent (Free, billing on) does not start: the
+ * click opens the Pro trial dialog instead (`useProGate`).
  */
 export function useGenerationStarter(
   projectId: string,
@@ -30,7 +36,10 @@ export function useGenerationStarter(
     message: string
   } | null>(null)
 
+  const proGate = useProGate(useProjectAiAccess(projectId))
+
   async function startGeneration(options: GenerationStartOptions = {}) {
+    if (proGate(PRO_REASON_GENERATION)) return
     const result = await generations.start(options)
     if (!result) return
     if (requiresGenerationConfirmation(result)) {

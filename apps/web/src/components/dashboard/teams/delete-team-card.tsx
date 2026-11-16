@@ -155,7 +155,7 @@ export function DeleteTeamCard({
                 </DialogClose>
                 <Button type="submit" variant="destructive" disabled={!confirmed || isDeleting}>
                   {isDeleting ? (
-                    <Loader2 aria-hidden="true" className="mr-2 size-4 motion-safe:animate-spin" />
+                    <Loader2 aria-hidden="true" className="mr-2 size-4 animate-spin" />
                   ) : (
                     <Trash2 aria-hidden="true" className="mr-2 size-4" />
                   )}

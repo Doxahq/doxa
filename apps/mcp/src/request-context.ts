@@ -37,11 +37,22 @@ export function newToolCallRecord(): ToolCallRecord {
   return { projectId: null, pageChanges: [] };
 }
 
+export interface ToolContextOptions {
+  /**
+   * Billing spec 11: count this call against the daily tool-call quota of
+   * the project's account, once, after the access policy allowed it. Off
+   * for the tools without a project (`list_projects`, `get_account`, ...).
+   */
+  readonly countsToolCall?: boolean;
+}
+
 export function createToolContext(
   context: McpRequestContext,
   record: ToolCallRecord = newToolCallRecord(),
+  options: ToolContextOptions = {},
 ): ToolContext {
   const { actor, policy, services, actions } = context;
+  let counted = false;
   return {
     actor,
     services,
@@ -50,6 +61,13 @@ export function createToolContext(
       const decision = await policy.authorize(actor, projectId, capability);
       if (!decision.allowed) throw new AccessDeniedError(decision.reason);
       record.projectId = decision.project.projectId;
+      // Only after the policy allowed the project, so a call can never
+      // spend the quota of an account the actor has no access to.
+      const billing = services?.billing;
+      if (options.countsToolCall && !counted && billing) {
+        counted = true;
+        await billing.consumeToolCall(decision.project.projectId);
+      }
       return decision.project;
     },
     listAccessibleProjects: () => policy.listAccessibleProjects(actor),

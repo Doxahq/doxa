@@ -31,6 +31,9 @@ import {
 import {
   GitHubProductionGenerationSource,
 } from "./production-generation-source";
+import type { BillingRefusal, GenerationMetering } from "./billing/generation-metering";
+import { meteredActionOf, requiredFeaturesOf, runModels } from "./billing/generation-metering";
+import { generationMeteringFromEnv } from "./billing/generation-metering-env";
 
 export type { ProductionGenerationBaseline };
 
@@ -49,7 +52,9 @@ export type ProductionGenerationAdmission =
       outcome: "confirmation_required";
       reason: GenerationConfirmationReason;
       message: string;
-    };
+    }
+  /** Billing refused the run: 402 `credits_exhausted`, 403 `plan_limit` or another refusal (spec 10.6). */
+  | { outcome: "billing_refused"; error: BillingRefusal };
 
 export interface ProductionGenerationJobsStore {
   create(
@@ -63,6 +68,10 @@ export interface ProductionGenerationAdmissionDependencies {
   jobs: ProductionGenerationJobsStore;
   instructions: InstructionsChangeCheck;
   executionConfig: GenerationExecutionConfig;
+  /** The credit meter (billing spec 10.5). Absent: no metering, as with `BILLING_ENFORCEMENT=off`. */
+  metering?: Pick<GenerationMetering, "mode" | "admit" | "abandon">;
+  /** The planner, writer and fallback models of a run. Default: planner and writer. */
+  runModels?: (config: GenerationExecutionConfig) => string[];
 }
 
 export class ProductionGenerationAdmissionService {
@@ -83,6 +92,8 @@ export class ProductionGenerationAdmissionService {
       instructions: instructionsChangeCheckFromEnv(env),
       executionConfig:
         resolveGenerationExecutionConfig(env),
+      metering: generationMeteringFromEnv(env),
+      runModels: (config) => runModels(env, config),
     });
   }
 
@@ -142,10 +153,11 @@ export class ProductionGenerationAdmissionService {
       }
     }
 
-    return this.dependencies.jobs.create({
+    const trigger = input.trigger ?? "manual";
+    const jobInput: CreateProductionGenerationJobInput = {
       projectId: input.projectId,
       userId: input.userId,
-      trigger: input.trigger ?? "manual",
+      trigger,
       baselineRevision:
         baseline?.sourceRevision ?? target.revision,
       targetRevision: target.revision,
@@ -153,6 +165,38 @@ export class ProductionGenerationAdmissionService {
       baselineVersionId: baseline?.versionId ?? null,
       seedVersionId: input.seed ? handWrittenVersionId : null,
       ...this.dependencies.executionConfig,
+    };
+    const { metering } = this.dependencies;
+    if (!metering || metering.mode === "off") {
+      return this.dependencies.jobs.create(jobInput);
+    }
+
+    // Billing spec 10.5 step 1: hold the first credits before the job exists,
+    // so a refused run leaves no job behind. The job takes the held ID.
+    const jobId = crypto.randomUUID();
+    const config = this.dependencies.executionConfig;
+    const meteredJob = { publicationMode: "production", trigger, baselineVersionId: jobInput.baselineVersionId } as const;
+    const admission = await metering.admit({
+      jobId,
+      projectId: input.projectId,
+      // A merge run without a compatible published baseline is cold: a full generation.
+      action: meteredActionOf(meteredJob),
+      features: requiredFeaturesOf(meteredJob),
+      models: this.dependencies.runModels?.(config) ?? [config.plannerModel, config.writerModel],
     });
+    if (admission.kind === "refused") {
+      return { outcome: "billing_refused", error: admission.error };
+    }
+    // A new job ID has no hold yet, so this cannot happen; never run without one.
+    if (admission.kind === "busy") throw new Error(`Job ${jobId} already holds credits.`);
+    let created: ProductionGenerationJobAdmission;
+    try {
+      created = await this.dependencies.jobs.create({ ...jobInput, id: jobId });
+    } catch (error) {
+      await metering.abandon(jobId, admission);
+      throw error;
+    }
+    if (created.outcome !== "created") await metering.abandon(jobId, admission);
+    return created;
   }
 }

@@ -66,13 +66,17 @@ export default defineConfig(({ command, mode }) => {
           // (frame-ancestors 'none'), and the unsubscribe page reads its query.
           // The login and sign-up pages check the session on the server for each
           // visit, and the reset password page reads the token in its query.
-          filter: ({ path }) =>
-            !path.startsWith("/dashboard")
-            && !path.startsWith("/oauth")
-            && !path.startsWith("/email/")
-            && path !== "/login"
-            && path !== "/signup"
-            && path !== "/reset-password",
+          // The pathname decides, so a link with a query (the pricing page's
+          // `/login?redirect=…`) is skipped too and never crawled in a loop.
+          filter: ({ path }) => {
+            const pathname = path.split(/[?#]/)[0] ?? path
+            return !pathname.startsWith("/dashboard")
+              && !pathname.startsWith("/oauth")
+              && !pathname.startsWith("/email/")
+              && pathname !== "/login"
+              && pathname !== "/signup"
+              && pathname !== "/reset-password"
+          },
         },
       }),
       viteReact(),

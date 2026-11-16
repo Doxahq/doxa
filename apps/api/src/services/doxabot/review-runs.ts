@@ -211,6 +211,20 @@ export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller 
     jobId: string,
     presentation: CancelledReviewRunPresentation,
   ): Promise<boolean> {
+    return this.finish(jobId, "cancelled", presentation);
+  }
+
+  /**
+   * Completes the check of an ended job with `state`, for an end that the
+   * worker does not report itself: a cancel, or a run that AI credits
+   * stopped (`neutral`, billing spec 10.6). False when the check has no run
+   * ID yet; its creator then reads the job's state.
+   */
+  async finish(
+    jobId: string,
+    state: "cancelled" | "neutral",
+    presentation: CancelledReviewRunPresentation & { detailsUrl?: string | null },
+  ): Promise<boolean> {
     const context = await this.dependencies.jobs.getReviewRunContext(jobId);
     const externalRunId = context?.externalReviewRunId ?? null;
     // A check that is still being created gets the job's state from its
@@ -222,10 +236,10 @@ export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller 
     const input = withDisplaySummary(
       updateReviewRunInputSchema.parse({
         externalRunId,
-        ...mapDoxabotReviewRunState("cancelled"),
+        ...mapDoxabotReviewRunState(state),
         title: presentation.title,
         summary: presentation.summary,
-        detailsUrl: null,
+        detailsUrl: presentation.detailsUrl ?? null,
         sourceRevision: context.targetRevision,
       }),
     );
@@ -319,8 +333,20 @@ export function reviewRunPresentationFor(
         summary:
           "Doxa cancelled documentation preview generation for this pull request.",
       };
+    case "stopped_credits":
+      return {
+        ...mapDoxabotReviewRunState("neutral"),
+        ...STOPPED_CREDITS_CHECK,
+      };
   }
 }
+
+/** Billing spec 10.6: a run without credits finishes `neutral` and never fails the customer's CI. */
+export const STOPPED_CREDITS_CHECK = {
+  title: "AI credits ran out",
+  summary:
+    "Doxa stopped the documentation preview because the account's AI credits ran out. Add credits or raise the limit on the billing page, then run the preview again.",
+} as const;
 
 /**
  * Whether a check state fits the job. An active job takes any state: the
@@ -341,6 +367,8 @@ export function checkAgreesWithJob(
       return check.conclusion === "failure" || check.conclusion === "action_required";
     case "cancelled":
       return check.conclusion === "cancelled";
+    case "stopped_credits":
+      return check.conclusion === "neutral";
   }
 }
 
@@ -379,6 +407,8 @@ export function mapDoxabotReviewRunState(state: DoxabotReviewRunState): {
       return { status: "completed", conclusion: "cancelled" };
     case "action_required":
       return { status: "completed", conclusion: "action_required" };
+    case "neutral":
+      return { status: "completed", conclusion: "neutral" };
   }
 }
 
@@ -387,7 +417,8 @@ export function withDisplaySummary<T extends CreateReviewRunInput>(
 ): T {
   const lines = [input.summary];
   if (input.detailsUrl) {
-    lines.push(`Preview: ${input.detailsUrl}`);
+    // A `neutral` check is a billing stop (spec 10.6): its link is the billing page.
+    lines.push(`${input.conclusion === "neutral" ? "Billing" : "Preview"}: ${input.detailsUrl}`);
   }
 
   const metrics = input.metrics;

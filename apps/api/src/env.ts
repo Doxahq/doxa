@@ -6,6 +6,7 @@ import type { EmailQueueMessage } from "@doxahq/email";
 import type { ModelTokenBroker } from "./services/model-access/model-token-broker";
 import type { ImageCompressor } from "./services/site-assets/image-compression";
 import type { SvgCleaner } from "./services/site-assets/image-content";
+import type { BillingPaymentsBinding } from "./services/billing/payments-port";
 
 export interface Env extends AuthEnv {
   DOCS_CACHE_INVALIDATOR?: DocsCacheInvalidationRpc;
@@ -47,6 +48,13 @@ export interface Env extends AuthEnv {
   DOXA_AGENT_MODEL?: string;
   DOXA_PLANNER_MODEL?: string;
   DOXA_WRITER_MODEL?: string;
+  /**
+   * Billing spec 10.5: the agent worker's model provider and fallback writer,
+   * so credit admission refuses a run with an unpriced model. Set them to the
+   * worker's values. Defaults: `anthropic`, and the planner model.
+   */
+  DOXA_MODEL_PROVIDER?: string;
+  DOXA_WRITER_FALLBACK_MODEL?: string;
   DOXA_GENERATION_PROFILE?: "fast-mvp" | "full-prod";
   DOXABOT_ENABLED?: string;
   DOXABOT_PUBLIC_REPOSITORIES_ENABLED?: string;
@@ -103,6 +111,25 @@ export interface Env extends AuthEnv {
   /** Only the exact value `true` opens the live agent activity panel. */
   AGENT_LIVE_ACTIVITY_ENABLED?: string;
   MCP_RESOURCE_URL?: string;
+  /** Billing spec 6.3: `stripe`, `none` or `memory`. Default `none` (plan `self_hosted`). */
+  BILLING_PROVIDER?: string;
+  /** `off` (default), `shadow` (log each denial, allow) or `on` (deny). */
+  BILLING_ENFORCEMENT?: string;
+  /** A plan key. Default `free` with a provider, `self_hosted` with `none`. */
+  BILLING_DEFAULT_PLAN?: string;
+  /** The origin of Checkout and Portal return URLs. Default `WEB_ORIGIN`. */
+  BILLING_RETURN_BASE_URL?: string;
+  /** Secret, Stripe provider only. Never in this repo or a Wrangler file. */
+  STRIPE_SECRET_KEY?: string;
+  /** Secret, Stripe provider only. */
+  STRIPE_WEBHOOK_SECRET?: string;
+  /** `on` or `off` (default). */
+  STRIPE_MANAGED_PAYMENTS?: string;
+  /**
+   * Checkout, Portal, invoices, webhooks and the billing jobs. Only the Node
+   * origin has it: `@doxahq/billing/payments` stays out of Worker builds.
+   */
+  BILLING_PAYMENTS?: BillingPaymentsBinding;
 }
 
 export function isDocsPreviewGateEnabled(value: string | undefined): boolean {

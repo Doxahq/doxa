@@ -5,8 +5,12 @@ export const EMAIL_NOTIFICATION_CATEGORIES = ["approvals", "generations", "domai
 
 export type EmailNotificationCategory = (typeof EMAIL_NOTIFICATION_CATEGORIES)[number];
 
-/** `transactional` emails (invites) always send and have no unsubscribe link. */
-export type EmailCategory = "transactional" | EmailNotificationCategory;
+/**
+ * `transactional` emails (invites) always send and have no unsubscribe link.
+ * `billing` emails (credits and pay-as-you-go, billing spec 10.7) are account
+ * notices about money: they also always send, but from the notifications stream.
+ */
+export type EmailCategory = "transactional" | "billing" | EmailNotificationCategory;
 
 /**
  * The contract of one kind of email: a stable name, a category, and the schema
@@ -29,7 +33,7 @@ export function defineEmailKind<const Name extends string, Schema extends z.ZodT
 }
 
 export function isNotificationCategory(category: EmailCategory): category is EmailNotificationCategory {
-  return category !== "transactional";
+  return category !== "transactional" && category !== "billing";
 }
 
 /**
@@ -43,5 +47,6 @@ export const EMAIL_STREAMS = ["transactional", "notifications"] as const;
 export type EmailStream = (typeof EMAIL_STREAMS)[number];
 
 export function streamOf(category: EmailCategory): EmailStream {
+  // `billing` goes with the notifications, so the invite subdomain keeps its own reputation.
   return category === "transactional" ? "transactional" : "notifications";
 }

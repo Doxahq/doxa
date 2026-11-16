@@ -220,7 +220,7 @@ export function useProjectGeneration(projectId: string, generationId: string) {
   return {
     generation,
     events,
-    durationMs: generation ? getGenerationDurationMs(generation, now) : 0,
+    durationMs: generation ? getGenerationDurationMs(generation, now, events) : 0,
     isPending: generationQuery.isPending,
     isRefreshing: generationQuery.isFetching || eventsQuery.isFetching,
     streamStatus,

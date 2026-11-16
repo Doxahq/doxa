@@ -27,6 +27,10 @@ import type {
   SourceProvider,
   StaleGenerationJobDto,
 } from "@doxahq/contracts";
+import {
+  GENERATION_CREDITS_STOPPED_EVENT_TYPE,
+  type GenerationCreditStopReason,
+} from "@doxahq/contracts/billing";
 import type { Env } from "../env";
 import type { ChangeProposalLifecycleState } from "./change-proposals";
 import {
@@ -51,6 +55,8 @@ import {
 } from "@doxahq/contracts/generation-reviews";
 import {
   WORKFLOW_STEP_FAILED_EVENT_TYPE,
+  GENERATION_CREDIT_STOP_STEP_EVENT_TYPE,
+  GENERATION_RESUMED_EVENT_TYPE,
   workflowStepFailureSchema,
   type ReferenceSourceReport,
 } from "@doxahq/contracts";
@@ -175,6 +181,11 @@ export interface CreateProductionGenerationJobInput {
   planningFingerprint: string;
   writingFingerprint: string;
   generatorFingerprint: string;
+  /**
+   * The job ID, when the caller chose it first: the credit meter holds
+   * credits for the job before the row exists (billing spec 10.5 step 1).
+   */
+  id?: string;
 }
 
 export type ProductionGenerationJobAdmission =
@@ -226,11 +237,19 @@ export interface GenerationRerunSource {
   change: { state: ChangeProposalLifecycleState; baseRef: string } | null;
   /** The project's production branch; null when no repository is connected. */
   productionBranch: string | null;
+  /** Who started the run, and its models: a continued run is metered again (billing spec 10.5). */
+  trigger: "manual" | "doxabot" | "merge";
+  /** The run's baseline: a Doxabot run without one is metered as a full generation. */
+  baselineVersionId: string | null;
+  plannerModel: string | null;
+  writerModel: string | null;
 }
 
 /** A preview run that a person starts again, which no webhook delivery carries. */
 export type PreviewRerunJobInput = CreateDoxabotGenerationJobInput & {
   rerunOfJobId: string;
+  /** The job ID that the credit meter already holds credits for (billing spec 10.5). */
+  jobId?: string;
 };
 
 export interface DoxabotGenerationJobsStore {
@@ -359,6 +378,7 @@ export class JobsRepository
       [job] = await this.db
         .insert(schema.generationJobs)
         .values({
+          ...(input.id ? { id: input.id } : {}),
           projectId: input.projectId,
           requestedByUserId: input.userId,
           trigger: input.trigger,
@@ -451,6 +471,10 @@ export class JobsRepository
           ? { state: row.changeState, baseRef: row.changeBaseRef }
           : null,
       productionBranch: row.productionBranch,
+      trigger: job.trigger,
+      baselineVersionId: job.baselineVersionId,
+      plannerModel: job.plannerModel,
+      writerModel: job.writerModel,
     };
   }
 
@@ -471,10 +495,10 @@ export class JobsRepository
         transaction,
         input,
       );
-      const created = await insertJob(
-        transaction,
-        doxabotJobValues(input, requestedByUserId),
-      );
+      const created = await insertJob(transaction, {
+        ...doxabotJobValues(input, requestedByUserId),
+        ...(input.jobId ? { id: input.jobId } : {}),
+      });
       if (!created) return { outcome: "concurrency_conflict" };
 
       await appendJobEvent(transaction, {
@@ -666,9 +690,13 @@ export class JobsRepository
     const hasNextPage = rows.length > input.limit;
     const pageRows = rows.slice(0, input.limit);
     const lastRow = pageRows.at(-1);
+    const pausedByJob = await this.pausedMsByJob(pageRows.map((row) => row.job.id));
 
     return {
-      generations: pageRows.map((row) => toJobDto(row.job)),
+      generations: pageRows.map((row) => ({
+        ...toJobDto(row.job),
+        pausedMs: pausedByJob.get(row.job.id) ?? 0,
+      })),
       nextCursor:
         hasNextPage && lastRow
           ? encodeGenerationCursor({
@@ -677,6 +705,43 @@ export class JobsRepository
             })
           : null,
     };
+  }
+
+  /**
+   * The wait before each continue of the jobs, in milliseconds: for each
+   * `generation_resumed` event, the time since the job's event before it.
+   * A job without a continue is not in the map.
+   */
+  private async pausedMsByJob(jobIds: readonly string[]): Promise<Map<string, number>> {
+    if (jobIds.length === 0) return new Map();
+    const resumedJobIds = this.db
+      .select({ jobId: schema.jobEvents.jobId })
+      .from(schema.jobEvents)
+      .where(
+        and(
+          inArray(schema.jobEvents.jobId, [...jobIds]),
+          eq(schema.jobEvents.type, GENERATION_RESUMED_EVENT_TYPE),
+        ),
+      );
+    const ordered = this.db
+      .select({
+        jobId: schema.jobEvents.jobId,
+        type: schema.jobEvents.type,
+        createdAt: schema.jobEvents.createdAt,
+        previousAt: sql<Date | null>`lag(${schema.jobEvents.createdAt}) over (partition by ${schema.jobEvents.jobId} order by ${schema.jobEvents.sequence})`.as("previous_at"),
+      })
+      .from(schema.jobEvents)
+      .where(inArray(schema.jobEvents.jobId, resumedJobIds))
+      .as("ordered_events");
+    const rows = await this.db
+      .select({
+        jobId: ordered.jobId,
+        pausedMs: sql<string>`coalesce(sum(extract(epoch from (${ordered.createdAt} - ${ordered.previousAt})) * 1000), 0)`,
+      })
+      .from(ordered)
+      .where(and(eq(ordered.type, GENERATION_RESUMED_EVENT_TYPE), isNotNull(ordered.previousAt)))
+      .groupBy(ordered.jobId);
+    return new Map(rows.map((row) => [row.jobId, Math.max(0, Math.round(Number(row.pausedMs)))]));
   }
 
   async getForProject(input: {
@@ -876,7 +941,9 @@ export class JobsRepository
       previewChannel,
       flaggedPages: await this.listFlaggedPages(input.jobId),
       referenceSource: await this.findReferenceSource(input.jobId),
-      stepFailure: row.job.status === "failed" ? await this.latestStepFailure(input.jobId) : null,
+      stepFailure: row.job.status === "failed" || row.job.status === "stopped_credits"
+        ? await this.latestStepFailure(input.jobId)
+        : null,
       rerunEvents: await this.findRerunEvents({
         projectId: input.projectId,
         jobId: input.jobId,
@@ -1125,33 +1192,41 @@ export class JobsRepository
 
   /** When the newest event of a type was added to the run, or null. */
   async latestEventAt(jobId: string, type: string): Promise<string | null> {
-    const event = await this.latestEvent(jobId, type);
+    const event = await this.latestEvent(jobId, [type]);
     return event ? event.createdAt.toISOString() : null;
   }
 
-  /** The step that ended the run's last failure, when the workflow recorded one. */
+  /**
+   * The step where the run last stopped, when the workflow recorded one: a
+   * failed step, or the step where the credit meter stopped it (billing spec
+   * 10.6).
+   */
   async latestStepFailure(jobId: string): Promise<RecordedStepFailure | null> {
-    const event = await this.latestEvent(jobId, WORKFLOW_STEP_FAILED_EVENT_TYPE);
+    const event = await this.latestEvent(jobId, [
+      WORKFLOW_STEP_FAILED_EVENT_TYPE,
+      GENERATION_CREDIT_STOP_STEP_EVENT_TYPE,
+    ]);
     const parsed = workflowStepFailureSchema.safeParse(event?.data);
     return event && parsed.success ? { failure: parsed.data, failedAt: event.createdAt } : null;
   }
 
   private async latestEvent(
     jobId: string,
-    type: string,
+    types: readonly string[],
   ): Promise<{ createdAt: Date; data: unknown } | null> {
     const [event] = await this.db
       .select({ createdAt: schema.jobEvents.createdAt, data: schema.jobEvents.data })
       .from(schema.jobEvents)
-      .where(and(eq(schema.jobEvents.jobId, jobId), eq(schema.jobEvents.type, type)))
+      .where(and(eq(schema.jobEvents.jobId, jobId), inArray(schema.jobEvents.type, [...types])))
       .orderBy(desc(schema.jobEvents.sequence))
       .limit(1);
     return event ?? null;
   }
 
   /**
-   * Turns a failed run back into a running one, for a resume. Returns false
-   * when the run is no longer failed. Throws `ActiveGenerationConflictError`
+   * Turns a failed run, or a run that the credit meter stopped, back into a
+   * running one, for a resume. Returns false when the run is no longer in
+   * one of those states. Throws `ActiveGenerationConflictError`
    * when another run of the project is active.
    */
   async reopenFailedJob(jobId: string): Promise<boolean> {
@@ -1159,7 +1234,10 @@ export class JobsRepository
       const rows = await this.db
         .update(schema.generationJobs)
         .set({ status: "running", errorMessage: null, updatedAt: new Date() })
-        .where(and(eq(schema.generationJobs.id, jobId), eq(schema.generationJobs.status, "failed")))
+        .where(and(
+          eq(schema.generationJobs.id, jobId),
+          inArray(schema.generationJobs.status, ["failed", "stopped_credits"]),
+        ))
         .returning({ id: schema.generationJobs.id });
       return rows.length > 0;
     } catch (error) {
@@ -1792,6 +1870,36 @@ export class JobsRepository
     });
   }
 
+  /**
+   * Billing spec 10.6: the credit meter stopped the run. False when the job
+   * had already ended. The page checkpoints of the run stay in storage.
+   */
+  async markStoppedCredits(
+    jobId: string,
+    input: {
+      /** A meter stop, or the code of a billing refusal at admission (a Doxabot preview keeps its job). */
+      reason: GenerationCreditStopReason;
+      message: string;
+      finishedPageCount?: number;
+    },
+  ): Promise<boolean> {
+    return this.transitionActiveJob({
+      jobId,
+      status: "stopped_credits",
+      errorMessage: input.message,
+      event: {
+        type: GENERATION_CREDITS_STOPPED_EVENT_TYPE,
+        message: input.message,
+        data: {
+          reason: input.reason,
+          ...(input.finishedPageCount !== undefined ? { finishedPageCount: input.finishedPageCount } : {}),
+          outcome: "stopped_credits",
+          terminal: true,
+        },
+      },
+    });
+  }
+
   async markCancelled(
     jobId: string,
     message: string,
@@ -1916,7 +2024,7 @@ type JobsTransaction = Parameters<Parameters<DoxaDb["transaction"]>[0]>[0];
 
 interface ActiveJobTransition {
   jobId: string;
-  status: "running" | "failed" | "cancelled";
+  status: "running" | "failed" | "cancelled" | "stopped_credits";
   errorMessage?: string;
   event: {
     type: string;

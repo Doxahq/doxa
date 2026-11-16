@@ -10,7 +10,7 @@ export function LoadingLabel({ label, className }: { label: string; className?: 
       role="status"
       className={cn("flex items-center justify-center gap-2 p-6 text-muted-foreground", className)}
     >
-      <Loader2 aria-hidden="true" className="size-3.5 motion-safe:animate-spin" />
+      <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
       <span className="font-mono text-[10px] tracking-[0.14em] uppercase">{label}</span>
     </div>
   )

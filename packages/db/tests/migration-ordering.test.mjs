@@ -314,3 +314,39 @@ test("0039 adds the retention columns as nullable and only queues work", async (
     "an open entry keeps its schedule",
   );
 });
+
+test("0046 creates only billing objects, and billing rows outlive their owners", async () => {
+  const sql = await readMigration("0046_billing.sql");
+
+  assert.ok(!/\bDROP\b/i.test(sql), "the billing migration drops nothing");
+  for (const match of sql.matchAll(/ALTER TABLE "([a-z_]+)"/g)) {
+    assert.match(
+      match[1],
+      /^(billing_|credit_|payg_)/,
+      `the billing migration must not alter ${match[1]}`,
+    );
+  }
+  for (const match of sql.matchAll(
+    /FOREIGN KEY \("[a-z_]+"\) REFERENCES "public"\."(user|teams|projects|generation_jobs)"\("id"\) ON DELETE ([a-z ]+) ON UPDATE/g,
+  )) {
+    assert.equal(
+      match[2],
+      "set null",
+      `a deletion in ${match[1]} must never remove a billing record`,
+    );
+  }
+  for (const table of [
+    "credit_ledger_entries",
+    "credit_grants",
+    "payg_invoices",
+    "billing_subscriptions",
+  ]) {
+    assert.match(
+      sql,
+      new RegExp(
+        `"${table}_account_id_billing_accounts_id_fk"[^;]*ON DELETE restrict`,
+      ),
+      `${table} rows are kept for 7 years`,
+    );
+  }
+});

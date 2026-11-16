@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { Github, Users } from "lucide-react"
 
 import { DashboardHeader, SectionDescription, SectionLabel } from "~/components/dashboard/dashboard-header"
+import { AccountTopBar } from "~/components/dashboard/shell/top-bar"
 import {
   Bar,
   BadgeBar,
@@ -12,13 +13,17 @@ import {
 } from "~/components/dashboard/skeletons/skeleton-kit"
 import { cn } from "~/lib/utils"
 
+/** The Account settings heading's description. Kept here, so the route's pending view stays light. */
+export const ACCOUNT_SETTINGS_DESCRIPTION = "Your profile, your connections and the emails Doxa sends you."
+
 /** Account Settings until every section's data is there. Its top bar is the page's own. */
 export function AccountSettingsSkeleton() {
   return (
     <>
-      <DashboardHeader title="Settings" />
+      <AccountTopBar crumbs={["Account settings"]} />
       <PageBodySkeleton label="Loading settings">
-        <SectionSkeleton title="Account">
+        <PageHeadingSkeleton label="Account" title="Account settings" description={ACCOUNT_SETTINGS_DESCRIPTION} />
+        <SectionSkeleton title="Profile">
           <FieldListSkeleton rows={[{ label: "Name", width: "8rem" }, { label: "Email", width: "13rem" }]} />
         </SectionSkeleton>
         <SectionSkeleton title="GitHub connection">

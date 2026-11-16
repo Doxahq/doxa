@@ -75,6 +75,8 @@ export const API_ENTRYPOINT_METHODS = {
     "markJobCancelled",
     "markJobSuperseded",
     "isJobActive",
+    "getJobStopReason",
+    "markJobStopped",
     "getGenerationResumedAt",
     "getGenerationControl",
     "listStaleGenerationJobs",

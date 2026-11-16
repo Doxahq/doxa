@@ -9,6 +9,7 @@ import { MoreMenu, SiteMenuItems, TopBar } from "~/components/dashboard/shell/to
 import { shortenGenerationId } from "~/lib/dashboard/generation-model"
 import { ProjectGenerationStreamProvider } from "~/lib/dashboard/generation-stream-context"
 import { writeLastProjectId } from "~/lib/dashboard/last-project"
+import { useLocationCheckoutReturn } from "~/lib/dashboard/use-checkout-return"
 import { usePreloadProjectRoutes } from "~/lib/dashboard/use-preload-project-routes"
 import { useIsProjectPagePending } from "~/lib/dashboard/use-project-page-pending"
 import { useProjectWorkspace } from "~/lib/dashboard/use-project-workspace"
@@ -29,6 +30,8 @@ export function ProjectWorkspaceLayout({ projectId }: { projectId: string }) {
 
   useEffect(() => writeLastProjectId(projectId), [projectId])
   usePreloadProjectRoutes()
+  // A Pro trial started on a project page returns to that page with `?checkout=<id>`.
+  useLocationCheckoutReturn()
 
   return (
     <>

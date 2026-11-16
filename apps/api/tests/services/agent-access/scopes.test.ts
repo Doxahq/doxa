@@ -85,6 +85,8 @@ describe("SCOPE_CAPABILITIES", () => {
       "instructions.configure",
       "team.manage",
       "team.delete",
+      "billing.read",
+      "billing.manage",
     ]);
   });
 

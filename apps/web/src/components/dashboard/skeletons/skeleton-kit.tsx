@@ -71,7 +71,7 @@ export function Bar({
   return (
     <span
       aria-hidden="true"
-      className={cn("block max-w-full shrink-0 rounded-sm bg-muted motion-safe:animate-pulse", className)}
+      className={cn("block max-w-full shrink-0 rounded-sm bg-muted animate-pulse", className)}
       style={{ width, height, ...SKELETON_PULSE_STYLE, ...style }}
     />
   )

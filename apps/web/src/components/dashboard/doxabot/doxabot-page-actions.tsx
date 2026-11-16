@@ -6,7 +6,11 @@ import { Button } from "~/components/ui/button"
 import { useGenerationStartFlow } from "~/lib/dashboard/use-generation-start-flow"
 import { useProjectGenerations } from "~/lib/dashboard/use-project-generations"
 
-/** The Doxabot page header actions: open the generations, or start one as the Generations page does. */
+/**
+ * The Doxabot page header actions: open the generations, or start one as the
+ * Generations page does. For an account without the Doxa Agent (Free), the
+ * start opens the Pro trial dialog (`useGenerationStartFlow`).
+ */
 export function DoxabotPageActions({ projectId, canRun }: { projectId: string; canRun: boolean }) {
   return (
     <div className="flex flex-wrap gap-2">

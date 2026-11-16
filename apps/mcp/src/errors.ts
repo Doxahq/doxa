@@ -22,6 +22,11 @@ import {
 } from "@doxahq/api/services/docs-content/errors";
 import { DocsDomainProvisioningError } from "@doxahq/api/services/docs-domain-lifecycle";
 import { SiteConfigValidationError } from "@doxahq/api/services/site-config-validation";
+import {
+  AiAdmissionError,
+  CreditsExhaustedError,
+  PlanLimitError,
+} from "@doxahq/api/services/billing/mcp-billing";
 import { RATE_LIMIT_RETRY_AFTER_SECONDS } from "./rate-limit";
 import { describeDocsContentError, describeDenial } from "./error-messages";
 import { PlatformActionError } from "./services/platform-actions";
@@ -38,8 +43,15 @@ export type ToolErrorCode =
   | CreateCustomDocsDomainErrorCode
   | "domain_provider_error"
   | "generation_active"
+  | BillingToolErrorCode
   | ActionToolErrorCode
   | "internal_error";
+
+/**
+ * Billing spec 9.3, 10.6 and 15.3: the HTTP 402 and 403 billing answers as
+ * tool errors, with the same facts and a hint.
+ */
+export type BillingToolErrorCode = "plan_limit" | "credits_exhausted" | "ai_paused_for_review" | "ai_unavailable";
 
 /** Codes that agents can act on when doxa-api refuses an action. */
 export type ActionToolErrorCode =
@@ -136,6 +148,7 @@ function describeError(error: unknown): ErrorFields {
     describeAccessError(error) ??
     describeValidationError(error) ??
     describeServiceError(error) ??
+    describeBillingError(error) ??
     describePlatformActionError(error) ?? {
       code: "internal_error",
       message: "Doxa could not complete the request. Try again later.",
@@ -218,6 +231,51 @@ function describeServiceError(error: unknown): ErrorFields | null {
   return null;
 }
 
+const BILLING_HINT = "Ask the user to open Billing in the Doxa dashboard. No tool buys or changes a plan.";
+
+function describeBillingError(error: unknown): ErrorFields | null {
+  if (error instanceof PlanLimitError) {
+    const { key, limit, used, resetsAt } = error.details;
+    const details: ToolErrorDetails = { key, limit: typeof limit === "boolean" ? String(limit) : limit };
+    if (used !== null) details.used = used;
+    if (resetsAt) details.resetsAt = resetsAt.toISOString();
+    if (key === "mcp.tool_calls_per_day") {
+      return {
+        code: "plan_limit",
+        message: `The account used all ${String(limit)} tool calls of today.`,
+        hint: resetsAt ? `Wait until ${resetsAt.toISOString()}, or upgrade the plan in the Doxa dashboard.` : BILLING_HINT,
+        details,
+      };
+    }
+    return { code: "plan_limit", message: `The account's plan does not allow ${key}.`, hint: BILLING_HINT, details };
+  }
+  if (error instanceof CreditsExhaustedError) {
+    const { available, needed, reason, resetsAt } = error.details;
+    const details: ToolErrorDetails = { available, needed, reason };
+    if (resetsAt) details.resetsAt = resetsAt.toISOString();
+    return {
+      code: "credits_exhausted",
+      message: `Not enough AI credits: ${available} available, ${needed} needed.`,
+      hint: BILLING_HINT,
+      details,
+    };
+  }
+  if (error instanceof AiAdmissionError) {
+    return error.code === "ai_paused_for_review"
+      ? { code: "ai_paused_for_review", message: "AI runs of this account are paused for a review.", hint: "Ask the user to contact Doxa support." }
+      : { code: "ai_unavailable", message: "AI runs are not available right now.", hint: "Try again later." };
+  }
+  return null;
+}
+
+/** The billing codes that the actions RPC carries; its message already holds the facts. */
+const BILLING_ACTION_CODES: Readonly<Record<string, BillingToolErrorCode>> = {
+  plan_limit: "plan_limit",
+  credits_exhausted: "credits_exhausted",
+  ai_paused_for_review: "ai_paused_for_review",
+  model_unpriced: "ai_unavailable",
+};
+
 const ACCESS_DENIAL_CODES: ReadonlySet<string> = new Set<AccessDenialReason>([
   "not_found",
   "scope_missing",
@@ -249,6 +307,14 @@ function describePlatformActionError(error: unknown): ErrorFields | null {
     return { code: "stale", message: error.message, details: { reason: error.code } };
   }
   if (error.code === "internal_error") return null;
+  const billingCode = BILLING_ACTION_CODES[error.code];
+  if (billingCode) {
+    return {
+      code: billingCode,
+      message: error.message,
+      hint: billingCode === "ai_unavailable" ? "Try again later." : BILLING_HINT,
+    };
+  }
   // A blocked publish: the message names the pages, the hint says how to fix them.
   if (error.code === "mdx_invalid") {
     return describeDocsContentError(new DocsContentError("mdx_invalid", error.message));

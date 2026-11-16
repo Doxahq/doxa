@@ -14,6 +14,7 @@ import {
   createAgentAccessRoutes,
   createOAuthAuthorizeRoutes,
 } from "./routes/agent-access";
+import { createBillingRoutes } from "./routes/billing";
 import { createEmailPreferencesRoutes, createEmailUnsubscribeRoutes } from "./routes/email";
 import { createGitHubRoutes } from "./routes/github";
 import { createInternalRoutes } from "./routes/internal";
@@ -81,6 +82,7 @@ export function createApiApp() {
   app.route("/team-invites", createTeamInviteRoutes());
   app.route("/email-preferences", createEmailPreferencesRoutes());
   app.route("/email", createEmailUnsubscribeRoutes());
+  app.route("/billing", createBillingRoutes());
 
   app.notFound(() => notFound());
 

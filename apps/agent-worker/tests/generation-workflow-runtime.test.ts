@@ -5,6 +5,7 @@ import {
 import { describe, expect, test, vi } from "vitest";
 import {
   dispatchWorkflowBatches,
+  failsRunAtBatch,
   resolveWriteGroupSize,
   finalizeRuntimeNavigation,
   GenerationNonRetryableError,
@@ -254,6 +255,44 @@ describe("generation workflow runtime", () => {
       { status: "fulfilled", value: "batch 3" },
       { status: "fulfilled", value: "batch 4" },
     ]);
+  });
+
+  // 2026-11-16: every try of the last write batch failed on the connection.
+  // The run ended succeeded with 42 of its 66 pages left out.
+  test("a batch that failed for a reason outside its pages fails the run, after the running batches end", async () => {
+    const sibling = deferred<string>();
+    const started: number[] = [];
+    const transport = new Error("Generation was cancelled before it started.");
+    const dispatched = dispatchWorkflowBatches({
+      batches: [0, 1, 2, 3],
+      parallelism: 2,
+      step: recordingStep([]),
+      stepName: (index) => `batch ${index + 1}`,
+      stepConfig: () => ({}),
+      isRunStopping: isRunStoppingError,
+      failsRun: failsRunAtBatch,
+      runBatch: async (_batch, index) => {
+        started.push(index);
+        if (index === 0) throw transport;
+        return sibling.promise;
+      },
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    sibling.resolve("finished");
+    // The same error object, so the step tracker finds the batch's step.
+    await expect(dispatched).rejects.toBe(transport);
+    expect(started).toEqual([0, 1]);
+  });
+
+  test("failsRunAtBatch: a retryable failure fails the run, a non-retryable one flags the batch's pages", () => {
+    expect(failsRunAtBatch(new Error("Generation stage request failed (503)."))).toBe(true);
+    expect(failsRunAtBatch(new GenerationNonRetryableError("Write stage returned an invalid checkpoint."))).toBe(false);
+    const workflowsNonRetryable = Object.assign(new Error("bad input"), { name: "NonRetryableError" });
+    expect(failsRunAtBatch(workflowsNonRetryable)).toBe(false);
+    // A run-stopping error has its own path.
+    expect(failsRunAtBatch(new Error("Generation stopped for credits (credit_cap): the run reached its credit cap."))).toBe(false);
   });
 
   test("a cancellation failure prevents remaining batches from starting", async () => {

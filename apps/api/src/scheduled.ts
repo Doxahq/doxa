@@ -42,6 +42,16 @@ export function runScheduledJobs(scheduledTime: number, env: Env, context: Execu
     context.waitUntil(AgentSignupPurge.fromEnv(env).run());
   }
   context.waitUntil(purgeAgentLiveEvents(env));
+  context.waitUntil(runBillingJobs(scheduledTime, env));
+}
+
+/**
+ * Billing spec 14.3. Only the Node origin has `BILLING_PAYMENTS`; it does
+ * nothing with `BILLING_PROVIDER=none`. Async, so a failed setup rejects
+ * this job only.
+ */
+async function runBillingJobs(scheduledTime: number, env: Env): Promise<unknown> {
+  return env.BILLING_PAYMENTS?.forEnv(env).runScheduledJobs(scheduledTime);
 }
 
 /** Async, so a failed setup rejects this job only and the other jobs still run. */

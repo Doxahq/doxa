@@ -1252,6 +1252,23 @@ describe("requestAgentContainerDestroy", () => {
     vi.useRealTimers();
   });
 
+  test("a resumable destroy asks the container to accept the job's next request", async () => {
+    const fetchImpl = vi.fn(async () => Response.json({ ok: true }));
+
+    await expect(
+      requestAgentContainerDestroy(
+        "11111111-1111-4111-8111-111111111111",
+        { agentContainerUrl: "http://localhost:8789", fetch: fetchImpl },
+        { resumable: true },
+      ),
+    ).resolves.toBe(true);
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://localhost:8789/admin/containers/11111111-1111-4111-8111-111111111111/destroy?resumable=1",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   test("falls back to the configured URL when the local service binding is unavailable", async () => {
     const binding: AgentContainerBinding = {
       fetch: vi.fn(async () => Response.json({ error: "unavailable" }, { status: 503 })),

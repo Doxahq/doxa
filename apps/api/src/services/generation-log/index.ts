@@ -1,5 +1,11 @@
 import type { GenerationLogPhase, JobEventDto } from "@doxahq/contracts";
 import {
+  GENERATION_CREDITS_EVENT_TYPE,
+  GENERATION_CREDITS_STOPPED_EVENT_TYPE,
+  generationCreditsEventDataSchema,
+  generationCreditsStoppedEventDataSchema,
+} from "@doxahq/contracts/billing";
+import {
   attemptText,
   hidden,
   line,
@@ -19,8 +25,9 @@ import { progressLine } from "./progress-lines";
  * from a run: its steps, retries, cache reuse, warnings and the outcome.
  *
  * Each kept event keeps its id, sequence and type. Its message is rewritten,
- * its `data` is dropped, and it gets a `phase` and a `level`. An event type
- * that no rule names is hidden, so a new internal event never reaches people.
+ * its `data` is dropped except the fields that its rule keeps, and it gets a
+ * `phase` and a `level`. An event type that no rule names is hidden, so a new
+ * internal event never reaches people.
  */
 export function toGenerationLog(events: readonly JobEventDto[]): JobEventDto[] {
   return events.flatMap((event) => {
@@ -35,6 +42,10 @@ export function toGenerationLogEvent(event: JobEventDto): JobEventDto | null {
   const logLine = rule ? rule(event.data ?? {}, event.message) : hidden;
   if (!logLine) return null;
   const elapsedMs = numberField(event.data ?? {}, "elapsedMs");
+  const data = {
+    ...(logLine.data ?? {}),
+    ...(elapsedMs === null ? {} : { elapsedMs }),
+  };
   return {
     id: event.id,
     jobId: event.jobId,
@@ -42,7 +53,7 @@ export function toGenerationLogEvent(event: JobEventDto): JobEventDto | null {
     source: event.source,
     type: event.type,
     message: logLine.message,
-    data: elapsedMs === null ? null : { elapsedMs },
+    data: Object.keys(data).length === 0 ? null : data,
     createdAt: event.createdAt,
     phase: logLine.phase,
     level: logLine.level,
@@ -107,6 +118,10 @@ const EVENT_RULES: Record<string, EventRule> = {
     ),
   review_run_update_failed: () =>
     line("run", "Doxabot could not update the check on the pull request.", "warning"),
+
+  // Credits (billing spec 10.5 and 10.6)
+  [GENERATION_CREDITS_EVENT_TYPE]: creditsLine,
+  [GENERATION_CREDITS_STOPPED_EVENT_TYPE]: creditsStoppedLine,
 
   // Setup
   preview_workflow_started: (data) =>
@@ -265,6 +280,19 @@ const EVENT_RULES: Record<string, EventRule> = {
       failed > 0 ? "warning" : "info",
     );
   },
+  page_cache_reused: (data) => {
+    const cached = numberField(data, "cachedPageCount");
+    const written = numberField(data, "writtenPageCount") ?? 0;
+    if (cached === null || cached === 0) return hidden;
+    const reason =
+      "Their source files, plan, links and Doxabot instructions did not change, so Doxa did not write them again";
+    return line(
+      "write",
+      written > 0
+        ? `Reused ${pageCount(cached)} from earlier runs. ${reason}. Doxa wrote the other ${pageCount(written)}.`
+        : `Reused ${pageCount(cached)} from earlier runs. ${reason}.`,
+    );
+  },
   generation_page_flagged: (_, message) => line("write", message, "warning"),
   generation_page_notice: (_, message) => line("write", message, "warning"),
 
@@ -297,6 +325,66 @@ const EVENT_RULES: Record<string, EventRule> = {
   review_skipped: () =>
     line("review", "The generation changed no page, so there is nothing to review."),
 };
+
+/**
+ * The live credit meter. A shadow event (`BILLING_ENFORCEMENT=shadow`) holds
+ * nothing and is hidden, so shadow mode stays invisible to people.
+ */
+function creditsLine(data: Record<string, unknown>): GenerationLogLine | null {
+  // The stored event may carry more fields; the strict schema reads only the meter's.
+  const parsed = generationCreditsEventDataSchema.safeParse({
+    usedCredits: data.usedCredits,
+    jobUsedCredits: data.jobUsedCredits,
+    holdCredits: data.holdCredits,
+    capCredits: data.capCredits,
+    fromPaygCredits: data.fromPaygCredits,
+    shadow: data.shadow,
+  });
+  if (!parsed.success || parsed.data.shadow) return hidden;
+  const credits = parsed.data;
+  // The whole job: a continued run counts its earlier tries too.
+  const jobUsedCredits = credits.jobUsedCredits ?? credits.usedCredits;
+  return {
+    ...line("run", `${creditCount(jobUsedCredits)} used so far.`),
+    data: {
+      usedCredits: credits.usedCredits,
+      jobUsedCredits,
+      holdCredits: credits.holdCredits,
+      capCredits: credits.capCredits,
+      fromPaygCredits: credits.fromPaygCredits,
+      shadow: credits.shadow,
+    },
+  };
+}
+
+/** A run that the credit meter (or a billing refusal) ended as `stopped_credits`. */
+function creditsStoppedLine(data: Record<string, unknown>): GenerationLogLine {
+  const parsed = generationCreditsStoppedEventDataSchema.safeParse(data);
+  if (!parsed.success) return line("run", "The run stopped for AI credits.", "warning");
+  const { reason, finishedPageCount } = parsed.data;
+  const finished = finishedPageCount === undefined
+    ? ""
+    : ` ${capitalize(pageCount(finishedPageCount))} ${finishedPageCount === 1 ? "is" : "are"} finished.`;
+  return {
+    ...line("run", `${CREDIT_STOP_TEXT[reason]}${finished}`, "warning"),
+    data: { reason, ...(finishedPageCount === undefined ? {} : { finishedPageCount }) },
+  };
+}
+
+const CREDIT_STOP_TEXT: Record<
+  ReturnType<typeof generationCreditsStoppedEventDataSchema.parse>["reason"],
+  string
+> = {
+  credits_exhausted: "The run stopped because the AI credits ran out.",
+  credit_cap: "The run stopped at its credit cap.",
+  plan_limit: "The plan does not include this AI action, so the run stopped.",
+  model_unpriced: "The run stopped because Doxa could not meter its model.",
+  ai_paused_for_review: "AI runs of this account are paused for a review, so the run stopped.",
+};
+
+function creditCount(value: number): string {
+  return `${value.toLocaleString("en-US")} ${value === 1 ? "credit" : "credits"}`;
+}
 
 function timedOut(): GenerationLogLine {
   return line("run", "A step took too long and was stopped.", "error");
@@ -353,13 +441,18 @@ function reviewDecisionText(data: Record<string, unknown>): string {
   return `The review ${joinWords(parts)}.`;
 }
 
+/**
+ * The pages of the run, and the pages kept from the published docs. A page of
+ * the run is one that the writer wrote or that came from the page cache
+ * (`page_cache_reused`), so the text does not say "written".
+ */
 function publishedCounts(data: Record<string, unknown>): string {
-  const written = numberField(data, "regeneratedPageCount");
-  const reused = numberField(data, "reusedPageCount");
-  if (written === null) return "";
-  return reused === null
-    ? `: ${pageCount(written)} written`
-    : `: ${pageCount(written)} written, ${reused} reused`;
+  const fromRun = numberField(data, "regeneratedPageCount");
+  const kept = numberField(data, "reusedPageCount");
+  if (fromRun === null) return "";
+  return kept === null
+    ? `: ${pageCount(fromRun)} from this run`
+    : `: ${pageCount(fromRun)} from this run, ${kept} kept from the published docs`;
 }
 
 /**

@@ -32,7 +32,8 @@ export function CreateProjectDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onGenerateFromRepository: () => void
+  /** Null when the account cannot generate (Free): the footer then has no link to it. */
+  onGenerateFromRepository: (() => void) | null
 }) {
   const example = useCreateExampleProject()
 
@@ -62,7 +63,7 @@ function CreateProjectForm({
 }: {
   example: ReturnType<typeof useCreateExampleProject>
   onCancel: () => void
-  onGenerateFromRepository: () => void
+  onGenerateFromRepository: (() => void) | null
 }) {
   const navigate = useNavigate()
   const [name, setName] = useState("")
@@ -136,10 +137,12 @@ function CreateProjectForm({
       </DialogBody>
 
       <DialogFooter>
-        <Button type="button" variant="ghost" size="sm" className="sm:mr-auto" onClick={onGenerateFromRepository}>
-          <Github aria-hidden="true" />
-          Generate from a GitHub repository instead
-        </Button>
+        {onGenerateFromRepository ? (
+          <Button type="button" variant="ghost" size="sm" className="sm:mr-auto" onClick={onGenerateFromRepository}>
+            <Github aria-hidden="true" />
+            Generate from a GitHub repository instead
+          </Button>
+        ) : null}
         <Button type="button" variant="outline" size="sm" disabled={example.isCreating} onClick={onCancel}>
           Cancel
         </Button>

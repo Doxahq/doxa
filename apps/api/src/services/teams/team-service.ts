@@ -20,6 +20,7 @@ import type { Env } from "../../env";
 import { TeamsRepository } from "../../repositories/teams";
 import { dashboardActor } from "../agent-access/actor";
 import { MembershipProjectAccessPolicy } from "../agent-access/membership-project-access-policy";
+import { planSeamsFromEnv, type TeamSeatPolicy } from "../billing/plan-seams";
 import type { ProjectAccessPolicy } from "../agent-access/project-access-policy";
 import { OutboxTeamInviteMailer, type TeamInviteMailer } from "./invite-mailer";
 import { HmacInviteTokens, hashInviteToken, isInviteToken, type InviteTokens } from "./invite-token";
@@ -36,6 +37,8 @@ export interface TeamServiceDeps {
   readonly newId: () => string;
   /** Sends the link when the manager gives an email address. */
   readonly inviteMailer: TeamInviteMailer;
+  /** Billing spec 9.3 `team.seats`, at invite create and accept. Absent: no seat limit. */
+  readonly seats?: TeamSeatPolicy;
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -61,6 +64,7 @@ export class TeamService {
       tokens: new HmacInviteTokens(env.BETTER_AUTH_SECRET),
       newId: () => crypto.randomUUID(),
       inviteMailer: OutboxTeamInviteMailer.fromEnv(env),
+      seats: planSeamsFromEnv(env).teamSeats,
     });
   }
 
@@ -149,6 +153,7 @@ export class TeamService {
     const now = this.deps.now();
     const invitedEmail = input.email?.trim().toLowerCase() ?? null;
     if (invitedEmail) await this.assertInviteEmailAllowed(teamId, userId, invitedEmail, now);
+    await this.assertSeatForInvite(teamId, now);
 
     const id = this.deps.newId();
     const token = await this.deps.tokens.tokenFor(id);
@@ -202,6 +207,33 @@ export class TeamService {
     }
   }
 
+  /**
+   * Billing spec 9.3 `team.seats`: a new invite needs a seat for each member
+   * and each pending invite, plus itself. A soft limit: two invites at the
+   * same moment can both pass. The seat policy throws `PlanLimitError` (403)
+   * with `BILLING_ENFORCEMENT=on` and only logs in `shadow`.
+   */
+  private async assertSeatForInvite(teamId: string, now: Date): Promise<void> {
+    const seats = this.deps.seats;
+    if (!seats?.active) return;
+    const [members, invites] = await Promise.all([
+      this.deps.store.listMembers(teamId),
+      this.deps.store.listPendingInvites(teamId, now),
+    ]);
+    await seats.assertSeatAvailable({ teamId, used: members.length + invites.length });
+  }
+
+  /** At accept, the members count: a downgrade after the invite still blocks the join (spec 9.5). */
+  private async assertSeatForAccept(userId: string, token: string): Promise<void> {
+    const seats = this.deps.seats;
+    if (!seats?.active) return;
+    const invite = await this.deps.store.findInvite(await hashInviteToken(token));
+    // A missing or unusable invite fails in `acceptInvite` with its own reason.
+    if (invite === null || (await this.deps.store.findRole(invite.teamId, userId)) !== null) return;
+    const members = await this.deps.store.listMembers(invite.teamId);
+    await seats.assertSeatAvailable({ teamId: invite.teamId, used: members.length });
+  }
+
   private async sendInviteEmail(teamId: string, invite: TeamInviteRecord, email: string, acceptUrl: string): Promise<void> {
     const team = await this.deps.store.findTeam(teamId);
     if (!team) throw new TeamNotFoundError();
@@ -246,6 +278,7 @@ export class TeamService {
 
   async acceptInvite(userId: string, token: string): Promise<AcceptedTeamInvite> {
     if (!isInviteToken(token)) throw new TeamInviteError("invite_not_found");
+    await this.assertSeatForAccept(userId, token);
     const result = await this.deps.store.acceptInvite(await hashInviteToken(token), userId, this.deps.now());
     if (result.outcome !== "accepted") throw new TeamInviteError(result.outcome);
     return { teamId: result.teamId, role: result.role };

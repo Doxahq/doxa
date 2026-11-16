@@ -1,5 +1,10 @@
 import { ContentPagePending } from "~/components/dashboard/content/editor-skeleton"
 import { GenerationChangesPending } from "~/components/dashboard/generation-changes/generation-changes-pending"
+import {
+  BillingAccountSkeleton,
+  BillingAccountsSkeleton,
+  BillingCreditsSkeleton,
+} from "~/components/dashboard/skeletons/billing-skeletons"
 import { AccountSettingsSkeleton, TeamSkeleton, TeamsSkeleton } from "~/components/dashboard/skeletons/account-skeletons"
 import {
   ProjectGenerationSkeleton,
@@ -21,6 +26,9 @@ import { SiteSettingsPending, SiteSettingsSectionPending } from "~/components/da
 export const DASHBOARD_PENDING_VIEWS = {
   accountSettings: AccountSettingsSkeleton,
   approvalRequest: ApprovalRequestSkeleton,
+  billingAccount: BillingAccountSkeleton,
+  billingAccounts: BillingAccountsSkeleton,
+  billingCredits: BillingCreditsSkeleton,
   content: ContentPagePending,
   doxabotInstructions: DoxabotInstructionsSkeleton,
   generation: ProjectGenerationSkeleton,

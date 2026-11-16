@@ -30,7 +30,8 @@ const SHARED_EGRESS_PATHS = new Set(["/me"]);
  * GitHub sends every webhook from a few shared IPs. The route checks the
  * HMAC over a bounded body, so a forged delivery costs little.
  */
-const UNCOUNTED_PATHS = new Set(["/github/webhook"]);
+// Provider webhooks: signed, retried by the sender, and never from one client IP.
+const UNCOUNTED_PATHS = new Set(["/github/webhook", "/billing/webhooks/stripe"]);
 
 export function limiterForRequest(
   request: Request,

@@ -5,6 +5,7 @@ import { ALL_APPROVAL_MODES, DEFAULT_TTL_HOURS } from "../action-definition";
 import { ActionExecutionError } from "../errors";
 import { generationFreshness } from "../freshness";
 import { defineProjectAction } from "../registered-action";
+import { billingRefusalActionError } from "../billing-refusal";
 
 const payloadSchema = z.object({ force: z.boolean().default(false) }).strict();
 
@@ -64,5 +65,7 @@ function generationRefusal(outcome: Refusal): ActionExecutionError {
       return new ActionExecutionError("confirmation_required", `${outcome.message} Start again with force set to true.`);
     case "dispatch_failed":
       return new ActionExecutionError("dispatch_failed", outcome.message);
+    case "billing_refused":
+      return billingRefusalActionError(outcome.error);
   }
 }

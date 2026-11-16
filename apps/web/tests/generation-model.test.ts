@@ -67,6 +67,32 @@ describe("generation dashboard model", () => {
     expect(formatGenerationDuration(123_000)).toBe("2m 03s")
   })
 
+  test("leaves out each wait before a continue", () => {
+    // 2026-11-16: a run stopped for credits after 8s, waited 10h 27m, then
+    // worked for 16m 03s. The page showed 10h 43m.
+    const job = createGeneration({
+      status: "succeeded",
+      createdAt: "2026-11-15T23:05:50.000Z",
+      updatedAt: "2026-11-16T09:49:23.000Z",
+    })
+    const events = [
+      { type: "queued", createdAt: "2026-11-15T23:05:50.000Z" },
+      { type: "credits_stopped", createdAt: "2026-11-15T23:05:58.000Z" },
+      { type: "generation_resumed", createdAt: "2026-11-16T09:33:17.000Z" },
+      { type: "credits_stopped", createdAt: "2026-11-16T09:39:36.000Z" },
+      { type: "generation_resumed", createdAt: "2026-11-16T09:46:20.000Z" },
+      { type: "staged_for_review", createdAt: "2026-11-16T09:49:23.000Z" },
+    ]
+    const now = new Date("2026-11-16T12:00:00.000Z").getTime()
+
+    expect(formatGenerationDuration(getGenerationDurationMs(job, now))).toBe("10h 43m")
+    // 8s + 6m 19s + 3m 03s
+    expect(getGenerationDurationMs(job, now, events)).toBe(570_000)
+    expect(formatGenerationDuration(getGenerationDurationMs(job, now, events))).toBe("9m 30s")
+    // The generations list has no events: the API sends the wait.
+    expect(getGenerationDurationMs({ ...job, pausedMs: 38_043_000 }, now)).toBe(570_000)
+  })
+
   test("shortens long generation IDs without changing short IDs", () => {
     expect(shortenGenerationId("11111111-1111-4111-8111-111111111111")).toBe("11111111…1111")
     expect(shortenGenerationId("job-1")).toBe("job-1")

@@ -284,7 +284,7 @@ export function useDashboardData(): DashboardData {
     ? "Starting"
     : generationActive
       ? "Generating"
-      : job?.status === "failed" || job?.status === "cancelled"
+      : job?.status === "failed" || job?.status === "cancelled" || job?.status === "stopped_credits"
         ? "Retry generation"
         : "Generate docs"
   const jobProgress = job ? getJobProgress(job, events) : 0

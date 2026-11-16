@@ -1,0 +1,46 @@
+{
+  "prices": {
+    "pro_monthly_founder_v1": {
+      "plan": "pro",
+      "interval": "month",
+      "amountCents": 15900,
+      "usage": "ai_usage_monthly_v1"
+    },
+    "pro_monthly_v1": {
+      "plan": "pro",
+      "interval": "month",
+      "amountCents": 20900,
+      "usage": "ai_usage_monthly_v1"
+    },
+    "pro_yearly_founder_v1": {
+      "plan": "pro",
+      "interval": "year",
+      "amountCents": 154800,
+      "usage": "ai_usage_yearly_v1"
+    },
+    "pro_yearly_v1": {
+      "plan": "pro",
+      "interval": "year",
+      "amountCents": 202800,
+      "usage": "ai_usage_yearly_v1"
+    }
+  },
+  "usagePrices": {
+    "ai_usage_monthly_v1": {
+      "interval": "month",
+      "unitAmountCents": 1,
+      "meter": "doxa_ai_overage"
+    },
+    "ai_usage_yearly_v1": {
+      "interval": "year",
+      "unitAmountCents": 1,
+      "meter": "doxa_ai_overage"
+    }
+  },
+  "markup": 3,
+  "baseFees": {
+    "doxabot.run": 20,
+    "generation.run": 50
+  },
+  "modelPriceTableHash": "fecb4a966219c937a6948450966049f1dec65c970c9c8983b0432063f08e4b82"
+}

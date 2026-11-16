@@ -171,6 +171,8 @@ describe("createInternalApiAdapter", () => {
       markJobCancelled: vi.fn(async () => undefined),
       markJobSuperseded: vi.fn(async () => undefined),
       isJobActive: vi.fn(async () => true),
+      getJobStopReason: vi.fn(async () => null),
+      markJobStopped: vi.fn(async () => undefined),
       getGenerationResumedAt: vi.fn(async () => null),
       getGenerationControl: vi.fn(async () => ({
         status: "enabled" as const,
@@ -272,6 +274,8 @@ function createEnv(): Parameters<typeof worker.queue>[1] {
       markJobCancelled: vi.fn(async () => undefined),
       markJobSuperseded: vi.fn(async () => undefined),
       isJobActive: vi.fn(async () => true),
+      getJobStopReason: vi.fn(async () => null),
+      markJobStopped: vi.fn(async () => undefined),
       getGenerationResumedAt: vi.fn(async () => null),
       getGenerationControl: vi.fn(async () => ({
         status: "enabled" as const,

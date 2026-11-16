@@ -18,6 +18,7 @@ import {
   getGenerationDurationMs,
   shortenGenerationId,
 } from "~/lib/dashboard/generation-model"
+import { useProjectAiAccess } from "~/lib/dashboard/use-ai-access"
 import { useGenerationStartFlow } from "~/lib/dashboard/use-generation-start-flow"
 import { useProjectCapabilities } from "~/lib/dashboard/use-project-capabilities"
 import { useProjectGenerations } from "~/lib/dashboard/use-project-generations"
@@ -40,9 +41,11 @@ export function ProjectGenerationsPage({ projectId }: { projectId: string }) {
   const [connectOpen, setConnectOpen] = useState(false)
   const canRun = useProjectCapabilities(projectId).can("generation.run")
   const reviewJobId = useQuery(generationReviewQueryOptions(projectId)).data?.jobId ?? null
+  const aiAccess = useProjectAiAccess(projectId)
 
-  // The skeleton is for the first load only (see `useIsFirstLoad`).
-  const isFirstLoad = useIsFirstLoad([{ isPending: state.isPending }])
+  // The skeleton is for the first load only (see `useIsFirstLoad`). The plan
+  // comes with the project, so the welcome draws its final action at once.
+  const isFirstLoad = useIsFirstLoad([{ isPending: state.isPending }, { isPending: aiAccess.kind === "loading" }])
   if (isFirstLoad) return <ProjectGenerationsSkeleton />
 
   return (

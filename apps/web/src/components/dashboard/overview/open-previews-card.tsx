@@ -12,6 +12,7 @@ const STATUS_BADGE: Record<GenerationJobDto["status"], { label: string; variant:
   succeeded: { label: "Ready", variant: "success" },
   failed: { label: "Failed", variant: "danger" },
   cancelled: { label: "Stopped", variant: "muted" },
+  stopped_credits: { label: "Out of credits", variant: "warning" },
 }
 
 function ExternalTextLink({ href, children }: { href: string; children: ReactNode }) {

@@ -405,7 +405,7 @@ function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button type="button" variant="destructive" size="sm" onClick={onConfirm} disabled={pending}>
-            {pending ? <Loader2 aria-hidden="true" className="motion-safe:animate-spin" /> : null}
+            {pending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
             {confirmLabel}
           </Button>
         </DialogFooter>

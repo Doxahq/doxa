@@ -9,9 +9,12 @@ import { ApprovalEmailNotifications } from "./approval-notifications";
 import { DomainEmailNotifications, type DomainNotifier } from "./domain-notifications";
 import { GenerationEmailNotifications, type GenerationNotifier } from "./generation-notifications";
 import { NotificationOutbox } from "./notification-outbox";
+import { BillingEmailNotifications, type BillingAccountOwner } from "./billing-notifications";
+import { DOXA_CATALOG, type BillingEnforcement, type BillingNotifier } from "@doxahq/billing";
 
 export type { DomainNotifier, DomainStatusChange } from "./domain-notifications";
 export type { GenerationNotifier, GenerationOutcome } from "./generation-notifications";
+export type { BillingAccountOwner } from "./billing-notifications";
 
 /*
  * The composition root of the notifiers: the only place they meet the env.
@@ -55,6 +58,31 @@ export function generationNotifierFromEnv(env: Env): GenerationNotifier {
 export function domainNotifierFromEnv(env: Env): DomainNotifier {
   const notifier = lazily("domain", () => new DomainEmailNotifications(notificationParts(env)));
   return { statusChanged: async (change) => notifier()?.statusChanged(change) };
+}
+
+/**
+ * The billing emails (billing spec 10.7). `mode` is `BILLING_ENFORCEMENT`:
+ * `off` sends nothing and builds nothing, `shadow` logs, `on` sends.
+ */
+export function billingNotifierFromEnv(
+  env: Env,
+  mode: BillingEnforcement,
+  owner: (accountId: string) => Promise<BillingAccountOwner | null>,
+): BillingNotifier {
+  if (mode === "off") return { notify: async () => undefined };
+  const notifier = lazily("billing", () => {
+    const parts = notificationParts(env);
+    return new BillingEmailNotifications({
+      mode,
+      owner,
+      audience: parts.audience,
+      notifications: parts.notifications,
+      links: parts.links,
+      unitPriceCents: DOXA_CATALOG.credit.unitPriceCents,
+      log: (event, fields) => console.log(JSON.stringify({ service: "doxa-api", event, mode, ...fields })),
+    });
+  });
+  return { notify: async (notification) => notifier()?.notify(notification) };
 }
 
 /** Builds once on first use. Returns `undefined` (and logs) when the build fails. */

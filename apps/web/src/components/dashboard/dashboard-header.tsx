@@ -140,11 +140,14 @@ export function FieldRow({
   label,
   children,
   mono = false,
+  truncate = true,
   className,
 }: {
   label: string
   children: ReactNode
   mono?: boolean
+  /** Cut a long value to one line. Turn it off for a row with a form field: the cut hides the field's focus outline. */
+  truncate?: boolean
   className?: string
 }) {
   return (
@@ -157,7 +160,8 @@ export function FieldRow({
       <span className={FIELD_LABEL_CLASS}>{label}</span>
       <div
         className={cn(
-          "min-w-0 truncate text-foreground",
+          "min-w-0 text-foreground",
+          truncate && "truncate",
           mono ? "font-mono text-[13.5px]" : "text-[14.5px]",
         )}
       >

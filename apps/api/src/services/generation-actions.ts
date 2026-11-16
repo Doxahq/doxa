@@ -178,7 +178,9 @@ export function getResumeBlockedReason(
     | "now"
   >,
 ): GenerationActionBlockedReason | null {
-  if (facts.status !== "failed") return "not_resumable";
+  // Billing spec 10.6: a run that hit its cap or ran out of credits continues
+  // like a failed one, after the account raises the cap or the limit.
+  if (facts.status !== "failed" && facts.status !== "stopped_credits") return "not_resumable";
   if (!facts.failedStep?.resumable || !facts.failedAt) return "not_resumable";
   const now = facts.now ?? new Date();
   if (now.getTime() - facts.failedAt.getTime() > GENERATION_RESUME_WINDOW_DAYS * DAY_MS) {

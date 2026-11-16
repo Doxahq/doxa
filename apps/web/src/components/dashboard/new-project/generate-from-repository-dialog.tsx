@@ -51,7 +51,8 @@ export function GenerateFromRepositoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-3xl overscroll-contain shadow-none">
+      {/* Wide, and as tall as the window allows: the header and footer stay put while the body scrolls. */}
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-4xl flex-col overscroll-contain shadow-none">
         <GenerateFromRepositoryForm
           onBusyChange={setIsBusy}
           onClose={() => handleOpenChange(false)}
@@ -119,7 +120,7 @@ function GenerateFromRepositoryForm({
         <StepList current={github.isLoading ? -1 : currentStep} />
       </DialogHeader>
 
-      <DialogBody className="space-y-3">
+      <DialogBody className="min-h-0 space-y-4 overflow-y-auto scrollbar-subtle">
         {github.isLoading ? (
           <RepositoryListSkeleton />
         ) : github.isConnected ? (
@@ -139,7 +140,7 @@ function GenerateFromRepositoryForm({
             <div
               role="group"
               aria-label="Repository"
-              className="flex max-h-[360px] flex-col overflow-y-auto rounded-lg border border-border scrollbar-subtle"
+              className="flex max-h-[min(30rem,45dvh)] flex-col overflow-y-auto rounded-lg border border-border scrollbar-subtle"
             >
               {repositories.length === 0 ? (
                 <p className="px-4 py-8 text-center text-sm text-muted-foreground">No repository matches “{query}”.</p>

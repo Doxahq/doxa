@@ -16,9 +16,14 @@ import { streamEvents } from "../http/progress-stream";
 import { forbidden, withProjectAccess } from "../http/project-access";
 import { parseValidatedJson } from "../http/validation";
 import { error, json, notFound } from "../http/response";
+import { billingErrorResponse } from "../http/billing-errors";
+import type { Env } from "../env";
+import { billingConfigFor } from "../services/billing/config";
+import type { BillingRefusal } from "../services/billing/generation-metering";
 import { createDocsWarmStatusRoutes } from "./docs-warm-status";
 import { JobsRepository } from "../repositories/jobs";
 import { GenerationCacheRepository } from "../repositories/generation-cache";
+import { nextRunBaselinesFromEnv, withNextRunTemperature } from "../services/generation-cache-view";
 import { PreviewVisibilityRepository } from "../repositories/preview-visibility";
 import {
   CreateProjectError,
@@ -62,6 +67,7 @@ import { createProjectApprovalRequestRoutes } from "./approval-requests";
 import { createProjectApprovalSettingsRoutes } from "./approval-settings";
 import { createDoxabotRoutes } from "./doxabot";
 import { createProjectTeamRoutes } from "./teams";
+import { createCreditEstimateRoutes } from "./billing";
 import { handleProjectShell } from "./project-shell";
 import {
   listGenerationsPage,
@@ -191,7 +197,7 @@ export function createProjectRoutes(): ApiApp {
         force: new URL(context.req.url).searchParams.get("force") === "true",
         seed: new URL(context.req.url).searchParams.get("seed") === "true",
       });
-      return generationStartOutcomeResponse(outcome);
+      return generationStartOutcomeResponse(outcome, context.env);
     }),
   );
 
@@ -209,6 +215,7 @@ export function createProjectRoutes(): ApiApp {
   app.route("/:projectId/approval-requests", createProjectApprovalRequestRoutes());
   app.route("/:projectId/approval-settings", createProjectApprovalSettingsRoutes());
   app.route("/:projectId/team", createProjectTeamRoutes());
+  app.route("/:projectId/credit-estimate", createCreditEstimateRoutes());
 
   app.get("/:projectId/overview", (context) =>
     withProjectAccess(context, "generation.read", (access) =>
@@ -348,7 +355,7 @@ export function createProjectRoutes(): ApiApp {
           code: outcome.reason,
         });
       }
-      return generationStartOutcomeResponse(outcome);
+      return generationStartOutcomeResponse(outcome, context.env);
     }),
   );
 
@@ -366,6 +373,7 @@ export function createProjectRoutes(): ApiApp {
           code: outcome.reason,
         });
       }
+      if (outcome.outcome === "billing_refused") return billingRefusalResponse(outcome.error, context.env);
       const generation = await new JobsRepository(context.env).getDetailForProject({
         userId: access.ownerUserId,
         projectId: access.projectId,
@@ -448,7 +456,13 @@ export function createProjectRoutes(): ApiApp {
       ).getForProject(project.id);
       if (!cache) return notFound();
 
-      return json({ generationCache: cache });
+      return json({
+        generationCache: await withNextRunTemperature(
+          cache,
+          project.id,
+          nextRunBaselinesFromEnv(context.env),
+        ),
+      });
     }),
   );
 
@@ -479,7 +493,13 @@ export function createProjectRoutes(): ApiApp {
       ).clearForProject(project.id);
       if (!cache) return notFound();
 
-      return json({ generationCache: cache });
+      return json({
+        generationCache: await withNextRunTemperature(
+          cache,
+          project.id,
+          nextRunBaselinesFromEnv(context.env),
+        ),
+      });
     }),
   );
 
@@ -587,6 +607,7 @@ const RERUN_BLOCKED_MESSAGES: Partial<Record<GenerationActionBlockedReason, stri
 
 function generationStartOutcomeResponse(
   outcome: GenerationStartOutcome,
+  env?: Env,
 ): Response {
   switch (outcome.outcome) {
     case "not_found":
@@ -608,7 +629,15 @@ function generationStartOutcomeResponse(
     }
     case "dispatch_failed":
       return error(outcome.message, 500);
+    case "billing_refused":
+      return billingRefusalResponse(outcome.error, env);
   }
+}
+
+/** Billing spec 10.6: 402 `credits_exhausted`, 403 `plan_limit` or another refusal, with a billing link. */
+function billingRefusalResponse(cause: BillingRefusal, env: Env | undefined): Response {
+  const response = billingErrorResponse(cause, { returnBaseUrl: billingConfigFor(env).returnBaseUrl });
+  return response ?? error("Billing refused the run.", 402);
 }
 
 function getCreateProjectStatus(error: CreateProjectError): number {

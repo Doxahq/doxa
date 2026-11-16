@@ -186,7 +186,7 @@ function Bar({
 }): ReactNode {
   return (
     <span
-      className={cn("block max-w-full rounded-sm bg-muted motion-safe:animate-pulse", className)}
+      className={cn("block max-w-full rounded-sm bg-muted animate-pulse", className)}
       style={{ width, height, ...SKELETON_PULSE_STYLE }}
     />
   )

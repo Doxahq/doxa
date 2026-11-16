@@ -9,6 +9,15 @@ import { z } from "zod";
 /** On the run, when it stops: the step that failed and whether it can continue. */
 export const WORKFLOW_STEP_FAILED_EVENT_TYPE = "workflow_step_failed";
 
+/**
+ * On a run that the credit meter stopped (`stopped_credits`, billing spec
+ * 10.6): the step where it stopped, with the same data as
+ * `workflow_step_failed`. A person can continue the run from there after
+ * raising the cap or the monthly limit. The generation log does not show it;
+ * the `credits_stopped` event tells people why the run stopped.
+ */
+export const GENERATION_CREDIT_STOP_STEP_EVENT_TYPE = "credits_stopped_step";
+
 /** On the run, when a person continues it. The run's time budget starts again here. */
 export const GENERATION_RESUMED_EVENT_TYPE = "generation_resumed";
 

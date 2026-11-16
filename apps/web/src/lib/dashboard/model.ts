@@ -54,9 +54,7 @@ export const EVENT_PROGRESS: Record<string, number> = {
 }
 
 export function getJobProgress(job: GenerationJobDto, events: JobEventDto[]): number {
-  if (job.status === "succeeded") return 100
-  if (job.status === "failed") return 100
-  if (job.status === "cancelled") return 100
+  if (isTerminalJob(job)) return 100
 
   const eventProgress = events.reduce((max, event) => Math.max(max, EVENT_PROGRESS[event.type] ?? 0), 0)
   const statusProgress = job.status === "running" ? 10 : job.status === "queued" ? 6 : 0
@@ -64,7 +62,7 @@ export function getJobProgress(job: GenerationJobDto, events: JobEventDto[]): nu
 }
 
 export function isTerminalJob(job: GenerationJobDto): boolean {
-  return job.status === "succeeded" || job.status === "failed" || job.status === "cancelled"
+  return job.status !== "queued" && job.status !== "running"
 }
 
 export function createLocalStartedEvent(job: GenerationJobDto): JobEventDto {

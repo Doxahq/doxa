@@ -16,6 +16,7 @@ import {
   type PageBatchCacheContext,
   type PageCacheEntry,
   type PageCacheKeyInput,
+  summarizePageCacheUse,
 } from "../src/generation-page-cache";
 import type {
   GenerationPageCheckpointStore,
@@ -624,3 +625,14 @@ function cacheContext(
     createdAt: "2026-07-30T00:00:00.000Z",
   };
 }
+
+describe("summarizePageCacheUse", () => {
+  test("adds the cache hits and the written pages of the batches that finished", () => {
+    expect(summarizePageCacheUse([
+      { status: "fulfilled", value: { exactHits: 20, crossModelHits: 2, generated: 3 } },
+      { status: "rejected", reason: new Error("batch failed") },
+      { status: "fulfilled", value: { exactHits: 5, crossModelHits: 0, generated: 0 } },
+    ])).toEqual({ cachedPageCount: 27, writtenPageCount: 3 });
+    expect(summarizePageCacheUse([])).toEqual({ cachedPageCount: 0, writtenPageCount: 0 });
+  });
+});

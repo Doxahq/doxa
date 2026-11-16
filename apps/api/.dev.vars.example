@@ -3,6 +3,8 @@ BETTER_AUTH_URL=https://replace-with-api-tunnel-or-dev-api-domain
 BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3001,https://replace-with-web-preview-domain
 # Isolate local/tunnel authentication from production cookies on .doxa.so.
 AUTH_COOKIE_PREFIX=doxa-dev
+# New accounts (email and password, Google, GitHub). Off unless exactly true.
+AUTH_SIGNUPS_ENABLED=true
 # The web app reads the signed-in marker `<prefix>.signed_in`: set
 # VITE_AUTH_COOKIE_PREFIX to the same value in apps/web/.env.local.
 # Set a domain only when the API and dashboard need to share cookies.
@@ -62,3 +64,13 @@ GITHUB_WEBHOOK_SECRET=replace-with-github-webhook-secret
 # Development-only emergency bypass. Keep false when a webhook secret is configured.
 DOXA_RUNTIME_ENVIRONMENT=development
 ALLOW_INSECURE_GITHUB_WEBHOOKS=false
+
+# BILLING_ENFORCEMENT=off: then nothing changes. Checkout, Portal and webhooks
+# need the Node origin: pnpm dev --api-node.
+# BILLING_PROVIDER=stripe
+# BILLING_ENFORCEMENT=on
+# STRIPE_SECRET_KEY=replace-with-sandbox-sk_test-or-rk_test-key
+# STRIPE_WEBHOOK_SECRET=replace-with-whsec-from-stripe-listen
+# STRIPE_MANAGED_PAYMENTS=on
+# The credit meter prices model calls with the agent worker provider.
+# DOXA_MODEL_PROVIDER=anthropic

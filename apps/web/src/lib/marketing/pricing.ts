@@ -1,5 +1,9 @@
 // Copy for the pricing page. Bracketed values are placeholders for limits
-// that are not decided yet.
+// that are not decided yet. Prices, credits and pay-as-you-go come from the
+// billing catalog (`@doxahq/billing/catalog`), so the page and Checkout
+// always agree.
+
+import { DOXA_CATALOG, describeOffer, formatUsd, isUnlimited, type LimitKey, type OfferView } from "@doxahq/billing/catalog"
 
 /** A run of text; `ph` marks a placeholder that renders in the `.ph` style. */
 export type Rich = string | { ph: string }
@@ -15,13 +19,130 @@ export interface PlanPricing {
   sub: string
 }
 
+export const FOUNDER_OFFER_KEY = "founder_v1"
+
+/** The founder offer as a new Checkout prices it with every spot open: what the prerendered page shows. */
+export const DEFAULT_PRO_OFFER: OfferView = describeOffer(DOXA_CATALOG, FOUNDER_OFFER_KEY, 0)
+
+/** The Checkout interval of a billing period. */
+export const PERIOD_INTERVAL: Record<BillingPeriod, "month" | "year"> = { monthly: "month", yearly: "year" }
+
+/** The parts of an offer that set the Pro price lines: the catalog view or `GET /billing/offers`. */
+export interface OfferPrices {
+  prices: Record<"month" | "year", { amountCents: number; monthlyEquivalentCents: number }>
+  yearlySavingsPercent: number
+}
+
+/** The Pro price for each billing period, from an offer. */
+export function proPricing(offer: OfferPrices): Record<BillingPeriod, PlanPricing> {
+  const { month, year } = offer.prices
+  return {
+    monthly: { price: formatUsd(month.amountCents), per: "/ month", sub: "Billed monthly · cancel anytime" },
+    yearly: {
+      price: formatUsd(year.monthlyEquivalentCents),
+      per: "/ month",
+      sub: `Billed yearly at ${formatUsd(year.amountCents)} · cancel anytime`,
+    },
+  }
+}
+
 /** Choices of the billing toggle on a plan card, in display order. */
-export const BILLING_OPTIONS: { id: BillingPeriod; label: string; note?: string }[] = [
-  { id: "monthly", label: "Monthly" },
-  { id: "yearly", label: "Yearly", note: "−17%" },
-]
+export function billingOptions(offer: OfferPrices): { id: BillingPeriod; label: string; note?: string }[] {
+  return [
+    { id: "monthly", label: "Monthly" },
+    { id: "yearly", label: "Yearly", ...(offer.yearlySavingsPercent > 0 ? { note: `−${offer.yearlySavingsPercent}%` } : {}) },
+  ]
+}
+
+export const BILLING_OPTIONS = billingOptions(DEFAULT_PRO_OFFER)
 
 export const DEFAULT_BILLING: BillingPeriod = "yearly"
+
+/** The offer line under the Pro price. With the live offer, it counts the spots left (spec 7.5). */
+export function founderOfferLine(offer: { open: boolean; slotsLeft: number; maxAccounts: number } | null): string | null {
+  if (!offer) return `Founder price for the first ${DEFAULT_PRO_OFFER.maxAccounts} paying customers`
+  if (!offer.open) return null
+  return `${offer.slotsLeft} of ${offer.maxAccounts} founder spots left`
+}
+
+/**
+ * "Upgrade to Pro": sign-in first, then the dashboard opens Checkout at this
+ * interval (`/dashboard/billing?upgrade=`). A signed-in visitor goes on at once.
+ */
+export function upgradeUrl(period: BillingPeriod, signInUrl = "/login"): string {
+  const next = `/dashboard/billing?upgrade=${PERIOD_INTERVAL[period]}`
+  return `${signInUrl}?redirect=${encodeURIComponent(next)}`
+}
+
+/** "Founder price for the first 50 paying customers": the static note of the hero and the CTA bands. */
+export const FOUNDER_PRICE_NOTE = founderOfferLine(null) ?? ""
+
+const fmt = (value: number) => new Intl.NumberFormat("en-US").format(value)
+const proCreditsLimit = DOXA_CATALOG.plans.pro.limits["ai.credits_monthly"]
+/** 5,000: the Pro allowance. */
+export const PRO_MONTHLY_CREDITS = typeof proCreditsLimit === "number" ? proCreditsLimit : 0
+const generationPricing = DOXA_CATALOG.actions["generation.run"].pricing
+const doxabotPricing = DOXA_CATALOG.actions["doxabot.run"].pricing
+const creditCents = DOXA_CATALOG.credit.unitPriceCents
+/** "$0.01". */
+export const CREDIT_PRICE = formatUsd(creditCents, { cents: true })
+/** Decision D10: docs chat launches later, so the page hides every chat line while it is planned. */
+const docsChatStatus: string = DOXA_CATALOG.actions["docs_chat.answer"].status
+export const DOCS_CHAT_LIVE = docsChatStatus === "live"
+const payg = DOXA_CATALOG.payg
+const usd = (credits: number) => formatUsd(credits * creditCents)
+
+/**
+ * The first lines of the Pro card. The dashboard's Pro trial offer shows the
+ * same lines, so both say the same thing about Pro.
+ */
+export const PRO_HIGHLIGHTS = {
+  agent: "Doxa Agent writes docs from your GitHub repo",
+  updates: "Keeps your docs updated with every PR or merge",
+  credits: `${fmt(PRO_MONTHLY_CREDITS)} AI credits / month`,
+  payg: `Pay-as-you-go above that, ${CREDIT_PRICE} per credit`,
+} as const
+
+const proLimits = DOXA_CATALOG.plans.pro.limits
+
+/** "Unlimited team seats", or "4 team seats" when Pro has a number for the limit. */
+function proLimitLine(key: LimitKey, noun: string): string {
+  const limit = proLimits[key]
+  return isUnlimited(limit) ? `Unlimited ${noun}` : `${fmt(limit)} ${noun}`
+}
+
+export interface ProFeatureGroup {
+  readonly id: "ai" | "site_team"
+  readonly label: string
+  readonly items: readonly string[]
+}
+
+/**
+ * The Pro features in two groups, for the trial dialog and the upgrade card.
+ * The credit numbers and the limits come from the catalog.
+ */
+export const PRO_FEATURE_GROUPS: readonly ProFeatureGroup[] = [
+  {
+    id: "ai",
+    label: "AI",
+    items: [
+      "Docs written from your repo",
+      "Docs updated on every PR",
+      `${fmt(PRO_MONTHLY_CREDITS)} AI credits a month`,
+      `Then ${CREDIT_PRICE} per credit`,
+    ],
+  },
+  {
+    id: "site_team",
+    label: "Site and team",
+    items: [
+      "Instant cloud search",
+      proLimitLine("mcp.tool_calls_per_day", "MCP calls"),
+      proLimitLine("docs.branches_per_site", "branches"),
+      proLimitLine("team.seats", "team seats"),
+    ],
+  },
+]
 
 export interface Plan {
   id: "free" | "pro" | "enterprise"
@@ -64,20 +185,16 @@ export const PLANS: Plan[] = [
     id: "pro",
     name: "PRO",
     desc: "For product teams that ship every week and want docs on their own brand.",
-    price: "$149",
-    per: "/ month",
-    sub: "Billed yearly at $1,788 · cancel anytime",
-    billing: {
-      monthly: { price: "$179", per: "/ month", sub: "Billed monthly · cancel anytime" },
-      yearly: { price: "$149", per: "/ month", sub: "Billed yearly at $1,788 · cancel anytime" },
-    },
-    offer: "Special price for the first 100 customers",
+    ...proPricing(DEFAULT_PRO_OFFER).yearly,
+    billing: proPricing(DEFAULT_PRO_OFFER),
+    offer: founderOfferLine(null) ?? undefined,
     includes: "Everything in Free, plus:",
     checks: [
-      ["Doxa Agent writes docs from your GitHub repo"],
-      ["Keeps your docs updated with every PR or merge"],
-      ["AI chat on your docs site"],
-      ["10,000 AI credits / month"],
+      [PRO_HIGHLIGHTS.agent],
+      [PRO_HIGHLIGHTS.updates],
+      ...(DOCS_CHAT_LIVE ? [["AI chat on your docs site"]] : []),
+      [PRO_HIGHLIGHTS.credits],
+      [PRO_HIGHLIGHTS.payg],
       ["Invite your team, unlimited seats"],
       ["Role-based permissions for every member"],
       ["Remove the \"Powered by Doxa\" badge"],
@@ -129,21 +246,23 @@ const item = (label: string, free: CompareCell, pro: CompareCell, enterprise: Co
   enterprise,
 })
 
+/** Decision D21: a pull request run without a baseline analyzes the whole repository. */
+export const COLD_RUN_NOTE = "A pull request run with no cache yet counts as a Full generation."
+
 export const COMPARE_ROWS: CompareRow[] = [
   group("Doxa Agent"),
   item("Generate docs from a GitHub repo", no, yes, yes),
   item("Doxabot rewrites affected pages on every merge", no, yes, yes),
   item("Approval before every publish", no, yes, yes),
   group("AI credits"),
-  item("AI credits per month", no, v("10,000"), v("50,000+")),
-  item("Docs chat answer", no, v("10 credits"), v("10 credits")),
-  item("Docs generation from a repo", no, v("100 + 5 per page"), v("100 + 5 per page")),
-  item("Doxabot run that changes pages", no, v("100 credits"), v("100 credits")),
-  item("Extra credits", no, v("Packs (pay-as-you-go coming soon)"), v("Volume pricing")),
+  item("AI credits per month", no, v(fmt(PRO_MONTHLY_CREDITS)), v("50,000+")),
+  item("Full generation", no, v(`${generationPricing.base} + model usage`), v(`${generationPricing.base} + model usage`)),
+  item("Update run (pull request or merge)", no, v(`${doxabotPricing.base} + model usage`), v(`${doxabotPricing.base} + model usage`)),
+  item("Credits above the allowance", no, v(`Pay-as-you-go, ${CREDIT_PRICE} each`), v("Volume pricing")),
   group("Docs platform"),
   item("Hosted MDX docs site", yes, yes, yes),
   item("Search and llms.txt", yes, yes, yes),
-  item("AI chat on your docs site", no, yes, yes),
+  ...(DOCS_CHAT_LIVE ? [item("AI chat on your docs site", no, yes, yes)] : []),
   item("Branches per site with previews", v("3"), v("Unlimited"), v("Unlimited")),
   item("Docs storage", v("100 MB"), v("Unlimited"), v("Unlimited")),
   item("Custom domains", v("1"), v("4"), v("Unlimited")),
@@ -188,13 +307,13 @@ export const FAQ: FaqItem[] = [
   {
     q: "How do AI credits work?",
     a: [
-      "AI credits come with Pro and Enterprise. Every AI action uses credits from one monthly pool, and 1 credit is worth $0.01. A docs chat answer uses 10 credits, a docs generation uses 100 credits plus 5 per page, and a Doxabot run that changes pages uses 100 credits. The first generation of each new site is free. An action that fails, a chat question without an answer and a Doxabot run that changes nothing use no credits. MCP tool calls, hosting and previews never use credits.",
+      `AI credits come with Pro and Enterprise. Pro includes ${fmt(PRO_MONTHLY_CREDITS)} credits each month, and 1 credit is worth ${CREDIT_PRICE}. An AI action costs a base fee plus the AI model usage of the run: a Full generation costs ${generationPricing.base} credits plus usage (about 266–350 credits for 50 pages), and an Update run (pull request or merge) costs ${doxabotPricing.base} credits plus usage. ${COLD_RUN_NOTE} Before a run, the dashboard shows an estimate, and each run stops at a cap that you set. A failed action costs nothing, and an Update run that changes nothing pays only its usage. MCP tool calls, hosting and previews never use credits.`,
     ],
   },
   {
     q: "What happens when I run out of credits?",
     a: [
-      "Only the AI features pause until the next month. Your docs site stays online. On Pro you can buy extra credits: 5,000 for $50, 20,000 for $180 or 50,000 for $400. Monthly credits expire at the end of the month, and extra credits stay valid for 12 months.",
+      `On Pro, runs continue with pay-as-you-go at ${CREDIT_PRICE} per credit. Doxa charges your card automatically when the balance reaches ${usd(payg.chargeAtCredits)}, and once a month. A monthly limit (${formatUsd(payg.defaultMonthlyLimitCents)} by default, from ${formatUsd(payg.monthlyLimitRangeCents[0])} to ${formatUsd(payg.monthlyLimitRangeCents[1])}) keeps the total in check, and you can turn pay-as-you-go off. During the trial, AI runs pause when the trial credits run out. Your docs site always stays online. Monthly credits expire at the end of the month.`,
     ],
   },
   {
@@ -216,7 +335,7 @@ export const FAQ: FaqItem[] = [
   {
     q: "What is the founder price?",
     a: [
-      "The Pro prices on this page are a special founder price for our first 100 customers. After that, Pro prices go up for new customers. The founder price does not apply to extra AI credit packs.",
+      `The Pro prices on this page are a founder price for our first ${DEFAULT_PRO_OFFER.maxAccounts} paying customers. A founder keeps the price while the subscription stays active, also after a switch between monthly and yearly. After that, Pro prices go up for new customers. Pay-as-you-go credits cost ${CREDIT_PRICE} each on every plan.`,
     ],
   },
 ]

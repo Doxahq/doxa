@@ -100,7 +100,7 @@ export function GenerationActionDialog(
             {props.isPending ? (
               <Loader2
                 aria-hidden="true"
-                className="motion-safe:animate-spin"
+                className="animate-spin"
               />
             ) : null}
             {props.isPending ? `${confirmLabel}…` : confirmLabel}

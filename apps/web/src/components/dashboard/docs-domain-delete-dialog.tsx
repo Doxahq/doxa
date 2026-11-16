@@ -137,7 +137,7 @@ export function DocsDomainDeleteContent({
           onClick={onDelete}
         >
           {isDeleting ? (
-            <Loader2 aria-hidden="true" className="motion-safe:animate-spin" />
+            <Loader2 aria-hidden="true" className="animate-spin" />
           ) : (
             <Trash2 aria-hidden="true" />
           )}

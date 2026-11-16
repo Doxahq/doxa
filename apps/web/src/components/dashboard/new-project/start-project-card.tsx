@@ -1,6 +1,9 @@
 import { Github, Plus } from "lucide-react"
 
+import { Bar, TextBar } from "~/components/dashboard/skeletons/skeleton-kit"
+import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
+import type { AiGenerationAccess } from "~/lib/dashboard/ai-access"
 
 const STEPS = [
   {
@@ -24,13 +27,20 @@ const STEPS = [
  * The start of the new project page: the two ways to create a project, and
  * the three steps from a project to a live site. With no project yet, it reads
  * as the empty state of the account.
+ *
+ * `access` says whether the account can generate. A Free account (no AI)
+ * sees the same buttons, with a PRO tag on "Generate from a repository"; the
+ * page opens the Pro trial dialog, which says why, when it is clicked. While the plan loads,
+ * bars hold the same space, so nothing moves when it arrives.
  */
 export function StartProjectCard({
   isFirstProject,
+  access,
   onGenerateFromRepository,
   onCreateProject,
 }: {
   isFirstProject: boolean
+  access: AiGenerationAccess
   onGenerateFromRepository: () => void
   onCreateProject: () => void
 }) {
@@ -45,24 +55,9 @@ export function StartProjectCard({
           >
             {isFirstProject ? "No projects yet" : "Start a new docs site"}
           </h2>
-          <p className="max-w-[460px] text-sm leading-[22px] text-muted-foreground">
-            Have code on GitHub? Doxabot reads your repository and writes your first docs. Or start from the starter docs
-            or an empty site.
-          </p>
+          <StartDescription access={access} />
         </div>
-        <div className="flex flex-col items-center gap-2.5">
-          <div className="flex flex-wrap justify-center gap-2">
-            <Button type="button" onClick={onGenerateFromRepository}>
-              <Github aria-hidden="true" />
-              Generate from a repository
-            </Button>
-            <Button type="button" variant="outline" onClick={onCreateProject}>
-              <Plus aria-hidden="true" />
-              Create project
-            </Button>
-          </div>
-          <span className="text-xs text-label">You can rename or delete the project later.</span>
-        </div>
+        <StartActions access={access} onGenerateFromRepository={onGenerateFromRepository} onCreateProject={onCreateProject} />
       </div>
 
       <ol className="grid border-t border-divider sm:grid-cols-3">
@@ -80,6 +75,63 @@ export function StartProjectCard({
         ))}
       </ol>
     </section>
+  )
+}
+
+const DESCRIPTION_CLASS = "max-w-[460px] text-sm leading-[22px] text-muted-foreground"
+
+function StartDescription({ access }: { access: AiGenerationAccess }) {
+  if (access.kind === "loading") {
+    return (
+      <div aria-hidden="true" className="w-[440px] max-w-full">
+        <TextBar width="100%" className={DESCRIPTION_CLASS} />
+        <TextBar width="70%" className={DESCRIPTION_CLASS} />
+      </div>
+    )
+  }
+  return (
+    <p className={DESCRIPTION_CLASS}>
+      Have code on GitHub? Doxabot reads your repository and writes your first docs. Or start from the starter docs or an
+      empty site.
+    </p>
+  )
+}
+
+function StartActions({
+  access,
+  onGenerateFromRepository,
+  onCreateProject,
+}: {
+  access: AiGenerationAccess
+  onGenerateFromRepository: () => void
+  onCreateProject: () => void
+}) {
+  if (access.kind === "loading") {
+    // The buttons' boxes, so the loaded actions take the same space.
+    return (
+      <div aria-hidden="true" className="flex flex-wrap justify-center gap-2">
+        <Bar width="13.5rem" height="2.25rem" />
+        <Bar width="9.25rem" height="2.25rem" />
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-wrap justify-center gap-2">
+      <Button type="button" onClick={onGenerateFromRepository}>
+        <Github aria-hidden="true" />
+        Generate from a repository
+        {/* The dialog says why; the tag only marks the plan, so it stays out of the button's name. */}
+        {access.kind === "needs_pro" ? (
+          <Badge aria-hidden="true" className="px-1.5 py-0 leading-4">
+            Pro
+          </Badge>
+        ) : null}
+      </Button>
+      <Button type="button" variant="outline" onClick={onCreateProject}>
+        <Plus aria-hidden="true" />
+        Create project
+      </Button>
+    </div>
   )
 }
 

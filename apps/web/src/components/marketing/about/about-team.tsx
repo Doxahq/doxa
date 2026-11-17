@@ -1,4 +1,4 @@
-import { GithubIcon } from "~/components/marketing/about/github-icon"
+import { GithubIcon } from "~/components/marketing/github-icon"
 import { CONTACT_EMAIL, GITHUB_URL } from "~/lib/marketing/links"
 
 const FACTS: { term: string; value: string; href?: string }[] = [

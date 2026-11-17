@@ -1,6 +1,6 @@
 /* Main page. Scoped to `.pg--home`; shared rules live in shared.css. */
 .pg--home { margin: 0; background: #0a0a0a; }
-.pg--home { --night: #0a0a0a; --line: rgba(255, 255, 255, 0.1); --line-strong: rgba(255, 255, 255, 0.16); --guide: rgba(255, 255, 255, 0.14); --text: #ededed; --muted: #a1a1a1; --dim: #737373; --ice: #9cc2ff; --accent: #3d7bff; --lav: #c4a1ff; --display: "Geist Mono", ui-monospace, monospace; --sans: "Geist", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --col: 1200px; /* Content lives in one centered column; lines, bands and the footer still run edge to edge. */ --gutter: max(20px, calc((100% - var(--col)) / 2)); --dash-x: linear-gradient(90deg, var(--guide) 0 4px, transparent 4px 8px); --dash-y: linear-gradient(180deg, var(--guide) 0 4px, transparent 4px 8px); position: relative; background: var(--night); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+.pg--home { --night: #0a0a0a; --line: rgba(255, 255, 255, 0.1); --line-strong: rgba(255, 255, 255, 0.16); --guide: rgba(255, 255, 255, 0.14); --text: #ededed; --muted: #a1a1a1; --dim: #737373; --ice: #9cc2ff; --accent: #3d7bff; --lav: #c4a1ff; --display: "Geist Mono", ui-monospace, monospace; --sans: "Geist", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --col: clamp(1200px, 72vw, 1520px); /* Content lives in one centered column (1200px, wider on big screens up to 1520px; every marketing page uses the same value so the nav and rails line up); lines, bands and the footer still run edge to edge. */ --gutter: max(20px, calc((100% - var(--col)) / 2)); --dash-x: linear-gradient(90deg, var(--guide) 0 4px, transparent 4px 8px); --dash-y: linear-gradient(180deg, var(--guide) 0 4px, transparent 4px 8px); position: relative; background: var(--night); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
 .pg--home * { box-sizing: border-box; margin: 0; padding: 0; }
 .pg--home .hr__n { position: absolute; top: 8px; right: calc(100% - var(--gutter) + 14px); font: 400 10px/1 var(--mono); letter-spacing: 0.12em; color: #55555a; white-space: nowrap; }
 .pg--home .vdiv { background-image: var(--dash-y); background-size: 1px 8px; background-repeat: repeat-y; background-position: left top; }
@@ -75,7 +75,7 @@
 .pg--home .wk img { flex-shrink: 0; width: 22px; height: 22px; }
 
 /* ---------- Open by design ---------- */
-.pg--home .op { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); }
+.pg--home .op { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .pg--home .op__copy { display: flex; flex-direction: column; justify-content: center; gap: 22px; padding: 88px 48px 88px 32px; }
 .pg--home .op__copy h2 { font-size: 52px; line-height: 1.04; }
 .pg--home .op__copy > p { max-width: 470px; font-size: 17px; line-height: 27px; color: var(--muted); }
@@ -85,6 +85,7 @@
 .pg--home .op__list div { display: flex; flex-direction: column; gap: 3px; }
 .pg--home .op__list b { font-size: 15px; font-weight: 600; line-height: 20px; color: #fafafa; }
 .pg--home .op__list div span { font-size: 14px; line-height: 21px; color: var(--muted); }
+.pg--home .op__guide { align-self: flex-start; margin-top: 10px; }
 .pg--home .op__art { display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: 56px 32px; }
 .pg--home .op__win { border: 1px solid var(--line-strong); background: #070708; }
 .pg--home .op__win:first-child { border-color: rgba(61, 123, 255, 0.5); box-shadow: 0 30px 80px -40px rgba(61, 123, 255, 0.6); }
@@ -106,7 +107,7 @@
 .pg--home .head p { max-width: 620px; font-size: 17px; line-height: 27px; color: var(--muted); }
 
 /* ---------- Featured: Doxa Agent ---------- */
-.pg--home .feature { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); background: rgba(255, 255, 255, 0.025); }
+.pg--home .feature { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); background: rgba(255, 255, 255, 0.025); }
 .pg--home .feature__copy { display: flex; flex-direction: column; justify-content: center; gap: 22px; padding: 72px 40px 72px 32px; }
 .pg--home .feature__copy h3 { font-size: 38px; line-height: 1.12; font-weight: 600; letter-spacing: -0.02em; color: #fafafa; }
 .pg--home .feature__copy p { max-width: 420px; font-size: 15px; line-height: 24px; color: var(--muted); }

@@ -1,6 +1,6 @@
 /* Mcp2 page. Scoped to `.pg--mcp`; shared rules live in shared.css. */
 .pg--mcp { margin: 0; background: #0a0a0a; }
-.pg--mcp { --night: #0a0a0a; --line: rgba(255, 255, 255, 0.1); --line-strong: rgba(255, 255, 255, 0.16); --guide: rgba(255, 255, 255, 0.14); --text: #ededed; --muted: #a1a1a1; --dim: #8a8a8f; --ice: #9cc2ff; --lav: #c4a1ff; --accent: #3d7bff; --deep: #2453c9; --display: "Geist Mono", ui-monospace, monospace; --sans: "Geist", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --col: 1200px; --gutter: max(20px, calc((100% - var(--col)) / 2)); --dash-x: linear-gradient(90deg, var(--guide) 0 4px, transparent 4px 8px); --dash-y: linear-gradient(180deg, var(--guide) 0 4px, transparent 4px 8px); position: relative; background: var(--night); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+.pg--mcp { --night: #0a0a0a; --line: rgba(255, 255, 255, 0.1); --line-strong: rgba(255, 255, 255, 0.16); --guide: rgba(255, 255, 255, 0.14); --text: #ededed; --muted: #a1a1a1; --dim: #8a8a8f; --ice: #9cc2ff; --lav: #c4a1ff; --accent: #3d7bff; --deep: #2453c9; --display: "Geist Mono", ui-monospace, monospace; --sans: "Geist", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --col: clamp(1200px, 72vw, 1520px); --gutter: max(20px, calc((100% - var(--col)) / 2)); --dash-x: linear-gradient(90deg, var(--guide) 0 4px, transparent 4px 8px); --dash-y: linear-gradient(180deg, var(--guide) 0 4px, transparent 4px 8px); position: relative; background: var(--night); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
 .pg--mcp * { box-sizing: border-box; margin: 0; padding: 0; }
 .pg--mcp .hr__n { position: absolute; top: 8px; right: calc(100% - var(--gutter) + 14px); font: 400 10px/1 var(--mono); letter-spacing: 0.12em; color: #6a6a70; white-space: nowrap; }
 .pg--mcp .ticks { position: absolute; top: 0; bottom: 0; width: var(--gutter); pointer-events: none; }
@@ -38,7 +38,8 @@
 .pg--mcp .copy svg { color: var(--ice); }
 
 /* Art panel */
-.pg--mcp .art { position: relative; aspect-ratio: 12 / 5; max-height: 500px; overflow: hidden; background: #070b16; }
+/* The art fills the column (1200px, up to 1520px on big screens) at 12:5. */
+.pg--mcp .art { position: relative; aspect-ratio: 12 / 5; max-height: calc(var(--col) * 5 / 12); overflow: hidden; background: #070b16; }
 .pg--mcp .art::before { content: ""; position: absolute; inset: -24px; background: var(--art-placeholder) center / cover no-repeat; filter: blur(16px); }
 .pg--mcp .art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .pg--mcp .art__fx { position: absolute; inset: 0; pointer-events: none; }

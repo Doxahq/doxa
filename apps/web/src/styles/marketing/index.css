@@ -3,6 +3,7 @@
    scoped to its root class (`.pg--home`, `.pg--pricing`, …). */
 @import "./shared.css";
 @import "./home.css";
+@import "./home-hero-v2.css";
 @import "./pricing.css";
 @import "./mcp.css";
 @import "./about.css";

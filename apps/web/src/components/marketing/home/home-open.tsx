@@ -1,5 +1,7 @@
+import { ArrowUpRight } from "lucide-react"
 import type { ReactNode } from "react"
 import { EXPORT_TREE } from "~/lib/marketing/home"
+import { SELF_HOSTING_GUIDE_URL } from "~/lib/marketing/links"
 
 const DOWNLOAD_PATH = "M9 2.5v9M5.5 8 9 11.5 12.5 8M3 13.5v2h12v-2"
 
@@ -71,6 +73,10 @@ export function HomeOpen() {
               </li>
             ))}
           </ul>
+          <a className="btn btn--line op__guide" href={SELF_HOSTING_GUIDE_URL} target="_blank" rel="noreferrer">
+            Self-hosting Guide
+            <ArrowUpRight aria-hidden="true" size={14} />
+          </a>
         </div>
         <div className="op__art vdiv" aria-hidden="true">
           <div className="op__win">

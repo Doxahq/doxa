@@ -1,10 +1,12 @@
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { ChevronDown } from "lucide-react"
 import { DoxaMark } from "~/components/marketing/doxa-mark"
+import { GithubIcon } from "~/components/marketing/github-icon"
 import {
   DASHBOARD_URL,
   DOCS_URL,
   GET_STARTED_URL,
+  GITHUB_URL,
   SIGN_IN_URL,
   type MarketingPage,
 } from "~/lib/marketing/links"
@@ -85,6 +87,9 @@ export function SiteNav({ current, cta = DEFAULT_CTA }: { current: MarketingPage
           <ResourcesMenu current={current} />
         </div>
         <div className="nav__actions">
+          <a className="nav__github" href={GITHUB_URL} target="_blank" rel="noreferrer" aria-label="Doxa on GitHub">
+            <GithubIcon size={18} />
+          </a>
           {STATIC_PAGES.has(current) ? (
             <a className="btn btn--light btn--sm" href={cta.href}>
               {cta.label}

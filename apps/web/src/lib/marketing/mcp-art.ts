@@ -11,10 +11,11 @@ export const MCP_ART = {
   width: 2400,
   height: 1000,
   /**
-   * The art box is at most 1200 px wide, inside a 20 px gutter. Under 760 px the
-   * box is 4:3 and the 12:5 image covers it, so the image is 1.8 times as wide.
+   * The art box is as wide as the page column (1200 px, growing to 1520 px on big
+   * screens), inside a 20 px gutter. Under 760 px the box is 4:3 and the 12:5 image
+   * covers it, so the image is 1.8 times as wide.
    */
-  sizes: "(max-width: 760px) calc((100vw - 40px) * 1.8), (max-width: 1240px) calc(100vw - 40px), 1200px",
+  sizes: "(max-width: 760px) calc((100vw - 40px) * 1.8), (max-width: 1240px) calc(100vw - 40px), clamp(1200px, 72vw, 1520px)",
   /** A 24 × 10 copy, drawn blurred under the image until the image loads. */
   placeholder: "data:image/webp;base64,UklGRogAAABXRUJQVlA4IHwAAADwAwCdASoYAAoAPrVWoUsnJSMhsAgA4BaJQApgAPRAQqDLdZKV353AAP74TYjsJ6BFJ7BMYus7NjR1K4efk47eb9HhEi3x9yPQb4bT2K06Ubmf/ZUFXTs4NoWesur6A+EMoWDzZtaW2hfiSWHtzFnDKhPHSNho/eNIeAAA",
 } as const

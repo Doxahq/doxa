@@ -10,6 +10,7 @@ export function absoluteUrl(path: string): string {
 }
 
 export const GITHUB_URL = "https://github.com/Doxahq/doxa"
+export const SELF_HOSTING_GUIDE_URL = `${GITHUB_URL}/blob/main/docs/current/self-hosting.md`
 export const DOCS_URL = "https://docs.doxa.so"
 export const MCP_SERVER_URL = "https://mcp.doxa.so/mcp"
 export const X_URL = "https://x.com/ipenywis"

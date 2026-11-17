@@ -1,0 +1,138 @@
+/* ---------- Home hero v2: the docs window rises out of the night dunes ----------
+   Component: components/marketing/home/home-hero-v2.tsx. Swap: lib/marketing/home-hero.ts.
+
+   The scene is a square of --sw: one photo in two layers (public/marketing/hero).
+     back  = sky and the big lit dune, scene rows 0 .. 92.2% (it runs on under the front band,
+             so the page never shows between the two layers).
+     front = the lower dune band, scene rows 70.83% .. 100%, transparent above its glowing edge.
+   The docs window's top sits at 44.44% of the scene. All the layers hang from the window
+   (the stage), so the window keeps its place on the dunes at every width, and the copy
+   above it can take any height.
+
+   --sw is the scene width: the full page width (never less than 1440px, so narrower
+   screens crop the sides), at most 2560px, and on narrow screens small enough for a 16px
+   margin on each side of the window. Above 2560px (ultrawide and 4K at 100%) the photo
+   would turn soft and the hero very tall, so it stops there and its sides fade into the
+   page (see the media query below).
+   --shot-w is the window width: 72.22% of the scene up to 1440px, then it grows only with
+   half the page, so on wide screens the photo fills the page but the window stays readable.
+   The front band crosses the window 26.4% of --sw below its top, which stays inside the
+   window for every width (about 72% of its height at 2560px, 82% at 3840px). */
+.pg--home .hv2 {
+  --sw: min(max(100vw, 1440px), calc((100vw - 32px) / 0.72222), 2560px);
+  /* The window is also at most 116% of the screen height (1040px on a 1440 x 900 screen),
+     so wide but short screens (1080p, 720p) do not open on a window that starts at the fold. */
+  --shot-w: min(calc(var(--sw) * 0.72222), max(1440px, 50vw), 116vh);
+  /* The window's height (the screenshot is 16:10, plus the 38px bar). */
+  --shot-h: calc(var(--shot-w) * 0.625 + 38px);
+  /* The front band's top, from the window's top. In the scene it sits at 26.4% of --sw,
+     and its glowing edge is 6% of --sw lower. On wide screens the window stops growing
+     with the scene, so the band would cross it lower and lower (90% of its height on a
+     2700px screen) and the window would look parked on the dune. So the band follows the
+     window instead: its edge never crosses below 68% of the window's height, which is
+     where it crosses at 1440px. The band sits 0.9% of --sw higher than in the photo: the
+     two layers come from different rows, and this hides the thin shadow line on the
+     left between the big dune's lit slope and the band. */
+  --front-top: calc(min(calc(var(--sw) * 0.25489), calc(var(--shot-h) * 0.68 - var(--sw) * 0.06)) + var(--shot-h) * 0.1);
+  /* The band is then 10% of the window's height lower still, to show more of the docs. */
+  position: relative; z-index: 7; isolation: isolate; overflow: hidden; background: var(--night);
+}
+/* The hero covers the page rails, so it draws its own copy of them (like the first hero).
+   They sit between the two dune layers: above the sky and the big dune, under the docs
+   window and the front band, so the band passes in front of them (a parallax cue). They
+   are a little brighter than the page's rails, because the photo behind them is busy.
+   The stage makes no stacking context, so its layers (back 0, window 2, front 3) share
+   the hero's order with the rails (1). */
+.pg--home .hv2 { --hv2-rail: linear-gradient(180deg, rgba(255, 255, 255, 0.34) 0 4px, transparent 4px 8px); }
+.pg--home .hv2::after { content: ""; position: absolute; top: 0; bottom: 0; left: var(--gutter); right: var(--gutter); z-index: 1; pointer-events: none; background-image: var(--hv2-rail), var(--hv2-rail); background-size: 1px 8px, 1px 8px; background-position: left top, right top; background-repeat: repeat-y; }
+.pg--home .hv2 > .hr { position: relative; z-index: 6; }
+
+.pg--home .hv2__copy { position: relative; z-index: 5; display: flex; flex-direction: column; align-items: center; gap: clamp(18px, 2.9vh, 26px); padding: clamp(40px, 10vh, 92px) 20px 0; text-align: center; }
+/* The scrim keeps the nav and the copy readable at every width. It belongs to the copy, not to
+   the photo: the photo grows with the page, so on wide screens its bright sky and the lit
+   dune come up behind the text. The scrim runs from the top of the hero (it reaches up past
+   the nav) to the top of the window, and a soft dark glow sits right behind the text block.
+   It paints in the copy's layer, so it covers the photo but stays under the text and the nav. */
+.pg--home .hv2__copy::before { content: ""; position: absolute; z-index: -1; top: -200px; bottom: -100px; left: 50%; width: 100vw; transform: translateX(-50%); pointer-events: none;
+  background:
+    radial-gradient(min(760px, 70vw) 62% at 50% 62%, rgba(7, 11, 19, 0.62), rgba(7, 11, 19, 0) 100%),
+    linear-gradient(180deg, rgba(10, 10, 10, 0.9) 0%, rgba(10, 10, 10, 0.7) 40%, rgba(10, 10, 10, 0.38) 78%, rgba(10, 10, 10, 0) 100%); }
+/* The headline and the lede follow the smaller of the page width and height: they grow
+   on big screens (65px -> 92px, 15px -> 19px from 1440 x 900 up) and shrink on wide but
+   short screens (1080p, 720p), so the window still shows in the first screen. Their line
+   lengths are in em, so they wrap the same at every size. */
+.pg--home .hv2__title { max-width: 12.9em; font-size: clamp(48px, min(4.5vw, 7.2vh), 92px); line-height: 0.98; text-wrap: balance; }
+.pg--home .hv2__lede { max-width: 33em; font-size: clamp(15px, min(1.06vw, 1.7vh), 19px); line-height: 1.6; color: rgba(226, 233, 242, 0.8); }
+.pg--home .hv2__ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.pg--home .hv2__ctas .btn--line { background: rgba(10, 14, 22, 0.35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+/* The pill and the buttons grow and shrink with the headline, in em,
+   so their height, padding and the agent logos keep their shape. */
+.pg--home .hv2__copy .pill { font-size: clamp(10px, min(0.68vw, 1.08vh), 13.5px); height: 2.55em; padding: 0 0.9em 0 0.36em; gap: 0.9em; }
+.pg--home .hv2__copy .pill b { font-size: 0.91em; padding: 0.3em 0.6em; }
+.pg--home .hv2__ctas { gap: clamp(8px, min(0.62vw, 0.98vh), 12.5px); }
+.pg--home .hv2__ctas .btn { font-size: clamp(11px, min(0.74vw, 1.18vh), 14.5px); height: 3.33em; padding: 0 1.33em; gap: 0.83em; }
+.pg--home .hv2__ctas .hero__connect { gap: 1em; padding-left: 0.83em; }
+.pg--home .hv2__ctas .hero__connect-logo { width: 2em; height: 2em; }
+.pg--home .hv2__ctas .hero__connect-logo + .hero__connect-logo { margin-left: -0.58em; }
+.pg--home .hv2__ctas .hero__connect-logo img { width: 1em; height: 1em; }
+
+/* The stage is the window's box. Its height runs to the bottom of the scene. */
+/* The hero ends halfway from the band's edge (6% of --sw into the band) to the
+   photo's bottom (29.2%), so the agents row sits closer. The window's foot stays hidden. */
+.pg--home .hv2__stage { position: relative; width: var(--shot-w); height: calc(var(--front-top) + var(--sw) * (0.06 + 0.23167 * 0.5)); margin: clamp(48px, 11vh, 100px) auto 0; }
+.pg--home .hv2__back, .pg--home .hv2__front { position: absolute; left: 50%; display: block; width: var(--sw); max-width: none; transform: translateX(-50%); pointer-events: none; user-select: none; }
+/* The sky fades into the page black above the window, so the nav and the copy sit on our own color. */
+.pg--home .hv2__back { top: calc(var(--sw) * -0.44444); height: calc(var(--sw) * 0.92188); z-index: 0;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.22) 16.7%, rgba(0, 0, 0, 0.6) 32.6%, #000 49.4%);
+  mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.22) 16.7%, rgba(0, 0, 0, 0.6) 32.6%, #000 49.4%); }
+.pg--home .hv2__front { top: var(--front-top); height: calc(var(--sw) * 0.29167); z-index: 3; filter: brightness(1.18) saturate(1.08); }
+.pg--home .hv2__floor { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; height: 160px; pointer-events: none; background: linear-gradient(180deg, rgba(10, 10, 10, 0) 0%, var(--night) 100%); }
+
+/* The docs window. It sits in place from the first paint (no rise animation). */
+.pg--home .hv2__shot { position: relative; z-index: 2; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 12px; background: #0b0b0d;
+  box-shadow: 0 0 0 1px rgba(156, 194, 255, 0.08), 0 -40px 160px -30px rgba(110, 150, 240, 0.5), 0 40px 80px rgba(0, 0, 0, 0.55); }
+.pg--home .hv2__shot img { display: block; width: 100%; height: auto; }
+.pg--home .hv2__bar { display: flex; align-items: center; gap: 14px; height: 38px; padding: 0 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.07); background: #101013; }
+.pg--home .hv2__dots { display: flex; flex-shrink: 0; gap: 8px; }
+/* The macOS window buttons: close, minimize, zoom. */
+.pg--home .hv2__dots i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25); }
+.pg--home .hv2__dots i:nth-child(1) { background: #ff5f57; }
+.pg--home .hv2__dots i:nth-child(2) { background: #febc2e; }
+.pg--home .hv2__dots i:nth-child(3) { background: #28c840; }
+/* The address bar: wide like a browser's, and a link to the live docs. */
+.pg--home .hv2__url { display: flex; flex: 0 1 560px; align-items: center; justify-content: center; gap: 7px; min-width: 0; height: 26px; margin: 0 auto; padding: 0 12px; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 7px; background: #17171b; font: 400 12px/1 var(--mono); color: #8a8a93; white-space: nowrap; transition: background-color 0.15s ease, color 0.15s ease; }
+.pg--home .hv2__url:hover { background: #1f1f24; color: #c7c7cc; }
+.pg--home .hv2__url svg { flex-shrink: 0; color: #6b6b73; }
+.pg--home .hv2__url-text { overflow: hidden; text-overflow: ellipsis; }
+/* As wide as the window buttons, so the address bar sits in the middle. */
+.pg--home .hv2__bar-end { flex-shrink: 0; width: 52px; }
+
+/* Wider than 2560px: the photo stays 2560px wide and its sides fade into the page black
+   over 22% of its width, on an eased curve so the edge never shows. The back layer keeps its sky fade too (both masks intersect). */
+@media (min-width: 2561px) {
+  .pg--home .hv2__back {
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.22) 16.7%, rgba(0, 0, 0, 0.6) 32.6%, #000 49.4%), linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.12) 5%, rgba(0, 0, 0, 0.4) 10%, rgba(0, 0, 0, 0.75) 15.5%, #000 22%, #000 78%, rgba(0, 0, 0, 0.75) 84.5%, rgba(0, 0, 0, 0.4) 90%, rgba(0, 0, 0, 0.12) 95%, transparent 100%);
+    mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.22) 16.7%, rgba(0, 0, 0, 0.6) 32.6%, #000 49.4%), linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.12) 5%, rgba(0, 0, 0, 0.4) 10%, rgba(0, 0, 0, 0.75) 15.5%, #000 22%, #000 78%, rgba(0, 0, 0, 0.75) 84.5%, rgba(0, 0, 0, 0.4) 90%, rgba(0, 0, 0, 0.12) 95%, transparent 100%);
+    -webkit-mask-composite: source-in; mask-composite: intersect; }
+  .pg--home .hv2__front {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.12) 5%, rgba(0, 0, 0, 0.4) 10%, rgba(0, 0, 0, 0.75) 15.5%, #000 22%, #000 78%, rgba(0, 0, 0, 0.75) 84.5%, rgba(0, 0, 0, 0.4) 90%, rgba(0, 0, 0, 0.12) 95%, transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.12) 5%, rgba(0, 0, 0, 0.4) 10%, rgba(0, 0, 0, 0.75) 15.5%, #000 22%, #000 78%, rgba(0, 0, 0, 0.75) 84.5%, rgba(0, 0, 0, 0.4) 90%, rgba(0, 0, 0, 0.12) 95%, transparent 100%); }
+}
+@media (max-width: 1100px) {
+  .pg--home .hv2__title { font-size: 52px; }
+  .pg--home .hv2__stage { margin-top: 80px; }
+}
+@media (max-width: 760px) {
+  .pg--home .hv2__copy { gap: 22px; padding: 48px 16px 0; }
+  .pg--home .hv2__title { font-size: 36px; }
+  .pg--home .hv2__lede { font-size: 15px; line-height: 24px; }
+  .pg--home .hv2__stage { margin-top: 56px; }
+  .pg--home .hv2__floor { height: 80px; }
+  .pg--home .hv2__shot { border-radius: 8px; }
+  .pg--home .hv2__bar { gap: 8px; height: 26px; padding: 0 8px; }
+  .pg--home .hv2__dots { gap: 4px; }
+  .pg--home .hv2__dots i { width: 6px; height: 6px; }
+  .pg--home .hv2__url { gap: 4px; height: 17px; padding: 0 8px; border-radius: 4px; font-size: 9px; }
+  .pg--home .hv2__url svg { width: 8px; height: 8px; }
+  .pg--home .hv2__bar-end { width: 26px; }
+}

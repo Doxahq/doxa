@@ -26,6 +26,9 @@
 
 /* ---------- Nav ---------- */
 .pg .nav { position: relative; z-index: 7; display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 64px; padding: 0 32px; }
+/* The GitHub link, before the nav buttons on every page. */
+.pg .nav__github { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: #a1a1a1; transition: color 0.15s ease; }
+.pg .nav__github:hover { color: #ffffff; }
 
 /* The Resources dropdown of the top bar, after baseten.co: the open trigger fills, and each dashed column is one category. The panel's top padding keeps the hover alive between the trigger and the columns. */
 .pg .navmenu { position: relative; }

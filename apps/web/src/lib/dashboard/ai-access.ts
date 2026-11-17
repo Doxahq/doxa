@@ -1,6 +1,8 @@
 import { DOXA_CATALOG } from "@doxahq/billing/catalog"
 import type { BillingAccountList, ProjectBilling } from "@doxahq/contracts/billing"
 
+import { workspaceBillingAccount } from "~/lib/dashboard/workspace-model"
+
 /**
  * May the viewer start a Doxa Agent generation (catalog feature
  * `ai.doxa_agent`, billing spec 3 and 9.3)? The dashboard asks before it
@@ -48,19 +50,21 @@ export function planHasDoxaAgent(plan: string): boolean {
 
 /**
  * The access of a project that does not exist yet. A project made on the new
- * project page belongs to the viewer, so it bills to the personal account
- * (spec 8.1). `GET /billing/accounts` fails with 503 `billing_not_configured`
- * while billing is off; any failure keeps today's onboarding.
+ * project page belongs to the current workspace (`teamId`, null for
+ * Personal), so it bills to that workspace's account (spec 8.1).
+ * `GET /billing/accounts` fails with 503 `billing_not_configured` while
+ * billing is off; any failure keeps today's onboarding. An account that the
+ * list does not show is left to the API.
  */
-export function newProjectAiAccess(query: {
-  isPending: boolean
-  data: BillingAccountList | undefined
-}): AiGenerationAccess {
+export function newProjectAiAccess(
+  query: { isPending: boolean; data: BillingAccountList | undefined },
+  teamId: string | null,
+): AiGenerationAccess {
   if (query.data === undefined) return query.isPending ? AI_ACCESS_LOADING : AI_ACCESS_OPEN
   if (query.data.enforcement !== "on") return AI_ACCESS_OPEN
-  const personal = query.data.accounts.find((account) => account.ownerKind === "user")
-  if (!personal || planHasDoxaAgent(personal.plan)) return AI_ACCESS_OPEN
-  return { kind: "needs_pro", accountId: personal.id, canManage: personal.canManage }
+  const account = workspaceBillingAccount(query.data.accounts, teamId)
+  if (!account || planHasDoxaAgent(account.plan)) return AI_ACCESS_OPEN
+  return { kind: "needs_pro", accountId: account.id, canManage: account.canManage }
 }
 
 /**

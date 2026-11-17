@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import type { BillingAccountDetail, BillingAccountSummary, BillingInvoice } from "@doxahq/contracts/billing"
+import type { BillingAccountDetail, BillingInvoice } from "@doxahq/contracts/billing"
 
 import { BillingCreditsSummaryRow } from "~/components/dashboard/billing/billing-credits-summary-row"
 import { BillingInvoicesSection } from "~/components/dashboard/billing/billing-invoices-section"
@@ -25,15 +25,12 @@ export interface BillingViewActions {
  */
 export function BillingAccountView({
   detail,
-  accounts,
   invoices,
   invoicePages,
   actions,
   notice,
 }: {
   detail: BillingAccountDetail
-  /** Every account of the viewer, for the switcher. */
-  accounts: readonly BillingAccountSummary[]
   invoices: readonly BillingInvoice[]
   invoicePages: MorePages
   actions: BillingViewActions
@@ -52,7 +49,7 @@ export function BillingAccountView({
   ) : null
 
   return (
-    <BillingPageLayout page="plan" detail={detail} accounts={accounts} banner={banner}>
+    <BillingPageLayout page="plan" detail={detail} banner={banner}>
       {notice}
       <BillingPlanSection detail={detail} actions={actions.plan} />
       {offer ? (

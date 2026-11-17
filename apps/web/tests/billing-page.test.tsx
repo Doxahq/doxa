@@ -26,8 +26,6 @@ import {
   LEDGER_ENTRIES,
   MANY_INVOICES,
   PAST_DUE_ACCOUNT,
-  PERSONAL_SUMMARY,
-  TEAM_SUMMARY,
   TRIAL_ACCOUNT,
 } from "./fixtures/billing"
 import { newQueryClient, renderInRouter } from "./fixtures/render-in-router"
@@ -62,7 +60,7 @@ function creditsActions(): CreditsViewActions {
 async function renderPlan(detail: BillingAccountDetail, invoices: BillingInvoice[] = INVOICES) {
   const handlers = planActions()
   renderInRouter(
-    <BillingAccountView detail={detail} accounts={[PERSONAL_SUMMARY]} invoices={invoices} invoicePages={NO_MORE} actions={handlers} />,
+    <BillingAccountView detail={detail} invoices={invoices} invoicePages={NO_MORE} actions={handlers} />,
   )
   await screen.findByRole("heading", { name: "Plan and invoices" })
   return handlers
@@ -73,7 +71,7 @@ async function renderCredits(detail: BillingAccountDetail, invoices: BillingInvo
   renderInRouter(
     <BillingCreditsView
       detail={detail}
-      accounts={[PERSONAL_SUMMARY]}
+     
       invoices={invoices}
       historyRows={creditHistoryRows(LEDGER_ENTRIES)}
       historyPages={NO_MORE}
@@ -226,20 +224,9 @@ describe("Plan and invoices", () => {
     expect(screen.queryByRole("button", { name: /Switch to|Cancel plan|Update in Stripe/ })).toBeNull()
   })
 
-  test("the account switcher shows only with more than one account", async () => {
-    renderInRouter(
-      <BillingAccountView
-        detail={ACTIVE_WITH_DEBT}
-        accounts={[PERSONAL_SUMMARY, TEAM_SUMMARY]}
-        invoices={[]}
-        invoicePages={NO_MORE}
-        actions={planActions()}
-      />,
-    )
-    expect(await screen.findByRole("button", { name: /Personal account/ })).toBeTruthy()
-    cleanup()
+  test("has no account picker: the logo menu picks the workspace, and so the account", async () => {
     await renderPlan(ACTIVE_WITH_DEBT)
-    expect(screen.queryByRole("button", { name: /Personal account/ })).toBeNull()
+    expect(screen.queryByRole("button", { name: /Personal account|Choose an account/ })).toBeNull()
   })
 })
 

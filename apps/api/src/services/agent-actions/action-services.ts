@@ -124,8 +124,9 @@ function projectsPort(env: Env, projects: ProjectsRepository): ProjectsPort {
       const project = await projects.getForUser(input.userId, input.projectId);
       return project ? { id: project.id, name: project.name } : null;
     },
-    createExample: (input) => createExampleProject(env, input),
-    createForRepository: (input) => createRepositoryProject(env, input),
+    // An agent creates personal projects: its payload has no team.
+    createExample: (input) => createExampleProject(env, { ...input, team: null }),
+    createForRepository: (input) => createRepositoryProject(env, { ...input, team: null }),
     delete: (input) => deleteProject(env, input),
   };
 }

@@ -9,7 +9,6 @@ import {
   creditsExhaustedErrorDetailsSchema,
   planLimitErrorDetailsSchema,
   type BillingAccountDetail,
-  type BillingAccountSummary,
   type BillingInvoice,
   type BillingLedgerEntry,
   type BillingOffer,
@@ -494,21 +493,6 @@ export function estimatePaygSentence(estimate: CreditEstimate, detail: BillingAc
 export function founderSpotsLine(offer: BillingOffer): string | null {
   if (!offer.open) return null
   return `${formatCredits(offer.slotsLeft)} of ${formatCredits(offer.maxAccounts)} founder spots left`
-}
-
-/** The plans that a subscription pays for (a Pro trial included). */
-const PAID_PLANS: ReadonlySet<string> = new Set(["pro", "enterprise"])
-
-/**
- * The account that the billing pages open by default: the first account on a
- * paid plan, in the order of `GET /billing/accounts` (the switcher's order),
- * else the viewer's own account, else null.
- */
-export function defaultBillingAccountId(
-  accounts: readonly Pick<BillingAccountSummary, "id" | "ownerKind" | "plan">[],
-): string | null {
-  const paid = accounts.find((account) => PAID_PLANS.has(account.plan))
-  return (paid ?? accounts.find((account) => account.ownerKind === "user"))?.id ?? null
 }
 
 export function founderOffer(offers: readonly BillingOffer[]): BillingOffer | null {

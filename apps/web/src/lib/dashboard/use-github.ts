@@ -10,6 +10,7 @@ import {
   githubRepositoriesQueryOptions,
 } from "~/lib/queries/dashboard"
 import { createProject, getApiUrl } from "~/lib/platform-api"
+import { refreshTeamOfNewProject } from "~/lib/dashboard/use-project-repository"
 
 const SHOW_LOCAL_INSTALL_CALLBACK = Boolean(
   import.meta.env.DEV || import.meta.env.VITE_DEV_USER_ID,
@@ -86,11 +87,12 @@ export function useGitHub(): GitHubConnection {
 
   const createProjectMutation = useMutation({
     mutationFn: createProject,
-    onSuccess: (project) => {
+    onSuccess: async (project) => {
       queryClient.setQueryData(
         dashboardQueryKeys.projects(),
         (current: ProjectDto[] | undefined) => mergeProjectIntoList(current, project),
       )
+      await refreshTeamOfNewProject(queryClient, project)
     },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.summary() })

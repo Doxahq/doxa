@@ -17,17 +17,21 @@ import { createBillingCheckout } from "~/lib/billing-api"
 import { founderOffer } from "~/lib/dashboard/billing-model"
 import { openBillingUrl } from "~/lib/dashboard/use-billing-account"
 import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
+import { useWorkspace } from "~/lib/dashboard/workspace-context"
+import { canReadBillingOf } from "~/lib/dashboard/workspace-model"
 import { getErrorMessage } from "~/lib/errors"
 import { billingAccountsQueryOptions, billingOffersQueryOptions } from "~/lib/queries/billing"
 
 /**
- * `/dashboard/billing`: every billing account of the viewer. With one account
- * the viewer manages, it opens that account's Plan and invoices. From the
- * pricing page (`?upgrade=year`), it goes on to Checkout: at once when only
- * one account can upgrade, else after the person picks one.
+ * `/dashboard/billing`: it opens Plan and invoices of the current workspace's
+ * account, else of the one account the viewer manages, else it lists every
+ * billing account. From the pricing page (`?upgrade=year`), it goes on to
+ * Checkout: at once when only one account can upgrade, else after the person
+ * picks one.
  */
 export function BillingAccountsPage({ upgradeInterval }: { upgradeInterval: "month" | "year" | null }) {
   const accountsQuery = useQuery(billingAccountsQueryOptions())
+  const { current } = useWorkspace()
   const offersQuery = useQuery({ ...billingOffersQueryOptions(), enabled: upgradeInterval !== null })
   const [closedPrice, setClosedPrice] = useState<{ accountId: string; priceKey: string } | null>(null)
   const checkout = useMutation({
@@ -53,7 +57,11 @@ export function BillingAccountsPage({ upgradeInterval }: { upgradeInterval: "mon
     checkout.mutate({ accountId: onlyAccount.id, priceKey })
   }, [onlyAccount, priceKey, checkout])
 
-  const isFirstLoad = useIsFirstLoad([accountsQuery, { isPending: upgradeInterval !== null && offersQuery.isPending }])
+  const isFirstLoad = useIsFirstLoad([
+    accountsQuery,
+    { isPending: upgradeInterval !== null && offersQuery.isPending },
+    { isPending: upgradeInterval === null && current === null },
+  ])
   // Most viewers have one account, so the page loads in the shape of its Plan and invoices.
   if (isFirstLoad) return upgradeInterval ? <BillingAccountsSkeleton /> : <BillingAccountSkeleton />
   if (accountsQuery.isError) {
@@ -68,12 +76,13 @@ export function BillingAccountsPage({ upgradeInterval }: { upgradeInterval: "mon
   }
 
   const managed = accounts.filter((account) => account.canManage)
-  const onlyManaged = upgradeInterval === null && managed.length === 1 ? managed[0] : undefined
-  if (onlyManaged) {
+  const workspaceAccount = current && canReadBillingOf(current) ? current.billingAccount : null
+  const opened = upgradeInterval === null ? (workspaceAccount ?? (managed.length === 1 ? managed[0] : undefined)) : undefined
+  if (opened) {
     return (
       <>
         <BillingAccountSkeleton />
-        <Navigate to="/dashboard/billing/$accountId" params={{ accountId: onlyManaged.id }} replace />
+        <Navigate to="/dashboard/billing/$accountId" params={{ accountId: opened.id }} replace />
       </>
     )
   }

@@ -2,7 +2,6 @@ import type { ReactNode } from "react"
 import type { BillingAccountDetail, BillingAccountSummary } from "@doxahq/contracts/billing"
 
 import { PageBody, PageHeading } from "~/components/dashboard/dashboard-header"
-import { BillingAccountSwitcher } from "~/components/dashboard/billing/billing-account-switcher"
 import { LoadingLabel } from "~/components/dashboard/route-pending"
 import { BillingAccountSkeleton, BillingCreditsSkeleton } from "~/components/dashboard/skeletons/billing-skeletons"
 import { AccountTopBar } from "~/components/dashboard/shell/top-bar"
@@ -14,20 +13,19 @@ import {
 } from "~/lib/dashboard/billing-pages"
 
 /**
- * The frame of a billing page of one account: the "Account / Billing / …"
- * top bar, the heading, and the account switcher when the viewer has more
- * than one account. `banner` sits above the heading (the past-due banner).
+ * The frame of a billing page of one account: the top bar ("Coder One /
+ * Billing / …", or "Account / Billing / …" with only the personal
+ * workspace), and the heading. The account is the current workspace's: the
+ * logo menu switches it. `banner` sits above the heading (the past-due banner).
  */
 export function BillingPageLayout({
   page,
   detail,
-  accounts,
   banner,
   children,
 }: {
   page: BillingPage
-  detail: Pick<BillingAccountDetail, "id" | "ownerKind" | "name">
-  accounts: readonly BillingAccountSummary[]
+  detail: Pick<BillingAccountDetail, "ownerKind" | "name">
   banner?: ReactNode
   children: ReactNode
 }) {
@@ -36,10 +34,7 @@ export function BillingPageLayout({
       <AccountTopBar crumbs={billingPageCrumbs(page)} />
       <PageBody>
         {banner}
-        <div className="flex flex-col gap-4">
-          <PageHeading label="Billing" title={BILLING_PAGE_TITLES[page]} description={billingPageDescription(page, detail)} />
-          <BillingAccountSwitcher accounts={accounts} currentId={detail.id} page={page} />
-        </div>
+        <PageHeading label="Billing" title={BILLING_PAGE_TITLES[page]} description={billingPageDescription(page, detail)} />
         {children}
       </PageBody>
     </>
@@ -47,9 +42,9 @@ export function BillingPageLayout({
 }
 
 /**
- * A billing page while it loads another account from the switcher: the same
- * frame, already on the new account, with a spinner in place of the sections.
- * Without it, the empty states of the new account flash before its data.
+ * A billing page while it loads another account after a workspace switch:
+ * the same frame, already on the new account, with a spinner in place of the
+ * sections. Without it, the empty states of the new account flash before its data.
  */
 export function BillingPageSwitching({
   page,
@@ -61,10 +56,10 @@ export function BillingPageSwitching({
   accounts: readonly BillingAccountSummary[]
 }) {
   const account = accounts.find((candidate) => candidate.id === accountId)
-  // Only the switcher starts a switch, so the account is in the list. A stale list falls back to the page skeleton.
+  // A switch goes to an account of the list. A stale list falls back to the page skeleton.
   if (!account) return page === "plan" ? <BillingAccountSkeleton /> : <BillingCreditsSkeleton />
   return (
-    <BillingPageLayout page={page} detail={account} accounts={accounts}>
+    <BillingPageLayout page={page} detail={account}>
       <LoadingLabel label="Loading..." className="min-h-64" />
     </BillingPageLayout>
   )

@@ -317,6 +317,19 @@ describe("members and roles", () => {
   });
 });
 
+describe("creating a project in a team", () => {
+  it("gives the team to an owner or admin, and refuses editors, viewers and non-members", async () => {
+    const env = setup();
+    const teamId = await team(env);
+    await expect(env.service.authorizeProjectCreation(OWNER, teamId)).resolves.toEqual({ id: teamId, name: "Acme Docs" });
+    await expect(env.service.authorizeProjectCreation(ADMIN, teamId)).resolves.toEqual({ id: teamId, name: "Acme Docs" });
+    await expect(env.service.authorizeProjectCreation(EDITOR, teamId)).rejects.toBeInstanceOf(TeamAccessError);
+    await expect(env.service.authorizeProjectCreation(VIEWER, teamId)).rejects.toBeInstanceOf(TeamAccessError);
+    await expect(env.service.authorizeProjectCreation(NEWCOMER, teamId)).rejects.toBeInstanceOf(TeamNotFoundError);
+    await expect(env.service.authorizeProjectCreation(OWNER, "not-a-uuid")).rejects.toBeInstanceOf(TeamNotFoundError);
+  });
+});
+
 describe("moving a project into a team", () => {
   it("moves the owner's personal project into a team they manage; their grants keep working", async () => {
     const env = setup();

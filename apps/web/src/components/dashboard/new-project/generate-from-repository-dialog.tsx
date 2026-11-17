@@ -29,14 +29,17 @@ const STEPS = ["Connect GitHub", "Choose a repository", "Generate"] as const
  * returns to `/dashboard?github=connected`, which opens this dialog again.
  *
  * The content mounts only while the dialog is open, so the repository list
- * loads only when the user opens it.
+ * loads only when the user opens it. `teamId` owns the new project (null:
+ * personal).
  */
 export function GenerateFromRepositoryDialog({
   open,
+  teamId,
   onOpenChange,
   onStartWithoutRepository,
 }: {
   open: boolean
+  teamId: string | null
   onOpenChange: (open: boolean) => void
   onStartWithoutRepository: () => void
 }) {
@@ -54,6 +57,7 @@ export function GenerateFromRepositoryDialog({
       {/* Wide, and as tall as the window allows: the header and footer stay put while the body scrolls. */}
       <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-4xl flex-col overscroll-contain shadow-none">
         <GenerateFromRepositoryForm
+          teamId={teamId}
           onBusyChange={setIsBusy}
           onClose={() => handleOpenChange(false)}
           onStartWithoutRepository={onStartWithoutRepository}
@@ -64,15 +68,17 @@ export function GenerateFromRepositoryDialog({
 }
 
 function GenerateFromRepositoryForm({
+  teamId,
   onBusyChange,
   onClose,
   onStartWithoutRepository,
 }: {
+  teamId: string | null
   onBusyChange: (busy: boolean) => void
   onClose: () => void
   onStartWithoutRepository: () => void
 }) {
-  const { github, addInstructions, generate, pendingChoice } = useGenerateFromRepository()
+  const { github, addInstructions, generate, pendingChoice } = useGenerateFromRepository(teamId)
   const isGenerating = pendingChoice !== null
   useEffect(() => onBusyChange(isGenerating), [isGenerating, onBusyChange])
   const [selectedId, setSelectedId] = useState("")

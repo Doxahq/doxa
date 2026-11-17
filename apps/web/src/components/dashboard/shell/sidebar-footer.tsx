@@ -1,35 +1,18 @@
 import { Link, useNavigate } from "@tanstack/react-router"
-import {
-  BookText,
-  Check,
-  ChevronRight,
-  ChevronsUpDown,
-  CreditCard,
-  Github,
-  LogOut,
-  PanelsTopLeft,
-  Plus,
-  UserRound,
-  Users,
-} from "lucide-react"
+import { BookText, ChevronRight, ChevronsUpDown, Github, LogOut, PanelsTopLeft, UserRound } from "lucide-react"
 
-import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar"
+import { UserAvatar } from "~/components/dashboard/shell/user-avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
-import { MenuSectionLabel } from "~/components/dashboard/shell/menu-parts"
-import { ProjectMonogram } from "~/components/dashboard/shell/project-monogram"
 import { useDashboardAuth } from "~/lib/auth/dashboard-auth-context"
 import { DOXA_DOCS_URL, DOXA_GITHUB_URL } from "~/lib/dashboard/external-links"
 import { useShell } from "~/lib/dashboard/shell-context"
-import { groupProjectsByTeam, hasTeamProjects } from "~/lib/dashboard/teams-model"
-import { useProjectsSummary } from "~/lib/dashboard/use-projects-summary"
 
 
 /** Full-width button that slides to the Site settings view. */
@@ -52,15 +35,17 @@ export function SiteSettingsButton({ projectId }: { projectId: string }) {
 }
 
 /**
- * Avatar, email and account menu, plus GitHub and docs links. The menu also
- * switches projects and starts a new one.
+ * Avatar, name and the menu of the person's own account: their email, then
+ * Account settings and Sign out. A person with no name shows their email.
+ * Workspaces, projects and billing are in the logo menu.
  */
-export function UserRow({ projectId, showLinks = true }: { projectId: string | null; showLinks?: boolean }) {
+export function UserRow({ showLinks = true }: { showLinks?: boolean }) {
   const navigate = useNavigate()
   const { user, isPending, signOut } = useDashboardAuth()
   // The identity loads in the browser. Until then the row leaves it blank.
   const displayName = user?.name?.trim() || user?.email || (isPending ? "" : "Account")
   const email = user?.email ?? ""
+  const showsEmailInMenu = email !== "" && displayName !== email
 
   async function handleSignOut() {
     await signOut().catch(() => undefined)
@@ -73,45 +58,28 @@ export function UserRow({ projectId, showLinks = true }: { projectId: string | n
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label="Account and projects menu"
+            aria-label="Account menu"
             className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-overlay data-[state=open]:bg-overlay"
           >
-            <Avatar className="size-[30px] border border-border">
-              {user?.image ? <AvatarImage src={user.image} alt="" /> : null}
-              <AvatarFallback className="bg-secondary font-mono text-[10.5px] font-medium uppercase">
-                {displayName ? getInitials(displayName) : null}
-              </AvatarFallback>
-            </Avatar>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[12.5px] text-foreground">{email || displayName}</span>
-              {email && displayName !== email ? (
-                <span className="block truncate text-[11.5px] text-muted-foreground">{displayName}</span>
-              ) : null}
-            </span>
+            <UserAvatar image={user?.image} name={displayName} className="size-[30px]" />
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground">{displayName}</span>
             <ChevronsUpDown aria-hidden="true" className="size-3.5 shrink-0 text-faint" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="start" className="w-64">
-          <ProjectMenuItems projectId={projectId} />
-          <DropdownMenuSeparator />
+          {showsEmailInMenu ? (
+            <>
+              <DropdownMenuLabel className="truncate font-normal text-muted-foreground">{email}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
           <DropdownMenuItem asChild>
             <Link to="/dashboard/settings">
               <UserRound />
               Account settings
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link to="/dashboard/billing">
-              <CreditCard />
-              Billing
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link to="/dashboard/teams">
-              <Users />
-              Teams
-            </Link>
-          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => void handleSignOut()}>
             <LogOut />
             Sign out
@@ -125,48 +93,6 @@ export function UserRow({ projectId, showLinks = true }: { projectId: string | n
         </>
       ) : null}
     </div>
-  )
-}
-
-/**
- * The projects, grouped by team when any team project exists, then "New
- * project". The list scrolls when it is long.
- */
-export function ProjectMenuItems({ projectId }: { projectId: string | null }) {
-  const { projects } = useProjectsSummary()
-  const grouped = hasTeamProjects(projects)
-
-  return (
-    <>
-      <div className="scrollbar-subtle max-h-72 overflow-y-auto">
-        {groupProjectsByTeam(projects).map((group) => (
-          <DropdownMenuGroup key={group.team?.id ?? "personal"}>
-            <DropdownMenuLabel className="px-2 pt-2 pb-1">
-              <MenuSectionLabel>{grouped ? (group.team?.name ?? "Personal") : "Projects"}</MenuSectionLabel>
-            </DropdownMenuLabel>
-            {group.projects.map((project) => (
-              <DropdownMenuItem key={project.id} asChild>
-                <Link to="/dashboard/projects/$projectId" params={{ projectId: project.id }}>
-                  <ProjectMonogram project={project} className="size-5 rounded-sm text-[10.5px]" />
-                  <span className="min-w-0 flex-1 truncate">{project.name}</span>
-                  {project.id === projectId ? (
-                    <Check aria-label="Current project" className="ml-auto text-primary-text" />
-                  ) : null}
-                </Link>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        ))}
-      </div>
-      <DropdownMenuItem asChild>
-        <Link to="/dashboard/projects/new" className="text-muted-foreground">
-          <span className="grid size-5 place-items-center rounded-sm border border-dashed border-border">
-            <Plus aria-hidden="true" className="size-3" />
-          </span>
-          New project
-        </Link>
-      </DropdownMenuItem>
-    </>
   )
 }
 
@@ -191,9 +117,4 @@ function IconLink({
       <Icon aria-hidden="true" className="size-4" />
     </a>
   )
-}
-
-function getInitials(name: string): string {
-  const parts = name.replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase()
 }

@@ -10,6 +10,10 @@ const billingApi = vi.hoisted(() => ({
   listBillingAccounts: vi.fn(),
   syncBillingCheckout: vi.fn(),
 }))
+vi.mock("~/lib/dashboard/workspace-context", async () => {
+  const fixture = await import("./fixtures/workspace")
+  return fixture.workspaceContextModule(() => fixture.workspaceValue())
+})
 vi.mock("~/lib/billing-api", async (importOriginal) => ({ ...(await importOriginal<object>()), ...billingApi }))
 vi.mock("~/lib/dashboard/use-projects-summary", () => ({
   useProjectsSummary: () => ({ projects: [], isPending: false }),

@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
 import { useSidebar } from "~/components/ui/sidebar"
+import { useWorkspaceCrumb } from "~/lib/dashboard/workspace-context"
 import { projectDetailQueryOptions } from "~/lib/queries/dashboard"
 import { cn } from "~/lib/utils"
 
@@ -20,7 +21,8 @@ export const TOP_BAR_ICON_BUTTON_CLASS =
 
 /**
  * The 52px bar above the main area: sidebar toggle, breadcrumb, an optional
- * status (the editor's save state), then actions and the "more" menu.
+ * status (the editor's save state), then actions and the "more" menu. On a
+ * page of one workspace, the breadcrumb starts with the workspace name.
  */
 export function TopBar({
   crumbs,
@@ -34,13 +36,15 @@ export function TopBar({
   actions?: ReactNode
   menu?: ReactNode
 }) {
+  const workspaceCrumb = useWorkspaceCrumb()
+  const trail = workspaceCrumb ? [workspaceCrumb, ...crumbs] : crumbs
   return (
     <header className="sticky top-0 z-20 flex h-13 shrink-0 items-center gap-3 border-b border-border bg-background pr-3.5 pl-3">
       <SidebarToggle className="size-8" />
       <nav aria-label="Breadcrumb" className="min-w-0 overflow-hidden">
         <ol className="flex min-w-0 items-center gap-1.5 text-[13px] whitespace-nowrap text-muted-foreground">
-          {crumbs.map((crumb, index) => {
-            const isCurrent = index === crumbs.length - 1
+          {trail.map((crumb, index) => {
+            const isCurrent = index === trail.length - 1
             return (
               <Fragment key={`${index}:${crumb}`}>
                 {index > 0 ? (
@@ -70,9 +74,14 @@ export function TopBar({
   )
 }
 
-/** The top bar of an account page: "Account / Billing / Plan and invoices". */
+/**
+ * The top bar of an account page: "Account / Account settings". A billing
+ * page names its workspace instead ("Coder One / Billing / Plan and
+ * invoices"), when the viewer has more than one.
+ */
 export function AccountTopBar({ crumbs }: { crumbs: readonly string[] }) {
-  return <TopBar crumbs={["Account", ...crumbs]} />
+  const workspaceCrumb = useWorkspaceCrumb()
+  return <TopBar crumbs={workspaceCrumb ? crumbs : ["Account", ...crumbs]} />
 }
 
 /** Opens and closes the sidebar. On mobile it opens the drawer. */

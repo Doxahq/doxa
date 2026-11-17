@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import { Outlet, useParams } from "@tanstack/react-router"
 
 import { AppSidebar } from "~/components/dashboard/app-sidebar"
@@ -12,12 +12,14 @@ import { StatusBar } from "~/components/dashboard/status-bar"
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar"
 import { Toaster } from "~/components/ui/sonner"
 import { DashboardAuthProvider } from "~/lib/auth/dashboard-auth-context"
-import { readLastProjectId, resolveLandingProjectId } from "~/lib/dashboard/last-project"
 import { ProjectBranchProvider } from "~/lib/dashboard/project-branch-context"
 import { ShellProvider } from "~/lib/dashboard/shell-context"
 import { useSidebarWidth } from "~/lib/dashboard/sidebar-width"
 import { SidebarPanelProvider } from "~/lib/dashboard/sidebar-panel-context"
 import { useProjectsSummary } from "~/lib/dashboard/use-projects-summary"
+import { WorkspaceProvider, useWorkspace } from "~/lib/dashboard/workspace-context"
+import { landingProjectIdIn } from "~/lib/dashboard/workspace-model"
+import { readLastProjectIdIn } from "~/lib/dashboard/workspace-storage"
 import { Route as DashboardRoute } from "~/routes/dashboard/route"
 
 interface ShellStyle extends CSSProperties {
@@ -53,11 +55,11 @@ export function DashboardLayout() {
  * sidebar keeps its full height.
  *
  * The shell always shows one project. On a project route it is that project.
- * Elsewhere (account settings, new project) it is the last opened project, so
- * the sidebar keeps its navigation.
+ * Elsewhere (account settings, new project) it is the last opened project of
+ * the current workspace, so the sidebar keeps its navigation. A workspace
+ * without projects shows none.
  */
 function DashboardShell() {
-  const projectId = useShellProjectId()
   const sidebarWidth = useSidebarWidth()
 
   return (
@@ -67,20 +69,30 @@ function DashboardShell() {
       style={{ ...SHELL_STYLE, ...sidebarWidth.style }}
     >
       <ShellProvider>
-        <CommandMenuProvider projectId={projectId}>
-          <ProjectScope projectId={projectId}>
-            <AppSidebar projectId={projectId} sidebarWidth={sidebarWidth} />
-            <SidebarInset className="h-svh min-h-0 min-w-0 overflow-hidden">
-              <main className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-subtle">
-                <ProjectBillingBanner projectId={projectId} />
-                <Outlet />
-              </main>
-              <StatusBar />
-            </SidebarInset>
-          </ProjectScope>
-        </CommandMenuProvider>
+        <WorkspaceProvider>
+          <ShellFrame sidebarWidth={sidebarWidth} />
+        </WorkspaceProvider>
       </ShellProvider>
     </SidebarProvider>
+  )
+}
+
+function ShellFrame({ sidebarWidth }: { sidebarWidth: ReturnType<typeof useSidebarWidth> }) {
+  const projectId = useShellProjectId()
+
+  return (
+    <CommandMenuProvider projectId={projectId}>
+      <ProjectScope projectId={projectId}>
+        <AppSidebar projectId={projectId} sidebarWidth={sidebarWidth} />
+        <SidebarInset className="h-svh min-h-0 min-w-0 overflow-hidden">
+          <main className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-subtle">
+            <ProjectBillingBanner projectId={projectId} />
+            <Outlet />
+          </main>
+          <StatusBar />
+        </SidebarInset>
+      </ProjectScope>
+    </CommandMenuProvider>
   )
 }
 
@@ -98,10 +110,10 @@ function useShellProjectId(): string | null {
   const params = useParams({ strict: false })
   const routeProjectId = typeof params.projectId === "string" ? params.projectId : null
   const { projects } = useProjectsSummary()
-  // Storage is read after mount, so the server render and the first client
-  // render stay identical.
-  const [lastProjectId, setLastProjectId] = useState<string | null>(null)
-  useEffect(() => setLastProjectId(readLastProjectId()), [routeProjectId])
+  // Null in the server render and during hydration, so both stay identical:
+  // the workspace waits for the browser storage.
+  const { current } = useWorkspace()
 
-  return routeProjectId ?? resolveLandingProjectId(projects, lastProjectId)
+  if (routeProjectId) return routeProjectId
+  return current ? landingProjectIdIn(projects, current.id, readLastProjectIdIn(current.id)) : null
 }

@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query"
 import type { ConnectProjectRepositoryInput, CreateExampleProjectInput, ProjectDto } from "@doxahq/contracts"
 
 import { mergeProjectIntoList } from "~/lib/dashboard/cache"
@@ -7,6 +7,7 @@ import {
   dashboardQueryKeys,
   type ProjectDetail,
 } from "~/lib/queries/dashboard"
+import { teamQueryKeys } from "~/lib/queries/teams"
 import { connectProjectRepository, createExampleProject } from "~/lib/platform-api"
 
 function cacheProject(queryClient: ReturnType<typeof useQueryClient>, project: ProjectDto) {
@@ -20,12 +21,20 @@ function cacheProject(queryClient: ReturnType<typeof useQueryClient>, project: P
   )
 }
 
+/** A team project changes the team's project list and count. */
+export function refreshTeamOfNewProject(queryClient: QueryClient, project: Pick<ProjectDto, "team">): Promise<void> {
+  return project.team ? queryClient.invalidateQueries({ queryKey: teamQueryKeys.all }) : Promise.resolve()
+}
+
 /** Creates a project without a repository, with the starter docs or an empty site published. */
 export function useCreateExampleProject() {
   const queryClient = useQueryClient()
   const mutation = useMutation({
     mutationFn: createExampleProject,
-    onSuccess: (project) => cacheProject(queryClient, project),
+    onSuccess: async (project) => {
+      cacheProject(queryClient, project)
+      await refreshTeamOfNewProject(queryClient, project)
+    },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.summary() })
     },

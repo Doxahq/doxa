@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, cleanup, render, renderHook, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, renderHook, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import type { CreateTeamInviteInput, TeamDetail, TeamInvite } from "@doxahq/contracts/teams"
 import { afterEach, describe, expect, test, vi } from "vitest"
@@ -9,6 +9,7 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import { TeamInvitesSection } from "~/components/dashboard/teams/team-invites-section"
 import { useTeam } from "~/lib/dashboard/use-teams"
 import { teamQueryKeys } from "~/lib/queries/teams"
+import { renderInRouter } from "./fixtures/render-in-router"
 
 const TEAM_ID = "00000000-0000-4000-8000-0000000000aa"
 const FIRST = invite("aaaaaaaa-0000-4000-8000-000000000001", "https://doxa.so/invite/first-token")
@@ -28,10 +29,19 @@ afterEach(() => {
 })
 
 describe("team invites section", () => {
+  test("opened at #invites (the logo menu's Invite members), it focuses the email field", async () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    await renderSection(team([]), "/dashboard/teams/team-1#invites")
+    const email = await screen.findByRole("textbox", { name: "Email address of the new member" })
+    await waitFor(() => expect(document.activeElement).toBe(email))
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" })
+  })
+
   test("shows each pending invite's link with a copy button", async () => {
     const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined)
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true })
-    renderSection(team([FIRST, SECOND]))
+    await renderSection(team([FIRST, SECOND]))
 
     const rows = within(screen.getByRole("list", { name: "Pending invites" })).getAllByRole("listitem")
     expect(rows).toHaveLength(2)
@@ -43,8 +53,8 @@ describe("team invites section", () => {
     expect(within(rows[0]).getByRole("button", { name: "Copy" })).toBeTruthy()
   })
 
-  test("never shows a link in the create card", () => {
-    renderSection(team([FIRST]))
+  test("never shows a link in the create card", async () => {
+    await renderSection(team([FIRST]))
     const createButton = screen.getByRole("button", { name: "Create invite link" })
     const createCard = createButton.closest(".surface-card")
     expect(createCard).not.toBeNull()
@@ -52,8 +62,8 @@ describe("team invites section", () => {
     expect(screen.getAllByLabelText("Invite link")).toHaveLength(1)
   })
 
-  test("explains an older invite whose link cannot be shown", () => {
-    renderSection(team([{ ...FIRST, url: null }]))
+  test("explains an older invite whose link cannot be shown", async () => {
+    await renderSection(team([{ ...FIRST, url: null }]))
     expect(screen.queryByLabelText("Invite link")).toBeNull()
     expect(screen.queryByRole("button", { name: "Copy" })).toBeNull()
     expect(screen.getByText("Link not available. Revoke it and create a new one.")).toBeTruthy()
@@ -62,7 +72,7 @@ describe("team invites section", () => {
 
 describe("invites by email", () => {
   test("sends the invite to the address, then clears the field", async () => {
-    const { onCreate } = renderSection(team([]))
+    const { onCreate } = await renderSection(team([]))
     const field = screen.getByLabelText("Email address of the new member")
 
     await userEvent.type(field, " grace@example.com ")
@@ -73,14 +83,14 @@ describe("invites by email", () => {
   })
 
   test("creates a link only when the field is empty", async () => {
-    const { onCreate } = renderSection(team([]))
+    const { onCreate } = await renderSection(team([]))
 
     await userEvent.click(screen.getByRole("button", { name: "Create invite link" }))
     expect(onCreate).toHaveBeenCalledWith({ role: "editor" })
   })
 
-  test("shows the address of an invite sent by email", () => {
-    renderSection(team([{ ...FIRST, email: "grace@example.com" }]))
+  test("shows the address of an invite sent by email", async () => {
+    await renderSection(team([{ ...FIRST, email: "grace@example.com" }]))
     expect(screen.getByText("Sent to grace@example.com")).toBeTruthy()
   })
 })
@@ -114,9 +124,10 @@ describe("invite list cache", () => {
   })
 })
 
-function renderSection(detail: TeamDetail) {
+/** Resolves once the router shows the section. */
+async function renderSection(detail: TeamDetail, path = "/dashboard/teams/team-1") {
   const onCreate = vi.fn<(input: CreateTeamInviteInput) => Promise<void>>().mockResolvedValue(undefined)
-  render(
+  renderInRouter(
     <TeamInvitesSection
       team={detail}
       isCreating={false}
@@ -126,7 +137,9 @@ function renderSection(detail: TeamDetail) {
       onCreate={onCreate}
       onRevoke={vi.fn()}
     />,
+    { path },
   )
+  await screen.findByText("Invites")
   return { onCreate }
 }
 

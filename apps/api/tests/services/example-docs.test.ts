@@ -92,7 +92,7 @@ describe("createExampleProject", () => {
 
     const project = await createExampleProject(
       { DOCS_BUCKET: storage.bucket } as never,
-      { userId: "user-1", name: "Acme" },
+      { userId: "user-1", name: "Acme", team: null },
     );
 
     const [seed] = mocks.publishSeedVersion.mock.calls[0];
@@ -139,12 +139,14 @@ describe("createExampleProject", () => {
 
     await createExampleProject({ DOCS_BUCKET: storage.bucket } as never, {
       userId: "user-1",
+      team: null,
       name: "Acme",
       template: "empty",
     });
 
     expect(mocks.createWithoutRepository).toHaveBeenCalledWith({
       userId: "user-1",
+      team: null,
       name: "Acme",
     });
     const [seed] = mocks.publishSeedVersion.mock.calls[0];
@@ -169,6 +171,7 @@ describe("createExampleProject", () => {
     await expect(
       createExampleProject({ DOCS_BUCKET: bucket } as never, {
         userId: "user-1",
+        team: null,
         name: "Acme",
       }),
     ).rejects.toThrow("database down");

@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import { Coins } from "lucide-react"
-import type { BillingAccountDetail, BillingAccountSummary, BillingInvoice } from "@doxahq/contracts/billing"
+import type { BillingAccountDetail, BillingInvoice } from "@doxahq/contracts/billing"
 
 import { EmptyState } from "~/components/dashboard/dashboard-header"
 import { BillingCapsSection, type CapsSectionActions } from "~/components/dashboard/billing/billing-caps-section"
@@ -25,14 +25,12 @@ export interface CreditsViewActions {
  */
 export function BillingCreditsView({
   detail,
-  accounts,
   invoices,
   historyRows,
   historyPages,
   actions,
 }: {
   detail: BillingAccountDetail
-  accounts: readonly BillingAccountSummary[]
   /** The pay-as-you-go card lists the paid usage charges and the unpaid one. */
   invoices: readonly BillingInvoice[]
   historyRows: readonly CreditHistoryRow[]
@@ -43,7 +41,7 @@ export function BillingCreditsView({
   const showPayg = hasLiveSubscription(detail) || detail.entitlements.features["ai.payg"] === true
 
   return (
-    <BillingPageLayout page="credits" detail={detail} accounts={accounts}>
+    <BillingPageLayout page="credits" detail={detail}>
       {hasAi ? (
         <BillingCreditsSection detail={detail} />
       ) : (

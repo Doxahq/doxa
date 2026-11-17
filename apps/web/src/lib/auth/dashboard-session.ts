@@ -4,6 +4,7 @@ export interface DashboardSessionUser {
   id: string
   name: string | null
   email: string | null
+  /** The avatar to show, from `userAvatarUrl`. Null shows initials. */
   image: string | null
 }
 

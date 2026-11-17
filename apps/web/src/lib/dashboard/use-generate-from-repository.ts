@@ -15,8 +15,10 @@ import { startGeneration } from "~/lib/platform-api"
  * instructions page first, or start the first Doxabot generation at once. When
  * the project exists but the generation does not start, it opens the project
  * overview, which offers the start again.
+ *
+ * `teamId` is the team that owns the new project; null makes it personal.
  */
-export function useGenerateFromRepository() {
+export function useGenerateFromRepository(teamId: string | null) {
   const github = useGitHub()
   const navigate = useNavigate()
   const start = useMutation({ mutationFn: (projectId: string) => startGeneration(projectId) })
@@ -34,6 +36,7 @@ export function useGenerateFromRepository() {
         githubRepositoryId: repository.id,
         name: repository.name,
         productionBranch,
+        ...(teamId ? { teamId } : {}),
       })
       writeLastProjectId(project.id)
       return project.id

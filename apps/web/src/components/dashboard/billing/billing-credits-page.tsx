@@ -48,7 +48,6 @@ export function BillingCreditsPage({ accountId }: { accountId: string }) {
   return (
     <BillingCreditsView
       detail={detail}
-      accounts={accountsQuery.data?.accounts ?? []}
       invoices={invoicesQuery.data?.pages.flatMap((page) => page.invoices) ?? []}
       historyRows={creditHistoryRows(entriesQuery.data?.pages.flatMap((page) => page.entries) ?? [])}
       historyPages={morePagesOf(entriesQuery)}

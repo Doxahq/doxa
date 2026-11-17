@@ -58,14 +58,21 @@ describe("project production branch", () => {
   });
 
   test("creates a project that follows the default branch without asking GitHub", async () => {
-    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId });
+    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, team: null });
 
     expect(mocks.getBranchTargetForUser).not.toHaveBeenCalled();
-    expect(mocks.createForRepository).toHaveBeenCalledWith({ userId: "user-1", githubRepositoryId: repositoryId });
+    expect(mocks.createForRepository).toHaveBeenCalledWith({ userId: "user-1", githubRepositoryId: repositoryId, team: null });
+  });
+
+  test("passes the authorized team to the new project", async () => {
+    const team = { id: "22222222-2222-4222-8222-222222222222", name: "Acme Docs" };
+    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, team });
+
+    expect(mocks.createForRepository).toHaveBeenCalledWith(expect.objectContaining({ team }));
   });
 
   test("does not ask GitHub about the repository's default branch", async () => {
-    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, productionBranch: "main" });
+    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, productionBranch: "main", team: null });
 
     expect(mocks.exists).not.toHaveBeenCalled();
     expect(mocks.createForRepository).toHaveBeenCalledWith(expect.objectContaining({ productionBranch: "main" }));
@@ -74,7 +81,7 @@ describe("project production branch", () => {
   test("stores another branch after GitHub confirms it", async () => {
     mocks.exists.mockResolvedValue(true);
 
-    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, productionBranch: "release" });
+    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, productionBranch: "release", team: null });
 
     expect(mocks.getBranchTargetForUser).toHaveBeenCalledWith("user-1", repositoryId);
     expect(mocks.exists).toHaveBeenCalledWith(target, "release");
@@ -86,6 +93,7 @@ describe("project production branch", () => {
 
     const created = createRepositoryProject(env, {
       userId: "user-1",
+      team: null,
       githubRepositoryId: repositoryId,
       productionBranch: "gone",
     });

@@ -157,7 +157,8 @@ const INVITE_STATUS: Record<TeamInviteFailure, number> = {
   already_member: 409,
 };
 
-function teamErrorResponse(cause: unknown): Response | null {
+/** The answer to a refused team action, or null when `cause` is no team error. */
+export function teamErrorResponse(cause: unknown): Response | null {
   if (cause instanceof TeamNotFoundError) return notFound();
   if (cause instanceof TeamAccessError) return error(cause.message, 403, { code: "forbidden" });
   if (cause instanceof TeamConflictError) return error(cause.message, cause.status, { code: cause.code });

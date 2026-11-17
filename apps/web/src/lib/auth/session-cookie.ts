@@ -1,3 +1,6 @@
+// Relative: `worker.js` bundles this file without the `~` alias.
+import { userAvatarUrl, userDisplayName } from "./user-profile"
+
 /**
  * Better Auth names its session cookie `{prefix}.session_token`, and on https
  * the name starts with `__Secure-`. The prefix is `better-auth` unless the API
@@ -71,12 +74,15 @@ export function looksSignedIn(cookieHeader: string | null | undefined): boolean 
 /** The person that the session cache cookie names. */
 export interface SessionCookieIdentity {
   id: string
+  name: string | null
   email: string | null
+  /** The avatar to show (see `userAvatarUrl`), or null. */
+  image: string | null
 }
 
 /**
  * Reads the signed-in person from Better Auth's session cache cookie, so the
- * server render can show their email at once. The cookie uses the "compact"
+ * server render can show their name, email and avatar at once. The cookie uses the "compact"
  * strategy (`packages/auth/src/server.ts`): base64url JSON of
  * `{ session: { session, user }, expiresAt, signature }`.
  *
@@ -134,7 +140,12 @@ function identityFromSessionData(value: string, now: number): SessionCookieIdent
   const sessionExpiresAt = isRecord(cached.session) ? cached.session.expiresAt : undefined
   if (typeof sessionExpiresAt === "string" && !(new Date(sessionExpiresAt).getTime() > now)) return null
   const email = cached.user.email
-  return { id: cached.user.id, email: typeof email === "string" ? email : null }
+  return {
+    id: cached.user.id,
+    name: userDisplayName(cached.user.name),
+    email: typeof email === "string" ? email : null,
+    image: userAvatarUrl(cached.user),
+  }
 }
 
 function decodeBase64Url(value: string): string | null {

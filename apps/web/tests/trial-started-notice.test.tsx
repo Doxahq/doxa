@@ -10,6 +10,10 @@ const billingApi = vi.hoisted(() => ({
   getBillingAccount: vi.fn(),
   listBillingOffers: vi.fn(),
 }))
+vi.mock("~/lib/dashboard/workspace-context", async () => {
+  const fixture = await import("./fixtures/workspace")
+  return fixture.workspaceContextModule(() => fixture.workspaceValue())
+})
 vi.mock("~/lib/billing-api", async (importOriginal) => ({ ...(await importOriginal<object>()), ...billingApi }))
 
 const router = vi.hoisted(() => ({ navigate: vi.fn(), search: {} as Record<string, unknown> }))
@@ -152,7 +156,7 @@ describe("the Free plan strip", () => {
     const note = screen.getByText(FREE_PLAN_NOTE)
     expect(screen.getByRole("link", { name: "Compare plans" }).getAttribute("href")).toBe("/dashboard/billing")
     // The last block of the page.
-    const strip = note.parentElement
+    const strip = note.closest("div")
     expect(strip?.nextElementSibling).toBeNull()
     expect(page.container.textContent?.endsWith("Compare plans")).toBe(true)
   })

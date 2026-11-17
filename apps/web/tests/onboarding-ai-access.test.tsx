@@ -68,19 +68,26 @@ describe("Doxa Agent access", () => {
 
   test("new project: billing off (no accounts) keeps every option; Free needs Pro; trial and Pro are open", () => {
     const on = (accounts: BillingAccountSummary[]) => ({ enforcement: "on" as const, accounts })
-    expect(newProjectAiAccess({ isPending: true, data: undefined })).toEqual(AI_ACCESS_LOADING)
+    expect(newProjectAiAccess({ isPending: true, data: undefined }, null)).toEqual(AI_ACCESS_LOADING)
     // 503 billing_not_configured, or any other failure: today's onboarding.
-    expect(newProjectAiAccess({ isPending: false, data: undefined })).toEqual(AI_ACCESS_OPEN)
-    expect(newProjectAiAccess({ isPending: false, data: on([]) })).toEqual(AI_ACCESS_OPEN)
-    // A Pro team does not help: the new project bills to the personal account.
-    expect(newProjectAiAccess({ isPending: false, data: on([TEAM_PRO, personal("free")]) })).toEqual(FREE)
+    expect(newProjectAiAccess({ isPending: false, data: undefined }, null)).toEqual(AI_ACCESS_OPEN)
+    expect(newProjectAiAccess({ isPending: false, data: on([]) }, null)).toEqual(AI_ACCESS_OPEN)
+    // A Pro team does not help a personal project: it bills to the personal account.
+    expect(newProjectAiAccess({ isPending: false, data: on([TEAM_PRO, personal("free")]) }, null)).toEqual(FREE)
+    // A project of the Pro team bills to the team.
+    expect(newProjectAiAccess({ isPending: false, data: on([TEAM_PRO, personal("free")]) }, "team-1")).toEqual(AI_ACCESS_OPEN)
+    expect(newProjectAiAccess({ isPending: false, data: on([{ ...TEAM_PRO, plan: "free" }, personal("pro")]) }, "team-1")).toEqual({
+      kind: "needs_pro",
+      accountId: TEAM_PRO.id,
+      canManage: true,
+    })
     // A trial account's effective plan is Pro.
-    expect(newProjectAiAccess({ isPending: false, data: on([personal("pro")]) })).toEqual(AI_ACCESS_OPEN)
+    expect(newProjectAiAccess({ isPending: false, data: on([personal("pro")]) }, null)).toEqual(AI_ACCESS_OPEN)
   })
 
   test("new project: enforcement off or shadow never gates, even with a payment provider and a Free plan", () => {
     for (const enforcement of ["off", "shadow"] as const) {
-      expect(newProjectAiAccess({ isPending: false, data: { enforcement, accounts: [personal("free")] } })).toEqual(AI_ACCESS_OPEN)
+      expect(newProjectAiAccess({ isPending: false, data: { enforcement, accounts: [personal("free")] } }, null)).toEqual(AI_ACCESS_OPEN)
     }
   })
 
@@ -107,7 +114,7 @@ describe("Doxa Agent access", () => {
   test("the hook reads 503 billing_not_configured as open", async () => {
     billingApi.listBillingAccounts.mockRejectedValue(new ApiRequestError("Billing is not configured", 503, "billing_not_configured"))
     function Probe() {
-      return <span>{useNewProjectAiAccess().kind}</span>
+      return <span>{useNewProjectAiAccess({ teamId: null }).kind}</span>
     }
     render(withClient(<Probe />))
     expect(screen.getByText("loading")).toBeTruthy()

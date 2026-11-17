@@ -24,13 +24,16 @@ import { cn } from "~/lib/utils"
 /**
  * Names a project without a repository and picks how it starts: the starter
  * docs (the default) or an empty site. The new project opens when it is ready.
+ * `teamId` owns the new project (null: personal).
  */
 export function CreateProjectDialog({
   open,
+  teamId,
   onOpenChange,
   onGenerateFromRepository,
 }: {
   open: boolean
+  teamId: string | null
   onOpenChange: (open: boolean) => void
   /** Null when the account cannot generate (Free): the footer then has no link to it. */
   onGenerateFromRepository: (() => void) | null
@@ -47,6 +50,7 @@ export function CreateProjectDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl overscroll-contain shadow-none">
         <CreateProjectForm
+          teamId={teamId}
           example={example}
           onCancel={() => handleOpenChange(false)}
           onGenerateFromRepository={onGenerateFromRepository}
@@ -57,10 +61,12 @@ export function CreateProjectDialog({
 }
 
 function CreateProjectForm({
+  teamId,
   example,
   onCancel,
   onGenerateFromRepository,
 }: {
+  teamId: string | null
   example: ReturnType<typeof useCreateExampleProject>
   onCancel: () => void
   onGenerateFromRepository: (() => void) | null
@@ -74,7 +80,7 @@ function CreateProjectForm({
     event.preventDefault()
     if (!trimmedName || example.isCreating) return
     try {
-      const project = await example.createExampleProject({ name: trimmedName, template })
+      const project = await example.createExampleProject({ name: trimmedName, template, ...(teamId ? { teamId } : {}) })
       toast.success(`Project “${project.name}” created`)
       await navigate({ to: "/dashboard/projects/$projectId/project", params: { projectId: project.id } })
     } catch {

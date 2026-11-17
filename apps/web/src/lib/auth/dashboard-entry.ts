@@ -29,6 +29,6 @@ export function resolveDashboardEntry(
   return {
     devSession: null,
     // The same fields as the session from the browser (see `toAuthSessionUser`).
-    identityHint: identity ? { id: identity.id, email: identity.email, name: null, image: null } : null,
+    identityHint: identity,
   }
 }

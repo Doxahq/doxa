@@ -9,8 +9,9 @@ import {
   type GenerationJobDto,
   type GenerationStartResultDto,
 } from "@doxahq/contracts";
+import type { ProjectTeam } from "@doxahq/contracts/teams";
 import { createApiRouter } from "../http/app";
-import type { ApiApp } from "../http/app";
+import type { ApiApp, ApiContext } from "../http/app";
 import { withUser } from "../http/auth";
 import { streamEvents } from "../http/progress-stream";
 import { forbidden, withProjectAccess } from "../http/project-access";
@@ -67,7 +68,8 @@ import { createDocsDomainRoutes } from "./docs-domains";
 import { createProjectApprovalRequestRoutes } from "./approval-requests";
 import { createProjectApprovalSettingsRoutes } from "./approval-settings";
 import { createDoxabotRoutes } from "./doxabot";
-import { createProjectTeamRoutes } from "./teams";
+import { createProjectTeamRoutes, teamErrorResponse } from "./teams";
+import { TeamService } from "../services/teams/team-service";
 import { createCreditEstimateRoutes } from "./billing";
 import { handleProjectShell } from "./project-shell";
 import {
@@ -82,6 +84,31 @@ import {
   withDocsUrl,
   withPreferredDocsUrls,
 } from "../utils/project-docs-urls";
+
+type NewProjectTeam =
+  | { readonly ok: true; readonly team: ProjectTeam | null }
+  | { readonly ok: false; readonly response: Response };
+
+/**
+ * The team of a project that the user creates: none for a personal project,
+ * else the team, when the user's role there has `project.create`. A team the
+ * user is not in answers 404, a role without the capability 403.
+ */
+async function authorizeNewProjectTeam(
+  context: ApiContext,
+  userId: string,
+  teamId: string | undefined,
+): Promise<NewProjectTeam> {
+  if (teamId === undefined) return { ok: true, team: null };
+  try {
+    const team = await TeamService.fromEnv(context.env).authorizeProjectCreation(userId, teamId);
+    return { ok: true, team };
+  } catch (cause) {
+    const response = teamErrorResponse(cause);
+    if (response) return { ok: false, response };
+    throw cause;
+  }
+}
 
 export function createProjectRoutes(): ApiApp {
   const app = createApiRouter();
@@ -106,11 +133,15 @@ export function createProjectRoutes(): ApiApp {
         "Invalid project payload.",
       );
       if (!input.ok) return input.response;
+      const { teamId, ...projectInput } = input.data;
+      const owner = await authorizeNewProjectTeam(context, userId, teamId);
+      if (!owner.ok) return owner.response;
 
       try {
         const project = await createRepositoryProject(context.env, {
           userId,
-          ...input.data,
+          ...projectInput,
+          team: owner.team,
         });
 
         return json(
@@ -135,11 +166,15 @@ export function createProjectRoutes(): ApiApp {
         "Invalid project payload.",
       );
       if (!input.ok) return input.response;
+      const { teamId, ...projectInput } = input.data;
+      const owner = await authorizeNewProjectTeam(context, userId, teamId);
+      if (!owner.ok) return owner.response;
 
       try {
         const project = await createExampleProject(context.env, {
           userId,
-          ...input.data,
+          ...projectInput,
+          team: owner.team,
         });
         return json(
           { project: withDocsUrl(project, context.env) },

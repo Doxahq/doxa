@@ -78,7 +78,6 @@ export function BillingAccountPage({
     <>
       <BillingAccountView
         detail={detail}
-        accounts={accountsQuery.data?.accounts ?? []}
         invoices={invoicesQuery.data?.pages.flatMap((page) => page.invoices) ?? []}
         invoicePages={morePagesOf(invoicesQuery)}
         notice={notice}

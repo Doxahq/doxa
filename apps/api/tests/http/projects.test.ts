@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     connectRepository: vi.fn(),
   },
   createExampleProject: vi.fn(),
+  authorizeProjectCreation: vi.fn(),
   deleteProject: vi.fn(),
   docsDomainsRepository: {
     listPreferredCustomHostnames: vi.fn(),
@@ -160,6 +161,11 @@ vi.mock("../../src/services/example-docs/create-project", () => ({
   createExampleProject: mocks.createExampleProject,
 }));
 
+vi.mock("../../src/services/teams/team-service", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  TeamService: { fromEnv: () => ({ authorizeProjectCreation: mocks.authorizeProjectCreation }) },
+}));
+
 vi.mock("../../src/services/project-deletion", () => ({
   deleteProject: mocks.deleteProject,
 }));
@@ -172,6 +178,7 @@ const { DocsDomainProvisioningError } = await import(
   "../../src/services/docs-domain-lifecycle"
 );
 const { CreateProjectError } = await import("../../src/repositories/projects");
+const { TeamAccessError, TeamNotFoundError } = await import("../../src/services/teams/errors");
 
 describe("project routes docs URLs", () => {
   beforeEach(() => {
@@ -287,7 +294,9 @@ describe("project routes docs URLs", () => {
     expect(mocks.projectsRepository.createForRepository).toHaveBeenCalledWith({
       userId: "user-1",
       githubRepositoryId: "11111111-1111-4111-8111-111111111111",
+      team: null,
     });
+    expect(mocks.authorizeProjectCreation).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({
       project: createProject({
         docsUrl: "https://demo.doxa.page",
@@ -310,7 +319,7 @@ describe("project routes docs URLs", () => {
     expect(response.status).toBe(201);
     expect(mocks.createExampleProject).toHaveBeenCalledWith(
       expect.anything(),
-      { userId: "user-1", name: "My Docs" },
+      { userId: "user-1", name: "My Docs", team: null },
     );
     expect(mocks.projectsRepository.createForRepository).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({
@@ -337,8 +346,62 @@ describe("project routes docs URLs", () => {
     expect(response.status).toBe(201);
     expect(mocks.createExampleProject).toHaveBeenCalledWith(
       expect.anything(),
-      { userId: "user-1", name: "My Docs", template: "empty" },
+      { userId: "user-1", name: "My Docs", template: "empty", team: null },
     );
+  });
+
+  test("creates a project in a team where the user's role may create one", async () => {
+    const team = { id: "33333333-3333-4333-8333-333333333333", name: "Coder One" };
+    mocks.authorizeProjectCreation.mockResolvedValue(team);
+    mocks.createExampleProject.mockResolvedValue(
+      createProject({ githubRepositoryId: null, publishedVersionId: "v-1", team }),
+    );
+    const response = await worker.fetch(
+      createMutationRequest("/projects/example", {
+        body: JSON.stringify({ name: "Team Docs", teamId: team.id }),
+      }),
+      createEnv({ DOCS_BASE_DOMAIN: "doxa.page" }),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(201);
+    expect(mocks.authorizeProjectCreation).toHaveBeenCalledWith("user-1", team.id);
+    expect(mocks.createExampleProject).toHaveBeenCalledWith(
+      expect.anything(),
+      { userId: "user-1", name: "Team Docs", team },
+    );
+    await expect(response.json()).resolves.toMatchObject({ project: { team } });
+  });
+
+  test("refuses a team role without project.create (403) and a team the user is not in (404)", async () => {
+    const teamId = "33333333-3333-4333-8333-333333333333";
+    for (const [refusal, status] of [
+      [new TeamAccessError(), 403],
+      [new TeamNotFoundError(), 404],
+    ] as const) {
+      mocks.authorizeProjectCreation.mockRejectedValueOnce(refusal);
+      const response = await worker.fetch(
+        createMutationRequest("/projects", {
+          body: JSON.stringify({ githubRepositoryId: "11111111-1111-4111-8111-111111111111", teamId }),
+        }),
+        createEnv({ DOCS_BASE_DOMAIN: "doxa.page" }),
+        createExecutionContext(),
+      );
+      expect(response.status).toBe(status);
+    }
+    expect(mocks.projectsRepository.createForRepository).not.toHaveBeenCalled();
+  });
+
+  test("refuses a team ID that is not a UUID before any check", async () => {
+    const response = await worker.fetch(
+      createMutationRequest("/projects/example", {
+        body: JSON.stringify({ name: "Team Docs", teamId: "not-a-uuid" }),
+      }),
+      createEnv({ DOCS_BASE_DOMAIN: "doxa.page" }),
+      createExecutionContext(),
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.authorizeProjectCreation).not.toHaveBeenCalled();
   });
 
   test("rejects an unknown example template", async () => {

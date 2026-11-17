@@ -9,6 +9,7 @@ import {
   type Capability,
   type CreateTeamInviteInput,
   type CreatedTeamInvite,
+  type ProjectTeam,
   type TeamDetail,
   type TeamInvite,
   type TeamInvitePreview,
@@ -332,6 +333,18 @@ export class TeamService {
    * manage. The project keeps its owner (storage, billing, GitHub), so the
    * owner's agent grants keep working through the owner's team role.
    */
+  /**
+   * The team of a project that the user is about to create in it. Throws
+   * "not found" for a team the user is not in, and "forbidden" for a role
+   * without `project.create` (editor, viewer).
+   */
+  async authorizeProjectCreation(userId: string, teamId: string): Promise<ProjectTeam> {
+    await this.authorize(userId, teamId, "project.create");
+    const team = await this.deps.store.findTeam(teamId);
+    if (team === null) throw new TeamNotFoundError();
+    return { id: team.id, name: team.name };
+  }
+
   async moveProject(userId: string, projectId: string, teamId: string): Promise<void> {
     const decision = await this.deps.projects.authorize(dashboardActor(userId), projectId, "project.delete");
     if (!decision.allowed) {

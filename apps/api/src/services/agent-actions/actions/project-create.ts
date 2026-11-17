@@ -9,9 +9,10 @@ import { FRESH } from "../freshness";
 import { definePrincipalAction } from "../registered-action";
 import { emptySchema } from "./shared";
 
+// An agent creates personal projects for now, so a team is refused, not ignored.
 const payloadSchema = z.discriminatedUnion("source", [
-  createExampleProjectInputSchema.extend({ source: z.literal("example") }).strict(),
-  createProjectInputSchema.extend({ source: z.literal("repository") }).strict(),
+  createExampleProjectInputSchema.omit({ teamId: true }).extend({ source: z.literal("example") }).strict(),
+  createProjectInputSchema.omit({ teamId: true }).extend({ source: z.literal("repository") }).strict(),
 ]);
 
 type ProjectCreatePayload = z.infer<typeof payloadSchema>;

@@ -3,7 +3,7 @@ import type { ProjectDto } from "@doxahq/contracts"
 import { ChevronsUpDown } from "lucide-react"
 
 import { ProjectMonogram } from "~/components/dashboard/shell/project-monogram"
-import { ProjectMenuItems } from "~/components/dashboard/shell/sidebar-footer"
+import { ProjectMenuItems } from "~/components/dashboard/shell/project-menu-items"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "~/components/ui/dropdown-menu"
 
 /**

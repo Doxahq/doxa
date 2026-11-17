@@ -2,6 +2,7 @@ import { queryOptions } from "@tanstack/react-query"
 import { authClient } from "@doxahq/auth/client"
 
 import type { DashboardSessionUser } from "~/lib/auth/dashboard-session"
+import { userAvatarUrl, userDisplayName, type UserPictureSource } from "~/lib/auth/user-profile"
 
 export const authSessionQueryKeys = {
   session: () => ["auth", "session"] as const,
@@ -10,20 +11,21 @@ export const authSessionQueryKeys = {
 /** The signed-in person, or null when the API knows no session for this browser. */
 export type AuthSessionUser = DashboardSessionUser | null
 
-interface BetterAuthSessionUser {
+interface BetterAuthSessionUser extends UserPictureSource {
   id: string
+  name?: string | null
   email?: string | null
 }
 
 /**
  * The person in the dashboard shell (status bar, account menu).
  *
- * It reads the Better Auth session, not `/me`. The shell keeps the same
- * fields that the server session had: the email and the id, no name or image.
+ * It reads the Better Auth session, not `/me`: the id, the name, the email
+ * and the avatar (see `userAvatarUrl`).
  */
 export function toAuthSessionUser(user: BetterAuthSessionUser | null | undefined): AuthSessionUser {
   if (!user) return null
-  return { id: user.id, name: null, email: user.email ?? null, image: null }
+  return { id: user.id, name: userDisplayName(user.name), email: user.email ?? null, image: userAvatarUrl(user) }
 }
 
 /**

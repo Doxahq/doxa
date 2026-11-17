@@ -12,6 +12,10 @@ const billingApi = vi.hoisted(() => ({
   getBillingAccount: vi.fn(),
   createBillingCheckout: vi.fn(),
 }))
+vi.mock("~/lib/dashboard/workspace-context", async () => {
+  const fixture = await import("./fixtures/workspace")
+  return fixture.workspaceContextModule(() => fixture.workspaceValue())
+})
 vi.mock("~/lib/billing-api", async (importOriginal) => ({ ...(await importOriginal<object>()), ...billingApi }))
 const openBillingUrl = vi.hoisted(() => vi.fn())
 vi.mock("~/lib/dashboard/use-billing-account", async (importOriginal) => ({

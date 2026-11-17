@@ -10,6 +10,7 @@ import { founderOffer } from "~/lib/dashboard/billing-model"
 import { openBillingUrl } from "~/lib/dashboard/use-billing-account"
 import { useCheckoutReturn } from "~/lib/dashboard/use-checkout-return"
 import { useProjectCapabilities } from "~/lib/dashboard/use-project-capabilities"
+import type { Workspace } from "~/lib/dashboard/workspace-model"
 import { billingAccountsQueryOptions, billingOffersQueryOptions } from "~/lib/queries/billing"
 import { projectDetailQueryOptions } from "~/lib/queries/dashboard"
 
@@ -19,8 +20,9 @@ export const CHECKOUT_PLAN_POLL_MS = 2_000
 export const CHECKOUT_PLAN_WAIT_MS = 60_000
 
 /**
- * The Doxa Agent access of the project that the new project page creates
- * (personal account).
+ * The Doxa Agent access of the project that the new project page creates in
+ * `workspace` (its billing account). Null while the workspace is not known:
+ * the access stays `loading`, so the page keeps its reserved state.
  *
  * With `checkout` (the Pro trial's Checkout returned here with
  * `?checkout=<id>`), the session is synced once and the parameter dropped
@@ -29,7 +31,10 @@ export const CHECKOUT_PLAN_WAIT_MS = 60_000
  * dialog. When the webhook lags behind the sync, the account list is read
  * again every 2 seconds, for up to a minute; then the Free state shows again.
  */
-export function useNewProjectAiAccess(checkout?: { sessionId: string | null; onHandled: () => void }): AiGenerationAccess {
+export function useNewProjectAiAccess(
+  workspace: Pick<Workspace, "teamId"> | null,
+  checkout?: { sessionId: string | null; onHandled: () => void },
+): AiGenerationAccess {
   const sessionId = checkout?.sessionId ?? null
   const [awaitingPlan, setAwaitingPlan] = useState(sessionId !== null)
   const sync = useCheckoutReturn(sessionId, checkout?.onHandled ?? noop)
@@ -37,7 +42,9 @@ export function useNewProjectAiAccess(checkout?: { sessionId: string | null; onH
     ...billingAccountsQueryOptions(),
     refetchInterval: awaitingPlan && !sync.isPending ? CHECKOUT_PLAN_POLL_MS : false,
   })
-  const access = newProjectAiAccess({ isPending: query.isPending, data: query.data })
+  const access = workspace
+    ? newProjectAiAccess({ isPending: query.isPending, data: query.data }, workspace.teamId)
+    : AI_ACCESS_LOADING
   const isOpen = access.kind === "open"
 
   useEffect(() => {

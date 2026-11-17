@@ -1,4 +1,5 @@
 import type { ProjectDto } from "@doxahq/contracts";
+import type { ProjectTeam } from "@doxahq/contracts/teams";
 import type { Env } from "../env";
 import { GitHubRepository } from "../repositories/github";
 import { CreateProjectError, ProjectsRepository } from "../repositories/projects";
@@ -52,6 +53,8 @@ export async function createRepositoryProject(
     name?: string;
     slug?: string;
     productionBranch?: string;
+    /** Authorized by the caller; null makes a personal project. */
+    team: ProjectTeam | null;
   },
 ): Promise<ProjectDto> {
   await assertProductionBranchExists(env, input);

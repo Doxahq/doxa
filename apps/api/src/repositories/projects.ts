@@ -1,6 +1,7 @@
 import { and, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
 import { createDb, schema } from "@doxahq/db";
 import type { ProjectDto } from "@doxahq/contracts";
+import type { ProjectTeam } from "@doxahq/contracts/teams";
 import type { Env } from "../env";
 import { siteUploadsBusy } from "../services/site-assets/upload-busy-errors";
 import { runWithSiteLock, SITE_LOCK_BUSY, SITE_LOCKS } from "./site-advisory-lock";
@@ -184,7 +185,8 @@ export class ProjectsRepository {
   /**
    * `productionBranch` must already be checked on GitHub
    * (`services/project-production-branch.ts`). Left out, the project follows
-   * the repository's default branch.
+   * the repository's default branch. `team` must already be authorized
+   * (`TeamService.authorizeProjectCreation`); null makes a personal project.
    */
   async createForRepository(input: {
     userId: string;
@@ -192,6 +194,7 @@ export class ProjectsRepository {
     name?: string;
     slug?: string;
     productionBranch?: string;
+    team: ProjectTeam | null;
   }): Promise<ProjectDto> {
     const repo = await this.getOwnedUnusedRepository(
       input.userId,
@@ -203,15 +206,17 @@ export class ProjectsRepository {
       name: input.name ?? repo.name,
       baseSlug: ensureSlug(input.slug ?? repo.name, repo.name),
       productionBranch: input.productionBranch ?? null,
+      team: input.team,
     });
     return project;
   }
 
-  /** Creates a project with no repository. Its docs site starts empty. */
+  /** Creates a project with no repository. Its docs site starts empty. `team` as in `createForRepository`. */
   async createWithoutRepository(input: {
     userId: string;
     name: string;
     slug?: string;
+    team: ProjectTeam | null;
   }): Promise<{ project: ProjectDto; siteId: string }> {
     return this.insertProject({
       userId: input.userId,
@@ -219,6 +224,7 @@ export class ProjectsRepository {
       name: input.name,
       baseSlug: ensureSlug(input.slug ?? input.name, "docs"),
       productionBranch: null,
+      team: input.team,
     });
   }
 
@@ -323,6 +329,7 @@ export class ProjectsRepository {
     name: string;
     baseSlug: string;
     productionBranch: string | null;
+    team: ProjectTeam | null;
   }): Promise<{ project: ProjectDto; siteId: string }> {
     return this.db.transaction(async (tx) => {
       const docsNamespace = createDocsNamespaceLookup(tx);
@@ -337,6 +344,7 @@ export class ProjectsRepository {
           userId: input.userId,
           githubRepositoryId: input.repository?.id ?? null,
           productionBranch: input.productionBranch,
+          teamId: input.team?.id ?? null,
           name: input.name,
           slug,
         })
@@ -351,7 +359,7 @@ export class ProjectsRepository {
         .returning({ id: schema.docsSites.id });
 
       return {
-        project: toProjectDto(project, input.repository?.fullName ?? null),
+        project: toProjectDto(project, input.repository?.fullName ?? null, input.team),
         siteId: site.id,
       };
     });
@@ -412,6 +420,7 @@ export async function createAvailableSlug(
 function toProjectDto(
   project: typeof schema.projects.$inferSelect,
   repositoryFullName: string | null,
+  team: ProjectTeam | null,
 ): ProjectDto {
   return {
     id: project.id,
@@ -421,7 +430,7 @@ function toProjectDto(
     repositoryFullName,
     publishedVersionId: null,
     docsUrl: null,
-    team: null,
+    team,
   };
 }
 

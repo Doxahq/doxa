@@ -6,6 +6,8 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { BillingAccountList } from "@doxahq/contracts/billing"
 
+import type { WorkspaceContextValue } from "~/lib/dashboard/workspace-context"
+
 const billingApi = vi.hoisted(() => ({
   listBillingAccounts: vi.fn(),
   getBillingAccount: vi.fn(),
@@ -13,6 +15,11 @@ const billingApi = vi.hoisted(() => ({
   listBillingLedgerEntries: vi.fn(),
 }))
 vi.mock("~/lib/billing-api", async (importOriginal) => ({ ...(await importOriginal<object>()), ...billingApi }))
+const workspace = vi.hoisted(() => ({ value: null as WorkspaceContextValue | null }))
+vi.mock("~/lib/dashboard/workspace-context", async () => {
+  const fixture = await import("./fixtures/workspace")
+  return fixture.workspaceContextModule(() => workspace.value ?? fixture.workspaceValue())
+})
 vi.mock("~/lib/dashboard/use-projects-summary", () => ({
   useProjectsSummary: () => ({ projects: [{ id: "p1", name: "Acme Payments" }], isPending: false }),
 }))
@@ -33,11 +40,11 @@ vi.mock("~/components/dashboard/shell/top-bar", async (importOriginal) => ({
 import { BillingAccountsPage } from "~/components/dashboard/billing/billing-accounts-page"
 import { BillingCreditsPage } from "~/components/dashboard/billing/billing-credits-page"
 import { AccountSidebarView } from "~/components/dashboard/shell/account-sidebar-view"
-import { createApiError } from "~/lib/api-errors"
 import { sidebarViewForPath } from "~/lib/dashboard/shell-context"
 import { Route as CreditsRoute } from "~/routes/dashboard/billing/$accountId/credits"
 import { ACTIVE_WITH_DEBT, INVOICES, LEDGER_ENTRIES, PERSONAL_SUMMARY, TEAM_SUMMARY } from "./fixtures/billing"
 import { newQueryClient, renderInRouter } from "./fixtures/render-in-router"
+import { personalWorkspace, workspaceValue } from "./fixtures/workspace"
 
 const PERSONAL_ID = PERSONAL_SUMMARY.id
 
@@ -45,9 +52,20 @@ function accounts(list: BillingAccountList["accounts"]): BillingAccountList {
   return { enforcement: "on", accounts: list }
 }
 
+const TEAM_WORKSPACE = {
+  id: TEAM_SUMMARY.ownerId,
+  teamId: TEAM_SUMMARY.ownerId,
+  name: "Acme team",
+  role: "owner",
+  memberCount: 3,
+  projectCount: 2,
+  billingAccount: TEAM_SUMMARY,
+} as const
+
 beforeEach(() => {
   vi.clearAllMocks()
   billingApi.listBillingAccounts.mockResolvedValue(accounts([PERSONAL_SUMMARY]))
+  workspace.value = workspaceValue({ current: personalWorkspace(PERSONAL_SUMMARY) })
 })
 afterEach(cleanup)
 
@@ -99,13 +117,26 @@ describe("the Account sidebar view", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard/projects/new"))
   })
 
-  test("without billing on the server, BILLING is hidden", async () => {
-    billingApi.listBillingAccounts.mockRejectedValue(
-      createApiError(503, { error: { message: "Billing is not configured on this server.", details: { code: "billing_not_configured" } } }),
-    )
-    const { client } = renderInRouter(<AccountSidebarView projectId="p1" />, { path: "/dashboard/settings" })
+  test("without billing on the server (no account for the workspace), BILLING is hidden", async () => {
+    workspace.value = workspaceValue({ current: personalWorkspace(null) })
+    renderInRouter(<AccountSidebarView projectId="p1" />, { path: "/dashboard/settings" })
     await screen.findByRole("navigation", { name: "Account" })
-    await waitFor(() => expect(client.getQueryState(["billing", "accounts"])?.status).toBe("error"))
+    expect(screen.queryByRole("link", { name: "Plan and invoices" })).toBeNull()
+  })
+
+  test("BILLING follows the current workspace and names it when the viewer has more than one", async () => {
+    workspace.value = workspaceValue({ current: TEAM_WORKSPACE, workspaces: [personalWorkspace(PERSONAL_SUMMARY), TEAM_WORKSPACE] })
+    renderInRouter(<AccountSidebarView projectId="p1" />, { path: "/dashboard/settings" })
+    const nav = await screen.findByRole("navigation", { name: "Account" })
+    expect(within(nav).getByText("Billing · Acme team")).toBeTruthy()
+    expect(within(nav).getByRole("link", { name: "Plan and invoices" }).getAttribute("href")).toBe(`/dashboard/billing/${TEAM_SUMMARY.id}`)
+  })
+
+  test("a team role without billing.read sees no BILLING", async () => {
+    const viewerWorkspace = { ...TEAM_WORKSPACE, role: "viewer" as const, billingAccount: null }
+    workspace.value = workspaceValue({ current: viewerWorkspace, workspaces: [personalWorkspace(PERSONAL_SUMMARY), viewerWorkspace] })
+    renderInRouter(<AccountSidebarView projectId="p1" />, { path: "/dashboard/settings" })
+    await screen.findByRole("navigation", { name: "Account" })
     expect(screen.queryByRole("link", { name: "Plan and invoices" })).toBeNull()
   })
 })
@@ -138,14 +169,23 @@ function renderBillingIndex() {
 }
 
 describe("/dashboard/billing", () => {
-  test("with one account the viewer manages, it opens that account's Plan and invoices", async () => {
+  test("opens Plan and invoices of the current workspace's account", async () => {
     const router = renderBillingIndex()
     expect(await screen.findByText(`Plan and invoices of ${PERSONAL_ID}`)).toBeTruthy()
     expect(router.state.location.pathname).toBe(`/dashboard/billing/${PERSONAL_ID}`)
   })
 
-  test("with more accounts, it lists them", async () => {
+  test("in a team workspace, opens the team's account, not the personal one", async () => {
     billingApi.listBillingAccounts.mockResolvedValue(accounts([PERSONAL_SUMMARY, TEAM_SUMMARY]))
+    workspace.value = workspaceValue({ current: TEAM_WORKSPACE, workspaces: [personalWorkspace(PERSONAL_SUMMARY), TEAM_WORKSPACE] })
+    const router = renderBillingIndex()
+    expect(await screen.findByText(`Plan and invoices of ${TEAM_SUMMARY.id}`)).toBeTruthy()
+    expect(router.state.location.pathname).toBe(`/dashboard/billing/${TEAM_SUMMARY.id}`)
+  })
+
+  test("when the workspace's billing is not the viewer's to read, it lists the accounts", async () => {
+    billingApi.listBillingAccounts.mockResolvedValue(accounts([PERSONAL_SUMMARY, TEAM_SUMMARY]))
+    workspace.value = workspaceValue({ current: { ...TEAM_WORKSPACE, role: "viewer", billingAccount: null } })
     renderBillingIndex()
     expect(await screen.findByText("Personal account")).toBeTruthy()
     expect(screen.getByText("Acme team")).toBeTruthy()

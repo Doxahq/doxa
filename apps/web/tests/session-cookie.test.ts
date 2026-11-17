@@ -80,9 +80,15 @@ describe("looksSignedIn", () => {
 })
 
 describe("readSessionCookieIdentity", () => {
-  test("reads the id and email from a valid session cache cookie", () => {
+  test("reads the id, name and email from a valid session cache cookie", () => {
     const header = `theme=dark; __Secure-better-auth.session_data=${sessionData()}`
-    expect(readSessionCookieIdentity(header, NOW)).toEqual({ id: "u1", email: "ada@example.com" })
+    expect(readSessionCookieIdentity(header, NOW)).toEqual({ id: "u1", name: "Ada", email: "ada@example.com", image: null })
+  })
+
+  test("reads the avatar: the GitHub picture when GitHub is linked", () => {
+    const user = { id: "u1", email: "ada@example.com", image: "https://lh3.googleusercontent.com/a/ada", githubLogin: "ada" }
+    const header = `better-auth.session_data=${sessionData({ user })}`
+    expect(readSessionCookieIdentity(header, NOW)?.image).toBe("https://avatars.githubusercontent.com/ada?size=64")
   })
 
   test("reads a cookie with a custom prefix, and one split into chunks", () => {
@@ -134,7 +140,7 @@ describe("resolveDashboardEntry", () => {
     const header = `__Secure-better-auth.session_token=abc; __Secure-better-auth.session_data=${sessionData()}`
     expect(resolveDashboardEntry(header, null, NOW)).toEqual({
       devSession: null,
-      identityHint: { id: "u1", email: "ada@example.com", name: null, image: null },
+      identityHint: { id: "u1", email: "ada@example.com", name: "Ada", image: null },
     })
   })
 

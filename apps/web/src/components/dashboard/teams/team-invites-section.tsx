@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useRouterState } from "@tanstack/react-router"
 import { Check, Copy, Link2, Loader2, Mail } from "lucide-react"
 import type { CreateTeamInviteInput, TeamDetail, TeamInvite, TeamRole } from "@doxahq/contracts/teams"
 
@@ -7,7 +8,7 @@ import { SectionDescription, SectionLabel } from "~/components/dashboard/dashboa
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
-import { TEAM_ROLE_LABELS, assignableRoles, formatTeamDate } from "~/lib/dashboard/teams-model"
+import { TEAM_INVITES_ANCHOR, TEAM_ROLE_LABELS, assignableRoles, formatTeamDate } from "~/lib/dashboard/teams-model"
 
 /** How long a copy button shows "Copied". */
 const COPIED_FEEDBACK_MS = 2000
@@ -16,7 +17,8 @@ const COPIED_FEEDBACK_MS = 2000
  * Invites (spec §5, email spec §10): a manager makes a single-use link with a
  * role, and Doxa emails it when the manager gives an address. Each pending
  * invite lists its link, so a manager can copy it again; only the token hash
- * is stored, and the API derives the link from the invite ID.
+ * is stored, and the API derives the link from the invite ID. Opened at
+ * `#invites`, it scrolls into view and focuses the email field.
  */
 export function TeamInvitesSection({
   team,
@@ -37,6 +39,15 @@ export function TeamInvitesSection({
 }) {
   const [role, setRole] = useState<TeamRole>("editor")
   const [email, setEmail] = useState("")
+  const sectionRef = useRef<HTMLElement>(null)
+  const emailRef = useRef<HTMLInputElement>(null)
+  const hash = useRouterState({ select: (state) => state.location.hash })
+
+  useEffect(() => {
+    if (hash !== TEAM_INVITES_ANCHOR) return
+    sectionRef.current?.scrollIntoView({ block: "start" })
+    emailRef.current?.focus({ preventScroll: true })
+  }, [hash])
   const roles = assignableRoles(team.role)
   const address = email.trim()
 
@@ -50,7 +61,7 @@ export function TeamInvitesSection({
   }
 
   return (
-    <section className="flex flex-col gap-3">
+    <section ref={sectionRef} id={TEAM_INVITES_ANCHOR} className="flex scroll-mt-16 flex-col gap-3">
       <div className="flex flex-col gap-1">
         <SectionLabel>Invites</SectionLabel>
         <SectionDescription>
@@ -61,6 +72,7 @@ export function TeamInvitesSection({
       <form onSubmit={submit} className="surface-card flex flex-col gap-4 p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Input
+            ref={emailRef}
             type="email"
             aria-label="Email address of the new member"
             placeholder="name@example.com (optional)"

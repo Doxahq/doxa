@@ -133,6 +133,13 @@ const projectSlugInputSchema = z
   .max(80)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 
+/**
+ * The team that owns a new project. Left out, the project is personal. The
+ * creator needs `project.create` in the team (owner or admin), and stays the
+ * project's owner (`projects.user_id`).
+ */
+const projectTeamIdInputSchema = z.uuid().optional();
+
 export const createProjectInputSchema = z.object({
   githubRepositoryId: z.string().uuid(),
   name: z.string().trim().min(1).max(120).optional(),
@@ -142,6 +149,7 @@ export const createProjectInputSchema = z.object({
    * follows the repository's default branch on GitHub.
    */
   productionBranch: gitBranchNameSchema.optional(),
+  teamId: projectTeamIdInputSchema,
 });
 
 /** A project with no repository that starts with the example docs site. */
@@ -153,6 +161,8 @@ export const createExampleProjectInputSchema = z.object({
   slug: projectSlugInputSchema.optional(),
   /** The starter docs when left out. */
   template: exampleDocsTemplateSchema.optional(),
+  /** As in `createProjectInputSchema`. */
+  teamId: projectTeamIdInputSchema,
 });
 
 export const connectProjectRepositoryInputSchema = z.object({

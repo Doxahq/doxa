@@ -1,4 +1,5 @@
 import type { ExampleDocsTemplate, ProjectDto } from "@doxahq/contracts";
+import type { ProjectTeam } from "@doxahq/contracts/teams";
 import type { Env } from "../../env";
 import { ProjectDeletionRepository } from "../../repositories/project-deletion";
 import { ProjectsRepository } from "../../repositories/projects";
@@ -17,6 +18,8 @@ export async function createExampleProject(
     name: string;
     slug?: string;
     template?: ExampleDocsTemplate;
+    /** Authorized by the caller; null makes a personal project. */
+    team: ProjectTeam | null;
   },
 ): Promise<ProjectDto> {
   const { template, ...projectInput } = input;

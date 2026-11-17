@@ -1,7 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 
-import { LogoWordmark } from "~/components/navigation/logo"
 import { ContentSidebarSkeleton } from "~/components/dashboard/content/content-sidebar-skeleton"
 import { AccountSidebarView } from "~/components/dashboard/shell/account-sidebar-view"
 import { ProjectSidebarView } from "~/components/dashboard/shell/project-sidebar-view"
@@ -10,15 +9,19 @@ import { SidebarSearchButton } from "~/components/dashboard/shell/sidebar-search
 import { SidebarResizeHandle } from "~/components/dashboard/shell/sidebar-resize-handle"
 import { SidebarViewFooter, SidebarViewHeader, SidebarViewStack } from "~/components/dashboard/shell/sidebar-view-stack"
 import { SiteSettingsSidebarView } from "~/components/dashboard/shell/site-settings-sidebar-view"
+import { WorkspaceMenu } from "~/components/dashboard/shell/workspace-menu"
 import { Sidebar, SidebarHeader } from "~/components/ui/sidebar"
 import { useSidebarPanelSlot } from "~/lib/dashboard/sidebar-panel-context"
 import type { useSidebarWidth } from "~/lib/dashboard/sidebar-width"
 import { useContentOverviewFailed } from "~/lib/dashboard/use-content-overview-failed"
+import { useWorkspace } from "~/lib/dashboard/workspace-context"
+import { canCreateProjectIn, isPersonalWorkspace } from "~/lib/dashboard/workspace-model"
 
 /**
- * The dashboard sidebar: a fixed header (logo over the search button) over
- * four sliding views (Project, Content, Site settings, Account). The project title
- * and the account menu in the footer switch projects.
+ * The dashboard sidebar: a fixed header (the logo, which opens the workspace
+ * menu, over the search button) over four sliding views (Project, Content,
+ * Site settings, Account). The project title switches projects of the
+ * current workspace.
  *
  * The Content view body comes from the content route, which owns the editor
  * state, through the sidebar panel slot.
@@ -40,9 +43,7 @@ export function AppSidebar({
         onReset={sidebarWidth.resetWidth}
       />
       <SidebarHeader className="gap-3.5 border-b border-divider px-3 pt-4 pb-3">
-        <Link to="/dashboard" aria-label="Doxa dashboard" className="w-fit px-1">
-          <LogoWordmark size={14} />
-        </Link>
+        <WorkspaceMenu />
         <SidebarSearchButton />
       </SidebarHeader>
 
@@ -53,7 +54,7 @@ export function AppSidebar({
               <ProjectSidebarView projectId={projectId} />
               <SidebarViewFooter>
                 <SiteSettingsButton projectId={projectId} />
-                <UserRow projectId={projectId} />
+                <UserRow />
               </SidebarViewFooter>
             </>
           ) : (
@@ -65,7 +66,7 @@ export function AppSidebar({
                 {contentPanel ?? <ContentViewPlaceholder projectId={projectId} />}
                 <SidebarViewFooter>
                   <SiteSettingsButton projectId={projectId} />
-                  <UserRow projectId={projectId} showLinks={false} />
+                  <UserRow showLinks={false} />
                 </SidebarViewFooter>
               </>
             ) : null,
@@ -96,24 +97,38 @@ function ContentViewPlaceholder({ projectId }: { projectId: string }) {
   )
 }
 
-/** Shown when the account has no project yet. */
+/**
+ * Shown when the current workspace has no project yet. Until the workspace
+ * is known it stays empty, so the message never shows before a project does.
+ */
 function NoProjectView() {
+  const { current } = useWorkspace()
+
   return (
     <>
       <div className="flex min-h-0 flex-1 flex-col items-start gap-3 px-4 py-6">
-        <p className="text-[13px] leading-6 text-muted-foreground">
-          Generate docs from a GitHub repository, or start from the starter docs or an empty site.
-        </p>
-        <Link
-          to="/dashboard/projects/new"
-          className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-[13px] text-foreground transition-colors hover:border-border-strong hover:bg-surface-hover"
-        >
-          <Plus aria-hidden="true" className="size-4" />
-          New project
-        </Link>
+        {current ? (
+          <>
+            <p className="text-[13px] leading-6 text-muted-foreground">
+              {isPersonalWorkspace(current) ? "" : `${current.name} has no projects yet. `}
+              {canCreateProjectIn(current)
+                ? "Generate docs from a GitHub repository, or start from the starter docs or an empty site."
+                : "An owner or admin of the team can create the first one."}
+            </p>
+            {canCreateProjectIn(current) ? (
+              <Link
+                to="/dashboard/projects/new"
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-[13px] text-foreground transition-colors hover:border-border-strong hover:bg-surface-hover"
+              >
+                <Plus aria-hidden="true" className="size-4" />
+                New project
+              </Link>
+            ) : null}
+          </>
+        ) : null}
       </div>
       <SidebarViewFooter>
-        <UserRow projectId={null} />
+        <UserRow />
       </SidebarViewFooter>
     </>
   )

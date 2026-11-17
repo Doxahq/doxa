@@ -15,6 +15,9 @@ import {
 
 import { ApiRequestError } from "~/lib/api-errors"
 
+/** `#invites` on a team page: the invite form, where the logo menu's "Invite members" lands. */
+export const TEAM_INVITES_ANCHOR = "invites"
+
 export const TEAM_ROLE_LABELS: Record<TeamRole, string> = {
   owner: "Owner",
   admin: "Admin",

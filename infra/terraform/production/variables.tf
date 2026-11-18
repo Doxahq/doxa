@@ -53,6 +53,12 @@ variable "max_task_count" {
   default     = 1
 }
 
+variable "log_retention_days" {
+  description = "Days to keep the API container logs in CloudWatch."
+  type        = number
+  default     = 90
+}
+
 variable "daily_pause" {
   description = "Daily window with no running API task, to save cost before launch. Hours are local to timezone. Null runs the API all day."
   type = object({

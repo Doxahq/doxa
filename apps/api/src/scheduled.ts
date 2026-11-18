@@ -15,6 +15,7 @@ import { isAgentSignupEnabled } from "./services/agent-signup/agent-signup-confi
 import { resolveOAuthConfig } from "./services/oauth/oauth-config";
 import { OAuthDataPurge } from "./services/oauth/purge";
 import { createStorageGarbageCollector } from "./services/storage-gc";
+import { reportCronHeartbeat } from "./services/cron-heartbeat";
 
 /**
  * The jobs of one 5-minute cron tick. Each job runs in `waitUntil`, so a
@@ -22,27 +23,34 @@ import { createStorageGarbageCollector } from "./services/storage-gc";
  * `scheduled()`, the Node server from the cron route.
  */
 export function runScheduledJobs(scheduledTime: number, env: Env, context: ExecutionContext): void {
-  context.waitUntil(DoxabotQueueOutboxPublisher.fromEnv(env).publishPending());
-  context.waitUntil(DocsCacheInvalidationMaintenance.fromEnv(env).run());
-  context.waitUntil(runHostnameMapReconcile(scheduledTime, env));
-  context.waitUntil(DocsPrerenderTaskMaintenance.fromEnv(env).run());
-  context.waitUntil(runDocsSearchMaintenance(scheduledTime, env));
-  context.waitUntil(createStorageGarbageCollector(env).run());
-  context.waitUntil(runDomainStatusChecks(env));
-  context.waitUntil(runApprovalSweep(env, context));
-  context.waitUntil(runMergeGenerations(env, context));
+  const jobs: Promise<unknown>[] = [];
+  const run = (job: Promise<unknown>) => {
+    jobs.push(job);
+    context.waitUntil(job);
+  };
+  run(DoxabotQueueOutboxPublisher.fromEnv(env).publishPending());
+  run(DocsCacheInvalidationMaintenance.fromEnv(env).run());
+  run(runHostnameMapReconcile(scheduledTime, env));
+  run(DocsPrerenderTaskMaintenance.fromEnv(env).run());
+  run(runDocsSearchMaintenance(scheduledTime, env));
+  run(createStorageGarbageCollector(env).run());
+  run(runDomainStatusChecks(env));
+  run(runApprovalSweep(env, context));
+  run(runMergeGenerations(env, context));
   const emailSweeper = EmailDeliverySweeper.fromEnv(env);
-  if (emailSweeper) context.waitUntil(emailSweeper.run());
+  if (emailSweeper) run(emailSweeper.run());
   const suppressionSync = isFirstCronRunOfHour(scheduledTime) ? EmailSuppressionSync.fromEnv(env) : null;
-  if (suppressionSync) context.waitUntil(suppressionSync.run());
+  if (suppressionSync) run(suppressionSync.run());
   if (resolveOAuthConfig(env).configured) {
-    context.waitUntil(OAuthDataPurge.fromEnv(env).run());
+    run(OAuthDataPurge.fromEnv(env).run());
   }
   if (isAgentSignupEnabled(env)) {
-    context.waitUntil(AgentSignupPurge.fromEnv(env).run());
+    run(AgentSignupPurge.fromEnv(env).run());
   }
-  context.waitUntil(purgeAgentLiveEvents(env));
-  context.waitUntil(runBillingJobs(scheduledTime, env));
+  run(purgeAgentLiveEvents(env));
+  run(runBillingJobs(scheduledTime, env));
+  // Last, after every job of the tick: the uptime monitor's cron heartbeat.
+  context.waitUntil(reportCronHeartbeat(env.OPENSTATUS_CRON_HEARTBEAT_URL, jobs));
 }
 
 /**

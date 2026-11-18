@@ -105,6 +105,11 @@ export interface Env extends AuthEnv {
   DEBUG?: string;
   /** Storage of the OAuth authorization server: clients, grants, tokens, pending consents. */
   OAUTH_KV?: KVNamespace;
+  /**
+   * The OpenStatus heartbeat URL of the 5-minute cron. Its token is the only
+   * credential, so it is a secret (SSM on the Node origin). Unset: no ping.
+   */
+  OPENSTATUS_CRON_HEARTBEAT_URL?: string;
   OAUTH_ISSUER?: string;
   /** Opens the auth.md agent signup flow. Only the exact value `true` opens it. */
   AGENT_SIGNUP_ENABLED?: string;

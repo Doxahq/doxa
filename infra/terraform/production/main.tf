@@ -91,6 +91,8 @@ module "api_service" {
   max_task_count = var.max_task_count
   daily_pause    = var.daily_pause
 
+  log_retention_days = var.log_retention_days
+
   enable_execute_command = var.enable_execute_command
 }
 

@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "doxa-docs-renderer",
+  "logpush": true,
   "main": "src/index.ts",
   "workers_dev": false,
   "preview_urls": false,

@@ -24,7 +24,15 @@ import { createSignInRoutes } from "./routes/sign-in";
 import { createTeamInviteRoutes, createTeamRoutes } from "./routes/teams";
 import { OutboxAuthMailer } from "./services/auth/outbox-auth-mailer";
 import { agentSignupDispatch } from "./services/agent-signup/agent-signup-dispatch";
+import { createReadinessProbe, readinessChecksFromEnv } from "./services/readiness";
+import type { Env } from "./env";
 import { oauthProviderDispatch } from "./services/oauth/provider-dispatch";
+
+/**
+ * One probe for the process. Each request passes its own env, which carries
+ * the database scope of that request.
+ */
+const readinessProbe = createReadinessProbe((env: Env) => readinessChecksFromEnv(env));
 
 /** Sign-in and session requests are small. */
 const AUTH_BODY_MAX_BYTES = 1024 * 1024;
@@ -59,6 +67,16 @@ export function createApiApp() {
   app.use("*", csrfProtection());
 
   app.get("/health", () => json({ ok: true, service: "doxa-api" }));
+
+  // For uptime monitors: 200 when Postgres and Valkey answer, else 503. The
+  // body names each check and its result, never an error.
+  app.get("/health/ready", async (context) => {
+    const report = await readinessProbe(context.env);
+    return Response.json(
+      { ok: report.ok, service: "doxa-api", checks: report.checks },
+      { status: report.ok ? 200 : 503, headers: { "cache-control": "no-store" } },
+    );
+  });
 
   app.all("/api/auth", (context) => {
     return handleAuth(context);

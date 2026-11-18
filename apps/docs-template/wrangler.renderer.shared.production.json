@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "doxa-docs-renderer-shared",
+  "logpush": true,
   "main": "worker.js",
   "workers_dev": false,
   "preview_urls": false,

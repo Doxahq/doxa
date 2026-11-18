@@ -95,6 +95,8 @@ describe("scheduled cache invalidation", () => {
       { status: "fulfilled", value: undefined },
       // Billing jobs: the Worker build has no BILLING_PAYMENTS, so nothing runs.
       { status: "fulfilled", value: undefined },
+      // Cron heartbeat: no OPENSTATUS_CRON_HEARTBEAT_URL, so no ping.
+      { status: "fulfilled", value: null },
     ]);
     expect(pending.purges).toHaveBeenCalledOnce();
     expect(pending.hostnameMaps).toHaveBeenCalledOnce();

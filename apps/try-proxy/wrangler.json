@@ -54,12 +54,12 @@
     "DOXA_TRY_SITE_DAILY_LIMIT": "5000",
     "DOXA_TRY_TARGET_DAILY_LIMIT": "50000"
   },
-  "logpush": false,
+  "logpush": true,
   "observability": {
-    "enabled": false,
+    "enabled": true,
     "logs": {
-      "enabled": false,
-      "invocation_logs": false
+      "enabled": true,
+      "invocation_logs": true
     },
     "traces": {
       "enabled": false

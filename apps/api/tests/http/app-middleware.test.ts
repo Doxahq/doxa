@@ -30,6 +30,23 @@ describe("app middleware", () => {
     expect(response.headers.get("x-frame-options")).toBe("SAMEORIGIN");
   });
 
+  test("answers the readiness route with 503 and names the failed check", async () => {
+    const response = await worker.fetch(
+      new Request("https://api.doxa.so/health/ready"),
+      createEnv({ AUTH_KV: { get: vi.fn(async () => null) } }),
+      createExecutionContext(),
+    );
+
+    // No database in this test env, so the database check fails: the route
+    // must then answer 503 and name only the check.
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const body = (await response.json()) as { ok: boolean; checks: Record<string, string> };
+    expect(body.ok).toBe(false);
+    expect(body.checks.cache).toBe("ok");
+    expect(["failed", "timeout"]).toContain(body.checks.database);
+  });
+
   test("handles credentialed CORS preflights for the configured web origin", async () => {
     const response = await worker.fetch(
       new Request("https://api.doxa.so/projects", {

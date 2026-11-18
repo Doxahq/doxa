@@ -48,12 +48,22 @@ async function limitByIp(request: Request, env: McpEnv): Promise<Response | null
   );
 }
 
+/** For uptime monitors. It reaches no dependency, so it costs nothing. */
+const HEALTH_PATH = "/health";
+
 export default {
   async fetch(request, env, ctx) {
     const limited = await limitByIp(request, env);
     if (limited) return limited;
+    const { pathname } = new URL(request.url);
+    if (pathname === HEALTH_PATH && request.method === "GET") {
+      return Response.json(
+        { ok: true, service: "doxa-mcp" },
+        { headers: { "cache-control": "no-store" } },
+      );
+    }
     // The upload URL carries its own secret, so it needs no bearer token.
-    if (isAssetUploadPath(new URL(request.url).pathname)) {
+    if (isAssetUploadPath(pathname)) {
       return handleAssetUpload(request, env);
     }
     const devContext = devAuthContext(request, env, (promise) =>

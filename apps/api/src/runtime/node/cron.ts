@@ -1,12 +1,8 @@
-import { createDb } from "@doxahq/db";
 import { ORIGIN_KEY_HEADER, secretsMatch } from "@doxahq/api-bridge";
 import { z } from "zod";
 import type { Env } from "../../env";
 import { runScheduledJobs } from "../../scheduled";
 import { BackgroundTasks } from "./background-tasks";
-
-/** Postgres advisory lock that one cron tick holds, so two tasks never run the jobs at once. */
-const CRON_LOCK = { classId: 4_242, objectId: 1 } as const;
 
 const cronTickSchema = z.object({ scheduledTime: z.number().int().nonnegative() });
 
@@ -22,8 +18,8 @@ export interface CronHandlerDeps {
   tasks: BackgroundTasks;
   /** Runs the jobs of one tick. Tests replace it. */
   runJobs?: RunJobs;
-  /** Tests replace the Postgres lock. */
-  withLock?: WithCronLock;
+  /** The lock that one tick holds, so two tasks never run the jobs at once (see `cron-lease.ts`). */
+  withLock: WithCronLock;
 }
 
 /**
@@ -33,7 +29,7 @@ export interface CronHandlerDeps {
  */
 export function createCronHandler(deps: CronHandlerDeps): (request: Request) => Promise<Response> {
   const runJobs = deps.runJobs ?? runScheduledJobs;
-  const withLock = deps.withLock ?? withPostgresAdvisoryLock;
+  const withLock = deps.withLock;
   let running: Promise<void> | null = null;
 
   return async (request) => {
@@ -65,23 +61,3 @@ async function runTick(scheduledTime: number, env: Env, runJobs: RunJobs): Promi
   runJobs(scheduledTime, env, jobs.createExecutionContext());
   await jobs.settled();
 }
-
-/** A session-level advisory lock on one pooled connection, released on the same connection. */
-const withPostgresAdvisoryLock: WithCronLock = async (env, work) => {
-  const client = await createDb(env).$client.connect();
-  try {
-    const { rows } = await client.query<{ locked: boolean }>(
-      "SELECT pg_try_advisory_lock($1, $2) AS locked",
-      [CRON_LOCK.classId, CRON_LOCK.objectId],
-    );
-    if (!rows[0]?.locked) return false;
-    try {
-      await work();
-      return true;
-    } finally {
-      await client.query("SELECT pg_advisory_unlock($1, $2)", [CRON_LOCK.classId, CRON_LOCK.objectId]);
-    }
-  } finally {
-    client.release();
-  }
-};

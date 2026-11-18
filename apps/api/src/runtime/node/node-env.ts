@@ -4,6 +4,8 @@ import type { Env } from "../../env";
 import { BridgeClient, createBridgedBindings } from "./bindings/bridge-bindings";
 import { S3R2Bucket, createR2S3Client } from "./bindings/r2-s3-bucket";
 import { ValkeyKvNamespace } from "./bindings/valkey-kv-namespace";
+import { createValkeyCronLock } from "./cron-lease";
+import type { WithCronLock } from "./cron";
 import { ProcessImageWorker } from "./image-processing/process-image-worker";
 import { modelTokenBrokerFromVars } from "./model-access/model-token-broker-from-vars";
 import { billingConfigFor } from "../../services/billing/config";
@@ -13,6 +15,8 @@ import { readApiVars, type DocsBucketSource, type NodeServerConfig } from "./con
 /** The API env on Node, and what must close at shutdown. */
 export interface NodeEnv {
   env: Env;
+  /** The cron lock, a lease in the same Valkey. */
+  cronLock: WithCronLock;
   close(): Promise<void>;
 }
 
@@ -65,6 +69,7 @@ export async function createNodeEnv(config: NodeServerConfig, vars: Record<strin
 
   return {
     env,
+    cronLock: createValkeyCronLock(valkey),
     async close() {
       await Promise.allSettled([valkey.quit(), docsBucket.close()]);
     },

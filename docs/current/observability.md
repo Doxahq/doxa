@@ -32,6 +32,14 @@ completed tick, because each job logs its own errors. The monitor goes down
 when a tick stops or never starts: a broken edge cron, tunnel, lock, or a
 stuck job.
 
+Only one task runs the jobs of a tick. The lock is a lease in Valkey
+(`apps/api/src/runtime/node/cron-lease.ts`): `SET {cron}:lock <token> NX PX
+600000`, then a compare-and-delete with the same token. A Postgres session
+advisory lock does not work here: the API reaches PlanetScale through
+PgBouncer in transaction mode, so the lock and the unlock can run on
+different server sessions. That lock leaked and most ticks were skipped
+until 2026-11-18.
+
 The URL holds the heartbeat token, so it is a secret. On the Node origin it is
 an SSM parameter (`/doxa/api/production/OPENSTATUS_CRON_HEARTBEAT_URL`) named
 in `api_secret_names`. Without it, nothing is sent.

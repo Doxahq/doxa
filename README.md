@@ -1,10 +1,6 @@
 <p align="center">
   <a href="https://doxa.so">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.svg">
-      <source media="(prefers-color-scheme: light)" srcset=".github/assets/banner-light.svg">
-      <img alt="Doxa: documentation that updates itself" src=".github/assets/banner-dark.svg" width="100%">
-    </picture>
+    <img alt="Doxa: documentation that updates itself. A Doxa docs site rises out of night dunes." src=".github/assets/banner.webp" width="100%">
   </a>
 </p>
 

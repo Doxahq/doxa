@@ -2,7 +2,9 @@ import { Link } from "@tanstack/react-router"
 import type { ReactNode } from "react"
 import { DoxaMark } from "~/components/marketing/doxa-mark"
 import { Hr } from "~/components/marketing/guides"
+import { FooterMark } from "~/components/marketing/footer-mark"
 import { OnboardAgentButton } from "~/components/marketing/onboard-agent-button"
+import { ThemeSwitch } from "~/components/marketing/theme-switch"
 import {
   CODERONE_URL,
   CONTACT_EMAIL,
@@ -65,7 +67,10 @@ function FooterAnchor({ link }: { link: FooterLink }): ReactNode {
   return <a href={link.href}>{link.label}</a>
 }
 
-/** The footer of every marketing page, ending in the large "DOXA" mark with "Onboard your agent" on top. */
+/**
+ * The footer of every marketing page: the link columns, the status link with
+ * the theme switch, and the large pixel "DOXA" mark with "Onboard your agent" on top.
+ */
 export function SiteFooter() {
   return (
     <footer className="foot">
@@ -108,10 +113,13 @@ export function SiteFooter() {
       <Hr />
       <div className="col">
         <div className="foot__base">
-          <a className="status" href={STATUS_URL}>
-            <i />
-            ALL SYSTEMS NORMAL
-          </a>
+          <div className="foot__start">
+            <a className="status" href={STATUS_URL} target="_blank" rel="noopener noreferrer">
+              <i />
+              ALL SYSTEMS NORMAL
+            </a>
+            <ThemeSwitch />
+          </div>
           <span className="label foot__credit">
             © 2026 Doxa · Made in <a href={CODERONE_URL}>CoderOne Labs</a> ·{" "}
             <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
@@ -120,7 +128,7 @@ export function SiteFooter() {
       </div>
       <Hr />
       <div className="foot__mark">
-        <span aria-hidden="true">DOXA</span>
+        <FooterMark />
         <OnboardAgentButton className="foot__agent" />
       </div>
     </footer>

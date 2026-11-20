@@ -23,7 +23,6 @@ import { Route as MarketingMcpRouteImport } from './routes/_marketing/mcp'
 import { Route as MarketingPricingRouteImport } from './routes/_marketing/pricing'
 import { Route as ApproveRequestIdRouteImport } from './routes/approve/$requestId'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
-import { Route as DashboardSettingsRouteImport } from './routes/dashboard/settings'
 import { Route as EmailUnsubscribeRouteImport } from './routes/email/unsubscribe'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
 import { Route as OauthClaimRouteImport } from './routes/oauth/claim'
@@ -37,6 +36,10 @@ import { Route as DashboardBillingIndexRouteImport } from './routes/dashboard/bi
 import { Route as DashboardProjectsIndexRouteImport } from './routes/dashboard/projects/index'
 import { Route as DashboardProjectsProjectIdRouteRouteImport } from './routes/dashboard/projects/$projectId/route'
 import { Route as DashboardProjectsNewRouteImport } from './routes/dashboard/projects/new'
+import { Route as DashboardSettingsIndexRouteImport } from './routes/dashboard/settings/index'
+import { Route as DashboardSettingsAgentsRouteImport } from './routes/dashboard/settings/agents'
+import { Route as DashboardSettingsApprovalsRouteImport } from './routes/dashboard/settings/approvals'
+import { Route as DashboardSettingsNotificationsRouteImport } from './routes/dashboard/settings/notifications'
 import { Route as DashboardTeamsIndexRouteImport } from './routes/dashboard/teams/index'
 import { Route as DashboardTeamsTeamIdRouteImport } from './routes/dashboard/teams/$teamId'
 import { Route as DashboardBillingAccountIdIndexRouteImport } from './routes/dashboard/billing/$accountId/index'
@@ -133,11 +136,6 @@ const DashboardIndexRoute = DashboardIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
-const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => DashboardRouteRoute,
-} as any)
 const EmailUnsubscribeRoute = EmailUnsubscribeRouteImport.update({
   id: '/email/unsubscribe',
   path: '/email/unsubscribe',
@@ -204,6 +202,28 @@ const DashboardProjectsNewRoute = DashboardProjectsNewRouteImport.update({
   path: '/projects/new',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
+const DashboardSettingsIndexRoute = DashboardSettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardSettingsAgentsRoute = DashboardSettingsAgentsRouteImport.update({
+  id: '/settings/agents',
+  path: '/settings/agents',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardSettingsApprovalsRoute =
+  DashboardSettingsApprovalsRouteImport.update({
+    id: '/settings/approvals',
+    path: '/settings/approvals',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardSettingsNotificationsRoute =
+  DashboardSettingsNotificationsRouteImport.update({
+    id: '/settings/notifications',
+    path: '/settings/notifications',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
 const DashboardTeamsIndexRoute = DashboardTeamsIndexRouteImport.update({
   id: '/teams/',
   path: '/teams/',
@@ -372,7 +392,6 @@ export interface FileRoutesByFullPath {
   '/mcp': typeof MarketingMcpRoute
   '/pricing': typeof MarketingPricingRoute
   '/approve/$requestId': typeof ApproveRequestIdRoute
-  '/dashboard/settings': typeof DashboardSettingsRoute
   '/email/unsubscribe': typeof EmailUnsubscribeRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/claim': typeof OauthClaimRoute
@@ -383,11 +402,15 @@ export interface FileRoutesByFullPath {
   '/legal/privacy': typeof MarketingLegalPrivacyRoute
   '/legal/terms': typeof MarketingLegalTermsRoute
   '/dashboard/projects/new': typeof DashboardProjectsNewRoute
+  '/dashboard/settings/agents': typeof DashboardSettingsAgentsRoute
+  '/dashboard/settings/approvals': typeof DashboardSettingsApprovalsRoute
+  '/dashboard/settings/notifications': typeof DashboardSettingsNotificationsRoute
   '/dashboard/teams/$teamId': typeof DashboardTeamsTeamIdRoute
   '/blog/': typeof MarketingBlogIndexRoute
   '/legal/': typeof MarketingLegalIndexRoute
   '/dashboard/billing/': typeof DashboardBillingIndexRoute
   '/dashboard/projects/': typeof DashboardProjectsIndexRoute
+  '/dashboard/settings/': typeof DashboardSettingsIndexRoute
   '/dashboard/teams/': typeof DashboardTeamsIndexRoute
   '/dashboard/projects/$projectId/site': typeof DashboardProjectsProjectIdSiteRouteRouteWithChildren
   '/dashboard/billing/$accountId/credits': typeof DashboardBillingAccountIdCreditsRoute
@@ -425,7 +448,6 @@ export interface FileRoutesByTo {
   '/mcp': typeof MarketingMcpRoute
   '/pricing': typeof MarketingPricingRoute
   '/approve/$requestId': typeof ApproveRequestIdRoute
-  '/dashboard/settings': typeof DashboardSettingsRoute
   '/email/unsubscribe': typeof EmailUnsubscribeRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/claim': typeof OauthClaimRoute
@@ -436,11 +458,15 @@ export interface FileRoutesByTo {
   '/legal/privacy': typeof MarketingLegalPrivacyRoute
   '/legal/terms': typeof MarketingLegalTermsRoute
   '/dashboard/projects/new': typeof DashboardProjectsNewRoute
+  '/dashboard/settings/agents': typeof DashboardSettingsAgentsRoute
+  '/dashboard/settings/approvals': typeof DashboardSettingsApprovalsRoute
+  '/dashboard/settings/notifications': typeof DashboardSettingsNotificationsRoute
   '/dashboard/teams/$teamId': typeof DashboardTeamsTeamIdRoute
   '/blog': typeof MarketingBlogIndexRoute
   '/legal': typeof MarketingLegalIndexRoute
   '/dashboard/billing': typeof DashboardBillingIndexRoute
   '/dashboard/projects': typeof DashboardProjectsIndexRoute
+  '/dashboard/settings': typeof DashboardSettingsIndexRoute
   '/dashboard/teams': typeof DashboardTeamsIndexRoute
   '/dashboard/billing/$accountId/credits': typeof DashboardBillingAccountIdCreditsRoute
   '/dashboard/projects/$projectId/content': typeof DashboardProjectsProjectIdContentRoute
@@ -480,7 +506,6 @@ export interface FileRoutesById {
   '/_marketing/mcp': typeof MarketingMcpRoute
   '/_marketing/pricing': typeof MarketingPricingRoute
   '/approve/$requestId': typeof ApproveRequestIdRoute
-  '/dashboard/settings': typeof DashboardSettingsRoute
   '/email/unsubscribe': typeof EmailUnsubscribeRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/claim': typeof OauthClaimRoute
@@ -492,11 +517,15 @@ export interface FileRoutesById {
   '/_marketing/legal/privacy': typeof MarketingLegalPrivacyRoute
   '/_marketing/legal/terms': typeof MarketingLegalTermsRoute
   '/dashboard/projects/new': typeof DashboardProjectsNewRoute
+  '/dashboard/settings/agents': typeof DashboardSettingsAgentsRoute
+  '/dashboard/settings/approvals': typeof DashboardSettingsApprovalsRoute
+  '/dashboard/settings/notifications': typeof DashboardSettingsNotificationsRoute
   '/dashboard/teams/$teamId': typeof DashboardTeamsTeamIdRoute
   '/_marketing/blog/': typeof MarketingBlogIndexRoute
   '/_marketing/legal/': typeof MarketingLegalIndexRoute
   '/dashboard/billing/': typeof DashboardBillingIndexRoute
   '/dashboard/projects/': typeof DashboardProjectsIndexRoute
+  '/dashboard/settings/': typeof DashboardSettingsIndexRoute
   '/dashboard/teams/': typeof DashboardTeamsIndexRoute
   '/dashboard/projects/$projectId/site': typeof DashboardProjectsProjectIdSiteRouteRouteWithChildren
   '/dashboard/billing/$accountId/credits': typeof DashboardBillingAccountIdCreditsRoute
@@ -538,7 +567,6 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/pricing'
     | '/approve/$requestId'
-    | '/dashboard/settings'
     | '/email/unsubscribe'
     | '/invite/$token'
     | '/oauth/claim'
@@ -549,11 +577,15 @@ export interface FileRouteTypes {
     | '/legal/privacy'
     | '/legal/terms'
     | '/dashboard/projects/new'
+    | '/dashboard/settings/agents'
+    | '/dashboard/settings/approvals'
+    | '/dashboard/settings/notifications'
     | '/dashboard/teams/$teamId'
     | '/blog/'
     | '/legal/'
     | '/dashboard/billing/'
     | '/dashboard/projects/'
+    | '/dashboard/settings/'
     | '/dashboard/teams/'
     | '/dashboard/projects/$projectId/site'
     | '/dashboard/billing/$accountId/credits'
@@ -591,7 +623,6 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/pricing'
     | '/approve/$requestId'
-    | '/dashboard/settings'
     | '/email/unsubscribe'
     | '/invite/$token'
     | '/oauth/claim'
@@ -602,11 +633,15 @@ export interface FileRouteTypes {
     | '/legal/privacy'
     | '/legal/terms'
     | '/dashboard/projects/new'
+    | '/dashboard/settings/agents'
+    | '/dashboard/settings/approvals'
+    | '/dashboard/settings/notifications'
     | '/dashboard/teams/$teamId'
     | '/blog'
     | '/legal'
     | '/dashboard/billing'
     | '/dashboard/projects'
+    | '/dashboard/settings'
     | '/dashboard/teams'
     | '/dashboard/billing/$accountId/credits'
     | '/dashboard/projects/$projectId/content'
@@ -645,7 +680,6 @@ export interface FileRouteTypes {
     | '/_marketing/mcp'
     | '/_marketing/pricing'
     | '/approve/$requestId'
-    | '/dashboard/settings'
     | '/email/unsubscribe'
     | '/invite/$token'
     | '/oauth/claim'
@@ -657,11 +691,15 @@ export interface FileRouteTypes {
     | '/_marketing/legal/privacy'
     | '/_marketing/legal/terms'
     | '/dashboard/projects/new'
+    | '/dashboard/settings/agents'
+    | '/dashboard/settings/approvals'
+    | '/dashboard/settings/notifications'
     | '/dashboard/teams/$teamId'
     | '/_marketing/blog/'
     | '/_marketing/legal/'
     | '/dashboard/billing/'
     | '/dashboard/projects/'
+    | '/dashboard/settings/'
     | '/dashboard/teams/'
     | '/dashboard/projects/$projectId/site'
     | '/dashboard/billing/$accountId/credits'
@@ -804,13 +842,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
-    '/dashboard/settings': {
-      id: '/dashboard/settings'
-      path: '/settings'
-      fullPath: '/dashboard/settings'
-      preLoaderRoute: typeof DashboardSettingsRouteImport
-      parentRoute: typeof DashboardRouteRoute
-    }
     '/email/unsubscribe': {
       id: '/email/unsubscribe'
       path: '/email/unsubscribe'
@@ -900,6 +931,34 @@ declare module '@tanstack/react-router' {
       path: '/projects/new'
       fullPath: '/dashboard/projects/new'
       preLoaderRoute: typeof DashboardProjectsNewRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/settings/': {
+      id: '/dashboard/settings/'
+      path: '/settings'
+      fullPath: '/dashboard/settings/'
+      preLoaderRoute: typeof DashboardSettingsIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/settings/agents': {
+      id: '/dashboard/settings/agents'
+      path: '/settings/agents'
+      fullPath: '/dashboard/settings/agents'
+      preLoaderRoute: typeof DashboardSettingsAgentsRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/settings/approvals': {
+      id: '/dashboard/settings/approvals'
+      path: '/settings/approvals'
+      fullPath: '/dashboard/settings/approvals'
+      preLoaderRoute: typeof DashboardSettingsApprovalsRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/settings/notifications': {
+      id: '/dashboard/settings/notifications'
+      path: '/settings/notifications'
+      fullPath: '/dashboard/settings/notifications'
+      preLoaderRoute: typeof DashboardSettingsNotificationsRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/teams/': {
@@ -1207,27 +1266,33 @@ const DashboardProjectsProjectIdRouteRouteWithChildren =
   )
 
 interface DashboardRouteRouteChildren {
-  DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
   DashboardProjectsProjectIdRouteRoute: typeof DashboardProjectsProjectIdRouteRouteWithChildren
   DashboardProjectsNewRoute: typeof DashboardProjectsNewRoute
+  DashboardSettingsAgentsRoute: typeof DashboardSettingsAgentsRoute
+  DashboardSettingsApprovalsRoute: typeof DashboardSettingsApprovalsRoute
+  DashboardSettingsNotificationsRoute: typeof DashboardSettingsNotificationsRoute
   DashboardTeamsTeamIdRoute: typeof DashboardTeamsTeamIdRoute
   DashboardBillingIndexRoute: typeof DashboardBillingIndexRoute
   DashboardProjectsIndexRoute: typeof DashboardProjectsIndexRoute
+  DashboardSettingsIndexRoute: typeof DashboardSettingsIndexRoute
   DashboardTeamsIndexRoute: typeof DashboardTeamsIndexRoute
   DashboardBillingAccountIdCreditsRoute: typeof DashboardBillingAccountIdCreditsRoute
   DashboardBillingAccountIdIndexRoute: typeof DashboardBillingAccountIdIndexRoute
 }
 
 const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
-  DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardIndexRoute: DashboardIndexRoute,
   DashboardProjectsProjectIdRouteRoute:
     DashboardProjectsProjectIdRouteRouteWithChildren,
   DashboardProjectsNewRoute: DashboardProjectsNewRoute,
+  DashboardSettingsAgentsRoute: DashboardSettingsAgentsRoute,
+  DashboardSettingsApprovalsRoute: DashboardSettingsApprovalsRoute,
+  DashboardSettingsNotificationsRoute: DashboardSettingsNotificationsRoute,
   DashboardTeamsTeamIdRoute: DashboardTeamsTeamIdRoute,
   DashboardBillingIndexRoute: DashboardBillingIndexRoute,
   DashboardProjectsIndexRoute: DashboardProjectsIndexRoute,
+  DashboardSettingsIndexRoute: DashboardSettingsIndexRoute,
   DashboardTeamsIndexRoute: DashboardTeamsIndexRoute,
   DashboardBillingAccountIdCreditsRoute: DashboardBillingAccountIdCreditsRoute,
   DashboardBillingAccountIdIndexRoute: DashboardBillingAccountIdIndexRoute,

@@ -12,6 +12,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* The light theme of the app (`data-theme` on <html>). `dark:` is not its
+   opposite: it follows the docs site theme inside the site canvas. */
+@custom-variant theme-light (&:where([data-theme="light"] *));
+
 :root {
   /* Near-black canvas with a faint cool cast. Pure black and pure white are
      avoided: both cause halation on long reading and writing sessions. */
@@ -99,7 +103,9 @@
   /* Text selection. */
   --selection: rgb(61 139 255 / 0.3);
 
-  /* Project monogram fills. Each passes 4.5:1 with the strong text on top. */
+  /* Project monogram fills. Each passes 4.5:1 with the monogram text on top.
+     The fills and the text are the same in both themes. */
+  --monogram-foreground: #f4f4f5;
   --monogram-0: #2563eb;
   --monogram-1: #7c3aed;
   --monogram-2: #0f766e;
@@ -108,6 +114,19 @@
   --monogram-5: #15803d;
   --monogram-6: #0369a1;
   --monogram-7: #a21caf;
+
+  /* The Doxa logo: a pale mark with a dark eye. The light theme swaps the two,
+     as `public/doxa-logo-new-dark.svg` does. */
+  --logo-mark: #e8e6dd;
+  --logo-eye: #1a1a18;
+
+  /* The auth page grid. Its lines sit one faint step off the page. */
+  --grid-line: oklch(0.15 0 0);
+
+  /* The "sync" art on the auth panel (the `doxa-sync-*` rules). */
+  --sync-ice: #9cc2ff;
+  --sync-ice-rgb: 156 194 255;
+  --sync-del: #f09a9a;
 
   /* Soft corners — slight rounding (experiment; original was 0) */
   --radius: 0.375rem;
@@ -129,11 +148,129 @@
   --sidebar-accent-foreground: #f4f4f5;
   --sidebar-border: #26262a;
   --sidebar-ring: #3d8bff;
+  /* The current page row: a grey fill a step above the hover fill. */
+  --sidebar-active: #18181b;
+  --sidebar-active-shadow: none;
 
   /* Scrollbars. The thumb sits at border strength, so it reads as chrome and
      not as content. It lifts on hover, so the target stays findable. */
   --scrollbar-thumb: #26262a;
   --scrollbar-thumb-hover: #3a3a40;
+}
+
+/* The light theme: `data-theme="light"` on <html>, set by `~/lib/theme`. It
+   is an attribute and not the `.dark` class because the `dark:` variant
+   belongs to the site canvas, which follows the docs site's own theme. Each
+   token keeps its dark role: the sidebar sits one step below the page, cards
+   and menus sit one step above it, and hover is a faint dark lift. The
+   monogram fills and the destructive fill do not change. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Off-white canvas. Pure white is kept for raised surfaces. */
+  --background: #fafafa;
+  --foreground: #18181b;
+  --body: #3f3f46;
+
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  /* A white card on the off-white page needs no top highlight. */
+  --card-highlight: transparent;
+  --surface-hover: #f4f4f5;
+  --overlay: rgb(0 0 0 / 0.045);
+  --focus-wash: rgb(0 0 0 / 0.06);
+
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --menu-border: #e4e4e7;
+  --menu-shadow: 0 12px 32px rgb(0 0 0 / 0.1), 0 2px 6px rgb(0 0 0 / 0.04);
+
+  /* A deeper blue, so that white text on a solid button reads. */
+  --dashboard-primary: #2f7cf6;
+  --primary-foreground: #ffffff;
+  /* Darker than the accent, so that it reads at body size on light surfaces. */
+  --primary-text: #1d6ad8;
+  --primary-wash: rgb(47 124 246 / 0.08);
+
+  --secondary: #f4f4f5;
+  --secondary-foreground: #3f3f46;
+
+  --muted: #f0f0f2;
+  --muted-foreground: #5f5f69;
+  --label: #6f6f79;
+  --faint: #9a9aa3;
+
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+
+  --danger: #dc2626;
+  --success: #15803d;
+  --success-foreground: #ffffff;
+  --warning: #b45309;
+  --warning-foreground: #ffffff;
+
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --divider: #efeff1;
+  --input: #e4e4e7;
+  --input-background: #ffffff;
+
+  --editor: #ffffff;
+  --prose: #27272a;
+  --code: #f4f4f5;
+  --selection: rgb(47 124 246 / 0.2);
+
+  /* The docs renderer's light-theme values for the inline-code chip. */
+  --code-bg: oklch(0.96 0 0);
+  --code-fg: oklch(0.3 0 0);
+  --code-border: oklch(0.9 0 0);
+
+  --sidebar: #f4f4f5;
+  --sidebar-foreground: #3f3f46;
+  --sidebar-primary: #2f7cf6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #2f7cf6;
+  /* The sidebar is grey, so a grey fill does not show. The current page row
+     is a white raised chip with a thin edge, like a card. */
+  --sidebar-active: #ffffff;
+  --sidebar-active-shadow: 0 0 0 1px #e4e4e7, 0 1px 2px rgb(0 0 0 / 0.06);
+
+  --scrollbar-thumb: #d9d9de;
+  --scrollbar-thumb-hover: #b8b8c0;
+
+  --logo-mark: #1a1a18;
+  --logo-eye: #fafaf8;
+
+  --grid-line: oklch(0.985 0 0);
+
+  --sync-ice: #1d4ed8;
+  --sync-ice-rgb: 37 99 235;
+  --sync-del: #b91c1c;
+}
+
+/* A picture made for one theme (`ThemedPicture`) shows only in that theme. */
+:root:not([data-theme="light"]) [data-theme-only="light"],
+:root[data-theme="light"] [data-theme-only="dark"] {
+  display: none;
+}
+
+/* Some client logos in public/marketing/logos are drawn in one light gray
+   (#ededed) for the dark theme. The light theme inverts them to a near-black. */
+:root[data-theme="light"]
+  img:is(
+    [src$="/logos/chatgpt.svg"],
+    [src$="/logos/cline.svg"],
+    [src$="/logos/cursor.svg"],
+    [src$="/logos/kilocode.svg"],
+    [src$="/logos/lmstudio.svg"],
+    [src$="/logos/opencode.svg"],
+    [src$="/logos/warp.svg"],
+    [src$="/logos/windsurf.svg"],
+    [src$="/logos/zed.svg"]
+  ) {
+  filter: invert(1);
 }
 
 @theme inline {
@@ -148,6 +285,7 @@
   --color-code: var(--code);
   --color-divider: var(--divider);
   --color-primary-text: var(--primary-text);
+  --color-monogram-foreground: var(--monogram-foreground);
   --color-primary-wash: var(--primary-wash);
   --color-faint: var(--faint);
   --color-overlay: var(--overlay);
@@ -185,6 +323,7 @@
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-active: var(--sidebar-active);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
@@ -325,8 +464,8 @@
 /* Subtle grid pattern — thin lines */
 .grid-pattern {
   background-image:
-    linear-gradient(oklch(0.15 0 0) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(0.15 0 0) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 60px 60px;
 }
 
@@ -588,18 +727,18 @@
 }
 
 .doxa-sync-del {
-  color: #f09a9a;
+  color: var(--sync-del);
   background: rgb(229 90 90 / 0.08);
 }
 
 .doxa-sync-add {
-  color: #9cc2ff;
+  color: var(--sync-ice);
   background: rgb(61 123 255 / 0.12);
 }
 
 .doxa-sync-changed,
 .doxa-sync-done {
-  color: #9cc2ff;
+  color: var(--sync-ice);
 }
 
 /* 5px wide, centered on the 1px line. */
@@ -609,8 +748,8 @@
   left: -3px;
   width: 5px;
   height: 5px;
-  background: #9cc2ff;
-  box-shadow: 0 0 8px rgb(156 194 255 / 0.8);
+  background: var(--sync-ice);
+  box-shadow: 0 0 8px rgb(var(--sync-ice-rgb) / 0.8);
   opacity: 0;
   animation: 6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }

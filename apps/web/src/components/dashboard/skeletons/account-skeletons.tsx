@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Github, Users } from "lucide-react"
+import { Github } from "lucide-react"
 
 import { DashboardHeader, SectionDescription, SectionLabel } from "~/components/dashboard/dashboard-header"
 import { AccountTopBar } from "~/components/dashboard/shell/top-bar"
@@ -11,63 +11,73 @@ import {
   PageHeadingSkeleton,
   TextBar,
 } from "~/components/dashboard/skeletons/skeleton-kit"
+import { ACCOUNT_PAGES, type AccountPage } from "~/lib/dashboard/account-pages"
 import { cn } from "~/lib/utils"
 
-/** The Account settings heading's description. Kept here, so the route's pending view stays light. */
-export const ACCOUNT_SETTINGS_DESCRIPTION = "Your profile, your connections and the emails Doxa sends you."
-
-/** Account Settings until every section's data is there. Its top bar is the page's own. */
-export function AccountSettingsSkeleton() {
+/** The top bar and the heading of one account settings page, as `AccountPageFrame` draws them. */
+function AccountPageSkeleton({ page, children }: { page: AccountPage; children: ReactNode }) {
   return (
     <>
-      <AccountTopBar crumbs={["Account settings"]} />
-      <PageBodySkeleton label="Loading settings">
-        <PageHeadingSkeleton label="Account" title="Account settings" description={ACCOUNT_SETTINGS_DESCRIPTION} />
-        <SectionSkeleton title="Profile">
-          <FieldListSkeleton rows={[{ label: "Name", width: "8rem" }, { label: "Email", width: "13rem" }]} />
-        </SectionSkeleton>
-        <SectionSkeleton title="GitHub connection">
-          {/* The real section's parts: the GitHub mark, one line of status,
-              the outlined state tag, and the small action button. */}
-          <div className="surface-card flex flex-col gap-4 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <Github aria-hidden="true" className="size-4 text-muted-foreground" />
-                <TextBar width="9.5rem" className="text-sm" />
-              </div>
-              <OutlinedBox width="6.75rem" height="1.25rem" barWidth="4.75rem" tag />
-            </div>
-            <div>
-              <OutlinedBox width="10.5rem" height="2rem" barWidth="7.5rem" icon />
-            </div>
-          </div>
-        </SectionSkeleton>
-        <SectionSkeleton title="Teams">
-          <div className="surface-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2.5">
-              <Users aria-hidden="true" className="size-4 text-muted-foreground" />
-              <span className="text-sm text-foreground">Share projects with your team, by role.</span>
-            </div>
-            <OutlinedBox width="8.5rem" height="2rem" barWidth="6rem" />
-          </div>
-        </SectionSkeleton>
-        <SectionSkeleton
-          title="Email notifications"
-          description="The emails that Doxa sends to your account address. Team invites always send."
-        >
-          <SwitchRowsSkeleton widths={["10rem", "12rem", "9rem", "11rem"]} />
-        </SectionSkeleton>
-        <SectionSkeleton title="Connected agents" description="Agents that can use your Doxa account through MCP.">
-          <ListRowsSkeleton widths={["9rem", "11rem"]} />
-        </SectionSkeleton>
-        <SectionSkeleton
-          title="Agent approvals"
-          description="What your agents can do without asking you, in every project. A project setting wins over these defaults."
-        >
-          <ListRowsSkeleton widths={["11rem", "9rem", "12.5rem", "10rem"]} control="13rem" />
-        </SectionSkeleton>
+      <AccountTopBar crumbs={[page.title]} />
+      <PageBodySkeleton label={`Loading ${page.title.toLowerCase()}`}>
+        <PageHeadingSkeleton label={page.group} title={page.title} description={page.description} />
+        {children}
       </PageBodySkeleton>
     </>
+  )
+}
+
+/** Account settings until the profile and the GitHub connection are there. */
+export function AccountSettingsSkeleton() {
+  return (
+    <AccountPageSkeleton page={ACCOUNT_PAGES.account}>
+      <SectionSkeleton title="Profile">
+        <FieldListSkeleton rows={[{ label: "Name", width: "8rem" }, { label: "Email", width: "13rem" }]} />
+      </SectionSkeleton>
+      <SectionSkeleton title="GitHub connection">
+        {/* The real section's parts: the GitHub mark, one line of status,
+            the outlined state tag, and the small action button. */}
+        <div className="surface-card flex flex-col gap-4 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <Github aria-hidden="true" className="size-4 text-muted-foreground" />
+              <TextBar width="9.5rem" className="text-sm" />
+            </div>
+            <OutlinedBox width="6.75rem" height="1.25rem" barWidth="4.75rem" tag />
+          </div>
+          <div>
+            <OutlinedBox width="10.5rem" height="2rem" barWidth="7.5rem" icon />
+          </div>
+        </div>
+      </SectionSkeleton>
+    </AccountPageSkeleton>
+  )
+}
+
+/** Email notifications: one switch row for each kind of email. */
+export function EmailNotificationsSkeleton() {
+  return (
+    <AccountPageSkeleton page={ACCOUNT_PAGES.emailNotifications}>
+      <SwitchRowsSkeleton widths={["10rem", "12rem", "9rem"]} />
+    </AccountPageSkeleton>
+  )
+}
+
+/** Connected agents: a few agent rows. */
+export function ConnectedAgentsSkeleton() {
+  return (
+    <AccountPageSkeleton page={ACCOUNT_PAGES.connectedAgents}>
+      <ListRowsSkeleton widths={["9rem", "11rem"]} />
+    </AccountPageSkeleton>
+  )
+}
+
+/** Agent approvals: the action rows with their Allow, Ask me and Block control. */
+export function AgentApprovalsSkeleton() {
+  return (
+    <AccountPageSkeleton page={ACCOUNT_PAGES.agentApprovals}>
+      <ListRowsSkeleton widths={["11rem", "9rem", "12.5rem", "10rem"]} control="13rem" />
+    </AccountPageSkeleton>
   )
 }
 

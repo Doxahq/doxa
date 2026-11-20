@@ -1,11 +1,12 @@
+import { ThemedPicture } from "~/components/ui/themed-picture"
+import { type PictureFiles, pictureFiles, sameInBothThemes, themedPictureFiles } from "~/lib/theme/picture-files"
+import type { Themed } from "~/lib/theme/theme"
 import { cn } from "~/lib/utils"
 
 interface DunesPhoto {
-  src: string
-  srcSet: string
-  /** Smaller AVIF files for browsers that read them. The WebP `srcSet` is the fallback. */
-  avifSrcSet?: string
-  /** The photo's own dark color, under it while it loads. */
+  /** The night photo, and its daylight copy when one exists. */
+  files: Themed<PictureFiles>
+  /** The photo's own color, under it while it loads. */
   fill: string
   /** How much the photo is darkened, so it sits in the page. */
   imageClass: string
@@ -17,11 +18,16 @@ interface DunesPhoto {
   positionClass: string
 }
 
+/** The first three photos have no AVIF files and no daylight copy. */
+function nightOnly(base: string): Themed<PictureFiles> {
+  const { webp, fallback } = pictureFiles(base, [768, 1280], 768)
+  return sameInBothThemes({ webp, fallback })
+}
+
 const DUNES_PHOTOS = {
   /** The first photo: a bright blue sky, darkened a lot. */
   dusk: {
-    src: "/auth/dunes-768.webp",
-    srcSet: "/auth/dunes-768.webp 768w, /auth/dunes-1280.webp 1280w",
+    files: nightOnly("/auth/dunes"),
     fill: "bg-[#0f0d17]",
     imageClass: "brightness-[0.78] saturate-[0.9]",
     skyFadeClass: "h-[45%]",
@@ -30,8 +36,7 @@ const DUNES_PHOTOS = {
   },
   /** The second photo: a night sky that is already dark, so it needs less. */
   night: {
-    src: "/auth/dunes-night-768.webp",
-    srcSet: "/auth/dunes-night-768.webp 768w, /auth/dunes-night-1280.webp 1280w",
+    files: nightOnly("/auth/dunes-night"),
     fill: "bg-[#110c0d]",
     imageClass: "brightness-[0.92]",
     skyFadeClass: "h-[30%]",
@@ -40,21 +45,21 @@ const DUNES_PHOTOS = {
   },
   /** The third photo: someone at an old computer in a night meadow, left of center. */
   meadow: {
-    src: "/auth/dunes-meadow-768.webp",
-    srcSet: "/auth/dunes-meadow-768.webp 768w, /auth/dunes-meadow-1280.webp 1280w",
+    files: nightOnly("/auth/dunes-meadow"),
     fill: "bg-[#191212]",
     imageClass: "brightness-[0.95]",
     skyFadeClass: "h-[22%]",
     edgeFadeClass: "w-1/4",
     positionClass: "object-[55%_45%]",
   },
-  /** The third photo again, in a deeper blue, with text on the screen. */
+  /**
+   * The third photo again, in a deeper blue, with text on the screen. The daylight
+   * copy is a Seedream 4 relight of it, graded to the light page, so it is not darkened.
+   */
   meadowBlue: {
-    src: "/auth/meadow-blue-800.webp",
-    srcSet: "/auth/meadow-blue-480.webp 480w, /auth/meadow-blue-800.webp 800w, /auth/meadow-blue-1200.webp 1200w, /auth/meadow-blue-1600.webp 1600w",
-    avifSrcSet: "/auth/meadow-blue-480.avif 480w, /auth/meadow-blue-800.avif 800w, /auth/meadow-blue-1200.avif 1200w, /auth/meadow-blue-1600.avif 1600w",
-    fill: "bg-[#15180c]",
-    imageClass: "brightness-[0.92]",
+    files: themedPictureFiles("/auth/meadow-blue", [480, 800, 1200, 1600], 800),
+    fill: "bg-[#15180c] theme-light:bg-[#f5f8f5]",
+    imageClass: "brightness-[0.92] theme-light:brightness-100",
     skyFadeClass: "h-[22%]",
     edgeFadeClass: "w-1/4",
     positionClass: "object-[55%_50%]",
@@ -68,31 +73,27 @@ const DUNES_PHOTO: keyof typeof DUNES_PHOTOS = "meadowBlue"
 const PANEL_SIZES = "33vw"
 
 /**
- * A night landscape photo, set into the auth panel. Three gradients fade
- * the photo into the page: the sky at the top, the edge next to the form, and
- * the foot. The fill under the photo is its own dark color, so the panel never
- * flashes before the image loads.
+ * A landscape photo, set into the auth panel: a night photo, or its daylight copy
+ * in the light theme. Three gradients fade the photo into the page: the sky at the
+ * top, the edge next to the form, and the foot. The fill under the photo is its own
+ * color, so the panel never flashes before the image loads.
  *
- * `loading="lazy"` keeps phones from downloading it: the panel is hidden there.
+ * `ThemedPicture` loads lazily, which keeps phones from downloading the photo: the
+ * panel is hidden there.
  */
 export function AuthDunesArt({ className }: { className?: string }) {
   const photo: DunesPhoto = DUNES_PHOTOS[DUNES_PHOTO]
   return (
     <div className={cn(photo.fill, className)} aria-hidden="true">
-      <picture>
-        {photo.avifSrcSet ? <source type="image/avif" srcSet={photo.avifSrcSet} sizes={PANEL_SIZES} /> : null}
-        <img
-          src={photo.src}
-          srcSet={photo.srcSet}
-          sizes={PANEL_SIZES}
-          alt=""
-          width={1280}
-          height={2280}
-          loading="lazy"
-          decoding="async"
-          className={cn("size-full object-cover", photo.positionClass, photo.imageClass)}
-        />
-      </picture>
+      <ThemedPicture
+        files={photo.files}
+        sizes={PANEL_SIZES}
+        alt=""
+        width={1280}
+        height={2280}
+        decoding="async"
+        className={cn("size-full object-cover", photo.positionClass, photo.imageClass)}
+      />
       <div className={cn("absolute inset-x-0 top-0 bg-linear-to-b from-background via-background/60 to-transparent", photo.skyFadeClass)} />
       <div className={cn("absolute inset-y-0 left-0 bg-linear-to-r from-background via-background/50 to-transparent", photo.edgeFadeClass)} />
       <div className="absolute inset-x-0 bottom-0 h-1/4 bg-linear-to-t from-background to-transparent" />

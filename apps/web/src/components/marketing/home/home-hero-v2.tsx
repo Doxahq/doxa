@@ -3,14 +3,8 @@ import { Lock } from "lucide-react"
 import { Hr } from "~/components/marketing/guides"
 import { ConnectAgentButton } from "~/components/marketing/home/connect-agent-button"
 import { SiteNav } from "~/components/marketing/site-nav"
-import {
-  HERO_V2_DOCS_SIZES,
-  HERO_V2_IMAGES,
-  HERO_V2_SCENE_SIZES,
-  type HeroImage,
-  heroSrc,
-  heroSrcSet,
-} from "~/lib/marketing/home-hero"
+import { ThemedPicture } from "~/components/ui/themed-picture"
+import { HERO_V2_DOCS_SIZES, HERO_V2_IMAGES, HERO_V2_SCENE_SIZES, type HeroImage } from "~/lib/marketing/home-hero"
 import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 
 /** The docs page in the screenshot. The address bar opens it in a new tab. */
@@ -28,21 +22,17 @@ interface HeroPictureProps {
 
 function HeroPicture({ image, sizes, className, alt = "", priority = false }: HeroPictureProps) {
   return (
-    <picture>
-      <source type="image/avif" srcSet={heroSrcSet(image, "avif")} sizes={sizes} />
-      <img
-        className={className}
-        src={heroSrc(image)}
-        srcSet={heroSrcSet(image, "webp")}
-        sizes={sizes}
-        alt={alt}
-        width={image.width}
-        height={image.height}
-        decoding="async"
-        fetchPriority={priority ? "high" : "auto"}
-        aria-hidden={alt === "" ? true : undefined}
-      />
-    </picture>
+    <ThemedPicture
+      files={image.files}
+      className={className}
+      sizes={sizes}
+      alt={alt}
+      width={image.width}
+      height={image.height}
+      decoding="async"
+      fetchPriority={priority ? "high" : "auto"}
+      aria-hidden={alt === "" ? true : undefined}
+    />
   )
 }
 
@@ -72,9 +62,10 @@ function DocsWindow() {
 }
 
 /**
- * Hero v2: centered copy over a night sky, and a window of the Doxa docs that rises
- * out of the dunes. The window stands between two layers of one photo: the big lit
- * dune behind it, and the lower dune band, whose glowing edge crosses the window.
+ * Hero v2: centered copy over a night sky (a daylight sky in the light theme), and a
+ * window of the Doxa docs that rises out of the dunes. The window stands between two
+ * layers of one photo: the big lit dune behind it, and the lower dune band, whose
+ * glowing edge crosses the window.
  * The swap with the first hero is `HOME_HERO_VERSION` in `lib/marketing/home-hero.ts`.
  */
 export function HomeHeroV2() {

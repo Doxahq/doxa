@@ -1,6 +1,8 @@
 /* Marketing site styles, loaded only by the `_marketing` layout route.
-   shared.css holds the nav, guide lines, bands and footer; each page file is
-   scoped to its root class (`.pg--home`, `.pg--pricing`, …). */
+   palette.css holds every color token and the light theme; shared.css holds
+   the nav, guide lines, bands and footer; each page file is scoped to its root
+   class (`.pg--home`, `.pg--pricing`, …). */
+@import "./palette.css";
 @import "./shared.css";
 @import "./home.css";
 @import "./home-hero-v2.css";

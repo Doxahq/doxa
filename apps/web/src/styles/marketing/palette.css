@@ -1,0 +1,172 @@
+/* The marketing palette. Every color on the marketing and auth pages is a token
+   here, so the light theme is one block of overrides (`data-theme="light"` on
+   <html>, set by `~/lib/theme`). Dark is the default.
+
+   A light value keeps the contrast that its dark value has against the page,
+   with the same hue. So each text step and each surface stands out from the
+   page by the same amount in both themes. The hues are the exception: a
+   contrast mirror of a pale tint is almost black, so their light values are
+   picked by hand to keep the hue. */
+.pg {
+  /* Text, from the most to the least contrast with the page. */
+  --hi: #ffffff; /* hover and current-page text */
+  --heading: #fafafa;
+  --text: #ededed;
+  --ink-warm: #e8e6dd;
+  --code-ink: #e6edf3;
+  --ink-1: #e4e4e7;
+  --ink-2: #d6d6db;
+  --ink-3: #d4d4d4;
+  --ink-4: #d0d0d4;
+  --ink-5: #c7c7cc;
+  --body: #c7c7c7;
+  --ink-6: #b5b5b5;
+  --ink-7: #a3a3a3;
+  --muted: #a1a1a1;
+  --ink-8: #8a8a93;
+  --ink-9: #8a8a8f;
+  --ink-10: #77777d;
+  --ink-11: #737373;
+  --ink-12: #6b6b73;
+  --faint: #6a6a70;
+  --ghost: #55555a;
+  --dim: var(--ink-9);
+
+  /* Surfaces. `--night` is the page. Wells sit below it, from the darkest to
+     the lightest; the high numbers are raised windows and cards. */
+  --night: #0a0a0a;
+  --well-1: #050505;
+  --well-2: #050506;
+  --well-3: #050508;
+  --well-4: #070708;
+  --well-5: #07080d;
+  --well-6: #070a14;
+  --well-7: #070b16;
+  --well-8: #0b0b0d;
+  --well-9: #0b0b0e;
+  --well-10: #0b1020;
+  --well-11: #0d0d0f;
+  --well-12: #0d0d10;
+  --well-13: #0e1016;
+  --well-14: #0e1018;
+  --well-15: #0f0f0f;
+  --well-16: #0f0f11;
+  --well-17: #101013;
+  --well-18: #121a2e;
+  --well-19: #161616;
+  --well-20: #17171b;
+  --well-21: #1b1e26;
+  --well-22: #1c1c1f;
+  --well-23: #1f1f24;
+
+  /* Hues. Text on an accent fill is `--on-accent` in both themes. */
+  --accent: #3d7bff;
+  --accent-hover: #5a8fff;
+  --on-accent: #ffffff;
+  --deep: #2453c9;
+  --ice: #9cc2ff;
+  --lav: #c4a1ff;
+  --ok: #7fd6a0;
+  --del: #f09a9a;
+  --deny: #ffb4a8;
+  --chip-ink: #d5e4ff;
+
+  /* Channels for translucent colors: `rgb(var(--hi-rgb) / 0.1)`. `--hi-rgb`
+     lifts a surface or draws a line, `--night-rgb` shades toward the page. */
+  --hi-rgb: 255 255 255;
+  --night-rgb: 10 10 10;
+  --ice-rgb: 156 194 255;
+  --lav-rgb: 196 161 255;
+  --ok-rgb: 127 214 160;
+  --card-rgb: 14 14 16;
+  --card-hover-rgb: 30 30 34;
+  --win-rgb: 9 9 12;
+  --cta-hover-rgb: 24 32 52;
+  /* The home hero copy sits on a photo, so its colors follow the photo. */
+  --lede-rgb: 226 233 242;
+  --glass-rgb: 10 14 22;
+  --sky-shade-rgb: 7 11 19;
+  /* Multiplies the alpha of every drop shadow. */
+  --shadow-strength: 1;
+
+  --line: rgb(var(--hi-rgb) / 0.1);
+  --line-strong: rgb(var(--hi-rgb) / 0.16);
+  --guide: rgb(var(--hi-rgb) / 0.14);
+}
+
+.pg--home,
+.pg--about {
+  --dim: var(--ink-11);
+}
+
+:root[data-theme="light"] .pg {
+  --hi: #030303;
+  --heading: #0a0a0a;
+  --text: #191919;
+  --ink-warm: #201f18;
+  --code-ink: #1f2328;
+  --ink-1: #202022;
+  --ink-2: #2a2a2e;
+  --ink-3: #2c2c2c;
+  --ink-4: #2f2f32;
+  --ink-5: #353539;
+  --body: #353535;
+  --ink-6: #424242;
+  --ink-7: #4f4f4f;
+  --muted: #515151;
+  --ink-8: #62626a;
+  --ink-9: #636367;
+  --ink-10: #74747a;
+  --ink-11: #797979;
+  --ink-12: #808088;
+  --faint: #818188;
+  --ghost: #9a9aa0;
+
+  --night: #fafafa;
+  --well-1: #fdfdfd;
+  --well-2: #fdfdff;
+  --well-3: #fdfdff;
+  --well-4: #fcfcfe;
+  --well-5: #fafbff;
+  --well-6: #f8faff;
+  --well-7: #f7f9ff;
+  --well-8: #f9f9fc;
+  --well-9: #f9f9fe;
+  --well-10: #f1f5ff;
+  --well-11: #f8f8fb;
+  --well-12: #f7f7fc;
+  --well-13: #f2f5ff;
+  --well-14: #f2f5ff;
+  --well-15: #f6f6f6;
+  --well-16: #f6f6f9;
+  --well-17: #f5f5fa;
+  --well-18: #e2ebff;
+  --well-19: #f0f0f0;
+  --well-20: #eeeef4;
+  --well-21: #e2e7f2;
+  --well-22: #e9e9ed;
+  --well-23: #e4e5ec;
+
+  --accent-hover: #2655c0;
+  --deep: #5b8eff;
+  --ice: #1d4ed8;
+  --lav: #6d28d9;
+  --ok: #15803d;
+  --del: #b91c1c;
+  --deny: #b42318;
+  --chip-ink: #1e40af;
+
+  --hi-rgb: 0 0 0;
+  --night-rgb: 250 250 250;
+  --ice-rgb: 29 78 216;
+  --lav-rgb: 109 40 217;
+  --ok-rgb: 21 128 61;
+  --card-rgb: 255 255 255;
+  --card-hover-rgb: 240 240 244;
+  --win-rgb: 255 255 255;
+  --cta-hover-rgb: 226 235 255;
+  --lede-rgb: 30 38 50;
+  --glass-rgb: 250 251 253;
+  --sky-shade-rgb: 250 251 253;
+  --shadow-strength: 0.2;
+}

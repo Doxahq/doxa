@@ -61,7 +61,7 @@ A person sets the modes on two dashboard pages:
   `approvals.configure` capability can save (owner and admin roles). Others
   see the page read only. The page also sets `require_other_decider`
   (default `false`); see [teams.md](teams.md).
-- Account settings → Agent approvals (`/dashboard/settings`): the user's
+- Account → Agents → Agent approvals (`/dashboard/settings/approvals`): the user's
   defaults, `project.create` included.
 
 Rules (v2 spec §4):

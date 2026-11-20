@@ -43,7 +43,7 @@
    are a little brighter than the page's rails, because the photo behind them is busy.
    The stage makes no stacking context, so its layers (back 0, window 2, front 3) share
    the hero's order with the rails (1). */
-.pg--home .hv2 { --hv2-rail: linear-gradient(180deg, rgba(255, 255, 255, 0.34) 0 4px, transparent 4px 8px); }
+.pg--home .hv2 { --hv2-rail: linear-gradient(180deg, rgb(var(--hi-rgb) / 0.34) 0 4px, transparent 4px 8px); }
 .pg--home .hv2::after { content: ""; position: absolute; top: 0; bottom: 0; left: var(--gutter); right: var(--gutter); z-index: 1; pointer-events: none; background-image: var(--hv2-rail), var(--hv2-rail); background-size: 1px 8px, 1px 8px; background-position: left top, right top; background-repeat: repeat-y; }
 .pg--home .hv2 > .hr { position: relative; z-index: 6; }
 
@@ -55,16 +55,16 @@
    It paints in the copy's layer, so it covers the photo but stays under the text and the nav. */
 .pg--home .hv2__copy::before { content: ""; position: absolute; z-index: -1; top: -200px; bottom: -100px; left: 50%; width: 100vw; transform: translateX(-50%); pointer-events: none;
   background:
-    radial-gradient(min(760px, 70vw) 62% at 50% 62%, rgba(7, 11, 19, 0.62), rgba(7, 11, 19, 0) 100%),
-    linear-gradient(180deg, rgba(10, 10, 10, 0.9) 0%, rgba(10, 10, 10, 0.7) 40%, rgba(10, 10, 10, 0.38) 78%, rgba(10, 10, 10, 0) 100%); }
+    radial-gradient(min(760px, 70vw) 62% at 50% 62%, rgb(var(--sky-shade-rgb) / 0.62), rgb(var(--sky-shade-rgb) / 0) 100%),
+    linear-gradient(180deg, rgb(var(--night-rgb) / 0.9) 0%, rgb(var(--night-rgb) / 0.7) 40%, rgb(var(--night-rgb) / 0.38) 78%, rgb(var(--night-rgb) / 0) 100%); }
 /* The headline and the lede follow the smaller of the page width and height: they grow
    on big screens (65px -> 92px, 15px -> 19px from 1440 x 900 up) and shrink on wide but
    short screens (1080p, 720p), so the window still shows in the first screen. Their line
    lengths are in em, so they wrap the same at every size. */
 .pg--home .hv2__title { max-width: 12.9em; font-size: clamp(48px, min(4.5vw, 7.2vh), 92px); line-height: 0.98; text-wrap: balance; }
-.pg--home .hv2__lede { max-width: 33em; font-size: clamp(15px, min(1.06vw, 1.7vh), 19px); line-height: 1.6; color: rgba(226, 233, 242, 0.8); }
+.pg--home .hv2__lede { max-width: 33em; font-size: clamp(15px, min(1.06vw, 1.7vh), 19px); line-height: 1.6; color: rgb(var(--lede-rgb) / 0.8); }
 .pg--home .hv2__ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
-.pg--home .hv2__ctas .btn--line { background: rgba(10, 14, 22, 0.35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.pg--home .hv2__ctas .btn--line { background: rgb(var(--glass-rgb) / 0.35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 /* The pill and the buttons grow and shrink with the headline, in em,
    so their height, padding and the agent logos keep their shape. */
 .pg--home .hv2__copy .pill { font-size: clamp(10px, min(0.68vw, 1.08vh), 13.5px); height: 2.55em; padding: 0 0.9em 0 0.36em; gap: 0.9em; }
@@ -86,13 +86,18 @@
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.22) 16.7%, rgba(0, 0, 0, 0.6) 32.6%, #000 49.4%);
   mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.22) 16.7%, rgba(0, 0, 0, 0.6) 32.6%, #000 49.4%); }
 .pg--home .hv2__front { top: var(--front-top); height: calc(var(--sw) * 0.29167); z-index: 3; filter: brightness(1.18) saturate(1.08); }
-.pg--home .hv2__floor { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; height: 160px; pointer-events: none; background: linear-gradient(180deg, rgba(10, 10, 10, 0) 0%, var(--night) 100%); }
+/* The floor fades the bottom of the front dunes into a solid color. Dark: the page black.
+   Light: the navy of the dune shadows, because a fade from the night photo to the white
+   page passes through gray. The hero then ends on a clean edge above the next section. */
+.pg--home .hv2 { --hv2-floor-rgb: var(--night-rgb); }
+:root[data-theme="light"] .pg--home .hv2 { --hv2-floor-rgb: 11 16 32; }
+.pg--home .hv2__floor { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; height: 160px; pointer-events: none; background: linear-gradient(180deg, rgb(var(--hv2-floor-rgb) / 0) 0%, rgb(var(--hv2-floor-rgb)) 100%); }
 
 /* The docs window. It sits in place from the first paint (no rise animation). */
-.pg--home .hv2__shot { position: relative; z-index: 2; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 12px; background: #0b0b0d;
-  box-shadow: 0 0 0 1px rgba(156, 194, 255, 0.08), 0 -40px 160px -30px rgba(110, 150, 240, 0.5), 0 40px 80px rgba(0, 0, 0, 0.55); }
+.pg--home .hv2__shot { position: relative; z-index: 2; overflow: hidden; border: 1px solid rgb(var(--hi-rgb) / 0.14); border-radius: 12px; background: var(--well-8);
+  box-shadow: 0 0 0 1px rgb(var(--ice-rgb) / 0.08), 0 -40px 160px -30px rgba(110, 150, 240, 0.5), 0 40px 80px rgb(0 0 0 / calc(0.55 * var(--shadow-strength))); }
 .pg--home .hv2__shot img { display: block; width: 100%; height: auto; }
-.pg--home .hv2__bar { display: flex; align-items: center; gap: 14px; height: 38px; padding: 0 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.07); background: #101013; }
+.pg--home .hv2__bar { display: flex; align-items: center; gap: 14px; height: 38px; padding: 0 14px; border-bottom: 1px solid rgb(var(--hi-rgb) / 0.07); background: var(--well-17); }
 .pg--home .hv2__dots { display: flex; flex-shrink: 0; gap: 8px; }
 /* The macOS window buttons: close, minimize, zoom. */
 .pg--home .hv2__dots i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25); }
@@ -100,9 +105,9 @@
 .pg--home .hv2__dots i:nth-child(2) { background: #febc2e; }
 .pg--home .hv2__dots i:nth-child(3) { background: #28c840; }
 /* The address bar: wide like a browser's, and a link to the live docs. */
-.pg--home .hv2__url { display: flex; flex: 0 1 560px; align-items: center; justify-content: center; gap: 7px; min-width: 0; height: 26px; margin: 0 auto; padding: 0 12px; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 7px; background: #17171b; font: 400 12px/1 var(--mono); color: #8a8a93; white-space: nowrap; transition: background-color 0.15s ease, color 0.15s ease; }
-.pg--home .hv2__url:hover { background: #1f1f24; color: #c7c7cc; }
-.pg--home .hv2__url svg { flex-shrink: 0; color: #6b6b73; }
+.pg--home .hv2__url { display: flex; flex: 0 1 560px; align-items: center; justify-content: center; gap: 7px; min-width: 0; height: 26px; margin: 0 auto; padding: 0 12px; border: 1px solid rgb(var(--hi-rgb) / 0.05); border-radius: 7px; background: var(--well-20); font: 400 12px/1 var(--mono); color: var(--ink-8); white-space: nowrap; transition: background-color 0.15s ease, color 0.15s ease; }
+.pg--home .hv2__url:hover { background: var(--well-23); color: var(--ink-5); }
+.pg--home .hv2__url svg { flex-shrink: 0; color: var(--ink-12); }
 .pg--home .hv2__url-text { overflow: hidden; text-overflow: ellipsis; }
 /* As wide as the window buttons, so the address bar sits in the middle. */
 .pg--home .hv2__bar-end { flex-shrink: 0; width: 52px; }
@@ -110,13 +115,17 @@
 /* Wider than 2560px: the photo stays 2560px wide and its sides fade into the page black
    over 22% of its width, on an eased curve so the edge never shows. The back layer keeps its sky fade too (both masks intersect). */
 @media (min-width: 2561px) {
+  .pg--home .hv2 { --hv2-side-fade: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.12) 5%, rgba(0, 0, 0, 0.4) 10%, rgba(0, 0, 0, 0.75) 15.5%, #000 22%, #000 78%, rgba(0, 0, 0, 0.75) 84.5%, rgba(0, 0, 0, 0.4) 90%, rgba(0, 0, 0, 0.12) 95%, transparent 100%); }
   .pg--home .hv2__back {
-    -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.22) 16.7%, rgba(0, 0, 0, 0.6) 32.6%, #000 49.4%), linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.12) 5%, rgba(0, 0, 0, 0.4) 10%, rgba(0, 0, 0, 0.75) 15.5%, #000 22%, #000 78%, rgba(0, 0, 0, 0.75) 84.5%, rgba(0, 0, 0, 0.4) 90%, rgba(0, 0, 0, 0.12) 95%, transparent 100%);
-    mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.22) 16.7%, rgba(0, 0, 0, 0.6) 32.6%, #000 49.4%), linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.12) 5%, rgba(0, 0, 0, 0.4) 10%, rgba(0, 0, 0, 0.75) 15.5%, #000 22%, #000 78%, rgba(0, 0, 0, 0.75) 84.5%, rgba(0, 0, 0, 0.4) 90%, rgba(0, 0, 0, 0.12) 95%, transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.22) 16.7%, rgba(0, 0, 0, 0.6) 32.6%, #000 49.4%), var(--hv2-side-fade);
+    mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.22) 16.7%, rgba(0, 0, 0, 0.6) 32.6%, #000 49.4%), var(--hv2-side-fade);
     -webkit-mask-composite: source-in; mask-composite: intersect; }
-  .pg--home .hv2__front {
-    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.12) 5%, rgba(0, 0, 0, 0.4) 10%, rgba(0, 0, 0, 0.75) 15.5%, #000 22%, #000 78%, rgba(0, 0, 0, 0.75) 84.5%, rgba(0, 0, 0, 0.4) 90%, rgba(0, 0, 0, 0.12) 95%, transparent 100%);
-    mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.12) 5%, rgba(0, 0, 0, 0.4) 10%, rgba(0, 0, 0, 0.75) 15.5%, #000 22%, #000 78%, rgba(0, 0, 0, 0.75) 84.5%, rgba(0, 0, 0, 0.4) 90%, rgba(0, 0, 0, 0.12) 95%, transparent 100%); }
+  .pg--home .hv2__front { -webkit-mask-image: var(--hv2-side-fade); mask-image: var(--hv2-side-fade); }
+  /* Light: the navy floor is as wide as the photo and fades out at its sides with it.
+     Full width, it would end in a hard dark band against the white page. */
+  :root[data-theme="light"] .pg--home .hv2__floor {
+    left: 50%; right: auto; width: var(--sw); transform: translateX(-50%);
+    -webkit-mask-image: var(--hv2-side-fade); mask-image: var(--hv2-side-fade); }
 }
 @media (max-width: 1100px) {
   .pg--home .hv2__title { font-size: 52px; }

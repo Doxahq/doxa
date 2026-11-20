@@ -50,7 +50,7 @@ function PlanPrice({ pricing }: { pricing: PlanPricing }) {
     typeof pricing.price === "string" ? (
       <strong>{pricing.price}</strong>
     ) : (
-      <strong className="ph" style={{ fontFamily: "var(--display)", fontSize: 44, color: "#fafafa" }}>
+      <strong className="ph" style={{ fontFamily: "var(--display)", fontSize: 44, color: "var(--heading)" }}>
         {pricing.price.ph}
       </strong>
     )
@@ -105,7 +105,7 @@ function PlanCard({ plan }: { plan: Plan }) {
       {pro && (offer.live?.open ?? true) ? (
         <span
           className="plan__tag chip"
-          style={{ background: "#0a0a0a", color: "#9cc2ff", borderColor: "rgba(61, 123, 255, 0.6)" }}
+          style={{ background: "var(--night)", color: "var(--ice)", borderColor: "rgba(61, 123, 255, 0.6)" }}
         >
           Founder price
         </span>

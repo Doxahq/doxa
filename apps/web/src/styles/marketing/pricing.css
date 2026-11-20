@@ -1,30 +1,30 @@
 /* Pricing page. Scoped to `.pg--pricing`; shared rules live in shared.css. */
-.pg--pricing { margin: 0; background: #0a0a0a; }
-.pg--pricing { --night: #0a0a0a; --line: rgba(255, 255, 255, 0.1); --line-strong: rgba(255, 255, 255, 0.16); --guide: rgba(255, 255, 255, 0.14); --text: #ededed; --muted: #a1a1a1; --dim: #8a8a8f; --ice: #9cc2ff; --accent: #3d7bff; --display: "Geist Mono", ui-monospace, monospace; --sans: "Geist", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --col: clamp(1200px, 72vw, 1520px); --gutter: max(20px, calc((100% - var(--col)) / 2)); --dash-x: linear-gradient(90deg, var(--guide) 0 4px, transparent 4px 8px); --dash-y: linear-gradient(180deg, var(--guide) 0 4px, transparent 4px 8px); position: relative; background: var(--night); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+.pg--pricing { margin: 0; background: var(--night); }
+.pg--pricing { --display: "Geist Mono", ui-monospace, monospace; --sans: "Geist", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --col: clamp(1200px, 72vw, 1520px); --gutter: max(20px, calc((100% - var(--col)) / 2)); --dash-x: linear-gradient(90deg, var(--guide) 0 4px, transparent 4px 8px); --dash-y: linear-gradient(180deg, var(--guide) 0 4px, transparent 4px 8px); position: relative; background: var(--night); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
 .pg--pricing * { box-sizing: border-box; margin: 0; padding: 0; }
-.pg--pricing .hr__n { position: absolute; top: 8px; right: calc(100% - var(--gutter) + 14px); font: 400 10px/1 var(--mono); letter-spacing: 0.12em; color: #6a6a70; white-space: nowrap; }
+.pg--pricing .hr__n { position: absolute; top: 8px; right: calc(100% - var(--gutter) + 14px); font: 400 10px/1 var(--mono); letter-spacing: 0.12em; color: var(--faint); white-space: nowrap; }
 .pg--pricing .ticks { position: absolute; top: 0; bottom: 0; width: var(--gutter); pointer-events: none; }
 .pg--pricing .ticks--l { left: 0; }
 .pg--pricing .ticks--r { right: 0; }
 .pg--pricing .ticks i { position: absolute; left: 0; right: 0; height: 1px; background-image: var(--dash-x); background-size: 8px 1px; }
-.pg--pricing .chip { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--line-strong); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); background: rgba(255, 255, 255, 0.03); }
+.pg--pricing .chip { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--line-strong); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); background: rgb(var(--hi-rgb) / 0.03); }
 .pg--pricing .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 40px; padding: 0 16px; border: 1px solid transparent; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
 .pg--pricing .btn--light { background: var(--text); color: var(--night); }
-.pg--pricing .btn--light:hover { background: #ffffff; color: var(--night); }
-.pg--pricing .btn--line { border-color: var(--line-strong); color: var(--text); background: rgba(10, 10, 10, 0.4); }
-.pg--pricing .btn--line:hover { background: rgba(255, 255, 255, 0.07); }
-.pg--pricing .btn--blue { background: var(--accent); color: #ffffff; }
-.pg--pricing .btn--blue:hover { background: #5a8fff; color: #ffffff; }
+.pg--pricing .btn--light:hover { background: var(--hi); color: var(--night); }
+.pg--pricing .btn--line { border-color: var(--line-strong); color: var(--text); background: rgb(var(--night-rgb) / 0.4); }
+.pg--pricing .btn--line:hover { background: rgb(var(--hi-rgb) / 0.07); }
+.pg--pricing .btn--blue { background: var(--accent); color: var(--on-accent); }
+.pg--pricing .btn--blue:hover { background: var(--accent-hover); color: var(--on-accent); }
 .pg--pricing .btn--sm { height: 32px; padding: 0 12px; font-size: 11px; }
-.pg--pricing .nav__links { display: flex; gap: 28px; font-size: 14px; color: #c7c7c7; }
+.pg--pricing .nav__links { display: flex; gap: 28px; font-size: 14px; color: var(--body); }
 .pg--pricing .nav__links > a { display: inline-flex; align-items: center; gap: 6px; }
-.pg--pricing .nav__tag { padding: 2px 4px; font-family: var(--mono); font-size: 9px; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase; color: #ffffff; background: var(--accent); }
-.pg--pricing .nav__links .on { color: #ffffff; }
+.pg--pricing .nav__tag { padding: 2px 4px; font-family: var(--mono); font-size: 9px; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase; color: var(--on-accent); background: var(--accent); }
+.pg--pricing .nav__links .on { color: var(--hi); }
 .pg--pricing .nav__actions { display: flex; gap: 8px; }
 
 /* Hero */
 .pg--pricing .hero { position: relative; overflow: hidden; isolation: isolate; }
-.pg--pricing .hero__glow { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(50% 70% at 50% 0%, rgba(61, 123, 255, 0.22) 0%, rgba(61, 123, 255, 0) 70%), radial-gradient(30% 50% at 82% 10%, rgba(196, 161, 255, 0.12) 0%, rgba(196, 161, 255, 0) 70%); }
+.pg--pricing .hero__glow { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(50% 70% at 50% 0%, rgba(61, 123, 255, 0.22) 0%, rgba(61, 123, 255, 0) 70%), radial-gradient(30% 50% at 82% 10%, rgb(var(--lav-rgb) / 0.12) 0%, rgb(var(--lav-rgb) / 0) 70%); }
 .pg--pricing .hero__inner { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 104px 32px 96px; text-align: center; }
 .pg--pricing .hero h1 { font-size: 64px; line-height: 1.02; }
 .pg--pricing .hero p { max-width: 560px; font-size: 18px; line-height: 28px; color: var(--muted); }
@@ -33,36 +33,36 @@
 .pg--pricing .hero__note i { width: 6px; height: 6px; background: var(--accent); animation: mk-blink 1.4s steps(1) infinite; }
 
 /* Plans */
-.pg--pricing .plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: rgba(255, 255, 255, 0.02); }
+.pg--pricing .plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: rgb(var(--hi-rgb) / 0.02); }
 .pg--pricing .plan { position: relative; display: flex; flex-direction: column; gap: 22px; min-width: 0; padding: 40px 32px 36px; }
 .pg--pricing .plan + .plan { background-image: var(--dash-y); background-size: 1px 8px; background-repeat: repeat-y; }
 .pg--pricing .plan--pro { background: linear-gradient(180deg, rgba(61, 123, 255, 0.12) 0%, rgba(61, 123, 255, 0.02) 60%); box-shadow: inset 0 0 0 1px rgba(61, 123, 255, 0.55); }
 .pg--pricing .plan__tag { position: absolute; top: -12px; left: 32px; }
 .pg--pricing .plan__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.pg--pricing .bill { display: inline-flex; padding: 2px; border: 1px solid var(--line-strong); background: rgba(10, 10, 10, 0.4); }
+.pg--pricing .bill { display: inline-flex; padding: 2px; border: 1px solid var(--line-strong); background: rgb(var(--night-rgb) / 0.4); }
 .pg--pricing .bill__opt { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 0; background: transparent; font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); cursor: pointer; }
 .pg--pricing .bill__opt:hover { color: var(--text); }
 .pg--pricing .bill__opt:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
-.pg--pricing .bill__opt--on { background: rgba(61, 123, 255, 0.22); color: #fafafa; }
+.pg--pricing .bill__opt--on { background: rgba(61, 123, 255, 0.22); color: var(--heading); }
 .pg--pricing .bill__opt span { color: var(--ice); }
-.pg--pricing .plan__name { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: 0.02em; color: #fafafa; }
+.pg--pricing .plan__name { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: 0.02em; color: var(--heading); }
 .pg--pricing .plan__desc { min-height: 44px; font-size: 14px; line-height: 22px; color: var(--muted); }
 .pg--pricing .price { display: flex; align-items: baseline; gap: 8px; }
-.pg--pricing .price strong { font-family: var(--display); font-weight: 700; font-size: 44px; letter-spacing: -0.03em; color: #fafafa; }
+.pg--pricing .price strong { font-family: var(--display); font-weight: 700; font-size: 44px; letter-spacing: -0.03em; color: var(--heading); }
 .pg--pricing .price span { font-family: var(--mono); font-size: 12px; color: var(--dim); }
 .pg--pricing .price__sub { margin-top: -12px; font-size: 13px; color: var(--dim); }
 .pg--pricing .price__offer { display: flex; align-items: center; gap: 8px; margin-top: -8px; width: fit-content; padding: 6px 10px; background: rgba(61, 123, 255, 0.1); font-family: var(--sans); font-size: 13px; color: var(--ice); }
 .pg--pricing .price__offer::before { content: ""; width: 6px; height: 6px; background: var(--ice); }
-.pg--pricing .plan h4 { font-size: 13px; font-weight: 600; color: #fafafa; }
+.pg--pricing .plan h4 { font-size: 13px; font-weight: 600; color: var(--heading); }
 .pg--pricing .checks { display: flex; flex-direction: column; gap: 10px; list-style: none; }
-.pg--pricing .checks li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 20px; color: #c7c7c7; }
+.pg--pricing .checks li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 20px; color: var(--body); }
 .pg--pricing .checks svg { flex-shrink: 0; margin-top: 3px; color: var(--ice); }
 .pg--pricing .plan__foot { display: flex; flex-direction: column; gap: 14px; margin-top: auto; padding-top: 8px; }
 .pg--pricing .hosts { display: flex; flex-wrap: wrap; gap: 6px; }
 .pg--pricing .host { display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border: 1px solid rgba(61, 123, 255, 0.55); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--ice); }
-.pg--pricing .host--lav { border-color: rgba(196, 161, 255, 0.55); color: #c4a1ff; }
+.pg--pricing .host--lav { border-color: rgb(var(--lav-rgb) / 0.55); color: var(--lav); }
 .pg--pricing .plan .btn { width: 100%; }
-.pg--pricing .ph { color: #c4a1ff; font-family: var(--mono); font-size: 0.92em; }
+.pg--pricing .ph { color: var(--lav); font-family: var(--mono); font-size: 0.92em; }
 
 /* Section heads */
 .pg--pricing .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 32px; padding: 88px 32px 40px; }
@@ -74,18 +74,18 @@
 .pg--pricing .table { display: block; overflow-x: auto; }
 .pg--pricing .tbl { min-width: 760px; }
 .pg--pricing .tr { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); align-items: center; min-height: 52px; background-image: var(--dash-x); background-size: 8px 1px; background-repeat: repeat-x; background-position: left bottom; }
-.pg--pricing .tr > div { padding: 12px 32px; font-size: 14px; color: #c7c7c7; }
-.pg--pricing .tr > div + div { font-family: var(--mono); font-size: 13px; color: #fafafa; }
+.pg--pricing .tr > div { padding: 12px 32px; font-size: 14px; color: var(--body); }
+.pg--pricing .tr > div + div { font-family: var(--mono); font-size: 13px; color: var(--heading); }
 .pg--pricing .tr--head { position: sticky; top: 0; z-index: 2; background-color: var(--night); min-height: 64px; }
-.pg--pricing .tr--head > div { font-family: var(--display) !important; font-weight: 700; font-size: 14px !important; letter-spacing: 0.06em; color: #fafafa; }
-.pg--pricing .tr--group { min-height: 44px; background-color: rgba(255, 255, 255, 0.025); }
+.pg--pricing .tr--head > div { font-family: var(--display) !important; font-weight: 700; font-size: 14px !important; letter-spacing: 0.06em; color: var(--heading); }
+.pg--pricing .tr--group { min-height: 44px; background-color: rgb(var(--hi-rgb) / 0.025); }
 .pg--pricing .tr--group > div { font-family: var(--mono) !important; font-size: 11px !important; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ice) !important; }
 .pg--pricing .tr .pro { background: rgba(61, 123, 255, 0.06); align-self: stretch; display: flex; align-items: center; }
-.pg--pricing .tr .ent { background: rgba(196, 161, 255, 0.06); align-self: stretch; display: flex; align-items: center; }
+.pg--pricing .tr .ent { background: rgb(var(--lav-rgb) / 0.06); align-self: stretch; display: flex; align-items: center; }
 .pg--pricing .yes { display: inline-flex; color: var(--ice); }
 .pg--pricing .yes svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.pg--pricing .ent .yes { color: #c4a1ff; }
-.pg--pricing .no { color: #55555a; }
+.pg--pricing .ent .yes { color: var(--lav); }
+.pg--pricing .no { color: var(--ghost); }
 
 /* FAQ */
 .pg--pricing .faq { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
@@ -96,11 +96,11 @@
 .pg--pricing .faq__mail:hover { text-decoration: underline; text-underline-offset: 3px; }
 .pg--pricing .faq__list { padding: 40px 32px; background-image: var(--dash-y); background-size: 1px 8px; background-repeat: repeat-y; }
 .pg--pricing .faq details { background-image: var(--dash-x); background-size: 8px 1px; background-repeat: repeat-x; background-position: left bottom; }
-.pg--pricing .faq summary { display: flex; align-items: center; gap: 12px; min-height: 60px; cursor: pointer; list-style: none; font-size: 16px; font-weight: 500; color: #fafafa; }
+.pg--pricing .faq summary { display: flex; align-items: center; gap: 12px; min-height: 60px; cursor: pointer; list-style: none; font-size: 16px; font-weight: 500; color: var(--heading); }
 .pg--pricing .faq summary::-webkit-details-marker { display: none; }
 .pg--pricing .faq summary::before { content: "+"; flex-shrink: 0; width: 20px; font-family: var(--mono); color: var(--ice); }
 .pg--pricing .faq details[open] summary::before { content: "−"; }
-.pg--pricing .faq summary:hover { color: #ffffff; }
+.pg--pricing .faq summary:hover { color: var(--hi); }
 .pg--pricing .faq details p { padding: 0 0 20px 32px; max-width: 640px; font-size: 14px; line-height: 23px; color: var(--muted); }
 
 /* CTA */

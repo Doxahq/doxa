@@ -1,15 +1,11 @@
 import { useState } from "react"
 import { Bot } from "lucide-react"
 
-import {
-  EmptyState,
-  SectionDescription,
-  SectionLabel,
-} from "~/components/dashboard/dashboard-header"
+import { EmptyState } from "~/components/dashboard/dashboard-header"
 import { ConnectedAgentRow } from "~/components/dashboard/settings/connected-agent-row"
 import { useConnectedAgents } from "~/lib/dashboard/use-connected-agents"
 
-/** The agents (MCP clients) that can use the account, with a revoke action. */
+/** Agents → Connected agents: the agents (MCP clients) that can use the account, with a revoke action. The page heading names it. */
 export function ConnectedAgentsSection() {
   const { grants, isLoading, loadError, revoke, revokingGrantId, revokeError } = useConnectedAgents()
   const [confirmingGrantId, setConfirmingGrantId] = useState<string | null>(null)
@@ -25,11 +21,6 @@ export function ConnectedAgentsSection() {
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <SectionLabel>Connected agents</SectionLabel>
-        <SectionDescription>Agents that can use your Doxa account through MCP.</SectionDescription>
-      </div>
-
       {isLoading ? (
         <p className="surface-card px-5 py-4 text-sm text-muted-foreground">Loading connected agents…</p>
       ) : loadError ? (

@@ -1,7 +1,7 @@
 import { Hr } from "~/components/marketing/guides"
 import { SectionHead } from "~/components/marketing/mcp/section-head"
 
-const ICE = { color: "#9cc2ff" }
+const ICE = { color: "var(--ice)" }
 
 /** Section 02: an agent session from finding a project to going live. */
 export function McpWorkflow() {

@@ -5,7 +5,14 @@ import {
   BillingAccountsSkeleton,
   BillingCreditsSkeleton,
 } from "~/components/dashboard/skeletons/billing-skeletons"
-import { AccountSettingsSkeleton, TeamSkeleton, TeamsSkeleton } from "~/components/dashboard/skeletons/account-skeletons"
+import {
+  AccountSettingsSkeleton,
+  AgentApprovalsSkeleton,
+  ConnectedAgentsSkeleton,
+  EmailNotificationsSkeleton,
+  TeamSkeleton,
+  TeamsSkeleton,
+} from "~/components/dashboard/skeletons/account-skeletons"
 import {
   ProjectGenerationSkeleton,
   ProjectGenerationsSkeleton,
@@ -25,12 +32,15 @@ import { SiteSettingsPending, SiteSettingsSectionPending } from "~/components/da
  */
 export const DASHBOARD_PENDING_VIEWS = {
   accountSettings: AccountSettingsSkeleton,
+  agentApprovals: AgentApprovalsSkeleton,
   approvalRequest: ApprovalRequestSkeleton,
   billingAccount: BillingAccountSkeleton,
   billingAccounts: BillingAccountsSkeleton,
   billingCredits: BillingCreditsSkeleton,
+  connectedAgents: ConnectedAgentsSkeleton,
   content: ContentPagePending,
   doxabotInstructions: DoxabotInstructionsSkeleton,
+  emailNotifications: EmailNotificationsSkeleton,
   generation: ProjectGenerationSkeleton,
   generationChanges: GenerationChangesPending,
   generations: ProjectGenerationsSkeleton,

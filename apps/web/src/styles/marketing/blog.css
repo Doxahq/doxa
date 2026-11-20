@@ -1,18 +1,18 @@
 /* Blog (/blog, /blog/$slug). Scoped to `.pg--blog`; shared rules live in shared.css. */
-.pg--blog { --night: #0a0a0a; --line: rgba(255, 255, 255, 0.1); --line-strong: rgba(255, 255, 255, 0.16); --guide: rgba(255, 255, 255, 0.14); --text: #ededed; --muted: #a1a1a1; --dim: #8a8a8f; --ice: #9cc2ff; --accent: #3d7bff; --deep: #2453c9; --lav: #c4a1ff; --display: "Geist Mono", ui-monospace, monospace; --sans: "Geist", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --col: clamp(1200px, 72vw, 1520px); --gutter: max(20px, calc((100% - var(--col)) / 2)); --dash-x: linear-gradient(90deg, var(--guide) 0 4px, transparent 4px 8px); --dash-y: linear-gradient(180deg, var(--guide) 0 4px, transparent 4px 8px); position: relative; margin: 0; background: var(--night); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; overflow-x: clip; }
+.pg--blog { --display: "Geist Mono", ui-monospace, monospace; --sans: "Geist", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace; --col: clamp(1200px, 72vw, 1520px); --gutter: max(20px, calc((100% - var(--col)) / 2)); --dash-x: linear-gradient(90deg, var(--guide) 0 4px, transparent 4px 8px); --dash-y: linear-gradient(180deg, var(--guide) 0 4px, transparent 4px 8px); position: relative; margin: 0; background: var(--night); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; overflow-x: clip; }
 .pg--blog * { box-sizing: border-box; margin: 0; padding: 0; }
-.pg--blog .chip { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--line-strong); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); background: rgba(255, 255, 255, 0.03); }
-.pg--blog a.chip:hover { color: #ffffff; background: rgba(255, 255, 255, 0.07); }
+.pg--blog .chip { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--line-strong); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); background: rgb(var(--hi-rgb) / 0.03); }
+.pg--blog a.chip:hover { color: var(--hi); background: rgb(var(--hi-rgb) / 0.07); }
 .pg--blog .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 40px; padding: 0 16px; border: 1px solid transparent; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
 .pg--blog .btn--light { background: var(--text); color: var(--night); }
-.pg--blog .btn--light:hover { background: #ffffff; color: var(--night); }
-.pg--blog .btn--line { border-color: var(--line-strong); color: var(--text); background: rgba(10, 10, 10, 0.4); }
-.pg--blog .btn--line:hover { background: rgba(255, 255, 255, 0.07); }
+.pg--blog .btn--light:hover { background: var(--hi); color: var(--night); }
+.pg--blog .btn--line { border-color: var(--line-strong); color: var(--text); background: rgb(var(--night-rgb) / 0.4); }
+.pg--blog .btn--line:hover { background: rgb(var(--hi-rgb) / 0.07); }
 .pg--blog .btn--sm { height: 32px; padding: 0 12px; font-size: 11px; }
-.pg--blog .nav__links { display: flex; gap: 28px; font-size: 14px; color: #c7c7c7; }
+.pg--blog .nav__links { display: flex; gap: 28px; font-size: 14px; color: var(--body); }
 .pg--blog .nav__links > a { display: inline-flex; align-items: center; gap: 6px; }
-.pg--blog .nav__tag { padding: 2px 4px; font-family: var(--mono); font-size: 9px; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase; color: #ffffff; background: var(--accent); }
-.pg--blog .nav__links .on { color: #ffffff; }
+.pg--blog .nav__tag { padding: 2px 4px; font-family: var(--mono); font-size: 9px; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase; color: var(--on-accent); background: var(--accent); }
+.pg--blog .nav__links .on { color: var(--hi); }
 .pg--blog .nav__actions { display: flex; gap: 8px; }
 
 /* Hero */
@@ -34,8 +34,8 @@
 .pg--blog .cover--grid { --texture: linear-gradient(90deg, color-mix(in srgb, var(--tint) 22%, transparent) 1px, transparent 1px), linear-gradient(180deg, color-mix(in srgb, var(--tint) 22%, transparent) 1px, transparent 1px); --texture-size: 24px 24px; }
 .pg--blog .cover--dots { --texture: radial-gradient(color-mix(in srgb, var(--tint) 55%, transparent) 1px, transparent 1.5px); --texture-size: 14px 14px; }
 .pg--blog .cover--lines { --texture: repeating-linear-gradient(135deg, color-mix(in srgb, var(--tint) 20%, transparent) 0 1px, transparent 1px 10px); --texture-size: auto; }
-.pg--blog .cover__title { position: relative; z-index: 1; max-width: 78%; font-family: var(--display); font-size: clamp(15px, 4.9cqw, 34px); font-weight: 700; line-height: 1.2; letter-spacing: -0.03em; text-align: center; text-wrap: balance; color: #fafafa; }
-.pg--blog .cover__mark { position: absolute; z-index: 1; width: 16px; height: 16px; border: 0 dashed color-mix(in srgb, var(--tint) 75%, #ffffff); }
+.pg--blog .cover__title { position: relative; z-index: 1; max-width: 78%; font-family: var(--display); font-size: clamp(15px, 4.9cqw, 34px); font-weight: 700; line-height: 1.2; letter-spacing: -0.03em; text-align: center; text-wrap: balance; color: var(--heading); }
+.pg--blog .cover__mark { position: absolute; z-index: 1; width: 16px; height: 16px; border: 0 dashed color-mix(in srgb, var(--tint) 75%, var(--hi)); }
 .pg--blog .cover__mark--tl { top: 10px; left: 10px; border-top-width: 1px; border-left-width: 1px; }
 .pg--blog .cover__mark--tr { top: 10px; right: 10px; border-top-width: 1px; border-right-width: 1px; }
 .pg--blog .cover__mark--bl { bottom: 10px; left: 10px; border-bottom-width: 1px; border-left-width: 1px; }
@@ -46,46 +46,46 @@
 
 /* List: one card per post */
 .pg--blog .posts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding: 48px 32px 96px; }
-.pg--blog .post-card { display: flex; flex-direction: column; min-width: 0; border: 1px dashed rgba(255, 255, 255, 0.18); transition: background-color 0.15s ease; }
-.pg--blog .post-card:hover { background-color: rgba(255, 255, 255, 0.04); }
-.pg--blog .post-card .cover { border-bottom: 1px dashed rgba(255, 255, 255, 0.18); }
+.pg--blog .post-card { display: flex; flex-direction: column; min-width: 0; border: 1px dashed rgb(var(--hi-rgb) / 0.18); transition: background-color 0.15s ease; }
+.pg--blog .post-card:hover { background-color: rgb(var(--hi-rgb) / 0.04); }
+.pg--blog .post-card .cover { border-bottom: 1px dashed rgb(var(--hi-rgb) / 0.18); }
 .pg--blog .post-card__text { display: flex; flex: 1; flex-direction: column; gap: 20px; padding: 20px; }
-.pg--blog .post-card h2 { font-size: 17px; font-weight: 500; line-height: 25px; color: #fafafa; transition: color 0.15s ease; }
+.pg--blog .post-card h2 { font-size: 17px; font-weight: 500; line-height: 25px; color: var(--heading); transition: color 0.15s ease; }
 .pg--blog .post-card:hover h2 { color: var(--ice); }
 .pg--blog .post-card__meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin-top: auto; font-family: var(--mono); font-size: 11px; line-height: 16px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
 
 /* Post: article on the left, sticky sidebar on the right. The sidebar comes first in the markup, so a phone shows the contents above the article. */
 .pg--blog .post { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
 .pg--blog .post__side { grid-column: 2; grid-row: 1; padding: 48px 32px 96px; background-image: var(--dash-y); background-size: 1px 8px; background-repeat: repeat-y; }
-.pg--blog .post__facts { position: sticky; top: 32px; display: flex; flex-direction: column; gap: 28px; max-height: calc(100vh - 64px); margin: 0 -8px; padding: 0 8px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.16) transparent; }
+.pg--blog .post__facts { position: sticky; top: 32px; display: flex; flex-direction: column; gap: 28px; max-height: calc(100vh - 64px); margin: 0 -8px; padding: 0 8px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgb(var(--hi-rgb) / 0.16) transparent; }
 .pg--blog .post__fact { display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 20px; color: var(--text); }
 .pg--blog .post-toc { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; list-style: none; }
 .pg--blog .post-toc a { display: block; padding: 5px 8px; font-size: 13px; line-height: 18px; color: var(--muted); transition: background-color 0.15s ease, color 0.15s ease; }
 .pg--blog .post-toc a.sub { padding-left: 22px; }
-.pg--blog .post-toc a:hover { background: rgba(255, 255, 255, 0.05); color: #ffffff; }
-.pg--blog .post-toc a.on { background: rgba(61, 123, 255, 0.16); color: #ffffff; }
+.pg--blog .post-toc a:hover { background: rgb(var(--hi-rgb) / 0.05); color: var(--hi); }
+.pg--blog .post-toc a.on { background: rgba(61, 123, 255, 0.16); color: var(--hi); }
 .pg--blog .post__share { display: flex; flex-wrap: wrap; gap: 8px; }
-.pg--blog .post__share a { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px dashed rgba(255, 255, 255, 0.18); font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--muted); }
-.pg--blog .post__share a:hover { background: rgba(255, 255, 255, 0.07); }
+.pg--blog .post__share a { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px dashed rgb(var(--hi-rgb) / 0.18); font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--muted); }
+.pg--blog .post__share a:hover { background: rgb(var(--hi-rgb) / 0.07); }
 .pg--blog .post__body { grid-column: 1; grid-row: 1; min-width: 0; padding: 48px 56px 96px 32px; }
 .pg--blog .post__body > * { max-width: 760px; }
-.pg--blog .post__body .cover { aspect-ratio: 2.4 / 1; border: 1px dashed rgba(255, 255, 255, 0.18); }
+.pg--blog .post__body .cover { aspect-ratio: 2.4 / 1; border: 1px dashed rgb(var(--hi-rgb) / 0.18); }
 .pg--blog .cover.cover--image { aspect-ratio: 16 / 9; background: var(--night); }
 .pg--blog .cover--image::before, .pg--blog .cover--image::after { content: none; }
 .pg--blog .cover--image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
 /* Article body. The MDX output has no classes, so the rules go by element. */
-.pg--blog .post__content { margin-top: 40px; font-size: 16px; line-height: 27px; color: #c7c7c7; overflow-wrap: break-word; }
+.pg--blog .post__content { margin-top: 40px; font-size: 16px; line-height: 27px; color: var(--body); overflow-wrap: break-word; }
 .pg--blog .post__content > * + * { margin-top: 18px; }
-.pg--blog .post__content h2, .pg--blog .post__content h3 { scroll-margin-top: 32px; font-family: var(--display); font-weight: 700; color: #fafafa; }
+.pg--blog .post__content h2, .pg--blog .post__content h3 { scroll-margin-top: 32px; font-family: var(--display); font-weight: 700; color: var(--heading); }
 .pg--blog .post__content h2 { font-size: 26px; line-height: 1.25; letter-spacing: -0.025em; }
 .pg--blog .post__content h3 { font-size: 18px; line-height: 1.35; letter-spacing: -0.015em; }
 .pg--blog .post__content > * + h2 { margin-top: 56px; }
 .pg--blog .post__content > * + h3 { margin-top: 36px; }
 .pg--blog .post__content > h2 + *, .pg--blog .post__content > h3 + * { margin-top: 14px; }
-.pg--blog .post__content strong { font-weight: 600; color: #fafafa; }
-.pg--blog .post__content a { color: var(--ice); text-decoration: underline; text-decoration-color: rgba(156, 194, 255, 0.4); text-underline-offset: 3px; }
-.pg--blog .post__content a:hover { color: #ffffff; text-decoration-color: #ffffff; }
+.pg--blog .post__content strong { font-weight: 600; color: var(--heading); }
+.pg--blog .post__content a { color: var(--ice); text-decoration: underline; text-decoration-color: rgb(var(--ice-rgb) / 0.4); text-underline-offset: 3px; }
+.pg--blog .post__content a:hover { color: var(--hi); text-decoration-color: var(--hi); }
 .pg--blog .post__content ul, .pg--blog .post__content ol { display: flex; flex-direction: column; gap: 8px; list-style: none; }
 .pg--blog .post__content ol { counter-reset: post-ol; }
 .pg--blog .post__content li { position: relative; padding-left: 24px; }
@@ -98,15 +98,17 @@
 .pg--blog .post__content table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 14px; line-height: 22px; }
 .pg--blog .post__content th { padding: 10px 16px 10px 0; font-family: var(--mono); font-size: 11px; font-weight: 400; letter-spacing: 0.1em; text-align: left; text-transform: uppercase; color: var(--dim); }
 .pg--blog .post__content td { padding: 10px 16px 10px 0; vertical-align: top; border-top: 1px solid var(--line); }
-.pg--blog .post__content :not(pre) > code { padding: 2px 5px; background: rgba(61, 123, 255, 0.14); font-family: var(--mono); font-size: 0.84em; color: #d5e4ff; }
+.pg--blog .post__content :not(pre) > code { padding: 2px 5px; background: rgba(61, 123, 255, 0.14); font-family: var(--mono); font-size: 0.84em; color: var(--chip-ink); }
 
-/* Code blocks. The prose stylesheet follows a `.dark` root, which the marketing pages do not have. */
+/* Code blocks. The prose stylesheet follows a `.dark` root, which the marketing pages do not have,
+   so the token colors follow the site theme here. */
 .pg--blog .shiki, .pg--blog .shiki span { color: var(--shiki-dark); }
-.pg--blog .post__content pre { border: 1px dashed rgba(255, 255, 255, 0.18); background: #0e1016; font-family: var(--mono); font-size: 13px; line-height: 21px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.16) transparent; }
-.pg--blog .post__content pre code { font-family: inherit; color: #e6edf3; }
+:root[data-theme="light"] .pg--blog :is(.shiki, .shiki span) { color: var(--shiki-light); }
+.pg--blog .post__content pre { border: 1px dashed rgb(var(--hi-rgb) / 0.18); background: var(--well-13); font-family: var(--mono); font-size: 13px; line-height: 21px; scrollbar-width: thin; scrollbar-color: rgb(var(--hi-rgb) / 0.16) transparent; }
+.pg--blog .post__content pre code { font-family: inherit; color: var(--code-ink); }
 .pg--blog .post__content [data-code-language] { font-family: var(--mono); font-size: 11px; color: var(--dim); }
-.pg--blog .post__content [data-slot="button"] { width: 28px; height: 28px; border: 1px dashed rgba(255, 255, 255, 0.18); border-radius: 0; background: #0e1016; color: var(--muted); box-shadow: none; }
-.pg--blog .post__content [data-slot="button"]:hover { background: #1b1e26; color: #ffffff; }
+.pg--blog .post__content [data-slot="button"] { width: 28px; height: 28px; border: 1px dashed rgb(var(--hi-rgb) / 0.18); border-radius: 0; background: var(--well-13); color: var(--muted); box-shadow: none; }
+.pg--blog .post__content [data-slot="button"]:hover { background: var(--well-21); color: var(--hi); }
 
 @media (max-width: 1300px) {
   .pg--blog .hr__n { display: none; }
@@ -137,5 +139,3 @@
 }
 
 /* Footer pieces that shared.css leaves to each page */
-.pg--blog .foot__brand { display: flex; flex-direction: column; gap: 18px; }
-.pg--blog .foot__social { display: flex; gap: 14px; color: var(--muted); }

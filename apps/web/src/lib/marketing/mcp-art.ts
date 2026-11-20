@@ -1,13 +1,13 @@
+import { themedPictureFiles } from "~/lib/theme/picture-files"
+
 /**
- * The antenna art of the MCP page, in two widths and two formats. The files
- * come from `public/marketing/mcp-dish.webp` (2400 × 1000), the master copy.
- * The route preloads the AVIF set, so the image arrives with the page and not
- * after the animation starts.
+ * The antenna art of the MCP page, in two widths and two formats. The night files
+ * come from `public/marketing/mcp-dish.webp` (2400 × 1000), the master copy. The
+ * daylight files come from `public/marketing/mcp-dish-light.webp`: a Seedream 4
+ * relight of the night master, with the same pixel band at the foot.
  */
 export const MCP_ART = {
-  avif: "/marketing/mcp-dish-1200.avif 1200w, /marketing/mcp-dish-2400.avif 2400w",
-  webp: "/marketing/mcp-dish-1200.webp 1200w, /marketing/mcp-dish-2400.webp 2400w",
-  fallback: "/marketing/mcp-dish-1200.webp",
+  files: themedPictureFiles("/marketing/mcp-dish", [1200, 2400], 1200),
   width: 2400,
   height: 1000,
   /**
@@ -16,6 +16,10 @@ export const MCP_ART = {
    * covers it, so the image is 1.8 times as wide.
    */
   sizes: "(max-width: 760px) calc((100vw - 40px) * 1.8), (max-width: 1240px) calc(100vw - 40px), clamp(1200px, 72vw, 1520px)",
-  /** A 24 × 10 copy, drawn blurred under the image until the image loads. */
-  placeholder: "data:image/webp;base64,UklGRogAAABXRUJQVlA4IHwAAADwAwCdASoYAAoAPrVWoUsnJSMhsAgA4BaJQApgAPRAQqDLdZKV353AAP74TYjsJ6BFJ7BMYus7NjR1K4efk47eb9HhEi3x9yPQb4bT2K06Ubmf/ZUFXTs4NoWesur6A+EMoWDzZtaW2hfiSWHtzFnDKhPHSNho/eNIeAAA",
+  /** A 24 × 10 copy of each photo, drawn blurred under the image until the image loads. */
+  placeholder: {
+    dark: "data:image/webp;base64,UklGRogAAABXRUJQVlA4IHwAAADwAwCdASoYAAoAPrVWoUsnJSMhsAgA4BaJQApgAPRAQqDLdZKV353AAP74TYjsJ6BFJ7BMYus7NjR1K4efk47eb9HhEi3x9yPQb4bT2K06Ubmf/ZUFXTs4NoWesur6A+EMoWDzZtaW2hfiSWHtzFnDKhPHSNho/eNIeAAA",
+    light:
+      "data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAADQAwCdASoYAAoAPrVKoUmnJCOhMAgA4BaJZQABHuxb1OqzGYZyTfAA/v7svaE31z28PB+jtN9qSZnaFQ3sewzafN4j+4BYST+VyWa5ob7X6QdX3LqT/s0g8vmLOrlefxzGXrGCwAAAAA==",
+  },
 } as const

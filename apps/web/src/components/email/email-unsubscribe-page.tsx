@@ -67,7 +67,7 @@ export function EmailUnsubscribePage({ link }: { link: UnsubscribeLink }) {
 function SettingsLink() {
   return (
     <Button variant="outline" asChild className="w-full">
-      <Link to="/dashboard/settings">Open email settings</Link>
+      <Link to="/dashboard/settings/notifications">Open email settings</Link>
     </Button>
   )
 }

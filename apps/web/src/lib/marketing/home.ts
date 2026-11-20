@@ -32,9 +32,9 @@ type AgentDiagramLeg = { dir: "down" | "up" | "right"; style: CSSProperties }
 /** The Doxa Agent diagram: repo → agent → preview → live docs. */
 export const AGENT_DIAGRAM = {
   gems: [
-    { left: "4%", top: "72%", background: "#3d7bff" },
-    { left: "52%", top: "6%", background: "#c4a1ff", animationDelay: "-3s" },
-    { left: "92%", top: "56%", background: "#9cc2ff", animationDelay: "-6s" },
+    { left: "4%", top: "72%", background: "var(--accent)" },
+    { left: "52%", top: "6%", background: "var(--lav)", animationDelay: "-3s" },
+    { left: "92%", top: "56%", background: "var(--ice)", animationDelay: "-6s" },
   ] satisfies CSSProperties[],
   // One signal runs the arrows in story order. `start` is when it reaches each arrow, in seconds.
   arrows: [

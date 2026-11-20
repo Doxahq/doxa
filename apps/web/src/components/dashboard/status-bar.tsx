@@ -2,11 +2,12 @@ import { useRouterState } from "@tanstack/react-router"
 
 import { useDashboardAuth } from "~/lib/auth/dashboard-auth-context"
 import { useOptionalProjectBranch } from "~/lib/dashboard/project-branch-context"
+import { STATUS_PAGE_URL } from "~/lib/status-page"
 
 /**
  * The terminal bar under the main area: `>_ email:path` on the left, the
- * current branch and system status on the right. It starts where the sidebar
- * ends.
+ * current branch and system status on the right. The status opens the
+ * public status page in a new tab. It starts where the sidebar ends.
  */
 export function StatusBar() {
   const { user, isPending } = useDashboardAuth()
@@ -30,10 +31,15 @@ export function StatusBar() {
       </span>
       <span className="flex shrink-0 items-center gap-4.5">
         {branchName ? <span className="max-[820px]:hidden">branch: {branchName}</span> : null}
-        <span className="flex items-center gap-1.5 tracking-[0.12em] uppercase">
+        <a
+          href={STATUS_PAGE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 tracking-[0.12em] uppercase transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none"
+        >
           <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
           All systems operational
-        </span>
+        </a>
       </span>
     </footer>
   )

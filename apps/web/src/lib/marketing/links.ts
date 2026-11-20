@@ -14,7 +14,7 @@ export const SELF_HOSTING_GUIDE_URL = `${GITHUB_URL}/blob/main/docs/current/self
 export const DOCS_URL = "https://docs.doxa.so"
 export const MCP_SERVER_URL = "https://mcp.doxa.so/mcp"
 export const X_URL = "https://x.com/ipenywis"
-export const STATUS_URL = "#"
+export { STATUS_PAGE_URL as STATUS_URL } from "~/lib/status-page"
 export const CONTACT_EMAIL = "hello@doxa.so"
 export const CONTACT_URL = `mailto:${CONTACT_EMAIL}`
 export const DEMO_URL = "https://cal.com/coderone/doxa-demo"

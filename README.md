@@ -49,25 +49,23 @@ claude mcp add --transport http doxa https://mcp.doxa.so/mcp
 - [Get started with an agent](#get-started-with-an-agent)
 - [Features](#features)
 - [Self-hosting](#self-hosting)
-- [Repository layout](#repository-layout)
-- [Documentation](#documentation)
 - [Contributing](#contributing)
 - [Security](#security)
 - [License](#license)
 
 ## Why Doxa
 
-Most documentation platforms are editors for people. An agent can only reach them through copy and paste, or through a custom script against an API. Doxa is built the other way around: the agent is a user from the first day.
+Most docs platforms started as editors for people and added AI later: a writing assistant, a chat box, an MCP server for search. Doxa started from the other end. Agents are users from day one: they write the docs, edit them on branches and even sign you up. A person still decides what goes live.
 
-| | A typical docs platform | Doxa |
+| | Docs platforms with AI added | Doxa |
 |---|---|---|
-| **First draft** | A person writes every page. | Doxabot reads the repository and writes the first version of the docs. |
-| **After a merge** | Someone must remember to update the docs. | Doxabot reads the diff and rewrites only the pages that the change affects. |
-| **Agent access** | None, or a REST API that you wire up yourself. | A hosted MCP server with OAuth. No API key to copy. |
-| **Agent signup** | A person creates the account. | An agent can create the account. The person confirms with a code in the browser. |
-| **Safety** | Edits go live when they are saved. | Agents work on branches. Publish, restore, generate, domain changes and deletes need a person's approval by default. |
-| **Review** | A diff of a whole site. | A preview of each branch and a review page by page. |
-| **Lock-in** | A proprietary format. | Plain MDX that you can export and take with you. |
+| **First draft** | You write it. AI helps page by page. | Doxabot writes the whole site from your repository. |
+| **After a merge** | You find the pages that went stale. | Doxabot reads the diff and rewrites only the pages it affects. |
+| **Agent access** | Usually read and search. | Read, write, branch, preview and publish over MCP. OAuth, no API key. |
+| **Sign-up** | A person creates the account. | Your agent signs you up. You confirm a code. |
+| **Safety** | Built around human editors. | Agents work on branches. Publish, restore and deletes wait for you. |
+| **Hosting** | Usually their cloud only. | Our cloud, or self-host it all ([Apache 2.0](LICENSE)). |
+| **Your content** | Often vendor-locked. | Plain MDX. Export it any time. |
 
 ## Get started with an agent
 
@@ -170,9 +168,12 @@ Sign in at [doxa.so](https://doxa.so), connect a GitHub repository, and let Doxa
 
 ## Self-hosting
 
-Doxa is the same code that runs [doxa.so](https://doxa.so). This repository holds no secrets, no account IDs and no production state. Doxa's own production deploys from a private ops repository, with the same scripts that you can use.
+Doxa is the same code that runs [doxa.so](https://doxa.so). This repository holds no secrets, no account IDs and no production state. Doxa's own production deploys from a private ops repository, with the same scripts that you can use. The [self-hosting guide](docs/current/self-hosting.md) has every step.
 
-### Run it on your computer
+<details>
+<summary><b>Run it on your computer</b></summary>
+
+<br>
 
 You need Node.js 24, pnpm 10 and Docker.
 
@@ -191,7 +192,12 @@ pnpm dev
 
 `pnpm dev` starts Postgres, the API, the generation workers, the docs renderer, the agent container and the web app. Fill your OAuth and model provider keys in `apps/api/.dev.vars` before you generate real docs. Read [docs/development.md](docs/development.md) for the flags, the local tunnel and the full generation path.
 
-### Run it in production
+</details>
+
+<details>
+<summary><b>Run it in production</b></summary>
+
+<br>
 
 The production stack runs on Cloudflare (Workers, R2, Queues, Containers, KV and Hyperdrive), a Node API origin on AWS ECS, and Postgres.
 
@@ -202,53 +208,11 @@ The production stack runs on Cloudflare (Workers, R2, Queues, Containers, KV and
 
 Read the [self-hosting guide](docs/current/self-hosting.md) for each step.
 
-## Repository layout
-
-A pnpm monorepo in TypeScript.
-
-| Path | What it does |
-|---|---|
-| `apps/web` | The `doxa.so` website and the dashboard (TanStack Start). |
-| `apps/api` | The API: auth, GitHub, projects, generations and publishing. Runs as a Node origin. |
-| `apps/api-edge` | The thin Worker in front of the API origin. |
-| `apps/mcp` | The MCP server at `mcp.doxa.so`. |
-| `apps/docs-template` | The docs site renderer: MDX, navigation, search and API reference. |
-| `apps/docs-runtime` | Serves the published content of each project from R2 to the renderer. |
-| `apps/docs-dispatcher`, `apps/docs-prerenderer` | Routing and prerendering for docs sites. |
-| `apps/agent-worker`, `apps/agent-container` | The generation queue consumer and the container that checks out repositories and runs Doxabot. |
-| `apps/search-gateway` | The search gateway for docs sites. |
-| `apps/try-proxy` | The proxy for the API playground. |
-| `apps/email-worker`, `apps/utility-jobs` | Email and background jobs. |
-| `packages/agent`, `packages/generation` | The Doxabot agent and the generation pipeline. |
-| `packages/mdx-runtime`, `packages/docs-prose` | The MDX parser and the shared page renderer. |
-| `packages/db` | The Drizzle schema and the migrations. |
-| `packages/contracts` | The shared API types and Zod schemas. |
-| `infra/terraform` | The production infrastructure on AWS. |
-
-## Documentation
-
-| Topic | Link |
-|---|---|
-| Product docs | [docs.doxa.so](https://docs.doxa.so) |
-| Docs for agents | [docs.doxa.so/llms.txt](https://docs.doxa.so/llms.txt) · [llms-full.txt](https://docs.doxa.so/llms-full.txt) |
-| Agent sign-up flow | [doxa.so/auth.md](https://doxa.so/auth.md) |
-| MCP server | [doxa.so/mcp](https://doxa.so/mcp) · [docs/current/mcp-server.md](docs/current/mcp-server.md) |
-| Local development | [docs/development.md](docs/development.md) |
-| Self-hosting | [docs/current/self-hosting.md](docs/current/self-hosting.md) |
-| Architecture notes | [docs/current](docs/current) |
-| Testing | [docs/testing-strategy.md](docs/testing-strategy.md) |
-| GitHub App | [docs/github-app.md](docs/github-app.md) |
-
-> [!TIP]
-> **Fun fact:** Doxa writes its own docs. Doxabot generated [docs.doxa.so](https://docs.doxa.so) from this repository, and Doxa hosts it. When we merge a change here, Doxabot updates the affected pages there. Yes, we eat our own dog food. 🐶 This way, every change to Doxa gets a real test on our own docs, and we find what to improve first.
+</details>
 
 ## Contributing
 
-Issues and pull requests are welcome.
-
-1. Open an issue before a large change, so that we can agree on the approach.
-2. Read [AGENTS.md](AGENTS.md). It holds the code rules for people and for coding agents.
-3. Run `pnpm typecheck` and `pnpm test` before you open a pull request.
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before you start. It has the repository layout, the setup, the code rules and how to check your change.
 
 ## Security
 

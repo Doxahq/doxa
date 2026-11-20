@@ -744,6 +744,12 @@ export const generationContextSchema = z.object({
    * none. Optional, so an older API stays readable.
    */
   doxabotInstructions: generationInstructionsSchema.nullable().optional(),
+  /**
+   * True while the site holds only starter content, so this run may fill the
+   * site branding that is still at its defaults. Optional, so an older API
+   * stays readable; absent means false.
+   */
+  brandingEligible: z.boolean().optional(),
 });
 
 export const generationExecutionContextSchema = generationContextSchema.extend({
@@ -1340,6 +1346,16 @@ export type ContainerGenerateStreamRecord = z.infer<
   typeof containerGenerateStreamRecordSchema
 >;
 
+export interface StoreGenerationSiteAssetInput {
+  jobId: string;
+  kind: "logo" | "favicon";
+  bytes: Uint8Array;
+}
+
+export interface StoreGenerationSiteAssetResult {
+  ref: string;
+}
+
 export interface InternalApiRpc {
   resolveDocsSite(projectSlug: string): Promise<DocsHostResolution | null>;
   resolveDocsProject(projectId: string): Promise<DocsHostResolution | null>;
@@ -1360,6 +1376,13 @@ export interface InternalApiRpc {
    * metadata). The API resolves the installation and repository itself.
    */
   createRepositoryReadToken(projectId: string): Promise<string>;
+  /**
+   * Stores a logo or favicon that a generation found for the site branding.
+   * The API cleans, compresses, and counts it against the site quota.
+   */
+  storeGenerationSiteAsset(
+    input: StoreGenerationSiteAssetInput,
+  ): Promise<StoreGenerationSiteAssetResult>;
   /**
    * A short-lived Anthropic token for one generation stage, or null when the
    * API has no federation set up (local development, Workers).

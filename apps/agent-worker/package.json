@@ -15,6 +15,7 @@
     "@doxahq/contracts": "workspace:*",
     "@doxahq/docs-engine": "workspace:*",
     "@doxahq/generation": "workspace:*",
+    "@doxahq/site-config": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -1508,6 +1508,7 @@ function createEnv(input: {
       getCurrentChangeProposalState: async () => null,
       createInstallationAccessToken: async () => "",
       createRepositoryReadToken: async () => "",
+      storeGenerationSiteAsset: async () => ({ ref: "" }),
       createModelAccessToken: vi.fn(async () => null),
       markJobRunning: async () => undefined,
       markJobFailed: async () => undefined,

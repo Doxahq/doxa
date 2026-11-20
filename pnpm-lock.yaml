@@ -78,6 +78,9 @@ importers:
       '@doxahq/generation':
         specifier: workspace:*
         version: link:../../packages/generation
+      '@doxahq/site-config':
+        specifier: workspace:*
+        version: link:../../packages/site-config
       zod:
         specifier: 'catalog:'
         version: 4.6.5

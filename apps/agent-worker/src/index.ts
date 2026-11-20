@@ -42,6 +42,12 @@ export interface Env {
   /** "0" turns off reuse of plans across runs. On by default. */
   DOXA_PLAN_CACHE_ENABLED?: string;
   DOXA_PAGE_CACHE_CROSS_MODEL?: string;
+  /** "0" turns off the site branding step of first generations. On by default. */
+  DOXA_SITE_BRANDING_ENABLED?: string;
+  /** "true" lets the branding step call Context.dev when it found no logo. Off by default. */
+  BRANDING_CONTEXT_DEV_ENABLED?: string;
+  /** Secret. Used only when BRANDING_CONTEXT_DEV_ENABLED is true. */
+  CONTEXT_DEV_API_KEY?: string;
   GENERATION_TIMEOUT_MS?: string;
   GENERATION_IDLE_TIMEOUT_MS?: string;
   GENERATION_OVERALL_TIMEOUT_MS?: string;

@@ -95,6 +95,11 @@ import {
 } from "./execution-context-failure";
 import { checkPageFailureBudgetStep, NO_STEP_RETRIES, runBestEffortStep, settleWritePhase } from "./best-effort-step";
 import {
+  isSiteBrandingEnabled,
+  runSiteBrandingStep,
+  type SiteBrandingStepResult,
+} from "./site-branding";
+import {
   pageNoticePayloadKey,
   readPageNoticePayload,
   storePageNoticePayload,
@@ -856,6 +861,14 @@ export class GenerationWorkflowRunner {
       const pageKeys = writeOutcome.keys;
       const failedPageIds = new Set(writeOutcome.failedPages.map((page) => page.id));
 
+      const branding = await this.siteBrandingStep(
+        step,
+        event.timestamp,
+        overallTimeoutMs,
+        input.jobId,
+        prepared.context,
+      );
+
       const published = await step.do(
         "assemble upload and publish artifacts",
         boundedStepConfig(
@@ -883,7 +896,7 @@ export class GenerationWorkflowRunner {
             versionId: prepared.versionId,
             projectSlug: prepared.context.project.slug,
             projectName: prepared.context.project.name,
-            siteConfig: prepared.context.siteConfig,
+            siteConfig: branding.siteConfig ?? prepared.context.siteConfig,
             entitlements: prepared.context.entitlements,
             pages: pages.map(({ title, route, navigationPath, content }) => ({
               title,
@@ -1001,6 +1014,34 @@ export class GenerationWorkflowRunner {
    * reads the payload that an earlier step stored, adds the notices of the
    * pages that the ledger marks as exhausted, and logs and skips a failure.
    */
+  /**
+   * Fills the default branding of a first generation's site. Best effort: a
+   * failure or a timeout keeps the settings of the context.
+   */
+  private siteBrandingStep(
+    step: GenerationWorkflowStep,
+    startedAt: Date,
+    overallTimeoutMs: number,
+    jobId: string,
+    context: GenerationContext,
+  ): Promise<SiteBrandingStepResult> {
+    const fallback: SiteBrandingStepResult = { siteConfig: null };
+    if (context.brandingEligible !== true || !isSiteBrandingEnabled(this.env)) {
+      return Promise.resolve(fallback);
+    }
+    return runBestEffortStep({
+      step,
+      name: "discover site branding",
+      config: bestEffortStepConfig(startedAt, overallTimeoutMs, SITE_BRANDING_TIMEOUT_MS),
+      fallback,
+      onError: (error) => logBestEffortStepError(jobId, "site_branding", error),
+      work: async () => {
+        await ensureJobActive(this.env, jobId);
+        return runSiteBrandingStep({ env: this.env, jobId, context });
+      },
+    });
+  }
+
   private async recordNoticesStep(
     step: GenerationWorkflowStep,
     jobId: string,
@@ -1732,6 +1773,16 @@ export class GenerationWorkflowRunner {
           new Set(baselinePageStates(reusableState).keys()),
         );
 
+      const branding = isPreview
+        ? { siteConfig: null }
+        : await this.siteBrandingStep(
+            step,
+            event.timestamp,
+            overallTimeoutMs,
+            input.jobId,
+            context,
+          );
+
       const assembled = await step.do(
         isPreview
           ? "assemble and upload incremental preview artifacts"
@@ -1789,7 +1840,7 @@ export class GenerationWorkflowRunner {
             versionId: prepared.versionId,
             projectSlug: context.project.slug,
             projectName: context.project.name,
-            siteConfig: context.siteConfig,
+            siteConfig: branding.siteConfig ?? context.siteConfig,
             entitlements: context.entitlements,
             pages: pages.map(
               ({
@@ -2330,6 +2381,9 @@ function behindInstructionsField(
 }
 
 /** A best-effort step failed; the run goes on without what it would add. */
+/** GitHub, the homepage, its images, and Context.dev when it is on. */
+const SITE_BRANDING_TIMEOUT_MS = 90_000;
+
 function logBestEffortStepError(jobId: string, step: string, error: unknown): void {
   console.warn(JSON.stringify({
     service: "doxa-agent-worker",

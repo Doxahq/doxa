@@ -21,6 +21,7 @@ describe the implemented state.
 - [Docs content storage](docs-content-storage.md)
 - [Documentation branching](docs-branching.md)
 - [Generation reviews](generation-reviews.md)
+- [Site branding discovery](site-branding.md)
 - [Docs search](docs-search.md)
 - [Docs export](docs-export.md)
 - [Storage garbage collection](storage-garbage-collection.md)

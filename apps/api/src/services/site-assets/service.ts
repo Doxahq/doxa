@@ -73,6 +73,28 @@ export class SiteAssetsService {
     input: Uint8Array,
   ): Promise<SiteAssetUploadResponse> {
     const { siteId } = await this.resolveSite(userId, projectId);
+    return this.store(projectId, siteId, kind, input);
+  }
+
+  /**
+   * Stores an image that a generation found for the site branding. The
+   * caller resolved the site from the job, so no user check applies here.
+   */
+  uploadForGeneration(
+    projectId: string,
+    siteId: string,
+    kind: SiteAssetKind,
+    input: Uint8Array,
+  ): Promise<SiteAssetUploadResponse> {
+    return this.store(projectId, siteId, kind, input);
+  }
+
+  private async store(
+    projectId: string,
+    siteId: string,
+    kind: SiteAssetKind,
+    input: Uint8Array,
+  ): Promise<SiteAssetUploadResponse> {
     const asset = await this.compress(
       await prepareSiteAssetIsolated(input, kind, this.deps.svgCleaner),
       kind,

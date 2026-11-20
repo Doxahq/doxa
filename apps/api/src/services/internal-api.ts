@@ -10,6 +10,8 @@ import type {
   GenerationRepairDiagnostic,
   GenerationUsageRecord,
   MarkJobStoppedInput,
+  StoreGenerationSiteAssetInput,
+  StoreGenerationSiteAssetResult,
 } from "@doxahq/contracts";
 import { markJobStoppedInputSchema } from "@doxahq/contracts";
 import type { GenerationInternalApi } from "@doxahq/generation";
@@ -17,6 +19,8 @@ import type { Env } from "../env";
 import { DocsRepository } from "../repositories/docs";
 import { GitHubRepository } from "../repositories/github";
 import { JobsRepository } from "../repositories/jobs";
+import { ProjectsRepository } from "../repositories/projects";
+import { SiteAssetsService } from "./site-assets/service";
 import {
   GenerationObservabilityRepository,
   toGenerationDiagnosticMetadata,
@@ -89,6 +93,10 @@ export class InternalApi extends WorkerEntrypoint<Env> implements InternalApiRpc
   async createRepositoryReadToken(projectId: string) {
     const access = await createRepositoryReadAccess(this.env, projectId);
     return access.token;
+  }
+
+  storeGenerationSiteAsset(input: StoreGenerationSiteAssetInput) {
+    return storeGenerationSiteAsset(this.env, input);
   }
 
   createModelAccessToken() {
@@ -346,6 +354,33 @@ async function markJobSuperseded(
  * credit meter stopped the run (billing spec 10.5 step 4). The worker then
  * asks `getJobStopReason` and ends the run as `stopped_credits`.
  */
+/**
+ * The project comes from the job, never from the caller, and only an active
+ * job can store an asset.
+ */
+async function storeGenerationSiteAsset(
+  env: Env,
+  input: StoreGenerationSiteAssetInput,
+): Promise<StoreGenerationSiteAssetResult> {
+  if (input.kind !== "logo" && input.kind !== "favicon") {
+    throw new Error("Unsupported generation site asset kind.");
+  }
+  if (!(await isJobActive(env, input.jobId))) {
+    throw new Error("The generation job is not active.");
+  }
+  const projectId = await new JobsRepository(env).findProjectId(input.jobId);
+  if (!projectId) throw new Error("Generation job not found.");
+  const site = await new ProjectsRepository(env).getDocsSiteForProject(projectId);
+  if (!site) throw new Error("Docs site not found.");
+  const stored = await SiteAssetsService.fromEnv(env).uploadForGeneration(
+    projectId,
+    site.siteId,
+    input.kind,
+    input.bytes,
+  );
+  return { ref: stored.ref };
+}
+
 async function isJobActive(env: Env, jobId: string): Promise<boolean> {
   if (!(await new JobsRepository(env).isActive(jobId))) return false;
   const metering = generationMeteringFromEnv(env);

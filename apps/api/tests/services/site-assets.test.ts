@@ -266,6 +266,36 @@ describe("site asset quota", () => {
   });
 });
 
+describe("generation site assets", () => {
+  test("stores an asset for a generation without a user lookup", async () => {
+    const { service, entries } = fixture();
+    const stored = await service.uploadForGeneration("project", "site", "logo", uniquePng(1));
+    expect(stored.ref).toMatch(/^asset:[a-f0-9]{64}$/);
+    expect([...entries.keys()]).toEqual([`site/${stored.ref.slice("asset:".length)}`]);
+  });
+
+  test("counts generation assets against the same site quota", async () => {
+    const { service, store } = fixture();
+    for (const seed of [1, 2, 3]) await service.upload("owner", "site", "logo", uniquePng(seed));
+    await expect(
+      service.uploadForGeneration("project", "site", "logo", uniquePng(4)),
+    ).rejects.toMatchObject({ code: "storage_quota_exceeded" });
+    expect(store.write).toHaveBeenCalledTimes(3);
+  });
+
+  test("cleans a generation SVG like an upload", async () => {
+    const { service, entries } = fixture();
+    await service.uploadForGeneration(
+      "project",
+      "site",
+      "logo",
+      encode(svg('<script>alert(1)</script><path d="M0 0h1"/>')),
+    );
+    const [entry] = [...entries.values()];
+    expect(new TextDecoder().decode(entry.bytes)).not.toContain("script");
+  });
+});
+
 describe("SVG cleaning away from the API thread", () => {
   const svgBytes = () => new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
 

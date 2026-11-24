@@ -21,6 +21,8 @@ import type {
   GenerationJobDto,
   GenerationStartResultDto,
   GenerationsPageDto,
+  GitHubInstallationsResponseDto,
+  GitHubRepositoriesRefreshResponseDto,
   GitHubRepositoryDto,
   JobEventDto,
   ProjectDto,
@@ -134,9 +136,30 @@ export async function listProjects(): Promise<ProjectDto[]> {
   return result.projects;
 }
 
+/** The GitHub installations that the user owns, and the users they can move one to. */
+export async function listGitHubInstallations(): Promise<GitHubInstallationsResponseDto> {
+  return apiFetch<GitHubInstallationsResponseDto>("/github/installations");
+}
+
+/** Moves an installation to another Doxa user who shares a team with the owner. */
+export async function transferGitHubInstallation(installationId: string, userId: string): Promise<void> {
+  await apiFetch(`/github/installations/${encodeURIComponent(installationId)}/owner`, {
+    method: "POST",
+    json: { userId },
+  });
+}
+
 export async function listRepositories(): Promise<GitHubRepositoryDto[]> {
   const result = await apiFetch<{ repositories: GitHubRepositoryDto[] }>("/github/repos");
   return result.repositories;
+}
+
+/**
+ * Reads the repository list from GitHub again. The API allows one refresh a
+ * minute per installation; a 429 has `retryAfterSeconds` in its details.
+ */
+export async function refreshRepositories(): Promise<GitHubRepositoriesRefreshResponseDto> {
+  return apiFetch<GitHubRepositoriesRefreshResponseDto>("/github/repos/refresh", { method: "POST" });
 }
 
 /** The branches of a repository of the user's GitHub installations, for a new project. */

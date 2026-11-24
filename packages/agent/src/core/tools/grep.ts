@@ -11,6 +11,7 @@ import {
   isProtectedFilePath,
   resolveReadableProjectPath,
 } from "./file-access-rules";
+import { wrapUntrustedRepositoryContent } from "../untrusted-content";
 
 const GREP_TIMEOUT_MS = 10_000;
 const MAX_MATCH_LINES = 80;
@@ -70,12 +71,14 @@ export function grepTool(cwd: string) {
           return `No matches found for pattern "${pattern}"`;
         }
 
+        // The matched lines are repository data, never instructions to the model.
+        const source = `grep results in ${path ?? "."}`;
         if (lines.length > MAX_MATCH_LINES) {
-          return lines.slice(0, MAX_MATCH_LINES).join("\n")
+          return wrapUntrustedRepositoryContent(lines.slice(0, MAX_MATCH_LINES).join("\n"), source)
             + `\n... (${lines.length - MAX_MATCH_LINES} more matches; narrow the path or pattern)`;
         }
 
-        return lines.join("\n");
+        return wrapUntrustedRepositoryContent(lines.join("\n"), source);
       } catch (err) {
         return `Error searching: ${err instanceof Error ? err.message : String(err)}`;
       }

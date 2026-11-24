@@ -255,6 +255,22 @@ export const githubInstallations = pgTable(
     accountLogin: text("account_login").notNull(),
     accountType: text("account_type").notNull(),
     permissions: jsonb("permissions").$type<Record<string, string>>(),
+    /**
+     * `active`, or what GitHub reported: `suspended` or `deleted` (the app
+     * was uninstalled). Doxabot and generations need an active installation.
+     */
+    status: text("status")
+      .$type<"active" | "suspended" | "deleted">()
+      .notNull()
+      .default("active"),
+    /** When the status last changed. Null while it never changed. */
+    statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
+    /**
+     * When the owner last refreshed the repository list from GitHub. The
+     * refresh has a cooldown, so a click spends the owner's GitHub budget at
+     * most once a minute. Null while it never ran.
+     */
+    repositoriesRefreshedAt: timestamp("repositories_refreshed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -267,7 +283,29 @@ export const githubInstallations = pgTable(
       table.installationId,
     ),
     index("github_installations_user_id_idx").on(table.userId),
+    check(
+      "github_installations_status",
+      sql`${table.status} IN ('active', 'suspended', 'deleted')`,
+    ),
   ],
+);
+
+/**
+ * The GitHub user who installed the app, from the signed `installation`
+ * `created` webhook (its `sender`). Keyed by the GitHub installation ID,
+ * because the webhook can arrive before Doxa has an installation row. Only
+ * this GitHub user can claim an organization installation (Decision 6).
+ */
+export const githubInstallationInstallers = pgTable(
+  "github_installation_installers",
+  {
+    installationId: text("installation_id").primaryKey(),
+    installerGithubUserId: text("installer_github_user_id").notNull(),
+    installerLogin: text("installer_login").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
 );
 
 export const githubRepositories = pgTable(
@@ -283,6 +321,16 @@ export const githubRepositories = pgTable(
     name: text("name").notNull(),
     defaultBranch: text("default_branch").notNull().default("main"),
     isPrivate: boolean("is_private").notNull().default(false),
+    /**
+     * Set when GitHub reports that the app lost the repository. The row and
+     * the project stay, so the site stays live; Doxabot and generations stop.
+     * Null while the repository is connected.
+     */
+    disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+    /** `removed` (from the installation) or `deleted` (on GitHub). */
+    disconnectedReason: text("disconnected_reason").$type<
+      "removed" | "deleted"
+    >(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -295,6 +343,10 @@ export const githubRepositories = pgTable(
       table.githubRepoId,
     ),
     index("github_repositories_installation_id_idx").on(table.installationId),
+    check(
+      "github_repositories_disconnected_reason",
+      sql`(${table.disconnectedAt} IS NULL AND ${table.disconnectedReason} IS NULL) OR (${table.disconnectedAt} IS NOT NULL AND ${table.disconnectedReason} IN ('removed', 'deleted'))`,
+    ),
   ],
 );
 
@@ -429,10 +481,25 @@ export const doxabotAutomationSettings = pgTable(
       .primaryKey()
       .references(() => projects.id, { onDelete: "cascade" }),
     enabled: boolean("enabled").notNull().default(false),
+    // Merge runs stay off until the owner turns them on (Decision 7).
     mergeTrigger: doxabotMergeTrigger("merge_trigger")
       .notNull()
-      .default("batched"),
+      .default("manual"),
     batchQuietMinutes: integer("batch_quiet_minutes").notNull().default(30),
+    /**
+     * GitHub logins of bot accounts whose pull requests get previews. Every
+     * other bot is skipped.
+     */
+    allowedBotLogins: text("allowed_bot_logins")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    /**
+     * Why Doxabot turned itself off: `repository_privatized`. A settings
+     * change by the owner clears it. Null otherwise.
+     */
+    pausedReason: text("paused_reason").$type<"repository_privatized">(),
+    pausedAt: timestamp("paused_at", { withTimezone: true }),
     updatedByUserId: text("updated_by_user_id").references(() => user.id, {
       onDelete: "set null",
     }),
@@ -531,6 +598,11 @@ export const scmWebhookDeliveries = pgTable(
       table.repositoryExternalId,
     ),
     index("scm_webhook_deliveries_status_idx").on(table.status),
+    // The cron cleanup deletes old ignored and failed rows by age.
+    index("scm_webhook_deliveries_status_created_at_idx").on(
+      table.status,
+      table.createdAt,
+    ),
     index("scm_webhook_deliveries_generation_job_id_idx").on(
       table.generationJobId,
     ),

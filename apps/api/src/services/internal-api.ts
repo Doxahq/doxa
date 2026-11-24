@@ -26,7 +26,6 @@ import {
   toGenerationDiagnosticMetadata,
 } from "../repositories/generation-observability";
 import { resolveDocsHost as resolveDocsHostForEnv } from "./docs-host-resolution";
-import { createInstallationAccessToken } from "./github-app";
 import { ReviewRunsService } from "./doxabot/review-runs";
 import {
   CANCELLED_PREVIEW_CHECK,
@@ -83,11 +82,6 @@ export class InternalApi extends WorkerEntrypoint<Env> implements InternalApiRpc
 
   getCurrentChangeProposalState(jobId: string) {
     return getCurrentChangeProposalState(this.env, jobId);
-  }
-
-  async createInstallationAccessToken(installationId: string) {
-    const token = await createInstallationAccessToken(this.env, installationId);
-    return token.token;
   }
 
   async createRepositoryReadToken(projectId: string) {
@@ -202,10 +196,8 @@ export class InternalApi extends WorkerEntrypoint<Env> implements InternalApiRpc
 export function createLocalGenerationInternalApi(env: Env): GenerationInternalApi {
   return {
     getGenerationContext: (projectId) => getGenerationContext(env, projectId),
-    createInstallationAccessToken: async (installationId) => {
-      const token = await createInstallationAccessToken(env, installationId);
-      return token.token;
-    },
+    createRepositoryReadToken: async (projectId) =>
+      (await createRepositoryReadAccess(env, projectId)).token,
     markJobRunning: (jobId) => markJobRunning(env, jobId),
     markJobFailed: (jobId, message) => markJobFailed(env, jobId, message),
     markJobCancelled: (jobId, message) => markJobCancelled(env, jobId, message),

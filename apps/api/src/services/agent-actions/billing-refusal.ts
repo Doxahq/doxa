@@ -16,6 +16,14 @@ export function billingRefusalActionError(cause: BillingRefusal): ActionExecutio
     );
   }
   if (cause instanceof PlanLimitError) {
+    const { key, limit, used } = cause.details;
+    if (typeof limit === "number") {
+      const use = used === null ? "" : ` and uses ${used}`;
+      return new ActionExecutionError(
+        "plan_limit",
+        `The account's plan allows ${limit} for ${key}${use}. Upgrade the plan in the Doxa dashboard.`,
+      );
+    }
     const reason = cause.details.reason ? ` (${cause.details.reason})` : "";
     return new ActionExecutionError(
       "plan_limit",

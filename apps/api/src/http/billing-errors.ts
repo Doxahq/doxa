@@ -43,9 +43,9 @@ export function planLimitResponse(cause: PlanLimitError, links: BillingErrorLink
     key,
     limit,
     used,
-    plan: links.plan ?? null,
+    plan: links.plan ?? cause.details.plan ?? null,
     resetsAt: resetsAt ? resetsAt.toISOString() : null,
-    upgradeUrl: billingPageUrl(links, links.accountId),
+    upgradeUrl: billingPageUrl(links, links.accountId ?? cause.details.accountId),
   };
   return error(cause.message, 403, details);
 }

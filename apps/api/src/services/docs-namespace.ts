@@ -19,10 +19,28 @@ export interface DocsNamespaceLookup {
   hasCustomHostname(hostname: string): Promise<boolean>;
 }
 
+/**
+ * Site names that no project can take (Decision 2). Every other name is first
+ * come, first served. A reserved name gets the same number suffix as a taken
+ * one, for example `docs-2`.
+ */
+export const RESERVED_SITE_LABELS: ReadonlySet<string> = new Set([
+  "doxa",
+  "docs",
+  "api",
+  "www",
+  "admin",
+]);
+
+export function isReservedSiteLabel(label: string): boolean {
+  return RESERVED_SITE_LABELS.has(label.trim().toLowerCase());
+}
+
 export async function isHostnameAvailable(
   lookup: DocsNamespaceLookup,
   candidate: DocsNamespaceCandidate,
 ): Promise<boolean> {
+  if (isReservedSiteLabel(candidate.label)) return false;
   if (await lookup.hasProjectSlug(candidate.label)) return false;
   if (await lookup.hasSiteSlug(candidate.label)) return false;
 

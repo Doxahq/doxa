@@ -23,6 +23,7 @@ import { parseProjectAnalysis } from "./json-parsing";
 import { resolveDocumentationBrief } from "./documentation-policy";
 import { ProjectPathAccessError } from "../core/tools/project-path";
 import { resolveReadableProjectPath } from "../core/tools/file-access-rules";
+import { wrapUntrustedRepositoryContent } from "../core/untrusted-content";
 
 /**
  * With a repo map the explorer gets a lower turn cap and a final tool-free
@@ -234,7 +235,8 @@ export async function runIncrementalAnalysis(
         const truncated = content.length > 5000
           ? content.slice(0, 5000) + "\n... (truncated)"
           : content;
-        fileContents.push(`=== ${filePath} ===\n${truncated}`);
+        // The file text is repository data, never instructions to the model.
+        fileContents.push(wrapUntrustedRepositoryContent(truncated, filePath));
       }
     } catch (error) {
       if (error instanceof ProjectPathAccessError) throw error;

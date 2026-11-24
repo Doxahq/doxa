@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { generationJobSchema } from "@doxahq/contracts";
 import type { GenerationStartOutcome } from "../../generation-start";
+import { repositoryRequiredMessage } from "../../repository-required-message";
 import { ALL_APPROVAL_MODES, DEFAULT_TTL_HOURS } from "../action-definition";
 import { ActionExecutionError } from "../errors";
 import { generationFreshness } from "../freshness";
@@ -55,7 +56,10 @@ function generationRefusal(outcome: Refusal): ActionExecutionError {
     case "not_found":
       return new ActionExecutionError("project_not_found", "Project not found.");
     case "repository_required":
-      return new ActionExecutionError("repository_required", "Connect a GitHub repository first.");
+      return new ActionExecutionError(
+        "repository_required",
+        outcome.reason ? repositoryRequiredMessage(outcome.reason) : "Connect a GitHub repository first.",
+      );
     case "paused":
       return new ActionExecutionError("generation_paused", "Generation is paused. Try again later.");
     case "already_active":
@@ -67,5 +71,7 @@ function generationRefusal(outcome: Refusal): ActionExecutionError {
       return new ActionExecutionError("dispatch_failed", outcome.message);
     case "billing_refused":
       return billingRefusalActionError(outcome.error);
+    case "repository_too_large":
+      return new ActionExecutionError("repository_too_large", outcome.message);
   }
 }

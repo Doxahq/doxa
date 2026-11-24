@@ -39,7 +39,7 @@ export function AgentIntegrations() {
             </div>
             <h3>GitHub</h3>
             <p>
-              The Doxa GitHub App connects your private repositories. It reads code and pull requests, and writes one
+              The Doxa GitHub App connects your public and private repositories. It reads code and pull requests, and writes one
               check run with the preview link.
             </p>
             <ul className="axint__list">

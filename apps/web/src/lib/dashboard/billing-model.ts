@@ -604,6 +604,7 @@ const LIMIT_LABELS: Record<string, string> = {
   "site.asset_files": "site files",
   "site.custom_domains": "custom domains",
   "team.seats": "team seats",
+  "account.projects": "projects",
   "mcp.tool_calls_per_day": "MCP tool calls today",
   "docs.export_window_hours": "docs exports",
   "ai.credits_monthly": "AI credits",

@@ -6,7 +6,10 @@ const mocks = vi.hoisted(() => ({
   exists: vi.fn(),
   createForRepository: vi.fn(),
   connectRepository: vi.fn(),
+  assertProjectLimit: vi.fn(),
 }));
+
+vi.mock("../../src/services/project-limit", () => ({ assertProjectLimit: mocks.assertProjectLimit }));
 
 vi.mock("../../src/repositories/github", () => ({
   GitHubRepository: vi.fn(() => ({ getBranchTargetForUser: mocks.getBranchTargetForUser })),
@@ -55,6 +58,27 @@ describe("project production branch", () => {
     mocks.getBranchTargetForUser.mockResolvedValue(target);
     mocks.createForRepository.mockResolvedValue({ id: "project-1" });
     mocks.connectRepository.mockResolvedValue({ id: "project-1" });
+    mocks.assertProjectLimit.mockResolvedValue(undefined);
+  });
+
+  test("checks the plan's project limit for the new project's owner first", async () => {
+    const team = { id: "22222222-2222-4222-8222-222222222222", name: "Acme Docs" };
+    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, team });
+    expect(mocks.assertProjectLimit).toHaveBeenCalledWith(env, expect.objectContaining({ userId: "user-1", team }));
+
+    const { PlanLimitError } = await import("@doxahq/billing");
+    mocks.createForRepository.mockClear();
+    mocks.assertProjectLimit.mockRejectedValueOnce(new PlanLimitError({ key: "account.projects", limit: 1, used: 1 }));
+    await expect(
+      createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, productionBranch: "dev", team: null }),
+    ).rejects.toBeInstanceOf(PlanLimitError);
+    expect(mocks.getBranchTargetForUser).not.toHaveBeenCalled();
+    expect(mocks.createForRepository).not.toHaveBeenCalled();
+  });
+
+  test("connecting a repository to an existing project does not count a new project", async () => {
+    await connectProjectRepository(env, { userId: "user-1", projectId: "project-1", githubRepositoryId: repositoryId });
+    expect(mocks.assertProjectLimit).not.toHaveBeenCalled();
   });
 
   test("creates a project that follows the default branch without asking GitHub", async () => {

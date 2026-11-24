@@ -14,6 +14,7 @@ import {
 import corpus from "./fixtures/security-corpus.json";
 import { SENSITIVE_FILE_GLOBS } from "../src/core/tools/file-access-rules";
 import { grepTool } from "../src/core/tools/grep";
+import { unwrapUntrustedRepositoryContent } from "../src/core/untrusted-content";
 import { readTool } from "../src/core/tools/read";
 import { explorationTools, writerTools } from "../src/core/tools";
 import { buildSourceEvidenceContext } from "../src/doxa-agent/evidence-bundle";
@@ -127,7 +128,7 @@ describe("security audit control checks", () => {
     const root = await realpath(await repository());
     await mkdir(join(root, "a:1:"));
     await writeFile(join(root, "a:1:", "notes.md"), "first line\nDOXA_MATCH here\n");
-    expect(await grepTool(root).execute({ pattern: "DOXA_MATCH", path: "." })).toBe(
+    expect(unwrapUntrustedRepositoryContent(await grepTool(root).execute({ pattern: "DOXA_MATCH", path: "." }))).toBe(
       `${join(root, "a:1:", "notes.md")}:2:DOXA_MATCH here`,
     );
   });
@@ -135,7 +136,7 @@ describe("security audit control checks", () => {
   test("Grep names the file when the search path is one file", async () => {
     const root = await realpath(await repository());
     await writeFile(join(root, "notes.md"), "DOXA_MATCH here\n");
-    expect(await grepTool(root).execute({ pattern: "DOXA_MATCH", path: "notes.md" })).toBe(
+    expect(unwrapUntrustedRepositoryContent(await grepTool(root).execute({ pattern: "DOXA_MATCH", path: "notes.md" }))).toBe(
       `${join(root, "notes.md")}:1:DOXA_MATCH here`,
     );
   });

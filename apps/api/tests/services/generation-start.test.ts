@@ -3,6 +3,7 @@ import type {
   GenerationJobDto,
   ProjectDto,
 } from "@doxahq/contracts";
+import { REPOSITORY_REQUIRED_MESSAGE } from "@doxahq/contracts";
 import { describe, expect, test, vi } from "vitest";
 
 // container-generation (reached through the dispatcher factory) imports
@@ -26,6 +27,7 @@ import {
   type GenerationStartJobsStore,
   type GenerationStartProjectsStore,
 } from "../../src/services/generation-start";
+import { repositoryRequiredMessage } from "../../src/services/repository-required-message";
 import type { ProductionGenerationAdmission } from "../../src/services/production-generation-admission";
 
 const START: GenerationStartInput = {
@@ -133,6 +135,34 @@ describe("GenerationStartService", () => {
       outcome: "repository_required",
     });
     expect(admission.calls).toEqual([]);
+  });
+
+  test.each(["repository_removed", "repository_deleted", "installation_suspended", "installation_deleted"] as const)(
+    "refuses a repository with %s before admission",
+    async (reason) => {
+      const { admission } = setup();
+      const service = new GenerationStartService({
+        projects: new InMemoryProjects([project()]),
+        repositoryIssue: async () => reason,
+        jobs: new InMemoryJobs(),
+        admission,
+        dispatcher: new RecordingDispatcher(),
+      });
+
+      await expect(service.start(START)).resolves.toEqual({ outcome: "repository_required", reason });
+      expect(admission.calls).toEqual([]);
+    },
+  );
+
+  test("gives each lost-repository reason its own message", () => {
+    expect(repositoryRequiredMessage()).toBe(REPOSITORY_REQUIRED_MESSAGE);
+    const messages = (["repository_removed", "repository_deleted", "installation_suspended", "installation_deleted"] as const)
+      .map((reason) => repositoryRequiredMessage(reason));
+    expect(new Set(messages).size).toBe(4);
+    for (const message of messages) {
+      expect(message).not.toBe(REPOSITORY_REQUIRED_MESSAGE);
+      expect(message).toContain("The site stays live.");
+    }
   });
 
   test("reports paused when an administrator paused generation", async () => {

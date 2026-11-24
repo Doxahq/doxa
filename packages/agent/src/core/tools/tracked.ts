@@ -20,6 +20,7 @@ import type { ToolSpec } from "../types";
 import { defineTool } from "../tool";
 import type { AgentToolPolicy } from "../../types";
 import type { ToolResultCache } from "./result-cache";
+import { unwrapUntrustedRepositoryContent } from "../untrusted-content";
 
 export interface TrackedTools {
   /** The wrapped tools array — pass this to the agent */
@@ -123,7 +124,8 @@ export function createTrackedTools(
       );
       // Glob returns newline-separated file paths
       if (!result.startsWith("No files found") && !result.startsWith("Error")) {
-        for (const line of result.split("\n")) {
+        // The list sits inside an untrusted-data block; only its lines are paths.
+        for (const line of unwrapUntrustedRepositoryContent(result).split("\n")) {
           const trimmed = line.trim();
           if (trimmed) {
             const basePath = args.path

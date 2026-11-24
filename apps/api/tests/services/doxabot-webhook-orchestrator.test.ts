@@ -21,6 +21,7 @@ import type {
 } from "../../src/repositories/webhook-deliveries";
 import {
   DoxabotWebhookOrchestrator,
+  PREVIEW_QUIET_WINDOW_SECONDS,
   billingStopCheck,
   resolveDoxabotExecutionConfig,
   type DoxabotWebhookDependencies,
@@ -59,6 +60,8 @@ function createAutomationContext(
     productionBranch: "main",
     storedEnabled: true,
     mergeTrigger: "batched",
+    allowedBotLogins: [],
+    connectionIssue: null,
     hasPublishedVersion: true,
     publishedBaseline: { versionId: baselineVersionId, sourceRevision: baseSha },
     ...overrides,
@@ -77,6 +80,12 @@ function pullRequestDelivery(input: {
   sourceUpdatedAt?: string;
   /** For an "edited" action: the base that the pull request moved from. */
   baseChangedFrom?: string;
+  /** The repository of the head branch; another ID is a fork, null a deleted fork. */
+  headRepositoryId?: number | null;
+  authorLogin?: string;
+  authorType?: string;
+  /** `repository.size` in KB; absent leaves the field out. */
+  repositorySizeKb?: number;
 }): ProcessGitHubWebhookInput {
   return {
     deliveryId: input.deliveryId,
@@ -90,13 +99,15 @@ function pullRequestDelivery(input: {
         id: 123456,
         private: input.isPrivate ?? true,
         default_branch: "main",
+        ...(input.repositorySizeKb !== undefined ? { size: input.repositorySizeKb } : {}),
       },
       pull_request: {
         id: 987654,
         user: {
           id: 1,
-          login: "octocat",
+          login: input.authorLogin ?? "octocat",
           avatar_url: "https://avatars.githubusercontent.com/u/1?v=4",
+          type: input.authorType ?? "User",
         },
         updated_at: input.sourceUpdatedAt ?? firstUpdatedAt,
         draft: input.draft ?? false,
@@ -107,6 +118,9 @@ function pullRequestDelivery(input: {
         },
         head: {
           sha: input.headRevision ?? firstHeadSha,
+          ...(input.headRepositoryId !== undefined
+            ? { repo: input.headRepositoryId === null ? null : { id: input.headRepositoryId } }
+            : {}),
         },
       },
     }),
@@ -120,6 +134,7 @@ function createHarness(
     sourceRevision: string;
   } | null = null,
   previewBilling?: PreviewRunBilling,
+  options: { publicRepositoriesEnabled?: boolean; maxRepositorySizeKb?: number } = {},
 ) {
   const claimedDeliveries = new Set<string>();
   const normalizedEvents = new Map<
@@ -321,6 +336,23 @@ function createHarness(
     finishCancel: vi.fn(async (_input: GenerationCancellationInput) => undefined),
   };
   const previewChannels = { closeForChange: vi.fn(async () => 1) };
+  const lifecycle = {
+    setInstallationStatus: vi.fn(async () => 1),
+    disconnectRepository: vi.fn(async () => true),
+    reconnectRepository: vi.fn(async () => true),
+    canAddRepository: vi.fn(async () => true),
+    addRepository: vi.fn(async () => true),
+    updateRepository: vi.fn(async (): Promise<{
+      previousVisibility: "private" | "public";
+      projectIds: string[];
+    } | null> => ({ previousVisibility: "private", projectIds: [projectId] })),
+    pauseAutomation: vi.fn(async () => undefined),
+    recordInstaller: vi.fn(async () => true),
+  };
+  const repositoryDefaultBranch = vi.fn(async (_input: {
+    repositoryExternalId: string;
+    installationExternalId: string;
+  }): Promise<string | null> => "trunk");
   const dependencies = {
     deliveries,
     settings,
@@ -332,7 +364,7 @@ function createHarness(
     changeProposalState,
     deploymentPolicy: {
       enabled: true,
-      publicRepositoriesEnabled: false,
+      publicRepositoriesEnabled: options.publicRepositoriesEnabled ?? false,
     },
     executionConfig: {
       plannerModel: "x-ai/grok-4.5:nitro",
@@ -346,6 +378,9 @@ function createHarness(
     previewJobs,
     previewChannels,
     ...(previewBilling ? { previewBilling } : {}),
+    lifecycle,
+    repositoryDefaultBranch,
+    ...(options.maxRepositorySizeKb !== undefined ? { maxRepositorySizeKb: options.maxRepositorySizeKb } : {}),
     now: () => new Date(closedAt),
   } satisfies DoxabotWebhookDependencies;
 
@@ -354,6 +389,8 @@ function createHarness(
     mergeTriggers,
     previewJobs,
     previewChannels,
+    lifecycle,
+    repositoryDefaultBranch,
     deliveries,
     settings,
     changeProposals,
@@ -752,6 +789,72 @@ describe("Doxabot webhook orchestrator", () => {
 
     expect(harness.previewJobs.cancel).toHaveBeenCalledWith(expect.objectContaining({ data: { reason: "retargeted" } }));
     expect(harness.previewChannels.closeForChange).toHaveBeenCalledOnce();
+  });
+
+  test("refuses the preview of a repository above the size limit before admission", async () => {
+    const harness = createHarness(createAutomationContext(), null, undefined, { maxRepositorySizeKb: 1000 });
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-too-large",
+      repositorySizeKb: 1001,
+    }))).resolves.toEqual({ outcome: "ignored", reason: "repository_too_large" });
+
+    expect(harness.jobs.admitDoxabotJob).not.toHaveBeenCalled();
+    expect(harness.queue.send).not.toHaveBeenCalled();
+    expect(harness.previewJobs.cancel).not.toHaveBeenCalled();
+    expect(harness.deliveries.markIgnored).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryId: "delivery-too-large", reason: "repository_too_large" }),
+    );
+  });
+
+  test("a push that makes the repository too large stops the run on the old head with a check", async () => {
+    const harness = createHarness(createAutomationContext(), null, undefined, { maxRepositorySizeKb: 1000 });
+    await harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-small", repositorySizeKb: 900 }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-grown",
+      action: "synchronize",
+      headRevision: secondHeadSha,
+      sourceUpdatedAt: "2026-07-23T10:05:00.000Z",
+      repositorySizeKb: 1500,
+    }))).resolves.toEqual({ outcome: "ignored", reason: "repository_too_large" });
+
+    expect(harness.jobs.admitDoxabotJob).toHaveBeenCalledOnce();
+    expect(harness.previewJobs.cancel).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: "job-1",
+      eventType: "doxabot_preview_refused",
+      data: { reason: "repository_too_large", sizeKb: 1500, limitKb: 1000 },
+      check: expect.objectContaining({ title: "Documentation preview stopped" }),
+    }));
+    expect(harness.previewChannels.closeForChange).not.toHaveBeenCalled();
+  });
+
+  test("previews a repository at the size limit, or one whose size GitHub did not send", async () => {
+    const harness = createHarness(createAutomationContext(), null, undefined, { maxRepositorySizeKb: 1000 });
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-at-limit",
+      repositorySizeKb: 1000,
+    }))).resolves.toEqual({ outcome: "enqueued", jobId: "job-1" });
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-no-size",
+      action: "synchronize",
+      headRevision: secondHeadSha,
+      sourceUpdatedAt: "2026-07-23T10:05:00.000Z",
+    }))).resolves.toMatchObject({ outcome: "enqueued" });
+  });
+
+  test("a merge of a large repository still feeds the merge trigger", async () => {
+    const harness = createHarness(createAutomationContext(), null, undefined, { maxRepositorySizeKb: 1000 });
+
+    await harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "delivery-large-merge",
+      action: "closed",
+      merged: true,
+      repositorySizeKb: 5000,
+    }));
+
+    expect(harness.mergeTriggers.recordMerge).toHaveBeenCalledOnce();
   });
 
   test("a push while Doxabot is off cancels the run on the old head but keeps the last preview online", async () => {
@@ -1237,7 +1340,10 @@ describe("Doxabot webhook orchestrator", () => {
     expect(harness.previewJobs.finishCancel).toHaveBeenCalledWith(expect.objectContaining({ jobId: "job-1" }));
     expect(harness.jobs.markCancelled).not.toHaveBeenCalledWith("job-2", expect.anything(), expect.anything(), expect.anything(), expect.anything());
     expect(harness.queue.send).toHaveBeenCalledTimes(2);
-    expect(harness.queue.send).toHaveBeenLastCalledWith(expect.objectContaining({ jobId: "job-2" }));
+    expect(harness.queue.send).toHaveBeenLastCalledWith(
+      expect.objectContaining({ jobId: "job-2" }),
+      { delaySeconds: PREVIEW_QUIET_WINDOW_SECONDS },
+    );
     expect(harness.getProposal()).toMatchObject({ headRevision: thirdHeadSha });
   });
 
@@ -1395,3 +1501,425 @@ async function sha256(value: string): Promise<string> {
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
+
+describe("Doxabot pull request trust (Decision 3) and bots", () => {
+  test.each(["OWNER", "MEMBER", "COLLABORATOR", "NONE"])(
+    "ignores a fork pull request by a %s author and posts nothing",
+    async (association) => {
+      const harness = createHarness();
+      const delivery = pullRequestDelivery({ deliveryId: `fork-${association}`, headRepositoryId: 654321 });
+      const body = JSON.parse(delivery.rawBody);
+      body.pull_request.author_association = association;
+
+      await expect(harness.orchestrator.process({ ...delivery, rawBody: JSON.stringify(body) }))
+        .resolves.toEqual({ outcome: "ignored", reason: "fork_pull_request" });
+
+      expect(harness.changeProposals.ensure).not.toHaveBeenCalled();
+      expect(harness.jobs.admitDoxabotJob).not.toHaveBeenCalled();
+      expect(harness.reviewRuns.create).not.toHaveBeenCalled();
+      expect(harness.queue.send).not.toHaveBeenCalled();
+      expect(harness.mergeTriggers.recordMerge).not.toHaveBeenCalled();
+    },
+  );
+
+  test("ignores a pull request from a deleted fork", async () => {
+    const harness = createHarness();
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "deleted-fork",
+      headRepositoryId: null,
+    }))).resolves.toEqual({ outcome: "ignored", reason: "fork_pull_request" });
+    expect(harness.jobs.admitDoxabotJob).not.toHaveBeenCalled();
+  });
+
+  test("feeds a merged fork pull request to the merge trigger, never to a preview", async () => {
+    const harness = createHarness();
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "fork-merged",
+      action: "closed",
+      merged: true,
+      headRepositoryId: 654321,
+    }))).resolves.toEqual({ outcome: "ignored", reason: "fork_pull_request" });
+
+    expect(harness.mergeTriggers.recordMerge).toHaveBeenCalledWith(expect.objectContaining({
+      projectId,
+      changeExternalId: "987654",
+    }));
+    expect(harness.changeProposals.ensure).not.toHaveBeenCalled();
+    expect(harness.jobs.admitDoxabotJob).not.toHaveBeenCalled();
+    expect(harness.reviewRuns.create).not.toHaveBeenCalled();
+  });
+
+  test("a fork pull request event stops a preview made before the fork rule", async () => {
+    const harness = createHarness();
+    // A preview from before the rule, when trusted forks got one.
+    await harness.orchestrator.process(pullRequestDelivery({ deliveryId: "old-preview" }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "fork-push",
+      action: "synchronize",
+      headRevision: secondHeadSha,
+      headRepositoryId: 654321,
+      sourceUpdatedAt: closedAt,
+    }))).resolves.toEqual({ outcome: "ignored", reason: "fork_pull_request" });
+
+    expect(harness.previewJobs.cancel).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: "job-1",
+      eventType: "doxabot_change_skipped",
+    }));
+    expect(harness.previewChannels.closeForChange).toHaveBeenCalledWith(expect.objectContaining({
+      projectId,
+      changeExternalId: "987654",
+    }));
+    expect(harness.jobs.admitDoxabotJob).toHaveBeenCalledOnce();
+  });
+
+  test("skips a pull request by a bot by default", async () => {
+    const harness = createHarness();
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "dependabot",
+      authorLogin: "dependabot[bot]",
+      authorType: "Bot",
+    }))).resolves.toEqual({ outcome: "ignored", reason: "bot_author" });
+    expect(harness.jobs.admitDoxabotJob).not.toHaveBeenCalled();
+    expect(harness.reviewRuns.create).not.toHaveBeenCalled();
+  });
+
+  test("previews a pull request by a bot that the project allows by login", async () => {
+    const harness = createHarness(createAutomationContext({ allowedBotLogins: ["Dependabot"] }));
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "allowed-bot",
+      authorLogin: "dependabot[bot]",
+      authorType: "Bot",
+    }))).resolves.toEqual({ outcome: "enqueued", jobId: "job-1" });
+  });
+
+  test("a merged bot pull request still feeds the merge trigger", async () => {
+    const harness = createHarness();
+
+    await harness.orchestrator.process(pullRequestDelivery({
+      deliveryId: "bot-merged",
+      action: "closed",
+      merged: true,
+      authorLogin: "renovate[bot]",
+      authorType: "Bot",
+    }));
+    expect(harness.mergeTriggers.recordMerge).toHaveBeenCalledOnce();
+  });
+
+  test("previews a public repository when the rollout flag is on", async () => {
+    const harness = createHarness(createAutomationContext(), null, undefined, { publicRepositoriesEnabled: true });
+
+    await expect(harness.orchestrator.process(pullRequestDelivery({ deliveryId: "public", isPrivate: false })))
+      .resolves.toEqual({ outcome: "enqueued", jobId: "job-1" });
+  });
+});
+
+describe("Doxabot preview quiet window", () => {
+  test("holds each preview for the quiet window, so quick pushes start one run", async () => {
+    const harness = createHarness();
+    const heads = [firstHeadSha, secondHeadSha, "d".repeat(40)];
+
+    for (const [index, head] of heads.entries()) {
+      await harness.orchestrator.process(pullRequestDelivery({
+        deliveryId: `push-${index}`,
+        action: index === 0 ? "opened" : "synchronize",
+        headRevision: head,
+        sourceUpdatedAt: new Date(Date.parse(firstUpdatedAt) + index * 10_000).toISOString(),
+      }));
+    }
+
+    // Every message waits the quiet window in the queue.
+    expect(harness.queue.send).toHaveBeenCalledTimes(3);
+    for (const call of harness.queue.send.mock.calls as unknown as unknown[][]) {
+      expect(call[1]).toEqual({ delaySeconds: PREVIEW_QUIET_WINDOW_SECONDS });
+    }
+    // Each newer push cancelled the queued run before its message came out,
+    // so only the run of the last head starts.
+    expect(harness.jobs.markCancelled).toHaveBeenCalledWith("job-1", expect.anything(), "doxabot_superseded", expect.anything(), expect.anything());
+    expect(harness.jobs.markCancelled).toHaveBeenCalledWith("job-2", expect.anything(), "doxabot_superseded", expect.anything(), expect.anything());
+    expect(harness.jobs.markCancelled).not.toHaveBeenCalledWith("job-3", expect.anything(), expect.anything(), expect.anything(), expect.anything());
+    expect(PREVIEW_QUIET_WINDOW_SECONDS).toBe(120);
+  });
+});
+
+describe("Doxabot repository lifecycle events", () => {
+  function lifecycleDelivery(eventName: string, deliveryId: string, body: Record<string, unknown>): ProcessGitHubWebhookInput {
+    return { deliveryId, eventName, rawBody: JSON.stringify(body) };
+  }
+  const repositoryBody = (overrides: Record<string, unknown> = {}) => ({
+    id: 123456,
+    name: "doxa",
+    full_name: "doxahq/doxa",
+    owner: { login: "doxahq" },
+    private: true,
+    default_branch: "main",
+    ...overrides,
+  });
+
+  test.each([
+    ["suspend", "suspended"],
+    ["unsuspend", "active"],
+    ["deleted", "deleted"],
+  ] as const)("installation %s sets the installation %s", async (action, status) => {
+    const harness = createHarness();
+
+    await expect(harness.orchestrator.process(lifecycleDelivery("installation", `install-${action}`, {
+      action,
+      installation: { id: 789 },
+    }))).resolves.toEqual({ outcome: "applied", changed: 1 });
+
+    expect(harness.lifecycle.setInstallationStatus).toHaveBeenCalledWith({
+      installationExternalId: "789",
+      status,
+      at: new Date(closedAt),
+    });
+    expect(harness.deliveries.markProcessed).toHaveBeenCalledWith({ provider: "github", deliveryId: `install-${action}` });
+  });
+
+  test("a new installation without a sender changes no record here", async () => {
+    const harness = createHarness();
+
+    await expect(harness.orchestrator.process(lifecycleDelivery("installation", "install-created", {
+      action: "created",
+      installation: { id: 789 },
+    }))).resolves.toEqual({ outcome: "applied", changed: 0 });
+    expect(harness.lifecycle.setInstallationStatus).not.toHaveBeenCalled();
+    expect(harness.lifecycle.recordInstaller).not.toHaveBeenCalled();
+  });
+
+  test("a new installation records who installed it (Decision 6)", async () => {
+    const harness = createHarness();
+
+    await expect(harness.orchestrator.process(lifecycleDelivery("installation", "install-created-sender", {
+      action: "created",
+      installation: { id: 789 },
+      sender: { id: 5150, login: "octo-admin" },
+    }))).resolves.toEqual({ outcome: "applied", changed: 1 });
+    expect(harness.lifecycle.recordInstaller).toHaveBeenCalledWith({
+      installationExternalId: "789",
+      installer: { githubUserId: "5150", login: "octo-admin" },
+    });
+    expect(harness.lifecycle.setInstallationStatus).not.toHaveBeenCalled();
+  });
+
+  test("a suspend keeps no sender as installer", async () => {
+    const harness = createHarness();
+
+    await harness.orchestrator.process(lifecycleDelivery("installation", "install-suspend-sender", {
+      action: "suspend",
+      installation: { id: 789 },
+      sender: { id: 6000, login: "someone-else" },
+    }));
+    expect(harness.lifecycle.recordInstaller).not.toHaveBeenCalled();
+  });
+
+  test("a repository removed from the app is disconnected, and an added one reconnected", async () => {
+    const harness = createHarness();
+    const short = { id: 123456, name: "doxa", full_name: "doxahq/doxa", private: false };
+
+    await harness.orchestrator.process(lifecycleDelivery("installation_repositories", "repos-removed", {
+      action: "removed",
+      installation: { id: 789 },
+      repositories_added: [],
+      repositories_removed: [short],
+    }));
+    await harness.orchestrator.process(lifecycleDelivery("installation_repositories", "repos-added", {
+      action: "added",
+      installation: { id: 789 },
+      repositories_added: [short],
+      repositories_removed: [],
+    }));
+
+    expect(harness.lifecycle.disconnectRepository).toHaveBeenCalledWith({
+      repositoryExternalId: "123456",
+      installationExternalId: "789",
+      reason: "removed",
+      at: new Date(closedAt),
+    });
+    expect(harness.lifecycle.reconnectRepository).toHaveBeenCalledWith({
+      repositoryExternalId: "123456",
+      installationExternalId: "789",
+      visibility: "public",
+    });
+  });
+
+  test("a new repository of an installation on all repositories gets a row (repository.created)", async () => {
+    const harness = createHarness();
+    harness.lifecycle.reconnectRepository.mockResolvedValueOnce(false);
+
+    await expect(harness.orchestrator.process(lifecycleDelivery("repository", "repo-created", {
+      action: "created",
+      installation: { id: 789 },
+      repository: repositoryBody({ id: 222, name: "react-email", full_name: "ipenywis/react-email", owner: { login: "ipenywis" }, private: false }),
+    }))).resolves.toEqual({ outcome: "applied", changed: 1 });
+
+    expect(harness.lifecycle.addRepository).toHaveBeenCalledWith({
+      repositoryExternalId: "222",
+      installationExternalId: "789",
+      fullName: "ipenywis/react-email",
+      owner: "ipenywis",
+      name: "react-email",
+      defaultBranch: "main",
+      visibility: "public",
+    });
+    // The event has the branch, so GitHub is not asked.
+    expect(harness.repositoryDefaultBranch).not.toHaveBeenCalled();
+    expect(harness.deliveries.markProcessed).toHaveBeenCalledWith({ provider: "github", deliveryId: "repo-created" });
+  });
+
+  test("a repository added to the selection gets a row, with its default branch read from GitHub", async () => {
+    const harness = createHarness();
+    harness.lifecycle.reconnectRepository.mockResolvedValueOnce(false);
+
+    await expect(harness.orchestrator.process(lifecycleDelivery("installation_repositories", "repos-added-new", {
+      action: "added",
+      installation: { id: 789 },
+      repositories_added: [{ id: 333, name: "docs", full_name: "acme/docs", private: true }],
+      repositories_removed: [],
+    }))).resolves.toEqual({ outcome: "applied", changed: 1 });
+
+    expect(harness.repositoryDefaultBranch).toHaveBeenCalledWith({
+      repositoryExternalId: "333",
+      installationExternalId: "789",
+    });
+    expect(harness.lifecycle.addRepository).toHaveBeenCalledWith({
+      repositoryExternalId: "333",
+      installationExternalId: "789",
+      fullName: "acme/docs",
+      owner: "acme",
+      name: "docs",
+      defaultBranch: "trunk",
+      visibility: "private",
+    });
+  });
+
+  test("a repository that was connected before is reconnected, with no new row and no GitHub read", async () => {
+    const harness = createHarness();
+
+    await harness.orchestrator.process(lifecycleDelivery("installation_repositories", "repos-added-known", {
+      action: "added",
+      installation: { id: 789 },
+      repositories_added: [{ id: 123456, name: "doxa", full_name: "doxahq/doxa", private: false }],
+      repositories_removed: [],
+    }));
+
+    expect(harness.lifecycle.reconnectRepository).toHaveBeenCalled();
+    expect(harness.lifecycle.canAddRepository).not.toHaveBeenCalled();
+    expect(harness.repositoryDefaultBranch).not.toHaveBeenCalled();
+    expect(harness.lifecycle.addRepository).not.toHaveBeenCalled();
+  });
+
+  test("an unknown installation, or a repository that has a row, costs no GitHub read and adds nothing", async () => {
+    const harness = createHarness();
+    harness.lifecycle.reconnectRepository.mockResolvedValue(false);
+    harness.lifecycle.canAddRepository.mockResolvedValue(false);
+
+    await expect(harness.orchestrator.process(lifecycleDelivery("installation_repositories", "repos-added-unknown", {
+      action: "added",
+      installation: { id: 999 },
+      repositories_added: [{ id: 444, name: "x", full_name: "someone/x", private: false }],
+      repositories_removed: [],
+    }))).resolves.toEqual({ outcome: "applied", changed: 0 });
+
+    expect(harness.repositoryDefaultBranch).not.toHaveBeenCalled();
+    expect(harness.lifecycle.addRepository).not.toHaveBeenCalled();
+  });
+
+  test("a failed default branch read adds no row and still finishes the delivery", async () => {
+    const harness = createHarness();
+    harness.lifecycle.reconnectRepository.mockResolvedValueOnce(false);
+    harness.repositoryDefaultBranch.mockRejectedValueOnce(new Error("GitHub repository request failed (502)."));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(harness.orchestrator.process(lifecycleDelivery("installation_repositories", "repos-added-fail", {
+      action: "added",
+      installation: { id: 789 },
+      repositories_added: [{ id: 555, name: "y", full_name: "acme/y", private: false }],
+      repositories_removed: [],
+    }))).resolves.toEqual({ outcome: "applied", changed: 0 });
+
+    expect(harness.lifecycle.addRepository).not.toHaveBeenCalled();
+    expect(harness.deliveries.markProcessed).toHaveBeenCalledWith({ provider: "github", deliveryId: "repos-added-fail" });
+    warn.mockRestore();
+  });
+
+  test("a deleted repository is disconnected and its site stays", async () => {
+    const harness = createHarness();
+
+    await harness.orchestrator.process(lifecycleDelivery("repository", "repo-deleted", {
+      action: "deleted",
+      installation: { id: 789 },
+      repository: repositoryBody(),
+    }));
+
+    expect(harness.lifecycle.disconnectRepository).toHaveBeenCalledWith(expect.objectContaining({ reason: "deleted" }));
+    expect(harness.previewChannels.closeForChange).not.toHaveBeenCalled();
+  });
+
+  test.each(["renamed", "transferred"])("a %s repository gets its new name and owner by its GitHub ID", async (action) => {
+    const harness = createHarness();
+
+    await harness.orchestrator.process(lifecycleDelivery("repository", `repo-${action}`, {
+      action,
+      installation: { id: 789 },
+      repository: repositoryBody({ name: "docs", full_name: "acme/docs", owner: { login: "acme" } }),
+    }));
+
+    expect(harness.lifecycle.updateRepository).toHaveBeenCalledWith({
+      repositoryExternalId: "123456",
+      visibility: "private",
+      fullName: "acme/docs",
+      owner: "acme",
+      name: "docs",
+      defaultBranch: "main",
+    });
+    expect(harness.lifecycle.pauseAutomation).not.toHaveBeenCalled();
+  });
+
+  test("a public repository that becomes private pauses Doxabot for its projects", async () => {
+    const harness = createHarness();
+    harness.lifecycle.updateRepository.mockResolvedValueOnce({ previousVisibility: "public", projectIds: [projectId] });
+
+    await harness.orchestrator.process(lifecycleDelivery("repository", "repo-privatized", {
+      action: "privatized",
+      installation: { id: 789 },
+      repository: repositoryBody({ private: true }),
+    }));
+
+    expect(harness.lifecycle.updateRepository).toHaveBeenCalledWith(expect.objectContaining({ visibility: "private" }));
+    expect(harness.lifecycle.pauseAutomation).toHaveBeenCalledWith({
+      projectIds: [projectId],
+      reason: "repository_privatized",
+      at: new Date(closedAt),
+    });
+  });
+
+  test("a repository that becomes public updates its visibility and keeps Doxabot as it is", async () => {
+    const harness = createHarness();
+
+    await harness.orchestrator.process(lifecycleDelivery("repository", "repo-publicized", {
+      action: "publicized",
+      installation: { id: 789 },
+      repository: repositoryBody({ private: false }),
+    }));
+
+    expect(harness.lifecycle.updateRepository).toHaveBeenCalledWith(expect.objectContaining({ visibility: "public" }));
+    expect(harness.lifecycle.pauseAutomation).not.toHaveBeenCalled();
+  });
+
+  test.each(["repository_removed", "repository_deleted", "installation_suspended", "installation_deleted"] as const)(
+    "a pull request of a repository with %s starts nothing",
+    async (connectionIssue) => {
+      const harness = createHarness(createAutomationContext({ connectionIssue }));
+
+      await expect(harness.orchestrator.process(pullRequestDelivery({ deliveryId: `issue-${connectionIssue}` })))
+        .resolves.toEqual({ outcome: "ignored", reason: connectionIssue });
+      expect(harness.changeProposals.ensure).not.toHaveBeenCalled();
+      expect(harness.mergeTriggers.recordMerge).not.toHaveBeenCalled();
+    },
+  );
+});

@@ -92,6 +92,8 @@ function automationContext(overrides: Partial<DoxabotAutomationContext> = {}): D
     // A person asks for the run, so automatic previews being off does not stop it.
     storedEnabled: false,
     mergeTrigger: "batched",
+    allowedBotLogins: [],
+    connectionIssue: null,
     hasPublishedVersion: true,
     publishedBaseline: { versionId: "version-live", sourceRevision: "a".repeat(40) },
     ...overrides,
@@ -106,6 +108,7 @@ function previewSetup(input: {
   context?: Partial<DoxabotAutomationContext>;
   /** The pull request on GitHub now; by default it matches the record. "unavailable" makes GitHub fail. */
   live?: Partial<ChangeProposalSnapshot> | "unavailable";
+  maxRepositorySizeKb?: number;
   /** The last successful preview of the pull request (the warm baseline), or null. */
   previewBaseline?: { versionId: string; sourceRevision: string } | null;
   /** Meter the run (BILLING_ENFORCEMENT=on). */
@@ -146,6 +149,7 @@ function previewSetup(input: {
       findSuccessfulCompatiblePreview: vi.fn(async () => (input.previewBaseline ?? null) as never),
     },
     ...(input.metered ? { metering } : {}),
+    ...(input.maxRepositorySizeKb !== undefined ? { maxRepositorySizeKb: input.maxRepositorySizeKb } : {}),
     queue,
     reviewRuns,
     deploymentPolicy: { enabled: true, publicRepositoriesEnabled: false },
@@ -233,6 +237,19 @@ describe("preview generation re-run", () => {
 
     await expect(service.rerun(failedRun())).resolves.toEqual({ outcome: "blocked", reason: "superseded" });
     expect(admitted).toHaveLength(0);
+  });
+
+  test("refuses a repository above the size limit, before any job", async () => {
+    const { service, admitted } = previewSetup({ live: { repositorySizeKb: 2_000 }, maxRepositorySizeKb: 1_000 });
+
+    await expect(service.rerun(failedRun())).resolves.toEqual({ outcome: "blocked", reason: "repository_too_large" });
+    expect(admitted).toHaveLength(0);
+  });
+
+  test("starts a repository inside the size limit", async () => {
+    const { service } = previewSetup({ live: { repositorySizeKb: 500 }, maxRepositorySizeKb: 1_000 });
+
+    await expect(service.rerun(failedRun())).resolves.toMatchObject({ outcome: "started" });
   });
 
   test("falls back to the record when GitHub cannot answer", async () => {

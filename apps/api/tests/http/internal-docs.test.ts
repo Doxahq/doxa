@@ -195,6 +195,28 @@ describe("internal docs host routes", () => {
     });
   });
 
+  test.each(["source_change", "branch"] as const)(
+    "keeps the %s preview kind, so the dispatcher can choose the banner",
+    async (previewKind) => {
+      const previewResolution = createResolution({
+        hostname: "doxa-demo-pr-42.doxa.page",
+        previewKind,
+      });
+      mocks.docsDomainsRepository.resolveByHostname.mockResolvedValue(null);
+      mocks.previewChannelsRepository.resolveByHostname.mockResolvedValue(previewResolution);
+
+      const response = await worker.fetch(
+        new Request("http://localhost:8787/internal/docs-hosts/doxa-demo-pr-42.doxa.page"),
+        createEnv({ DOCS_BASE_DOMAIN: "doxa.page" }),
+        createExecutionContext(),
+      );
+
+      await expect(response.json()).resolves.toMatchObject({
+        site: { renderTarget: "preview", previewKind },
+      });
+    },
+  );
+
   test("resolves a permanent generation preview before other domains", async () => {
     const previewResolution = createResolution({
       publishedVersionId: "a1b2c3d4-e5f6-4789-8123-456789abcdef",

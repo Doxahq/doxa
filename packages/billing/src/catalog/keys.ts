@@ -30,6 +30,12 @@ export const LIMIT_KEYS = [
   "site.asset_files",
   "site.custom_domains",
   "team.seats",
+  /**
+   * Projects of one billing account (decided 2026-11-23, cost limits): a
+   * team account holds the team's projects, a personal account holds the
+   * user's projects that have no team. Checked when a project is created.
+   */
+  "account.projects",
   "mcp.tool_calls_per_day",
   /**
    * Hours in one docs export window (decided 2026-11-16): one export per

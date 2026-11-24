@@ -1,6 +1,5 @@
 import {
   ACTIVE_GENERATION_MESSAGE,
-  REPOSITORY_REQUIRED_MESSAGE,
   connectProjectRepositoryInputSchema,
   createExampleProjectInputSchema,
   createProjectInputSchema,
@@ -17,7 +16,8 @@ import { streamEvents } from "../http/progress-stream";
 import { forbidden, withProjectAccess } from "../http/project-access";
 import { parseValidatedJson } from "../http/validation";
 import { error, json, notFound } from "../http/response";
-import { billingErrorResponse } from "../http/billing-errors";
+import { PlanLimitError } from "@doxahq/billing";
+import { billingErrorResponse, planLimitResponse } from "../http/billing-errors";
 import type { Env } from "../env";
 import { billingConfigFor } from "../services/billing/config";
 import type { BillingRefusal } from "../services/billing/generation-metering";
@@ -47,6 +47,7 @@ import {
   GenerationStartService,
   type GenerationStartOutcome,
 } from "../services/generation-start";
+import { repositoryRequiredMessage } from "../services/repository-required-message";
 import { GenerationRerunService } from "../services/generation-rerun";
 import { GenerationResumeService } from "../services/generation-resume";
 import {
@@ -152,6 +153,9 @@ export function createProjectRoutes(): ApiApp {
         if (err instanceof CreateProjectError) {
           return error(err.message, getCreateProjectStatus(err));
         }
+        if (err instanceof PlanLimitError) {
+          return planLimitResponse(err, { returnBaseUrl: billingConfigFor(context.env).returnBaseUrl });
+        }
 
         throw err;
       }
@@ -183,6 +187,9 @@ export function createProjectRoutes(): ApiApp {
       } catch (err) {
         if (err instanceof CreateProjectError) {
           return error(err.message, getCreateProjectStatus(err));
+        }
+        if (err instanceof PlanLimitError) {
+          return planLimitResponse(err, { returnBaseUrl: billingConfigFor(context.env).returnBaseUrl });
         }
 
         throw err;
@@ -640,6 +647,7 @@ const RERUN_BLOCKED_MESSAGES: Partial<Record<GenerationActionBlockedReason, stri
   change_not_open: "The pull request is closed, merged, or a draft.",
   base_not_production: BASE_NOT_PRODUCTION_MESSAGE,
   previews_unavailable: "Pull request previews are not available for this project.",
+  repository_too_large: "The repository is larger than the size limit for generations.",
 };
 
 function generationStartOutcomeResponse(
@@ -650,8 +658,9 @@ function generationStartOutcomeResponse(
     case "not_found":
       return notFound();
     case "repository_required":
-      return error(REPOSITORY_REQUIRED_MESSAGE, 409, {
+      return error(repositoryRequiredMessage(outcome.reason), 409, {
         code: "repository_required",
+        ...(outcome.reason ? { reason: outcome.reason } : {}),
       });
     case "paused":
       return error("Generation is currently paused by an administrator.", 409);
@@ -668,6 +677,12 @@ function generationStartOutcomeResponse(
       return error(outcome.message, 500);
     case "billing_refused":
       return billingRefusalResponse(outcome.error, env);
+    case "repository_too_large":
+      return error(outcome.message, 422, {
+        code: "repository_too_large",
+        sizeKb: outcome.sizeKb,
+        limitKb: outcome.limitKb,
+      });
   }
 }
 

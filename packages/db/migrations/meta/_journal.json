@@ -351,6 +351,20 @@
       "when": 1794864247366,
       "tag": "0049_billing_export_claims",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795434715498,
+      "tag": "0050_public_repositories",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1795471081391,
+      "tag": "0051_github_repository_refresh",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ import {
 } from "./formatters";
 import { lineForReaders } from "./readers";
 import type { BuiltPrompt, PromptModule, PromptRenderContext } from "./types";
+import { wrapUntrustedRepositoryContent } from "../../../core/untrusted-content";
 
 function projectContextBlock(context: PromptRenderContext): string {
   const rawContext = context.documentationBrief?.projectContext;
@@ -269,7 +270,7 @@ export function buildAnalysisPrompt(
     userBody: `Based on the following project exploration, generate a complete project analysis JSON object.${retry}
 
 PROJECT EXPLORATION:
-${context.explorationContext ?? ""}${projectContextBlock(context)}
+${wrapUntrustedRepositoryContent(context.explorationContext ?? "", "exploration summary of the repository")}${projectContextBlock(context)}
 
 Additional requirements:
 - projectDescription must be a thorough 4-8 sentence description.

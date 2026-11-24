@@ -6,6 +6,7 @@ import { z } from "zod/v4";
 import { defineTool } from "../tool";
 import { fileExists, readTextFile } from "../../utils/runtime";
 import { isLargeFilePath, resolveReadableProjectPath } from "./file-access-rules";
+import { wrapUntrustedRepositoryContent } from "../untrusted-content";
 
 const MAX_READ_CHARS = 8_000;
 const MAX_READ_LINES = 180;
@@ -40,7 +41,11 @@ export function readTool(cwd: string) {
               `... (truncated ${lines.length - MAX_READ_LINES} lines; read a more specific file or grep for a narrower pattern)`,
             ]
           : lines;
-        return limitedLines.map((line, i) => `${String(i + 1).padStart(4)} | ${line}`).join("\n");
+        // The file text is repository data, never instructions to the model.
+        return wrapUntrustedRepositoryContent(
+          limitedLines.map((line, i) => `${String(i + 1).padStart(4)} | ${line}`).join("\n"),
+          path,
+        );
       } catch (err) {
         return `Error reading file: ${err instanceof Error ? err.message : String(err)}`;
       }

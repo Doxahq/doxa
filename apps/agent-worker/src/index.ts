@@ -235,7 +235,7 @@ function logGenerationError(
 export function createInternalApiAdapter(api: InternalApiRpc): GenerationInternalApi {
   return {
     getGenerationContext: (projectId) => api.getGenerationContext(projectId),
-    createInstallationAccessToken: (installationId) => api.createInstallationAccessToken(installationId),
+    createRepositoryReadToken: (projectId) => api.createRepositoryReadToken(projectId),
     markJobRunning: (jobId) => api.markJobRunning(jobId),
     markJobFailed: (jobId, message) => api.markJobFailed(jobId, message),
     markJobCancelled: (jobId, message) => api.markJobCancelled(jobId, message),

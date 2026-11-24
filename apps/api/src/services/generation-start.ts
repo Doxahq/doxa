@@ -8,6 +8,11 @@ import type {
 import type { Env } from "../env";
 import type { BillingRefusal } from "./billing/generation-metering";
 import {
+  findProjectRepositoryIssue,
+  type RepositoryConnectionIssue,
+} from "../repositories/github-lifecycle";
+import type { RepositoryTooLarge } from "./repository-size";
+import {
   ActiveGenerationConflictError,
   JobsRepository,
   productionConcurrencyKey,
@@ -35,7 +40,11 @@ export interface GenerationStartInput {
 
 export type GenerationStartOutcome =
   | { outcome: "not_found" }
-  | { outcome: "repository_required" }
+  /**
+   * No repository, or GitHub took it away (`reason`): the app lost it, or the
+   * installation is suspended or uninstalled. The site stays live.
+   */
+  | { outcome: "repository_required"; reason?: RepositoryConnectionIssue }
   | { outcome: "paused" }
   | { outcome: "already_active"; job: GenerationJobDto }
   /** Admission lost a race and the blocking job is already gone. */
@@ -48,7 +57,9 @@ export type GenerationStartOutcome =
   | { outcome: "started"; job: GenerationJobDto }
   | { outcome: "dispatch_failed"; message: string }
   /** Billing refused the run (spec 10.6): no job was created. */
-  | { outcome: "billing_refused"; error: BillingRefusal };
+  | { outcome: "billing_refused"; error: BillingRefusal }
+  /** The repository is above the size limit: no job was created. */
+  | RepositoryTooLarge;
 
 export interface GenerationStartProjectsStore {
   getForUser(userId: string, projectId: string): Promise<ProjectDto | null>;
@@ -68,6 +79,8 @@ export interface GenerationAdmission {
 
 export interface GenerationStartServiceDependencies {
   projects: GenerationStartProjectsStore;
+  /** Absent: the repository is taken as usable. */
+  repositoryIssue?: (projectId: string) => Promise<RepositoryConnectionIssue | null>;
   jobs: GenerationStartJobsStore;
   admission: GenerationAdmission;
   dispatcher: GenerationDispatcher;
@@ -84,6 +97,7 @@ export class GenerationStartService {
     const jobs = new JobsRepository(env);
     return new GenerationStartService({
       projects: new ProjectsRepository(env),
+      repositoryIssue: (projectId) => findProjectRepositoryIssue(env, projectId),
       jobs,
       // Built on first use: its GitHub source and baselines store are only
       // needed once the cheap checks pass.
@@ -102,6 +116,8 @@ export class GenerationStartService {
     );
     if (!project) return { outcome: "not_found" };
     if (!project.githubRepositoryId) return { outcome: "repository_required" };
+    const repositoryIssue = await this.deps.repositoryIssue?.(project.id);
+    if (repositoryIssue) return { outcome: "repository_required", reason: repositoryIssue };
     if (await this.deps.jobs.isGenerationPaused()) return { outcome: "paused" };
 
     const activeJob = await this.deps.jobs.activeForConcurrencyKey(

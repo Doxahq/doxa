@@ -116,8 +116,8 @@ describe("protocol", () => {
     expect(isBridgeCallMethod("GENERATION_QUEUE", "delete")).toBe(false);
   });
 
-  it("lists the 45 RPC methods of the API", () => {
-    expect(Object.values(API_ENTRYPOINT_METHODS).flat()).toHaveLength(45);
+  it("lists the 44 RPC methods of the API", () => {
+    expect(Object.values(API_ENTRYPOINT_METHODS).flat()).toHaveLength(44);
   });
 });
 

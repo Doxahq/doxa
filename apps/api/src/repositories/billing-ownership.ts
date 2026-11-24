@@ -13,6 +13,8 @@ export interface BillingAccountUsage {
    * projects that have no team (billing spec 8.1).
    */
   countCustomDomains(input: { ownerKind: OwnerKind; ownerId: string; exceptProjectId: string }): Promise<number>;
+  /** The account's projects, for the `account.projects` limit. Same ownership rule as above. */
+  countProjects(input: { ownerKind: OwnerKind; ownerId: string }): Promise<number>;
 }
 
 /** The recent runs of a project, for the credit estimate (billing spec 10.5). */
@@ -61,15 +63,17 @@ export class BillingOwnershipRepository implements ProjectOwnershipPort, Billing
   }
 
   async countCustomDomains(input: { ownerKind: OwnerKind; ownerId: string; exceptProjectId: string }): Promise<number> {
-    const owner =
-      input.ownerKind === "team"
-        ? eq(projects.teamId, input.ownerId)
-        : and(eq(projects.userId, input.ownerId), isNull(projects.teamId));
+    const owner = accountProjectsFilter(input);
     const [row] = await this.db
       .select({ value: count() })
       .from(docsDomains)
       .innerJoin(projects, eq(projects.id, docsDomains.projectId))
       .where(and(owner, eq(docsDomains.kind, "custom_domain"), ne(docsDomains.projectId, input.exceptProjectId)));
+    return row?.value ?? 0;
+  }
+
+  async countProjects(input: { ownerKind: OwnerKind; ownerId: string }): Promise<number> {
+    const [row] = await this.db.select({ value: count() }).from(projects).where(accountProjectsFilter(input));
     return row?.value ?? 0;
   }
 
@@ -102,4 +106,11 @@ export class BillingOwnershipRepository implements ProjectOwnershipPort, Billing
       .limit(limit);
     return rows.map((row) => row.id);
   }
+}
+
+/** The projects of one billing account (billing spec 8.1). */
+function accountProjectsFilter(input: { ownerKind: OwnerKind; ownerId: string }) {
+  return input.ownerKind === "team"
+    ? eq(projects.teamId, input.ownerId)
+    : and(eq(projects.userId, input.ownerId), isNull(projects.teamId));
 }

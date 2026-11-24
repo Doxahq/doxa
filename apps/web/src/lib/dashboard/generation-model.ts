@@ -159,6 +159,7 @@ export function getActionBlockedMessage(
     change_not_open: "The pull request is closed, merged, or a draft.",
     base_not_production: "The pull request does not target the production branch.",
     previews_unavailable: "Pull request previews are not available for this project.",
+    repository_too_large: "The repository is larger than the size limit for generations.",
     promote_expired:
       "A newer push replaced this preview too long ago to promote it.",
     version_collected:

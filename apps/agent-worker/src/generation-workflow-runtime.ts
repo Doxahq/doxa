@@ -153,6 +153,8 @@ import {
   behindInstructionsNotices,
   openIssueNotices,
   recordPageNotices,
+  recordUnverifiedExternalLinks,
+  unverifiedExternalLinkPages,
 } from "./page-notices";
 import {
   applyPageLocks,
@@ -835,7 +837,7 @@ export class GenerationWorkflowRunner {
           // Every read comes before the flag events, so a failed read never
           // repeats them when the step is retried.
           const noticesKey = await this.storeNoticePayload(input.jobId, pageNoticePayloadKey(checkpointPrefix, "full"), {
-            openIssueNotices: await this.collectOpenIssueNotices(input.jobId, outcome.keys),
+            ...await this.collectWrittenPageNotices(input.jobId, outcome.keys),
             behindCandidates: [],
           });
           const { flaggedPages } = planWithFailedPages(
@@ -979,19 +981,26 @@ export class GenerationWorkflowRunner {
   }
 
   /**
-   * The notices of the pages the writer kept with open issues. Notices only
-   * add information, so a failed checkpoint read gives none rather than a
-   * failed step.
+   * The notices of the pages the writer kept with open issues, and the pages
+   * that link to outside domains the repository does not contain. Notices
+   * only add information, so a failed checkpoint read gives none rather than
+   * a failed step.
    */
-  private async collectOpenIssueNotices(jobId: string, pageKeys: readonly string[]): Promise<PageNotice[]> {
+  private async collectWrittenPageNotices(
+    jobId: string,
+    pageKeys: readonly string[],
+  ): Promise<Pick<PageNoticePayload, "openIssueNotices" | "unverifiedExternalLinks">> {
     try {
-      const writtenBatches = await Promise.all(
+      const writtenPages = (await Promise.all(
         pageKeys.map((key) => readPageCheckpoint(this.env.DOCS_BUCKET, key)),
-      );
-      return openIssueNotices(writtenBatches.flat());
+      )).flat();
+      return {
+        openIssueNotices: openIssueNotices(writtenPages),
+        unverifiedExternalLinks: unverifiedExternalLinkPages(writtenPages),
+      };
     } catch (error) {
       logBestEffortStepError(jobId, "open_issue_notices", error);
-      return [];
+      return { openIssueNotices: [], unverifiedExternalLinks: [] };
     }
   }
 
@@ -1069,6 +1078,11 @@ export class GenerationWorkflowRunner {
           ],
           addJobEvent: (noticeEvent) => this.env.API.addJobEvent(jobId, noticeEvent),
           onError: (_notice, error) => logBestEffortStepError(jobId, "page_notice", error),
+        });
+        await recordUnverifiedExternalLinks({
+          pages: payload.unverifiedExternalLinks,
+          addJobEvent: (linkEvent) => this.env.API.addJobEvent(jobId, linkEvent),
+          onError: (error) => logBestEffortStepError(jobId, "unverified_external_links", error),
         });
       },
     });
@@ -1684,7 +1698,7 @@ export class GenerationWorkflowRunner {
           const runFingerprint = analysisResult.analysisState.projectInstructionsFingerprint;
           const previousRunFingerprint = reusableState?.analysis.projectInstructionsFingerprint;
           const noticesKey = await this.storeNoticePayload(input.jobId, pageNoticePayloadKey(checkpointPrefix, checkpointScope), {
-            openIssueNotices: await this.collectOpenIssueNotices(input.jobId, outcome.keys),
+            ...await this.collectWrittenPageNotices(input.jobId, outcome.keys),
             behindCandidates: behindInstructionCandidates({
               previousPages: reusableState?.pages ?? [],
               previousRunFingerprint,
@@ -2227,11 +2241,6 @@ function assertRevisionAwareExecutionContext(
   ) {
     throw new NonRetryableError(
       "Preview generation context is incomplete.",
-    );
-  }
-  if (context.repository.isPrivate !== true) {
-    throw new NonRetryableError(
-      "Doxabot previews are disabled for public repositories.",
     );
   }
   if (

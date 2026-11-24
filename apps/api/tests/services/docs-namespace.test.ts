@@ -41,6 +41,36 @@ describe("isHostnameAvailable", () => {
   });
 });
 
+describe("reserved site names (Decision 2)", () => {
+  test.each(["doxa", "docs", "api", "www", "admin", "Docs"])(
+    "%s is never available",
+    async (label) => {
+      const lookup = createLookup();
+
+      await expect(
+        isHostnameAvailable(lookup, { label, hostname: `${label.toLowerCase()}.doxa.page` }),
+      ).resolves.toBe(false);
+      expect(lookup.hasProjectSlug).not.toHaveBeenCalled();
+    },
+  );
+
+  test("a reserved name gets the suffix of a taken name", async () => {
+    const lookup = createLookup();
+
+    await expect(
+      createAvailableSlug("docs", (candidate) => isHostnameAvailable(lookup, candidate), "doxa.page"),
+    ).resolves.toBe("docs-2");
+  });
+
+  test("names that only start with a reserved name stay first come, first served", async () => {
+    const lookup = createLookup();
+
+    for (const label of ["docs-site", "api-docs", "doxa-cli", "admins"]) {
+      await expect(isHostnameAvailable(lookup, { label, hostname: `${label}.doxa.page` })).resolves.toBe(true);
+    }
+  });
+});
+
 describe("namespace-aware hostname allocation", () => {
   test.each([
     {

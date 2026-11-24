@@ -35,6 +35,8 @@ export const DOXA_CATALOG = defineCatalog({
         "site.asset_files": 200,
         "site.custom_domains": 1,
         "team.seats": 1,
+        // Decided 2026-11-23 (cost limits): the pricing page offers "a docs site" on Free.
+        "account.projects": 1,
         "mcp.tool_calls_per_day": 100,
         "docs.export_window_hours": 24,
       },
@@ -54,6 +56,8 @@ export const DOXA_CATALOG = defineCatalog({
         "site.asset_files": UNLIMITED,
         "site.custom_domains": 4,
         "team.seats": UNLIMITED,
+        // Decided 2026-11-23 (cost limits). No number on the pricing page yet.
+        "account.projects": 10,
         "mcp.tool_calls_per_day": UNLIMITED,
         "docs.export_window_hours": 1,
       },
@@ -73,6 +77,7 @@ export const DOXA_CATALOG = defineCatalog({
         "site.asset_files": UNLIMITED,
         "site.custom_domains": UNLIMITED,
         "team.seats": UNLIMITED,
+        "account.projects": UNLIMITED,
         "mcp.tool_calls_per_day": UNLIMITED,
         "docs.export_window_hours": 1,
       },
@@ -91,6 +96,7 @@ export const DOXA_CATALOG = defineCatalog({
         "site.asset_files": UNLIMITED,
         "site.custom_domains": UNLIMITED,
         "team.seats": UNLIMITED,
+        "account.projects": UNLIMITED,
         "mcp.tool_calls_per_day": UNLIMITED,
         "docs.export_window_hours": 0,
       },

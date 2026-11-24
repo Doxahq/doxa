@@ -2,6 +2,8 @@ import { usePrefetchQuery, useQuery } from "@tanstack/react-query"
 import { BetaTag } from "~/components/dashboard/beta-tag"
 
 import { PageBody, PageHeading } from "~/components/dashboard/dashboard-header"
+import { AllowedBotsCard } from "~/components/dashboard/doxabot/allowed-bots-card"
+import { DoxabotAutomationWarningBanner } from "~/components/dashboard/doxabot/automation-warning-banner"
 import { DoxabotPageActions } from "~/components/dashboard/doxabot/doxabot-page-actions"
 import { DoxabotStatusRow } from "~/components/dashboard/doxabot/doxabot-status-row"
 import { GenerationCacheCard } from "~/components/dashboard/doxabot/generation-cache-card"
@@ -13,6 +15,7 @@ import {
   DOXABOT_PAGE_DESCRIPTION,
   ProjectDoxabotSkeleton,
 } from "~/components/dashboard/skeletons/doxabot-skeletons"
+import { getDoxabotAutomationNotice } from "~/lib/dashboard/doxabot-model"
 import { getDoxabotStatusFacts } from "~/lib/dashboard/doxabot-status-model"
 import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
 import { useProjectCapabilities } from "~/lib/dashboard/use-project-capabilities"
@@ -48,6 +51,7 @@ export function ProjectDoxabotPage({ projectId }: { projectId: string }) {
     instructions,
     doxabot: doxabotQuery.data ?? null,
   })
+  const automationNotice = getDoxabotAutomationNotice(doxabotQuery.data ?? null)
 
   return (
     <PageBody className="max-w-4xl">
@@ -55,10 +59,12 @@ export function ProjectDoxabotPage({ projectId }: { projectId: string }) {
       <DoxabotPageActions projectId={projectId} canRun={can("generation.run") && Boolean(project?.repositoryFullName)} />
 
       <section className="flex flex-col gap-4">
+        {automationNotice ? <DoxabotAutomationWarningBanner notice={automationNotice} /> : null}
         <DoxabotStatusRow facts={facts} />
         <InstructionsCard projectId={projectId} current={instructions} />
         <ProductionBranchCard projectId={projectId} />
         <DoxabotSettingsCard projectId={projectId} />
+        <AllowedBotsCard projectId={projectId} />
         <DoxabotMergeUpdatesCard projectId={projectId} />
         <GenerationCacheCard projectId={projectId} />
       </section>

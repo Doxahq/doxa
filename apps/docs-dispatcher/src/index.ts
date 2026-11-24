@@ -11,6 +11,7 @@ import {
   type DocsCspEnv,
 } from "./content-security-policy";
 import { handleCspReport, isCspReportRequest } from "./csp-report";
+import { withPreviewBanner } from "./preview-banner";
 import {
   parsePublicDocsRouteDataV1,
   type PublicDocsRouteDataV1,
@@ -609,8 +610,11 @@ const docsGateway = {
         savedStatus = "PREVIOUS";
       }
       if (savedResponse) {
-        const result = withDocsPreviewSearchPolicy(
-          withDocsSecurityHeaders(withoutResponseCaching(savedResponse)),
+        const result = withPreviewBanner(
+          withDocsPreviewSearchPolicy(
+            withDocsSecurityHeaders(withoutResponseCaching(savedResponse)),
+            resolvedHost,
+          ),
           resolvedHost,
         );
         setHostDiagnostics(result.headers, hostCacheStatus, hostLookup);
@@ -741,9 +745,12 @@ const docsGateway = {
     );
     // The default cache key omits hostname and version. Never cache this gateway,
     // including shared fallback responses which resolve their version separately.
-    const result = withDocsPreviewSearchPolicy(
-      withDocsSecurityHeaders(
-        withoutResponseCaching(withoutCacheProbeMarker(response)),
+    const result = withPreviewBanner(
+      withDocsPreviewSearchPolicy(
+        withDocsSecurityHeaders(
+          withoutResponseCaching(withoutCacheProbeMarker(response)),
+        ),
+        resolvedHost,
       ),
       resolvedHost,
     );

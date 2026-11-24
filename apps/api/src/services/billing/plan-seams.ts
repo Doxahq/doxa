@@ -28,6 +28,17 @@ export interface TeamSeatPolicy {
   assertSeatAvailable(input: { teamId: string; used: number }): Promise<void>;
 }
 
+/**
+ * Projects per billing account (`account.projects`, decided 2026-11-23):
+ * checked before a project is created. The owner is the new project's: its
+ * team, else the user (billing spec 8.1).
+ */
+export interface ProjectLimitPolicy {
+  /** False with `BILLING_ENFORCEMENT=off`: no count, as before billing. */
+  readonly active: boolean;
+  assertProjectAvailable(owner: { userId: string; teamId: string | null }): Promise<void>;
+}
+
 /** Every plan limit check of the API (billing spec 9.3), behind its existing interface. */
 export interface PlanSeams {
   readonly mode: BillingEnforcement;
@@ -36,6 +47,7 @@ export interface PlanSeams {
   readonly searchPolicy: SearchPolicyService;
   readonly docsDomainLimit: DocsDomainLimitPolicy;
   readonly teamSeats: TeamSeatPolicy;
+  readonly projectLimit: ProjectLimitPolicy;
 }
 
 /** Today's free-plan stubs: the exact behavior of `BILLING_ENFORCEMENT=off`. */
@@ -99,6 +111,7 @@ export function createPlanSeams(deps: PlanSeamDeps): PlanSeams {
       searchPolicy: legacy.searchPolicy,
       docsDomainLimit: legacy.docsDomainLimit,
       teamSeats: { active: false, assertSeatAvailable: async () => undefined },
+      projectLimit: { active: false, assertProjectAvailable: async () => undefined },
     };
   }
 
@@ -234,6 +247,34 @@ export function createPlanSeams(deps: PlanSeamDeps): PlanSeams {
         const limit = isUnlimited(raw) ? "unlimited" : raw;
         log({ key: "team.seats", mode, kind: "denied", plan: view.entitlements.plan, accountId: view.account.id, limit, used });
         if (mode === "on") throw new PlanLimitError({ key: "team.seats", limit, used });
+      },
+    },
+    projectLimit: {
+      active: true,
+      async assertProjectAvailable({ userId, teamId }) {
+        const ownerKind = teamId === null ? "user" : "team";
+        const ownerId = teamId ?? userId;
+        let view: AccountBillingView;
+        let used: number;
+        try {
+          const account = await billing().accounts.accountForOwner(ownerKind, ownerId);
+          view = await billing().entitlements.forAccount(account.id);
+          // An unlimited plan needs no count.
+          if (isUnlimited(view.entitlements.limits["account.projects"])) return;
+          used = await billing().usage.countProjects({ ownerKind, ownerId });
+        } catch (cause) {
+          if (mode === "on") throw cause;
+          logShadowFailure(ownerId, cause);
+          return;
+        }
+        if (withinLimit(view.entitlements, "account.projects", used)) return;
+        const raw = view.entitlements.limits["account.projects"];
+        const limit = isUnlimited(raw) ? "unlimited" : raw;
+        const plan = view.entitlements.plan;
+        log({ key: "account.projects", mode, kind: "denied", plan, accountId: view.account.id, limit, used });
+        if (mode === "on") {
+          throw new PlanLimitError({ key: "account.projects", limit, used, accountId: view.account.id, plan });
+        }
       },
     },
   };

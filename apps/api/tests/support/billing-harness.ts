@@ -30,11 +30,20 @@ export class MemoryBillingTeams implements BillingTeamDirectory {
   }
 }
 
-/** Custom domains of each project, for the account-wide domain limit. */
+/** Custom domains of each project, for the account-wide domain limit, and the project count. */
 export class MemoryBillingUsage {
   readonly domains = new Map<string, number>();
 
   constructor(private readonly billing: TestBilling) {}
+
+  async countProjects(input: { ownerKind: OwnerKind; ownerId: string }): Promise<number> {
+    let total = 0;
+    for (const owner of this.billing.projects.projects.values()) {
+      const matches = input.ownerKind === "team" ? owner.teamId === input.ownerId : owner.userId === input.ownerId && owner.teamId === null;
+      if (matches) total += 1;
+    }
+    return total;
+  }
 
   async countCustomDomains(input: { ownerKind: OwnerKind; ownerId: string; exceptProjectId: string }): Promise<number> {
     let total = 0;

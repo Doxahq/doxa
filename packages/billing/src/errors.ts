@@ -45,6 +45,10 @@ export class PlanLimitError extends Error {
       readonly used: number | null;
       readonly reason?: string;
       readonly resetsAt?: Date | null;
+      /** The billing account the limit is about, when the check knows it. Gives the answer a billing link. */
+      readonly accountId?: string;
+      /** That account's plan key. */
+      readonly plan?: string;
     },
   ) {
     super(`Plan limit reached for ${details.key}.`);

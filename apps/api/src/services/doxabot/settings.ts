@@ -112,6 +112,11 @@ export class DoxabotSettingsService {
         mergeTrigger: input.changes.mergeTrigger ?? state.mergeTrigger,
         batchQuietMinutes:
           input.changes.batchQuietMinutes ?? state.batchQuietMinutes,
+        allowedBotLogins: input.changes.allowedBotLogins ?? state.allowedBotLogins,
+        // The store clears a pause on every change; a lost repository stays.
+        automationWarning: state.repository.connected
+          ? state.repository.connectionIssue
+          : null,
         updatedAt,
       },
       this.deploymentPolicy,
@@ -198,6 +203,8 @@ function toSettingsDto(
     repositoryDefaultBranch: state.repository.connected
       ? state.repository.defaultBranch
       : null,
+    allowedBotLogins: state.allowedBotLogins,
+    automationWarning: state.automationWarning,
     updatedAt: state.updatedAt?.toISOString() ?? null,
   };
 

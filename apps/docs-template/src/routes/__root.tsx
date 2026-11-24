@@ -145,6 +145,10 @@ function RootDocument({
                   className="flex h-screen"
                   style={{ display: "flex", height: "100vh" }}
                 >
+                  {/* Keep this id, and keep this shell a direct child of <body>:
+                      the dispatcher's preview banner
+                      (apps/docs-dispatcher/src/preview-banner.ts) finds the
+                      shell through it. */}
                   <div
                     id="app-scroll-container"
                     data-scroll-restoration-id={DOCS_SCROLL_RESTORATION_ID}

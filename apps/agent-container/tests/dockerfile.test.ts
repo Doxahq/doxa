@@ -63,6 +63,15 @@ describe("agent container image", () => {
     );
   });
 
+  test("starts through the egress CA entrypoint, which keeps the start command", async () => {
+    const entrypoint = 'ENTRYPOINT ["sh", "/app/apps/agent-container/scripts/trust-egress-ca.sh"]';
+    expect(dockerfile).toContain(entrypoint);
+    expect(dockerfile.indexOf("COPY apps/agent-container ./apps/agent-container")).toBeLessThan(
+      dockerfile.indexOf(entrypoint),
+    );
+    expect(dockerfile.indexOf(entrypoint)).toBeLessThan(dockerfile.indexOf("CMD"));
+  });
+
   test("runs generation as the unprivileged node user", async () => {
     expect(dockerfile).toContain("ENV DOXA_WORKSPACE_ROOT=/app");
     expect(dockerfile).toContain("chown node:node /app/.workspaces");

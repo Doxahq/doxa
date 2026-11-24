@@ -22,6 +22,7 @@ import {
   listProjectGenerations,
   listProjectRepositoryBranches,
   listProjects,
+  listGitHubInstallations,
   listRepositoryBranches,
   listRepositories,
 } from "~/lib/platform-api"
@@ -44,6 +45,7 @@ export const dashboardQueryKeys = {
   summary: () => [...dashboardQueryKeys.all, "summary"] as const,
   projects: () => [...dashboardQueryKeys.summary(), "projects"] as const,
   githubRepositories: () => [...dashboardQueryKeys.summary(), "github-repositories"] as const,
+  githubInstallations: () => [...dashboardQueryKeys.summary(), "github-installations"] as const,
   githubRepositoryBranches: (githubRepositoryId: string) =>
     [...dashboardQueryKeys.githubRepositories(), githubRepositoryId, "branches"] as const,
   project: (projectId: string) => [...dashboardQueryKeys.all, "projects", projectId] as const,
@@ -103,6 +105,15 @@ export function githubRepositoriesQueryOptions() {
   return queryOptions({
     queryKey: dashboardQueryKeys.githubRepositories(),
     queryFn: loadGitHubRepositories,
+    staleTime: 10_000,
+  })
+}
+
+/** The installations the user owns and the transfer targets, for Account settings. */
+export function githubInstallationsQueryOptions() {
+  return queryOptions({
+    queryKey: dashboardQueryKeys.githubInstallations(),
+    queryFn: listGitHubInstallations,
     staleTime: 10_000,
   })
 }

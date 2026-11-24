@@ -18,6 +18,12 @@ const mocks = vi.hoisted(() => ({
   exchangeUserAuthorizationCode: vi.fn(),
   findUserInstallation: vi.fn(),
   listUserInstallationRepositories: vi.fn(),
+  fetchGitHubTokenUser: vi.fn(),
+  findInstallationOwner: vi.fn(),
+  findInstaller: vi.fn(),
+  listInstallationsForOwner: vi.fn(),
+  listOwnerTransferTargets: vi.fn(),
+  transferInstallationOwner: vi.fn(),
 }));
 
 vi.mock("../../src/http/auth", () => ({
@@ -30,6 +36,16 @@ vi.mock("../../src/repositories/github", () => ({
     recordInstallation = mocks.recordInstallation;
     recordRepository = mocks.recordRepository;
     removeRepositoriesExcept = mocks.removeRepositoriesExcept;
+    findInstallationOwner = mocks.findInstallationOwner;
+    listInstallationsForOwner = mocks.listInstallationsForOwner;
+    listOwnerTransferTargets = mocks.listOwnerTransferTargets;
+    transferInstallationOwner = mocks.transferInstallationOwner;
+  },
+}));
+
+vi.mock("../../src/repositories/github-lifecycle", () => ({
+  GitHubLifecycleRepository: class {
+    findInstaller = mocks.findInstaller;
   },
 }));
 
@@ -38,6 +54,7 @@ vi.mock("../../src/services/github-app", async (original) => ({
   exchangeUserAuthorizationCode: mocks.exchangeUserAuthorizationCode,
   findUserInstallation: mocks.findUserInstallation,
   listUserInstallationRepositories: mocks.listUserInstallationRepositories,
+  fetchGitHubTokenUser: mocks.fetchGitHubTokenUser,
 }));
 
 import { createGitHubRoutes } from "../../src/routes/github";
@@ -86,9 +103,13 @@ describe("GitHub install routes", () => {
     mocks.exchangeUserAuthorizationCode.mockResolvedValue("ghu_user");
     mocks.findUserInstallation.mockResolvedValue({
       installationId: "4242",
+      accountId: "900",
       accountLogin: "acme",
       accountType: "Organization",
     });
+    mocks.fetchGitHubTokenUser.mockResolvedValue({ githubUserId: "5150", login: "octo-admin" });
+    mocks.findInstallationOwner.mockResolvedValue(null);
+    mocks.findInstaller.mockResolvedValue({ githubUserId: "5150", login: "octo-admin" });
     mocks.listUserInstallationRepositories.mockResolvedValue({
       repositories: [
         {
@@ -326,5 +347,154 @@ describe("GitHub install routes", () => {
 
     expect(response.status).toBe(403);
     expect(mocks.recordInstallation).not.toHaveBeenCalled();
+  });
+
+  describe("organization install owner (Decision 6)", () => {
+    test("authorize accepts the GitHub user who installed the app", async () => {
+      const { state, nonce } = await startAuthorization("4242");
+
+      const response = await authorize(state, nonce);
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe("https://doxa.so/dashboard?github=connected");
+      expect(mocks.fetchGitHubTokenUser).toHaveBeenCalledWith("ghu_user");
+      expect(mocks.findInstaller).toHaveBeenCalledWith("4242");
+      expect(mocks.recordInstallation).toHaveBeenCalled();
+    });
+
+    test("authorize refuses an organization member who did not install the app", async () => {
+      mocks.fetchGitHubTokenUser.mockResolvedValue({ githubUserId: "7777", login: "member" });
+      const { state, nonce } = await startAuthorization("4242");
+
+      const response = await authorize(state, nonce);
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({
+        error: expect.objectContaining({ message: expect.stringContaining("octo-admin") }),
+      });
+      expect(mocks.recordInstallation).not.toHaveBeenCalled();
+      expect(mocks.recordRepository).not.toHaveBeenCalled();
+    });
+
+    test("authorize asks to try again while the installation webhook did not arrive", async () => {
+      mocks.findInstaller.mockResolvedValue(null);
+      const { state, nonce } = await startAuthorization("4242");
+
+      const response = await authorize(state, nonce);
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(
+        "https://doxa.so/dashboard?github=pending&installation_id=4242",
+      );
+      expect(response.headers.get("set-cookie")).toMatch(/doxa_github_install=; Path=\/github\/install; Max-Age=0/);
+      expect(mocks.recordInstallation).not.toHaveBeenCalled();
+    });
+
+    test("authorize lets the recorded owner connect again without an installer record", async () => {
+      mocks.findInstallationOwner.mockResolvedValue("user-1");
+      mocks.findInstaller.mockResolvedValue(null);
+      mocks.fetchGitHubTokenUser.mockResolvedValue({ githubUserId: "7777", login: "member" });
+      const { state, nonce } = await startAuthorization("4242");
+
+      const response = await authorize(state, nonce);
+
+      expect(response.status).toBe(302);
+      expect(mocks.recordInstallation).toHaveBeenCalled();
+    });
+
+    test("authorize refuses the installer when another Doxa user owns the installation", async () => {
+      mocks.findInstallationOwner.mockResolvedValue("user-2");
+      const { state, nonce } = await startAuthorization("4242");
+
+      const response = await authorize(state, nonce);
+
+      expect(response.status).toBe(409);
+      expect(mocks.recordInstallation).not.toHaveBeenCalled();
+    });
+
+    test("a user account installation needs the GitHub user who owns the account", async () => {
+      mocks.findUserInstallation.mockResolvedValue({
+        installationId: "4242",
+        accountId: "900",
+        accountLogin: "alice",
+        accountType: "User",
+      });
+      mocks.findInstaller.mockResolvedValue(null);
+      const refused = await startAuthorization("4242");
+      expect((await authorize(refused.state, refused.nonce)).status).toBe(403);
+      expect(mocks.recordInstallation).not.toHaveBeenCalled();
+
+      mocks.fetchGitHubTokenUser.mockResolvedValue({ githubUserId: "900", login: "alice" });
+      const accepted = await startAuthorization("4242");
+      expect((await authorize(accepted.state, accepted.nonce)).status).toBe(302);
+      expect(mocks.recordInstallation).toHaveBeenCalled();
+    });
+
+    test("authorize answers 502 when GitHub cannot name the user", async () => {
+      mocks.fetchGitHubTokenUser.mockRejectedValue(new Error("GitHub user request failed (500)."));
+      const { state, nonce } = await startAuthorization("4242");
+
+      expect((await authorize(state, nonce)).status).toBe(502);
+      expect(mocks.recordInstallation).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("installation owner transfer", () => {
+    const rowId = "0b6f3f8e-2a51-4f4e-9a63-6b1f6f2f0a11";
+    const transfer = (body: unknown, id = rowId) =>
+      request(`/installations/${id}/owner`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    test("the owner moves an installation to a team member", async () => {
+      mocks.transferInstallationOwner.mockResolvedValue("moved");
+
+      const response = await transfer({ userId: "user-2" });
+
+      expect(response.status).toBe(200);
+      expect(mocks.transferInstallationOwner).toHaveBeenCalledWith({
+        installationRowId: rowId,
+        fromUserId: "user-1",
+        toUserId: "user-2",
+      });
+    });
+
+    test("a user who does not own the installation gets 404", async () => {
+      mocks.transferInstallationOwner.mockResolvedValue("not_found");
+
+      expect((await transfer({ userId: "user-2" })).status).toBe(404);
+    });
+
+    test("a target outside the owner's teams is refused", async () => {
+      mocks.transferInstallationOwner.mockResolvedValue("target_not_allowed");
+
+      expect((await transfer({ userId: "stranger" })).status).toBe(403);
+    });
+
+    test("a bad installation id or body is refused before any change", async () => {
+      expect((await transfer({ userId: "user-2" }, "not-a-uuid")).status).toBe(404);
+      expect((await transfer({})).status).toBe(400);
+      expect(mocks.transferInstallationOwner).not.toHaveBeenCalled();
+    });
+
+    test("lists the owner's installations and the transfer targets", async () => {
+      mocks.listInstallationsForOwner.mockResolvedValue([
+        { id: rowId, accountLogin: "acme", accountType: "Organization", status: "active" },
+      ]);
+      mocks.listOwnerTransferTargets.mockResolvedValue([
+        { userId: "user-2", name: "Bea", email: "bea@example.com" },
+      ]);
+
+      const response = await request("/installations");
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        installations: [{ id: rowId, accountLogin: "acme", accountType: "Organization", status: "active" }],
+        transferTargets: [{ userId: "user-2", name: "Bea", email: "bea@example.com" }],
+      });
+      expect(mocks.listInstallationsForOwner).toHaveBeenCalledWith("user-1");
+    });
   });
 });

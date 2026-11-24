@@ -8,6 +8,7 @@ import type {
 } from "@doxahq/contracts";
 import { projectGenerationCacheSchema } from "@doxahq/contracts";
 import type { DoxabotProjectSettingsState } from "../../src/repositories/doxabot-settings";
+import { findProjectRepositoryIssue } from "../../src/repositories/github-lifecycle";
 import { ActiveGenerationConflictError } from "../../src/repositories/jobs";
 import { resolveCompatibleProductionBaseline } from "../../src/repositories/production-baselines";
 import { meteredActionOf } from "../../src/services/billing/generation-metering";
@@ -128,6 +129,11 @@ vi.mock("../../src/repositories/github", () => ({
   GitHubRepository: vi.fn(),
 }));
 
+// The repository and its installation are connected in these tests.
+vi.mock("../../src/repositories/github-lifecycle", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/repositories/github-lifecycle")>()),
+  findProjectRepositoryIssue: vi.fn(async () => null),
+}));
 vi.mock("../../src/services/container-generation", () => ({
   runContainerGeneration: vi.fn(),
 }));
@@ -496,6 +502,27 @@ describe("project routes docs URLs", () => {
     expect(mocks.productionGenerationAdmission.admit).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ["repository_removed", "The repository was removed from the doxabot GitHub App."],
+    ["repository_deleted", "The repository was deleted on GitHub."],
+    ["installation_suspended", "The doxabot GitHub App is suspended on GitHub."],
+    ["installation_deleted", "The doxabot GitHub App was uninstalled."],
+  ] as const)("says why a %s repository cannot generate", async (reason, start) => {
+    vi.mocked(findProjectRepositoryIssue).mockResolvedValueOnce(reason);
+    const response = await worker.fetch(
+      createMutationRequest("/projects/11111111-1111-4111-8111-111111111111/generate"),
+      createEnv({ GENERATION_MODE: "queue", GENERATION_QUEUE: { send: vi.fn() } }),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { error: { message: string; details: unknown } };
+    expect(body.error.details).toEqual({ code: "repository_required", reason });
+    expect(body.error.message.startsWith(start)).toBe(true);
+    expect(body.error.message).toContain("The site stays live.");
+    expect(mocks.productionGenerationAdmission.admit).not.toHaveBeenCalled();
+  });
+
   test("blocks project generation while generation is paused", async () => {
     mocks.jobsRepository.isGenerationPaused.mockResolvedValue(true);
 
@@ -693,6 +720,64 @@ describe("project routes docs URLs", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  test("refuses a project above the plan's project limit with the plan_limit shape", async () => {
+    const { PlanLimitError } = await import("@doxahq/billing");
+    mocks.projectsRepository.createForRepository.mockRejectedValueOnce(
+      new PlanLimitError({ key: "account.projects", limit: 1, used: 1, accountId: "acct_1", plan: "free" }),
+    );
+
+    const response = await worker.fetch(
+      createMutationRequest("/projects", {
+        body: JSON.stringify({
+          githubRepositoryId: "11111111-1111-4111-8111-111111111111",
+        }),
+      }),
+      createEnv({ DOCS_BASE_DOMAIN: "doxa.page", BILLING_RETURN_BASE_URL: "https://doxa.so" }),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        message: "Plan limit reached for account.projects.",
+        details: {
+          code: "plan_limit",
+          key: "account.projects",
+          limit: 1,
+          used: 1,
+          plan: "free",
+          resetsAt: null,
+          upgradeUrl: "https://doxa.so/dashboard/billing/acct_1",
+        },
+      },
+    });
+  });
+
+  test("refuses a generation of a repository above the size limit", async () => {
+    const send = vi.fn();
+    mocks.productionGenerationAdmission.admit.mockResolvedValueOnce({
+      outcome: "repository_too_large",
+      sizeKb: 2_097_152,
+      limitKb: 1_048_576,
+      message: "This repository is 2 GB. Doxa generates docs for repositories up to 1 GB.",
+    });
+
+    const response = await worker.fetch(
+      createMutationRequest("/projects/11111111-1111-4111-8111-111111111111/generate"),
+      createEnv({ GENERATION_MODE: "queue", GENERATION_QUEUE: { send } }),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        message: "This repository is 2 GB. Doxa generates docs for repositories up to 1 GB.",
+        details: { code: "repository_too_large", sizeKb: 2_097_152, limitKb: 1_048_576 },
+      },
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
   test("returns not found when the selected repository is not available to the user", async () => {
     mocks.projectsRepository.createForRepository.mockRejectedValueOnce(
       new CreateProjectError(
@@ -886,6 +971,8 @@ describe("project routes docs URLs", () => {
         repositoryVisibility: "private",
         productionBranch: "main",
         repositoryDefaultBranch: "main",
+        allowedBotLogins: [],
+        automationWarning: null,
         available: true,
         unavailableReason: null,
         updatedAt: null,
@@ -901,6 +988,7 @@ describe("project routes docs URLs", () => {
           visibility: "public",
           defaultBranch: "main",
           productionBranch: "main",
+          connectionIssue: null,
         },
       }),
     );
@@ -1989,11 +2077,14 @@ function createDoxabotProjectState(
       visibility: "private",
       defaultBranch: "main",
       productionBranch: "main",
+      connectionIssue: null,
     },
     hasPublishedVersion: true,
     storedEnabled: false,
     mergeTrigger: "batched",
     batchQuietMinutes: 30,
+    allowedBotLogins: [],
+    automationWarning: null,
     updatedAt: null,
     ...overrides,
   };

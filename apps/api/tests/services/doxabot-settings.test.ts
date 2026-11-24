@@ -36,11 +36,14 @@ const privateProject: DoxabotProjectSettingsState = {
     visibility: "private",
     defaultBranch: "main",
     productionBranch: "main",
+    connectionIssue: null,
   },
   hasPublishedVersion: true,
   storedEnabled: false,
   mergeTrigger: "batched",
   batchQuietMinutes: 30,
+  allowedBotLogins: [],
+  automationWarning: null,
   updatedAt: null,
 };
 
@@ -91,6 +94,8 @@ describe("Doxabot settings service", () => {
       repositoryVisibility: "private",
       productionBranch: "main",
       repositoryDefaultBranch: "main",
+      allowedBotLogins: [],
+      automationWarning: null,
       unavailableReason: null,
       updatedAt: null,
     });
@@ -137,6 +142,7 @@ describe("Doxabot settings service", () => {
         visibility: "public",
         defaultBranch: "main",
         productionBranch: "main",
+        connectionIssue: null,
       },
     });
     const service = settingsService(store, enabledPolicy);
@@ -189,6 +195,8 @@ describe("Doxabot settings service", () => {
       repositoryVisibility: "private",
       productionBranch: "main",
       repositoryDefaultBranch: "main",
+      allowedBotLogins: [],
+      automationWarning: null,
       unavailableReason: null,
       updatedAt: "2026-07-23T09:00:00.000Z",
     });
@@ -222,6 +230,8 @@ describe("Doxabot settings service", () => {
       repositoryVisibility: "private",
       productionBranch: "main",
       repositoryDefaultBranch: "main",
+      allowedBotLogins: [],
+      automationWarning: null,
       unavailableReason: "global_disabled",
       updatedAt: "2026-07-23T09:00:00.000Z",
     });
@@ -386,5 +396,94 @@ describe("Doxabot production branch setting", () => {
 
     await expect(result).rejects.toMatchObject({ code: "branch_check_unavailable" });
     expect(store.update).not.toHaveBeenCalled();
+  });
+
+  test("saves the allowed bot logins and returns them", async () => {
+    const store = createSettingsStore(privateProject);
+    const service = settingsService(store, enabledPolicy);
+
+    await expect(service.updateForOwner({
+      projectId: privateProject.projectId,
+      userId: privateProject.ownerUserId,
+      updatedByUserId: privateProject.ownerUserId,
+      changes: { allowedBotLogins: ["dependabot[bot]", "renovate"] },
+    })).resolves.toMatchObject({ allowedBotLogins: ["dependabot[bot]", "renovate"] });
+    expect(store.update).toHaveBeenCalledWith(expect.objectContaining({
+      changes: { allowedBotLogins: ["dependabot[bot]", "renovate"] },
+    }));
+  });
+
+  test("warns when the repository became private, and a settings change clears it", async () => {
+    const paused = { ...privateProject, automationWarning: "repository_privatized" as const };
+    const service = settingsService(createSettingsStore(paused), enabledPolicy);
+
+    await expect(service.getForOwner({
+      projectId: paused.projectId,
+      userId: paused.ownerUserId,
+    })).resolves.toMatchObject({ available: true, automationWarning: "repository_privatized" });
+    await expect(service.updateForOwner({
+      projectId: paused.projectId,
+      userId: paused.ownerUserId,
+      updatedByUserId: paused.ownerUserId,
+      changes: { enabled: true },
+    })).resolves.toMatchObject({ enabled: true, automationWarning: null });
+  });
+
+  test.each(["repository_removed", "repository_deleted", "installation_suspended", "installation_deleted"] as const)(
+    "a repository with %s is unavailable, says why, and cannot be enabled",
+    async (connectionIssue) => {
+      const state = {
+        ...privateProject,
+        repository: { ...privateProject.repository, connectionIssue },
+        automationWarning: connectionIssue,
+      } as DoxabotProjectSettingsState;
+      const store = createSettingsStore(state);
+      const service = settingsService(store, enabledPolicy);
+
+      await expect(service.getForOwner({ projectId: state.projectId, userId: state.ownerUserId }))
+        .resolves.toMatchObject({
+          available: false,
+          unavailableReason: "repository_not_connected",
+          automationWarning: connectionIssue,
+        });
+      await expect(service.updateForOwner({
+        projectId: state.projectId,
+        userId: state.ownerUserId,
+        updatedByUserId: state.ownerUserId,
+        changes: { enabled: true },
+      })).rejects.toEqual(expect.objectContaining({ code: "enablement_unavailable" }));
+    },
+  );
+
+  test("enables a public repository while the rollout flag is on", async () => {
+    const store = createSettingsStore({
+      ...privateProject,
+      repository: {
+        connected: true,
+        visibility: "public",
+        defaultBranch: "main",
+        productionBranch: "main",
+        connectionIssue: null,
+      },
+    });
+    const service = settingsService(store, { ...enabledPolicy, publicRepositoriesEnabled: true });
+
+    await expect(service.updateForOwner({
+      projectId: privateProject.projectId,
+      userId: privateProject.ownerUserId,
+      updatedByUserId: privateProject.ownerUserId,
+      changes: { enabled: true },
+    })).resolves.toMatchObject({ available: true, enabled: true, repositoryVisibility: "public" });
+  });
+});
+
+describe("Doxabot merge trigger default (Decision 7)", () => {
+  test("merge runs are manual until the owner turns them on", async () => {
+    const { DEFAULT_MERGE_SETTINGS } = await vi.importActual<typeof import("../../src/repositories/doxabot-settings")>(
+      "../../src/repositories/doxabot-settings",
+    );
+    const { schema } = await vi.importActual<typeof import("@doxahq/db")>("@doxahq/db");
+    expect(DEFAULT_MERGE_SETTINGS.mergeTrigger).toBe("manual");
+    expect(schema.doxabotAutomationSettings.mergeTrigger.default).toBe("manual");
   });
 });

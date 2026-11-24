@@ -47,6 +47,48 @@ export const doxabotBatchQuietMinutesSchema = z.union([
   z.literal(360),
 ]);
 
+/** The most bot logins that one project may allow. */
+export const DOXABOT_ALLOWED_BOT_LOGINS_LIMIT = 20;
+
+/**
+ * A GitHub login of a bot account, such as `dependabot[bot]`. The `[bot]`
+ * suffix is optional: `dependabot` allows the same bot.
+ */
+export const doxabotBotLoginSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\[bot\])?$/, "Enter a GitHub login, such as dependabot[bot].");
+
+/** The login without case and without the `[bot]` suffix, so both spellings match. */
+export function normalizeBotLogin(login: string): string {
+  return login.trim().toLowerCase().replace(/\[bot\]$/, "");
+}
+
+export const doxabotAllowedBotLoginsSchema = z
+  .array(doxabotBotLoginSchema)
+  .max(DOXABOT_ALLOWED_BOT_LOGINS_LIMIT);
+
+/**
+ * Why Doxabot stopped updating the site on its own. The site stays live; the
+ * owner decides what to do next (Decision 4).
+ * - `repository_privatized`: the repository became private. Doxabot turned
+ *   pull request previews off and set merges to manual. A settings change
+ *   clears it.
+ * - `repository_removed`: the repository was removed from the GitHub App.
+ * - `repository_deleted`: the repository was deleted on GitHub.
+ * - `installation_suspended` / `installation_deleted`: the GitHub App was
+ *   suspended or uninstalled.
+ */
+export const doxabotAutomationWarningSchema = z.enum([
+  "repository_privatized",
+  "repository_removed",
+  "repository_deleted",
+  "installation_suspended",
+  "installation_deleted",
+]);
+
 const doxabotSettingsBaseSchema = z.object({
   enabled: z.boolean(),
   mergeTrigger: doxabotMergeTriggerSchema,
@@ -59,6 +101,13 @@ const doxabotSettingsBaseSchema = z.object({
   productionBranch: z.string().min(1).nullable(),
   /** The repository's default branch on GitHub. Null without a repository. */
   repositoryDefaultBranch: z.string().min(1).nullable(),
+  /**
+   * Bot accounts whose pull requests get previews. Doxabot skips every other
+   * bot. Optional, so an older API stays readable; absent means none.
+   */
+  allowedBotLogins: doxabotAllowedBotLoginsSchema.optional(),
+  /** Why automation stopped, or null. Optional, so an older API stays readable. */
+  automationWarning: doxabotAutomationWarningSchema.nullable().optional(),
   updatedAt: z.string().datetime().nullable(),
 });
 
@@ -82,6 +131,8 @@ export const updateDoxabotSettingsInputSchema = z
     enabled: z.boolean().optional(),
     mergeTrigger: doxabotMergeTriggerSchema.optional(),
     batchQuietMinutes: doxabotBatchQuietMinutesSchema.optional(),
+    /** Replaces the whole list. */
+    allowedBotLogins: doxabotAllowedBotLoginsSchema.optional(),
     /** The API checks on GitHub that the branch exists before it saves it. */
     productionBranch: gitBranchNameSchema.optional(),
   })
@@ -113,6 +164,7 @@ export type UpdateDoxabotSettingsInput = z.infer<
   typeof updateDoxabotSettingsInputSchema
 >;
 export type DoxabotMergeTrigger = z.infer<typeof doxabotMergeTriggerSchema>;
+export type DoxabotAutomationWarning = z.infer<typeof doxabotAutomationWarningSchema>;
 export type DoxabotBatchQuietMinutes = z.infer<
   typeof doxabotBatchQuietMinutesSchema
 >;

@@ -48,7 +48,7 @@ export async function createRepositoryReadAccess(
 
   // A local installation uses one developer token, which cannot be scoped.
   const scope = isLocalInstallation(target.installationId)
-    ? undefined
+    ? null
     : repositoryReadScope(target.externalId);
   const { token } = await createInstallationAccessToken(env, target.installationId, scope);
   return { target, token };

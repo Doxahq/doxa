@@ -218,6 +218,41 @@ export const pageNoticeSchema = z.object({
   issues: pageOpenIssuesSchema,
 });
 
+/**
+ * The job event that lists the outside domains that the run's written pages
+ * link to and the repository does not contain. Outside links are allowed
+ * (owner decision, 2026-10-27), so the event flags them and nothing removes them.
+ */
+export const UNVERIFIED_EXTERNAL_LINKS_EVENT_TYPE = "unverified_external_links";
+
+export const UNVERIFIED_EXTERNAL_LINK_LIMITS = {
+  domainLength: 253,
+  domainsPerPage: 20,
+  pages: 200,
+  domains: 200,
+} as const;
+
+/** The unverified outside domains of one page. */
+export const unverifiedExternalDomainsSchema = z
+  .array(z.string().min(1).max(UNVERIFIED_EXTERNAL_LINK_LIMITS.domainLength))
+  .max(UNVERIFIED_EXTERNAL_LINK_LIMITS.domainsPerPage);
+
+export const unverifiedExternalLinkPageSchema = z.object({
+  pageId: z.string().min(1).max(PAGE_NOTICE_LIMITS.pageIdLength),
+  title: z.string().min(1).max(PAGE_NOTICE_LIMITS.titleLength),
+  href: pageHrefSchema.nullable(),
+  domains: unverifiedExternalDomainsSchema.min(1),
+});
+
+/** The data of an {@link UNVERIFIED_EXTERNAL_LINKS_EVENT_TYPE} event. */
+export const unverifiedExternalLinksEventDataSchema = z.object({
+  domains: z
+    .array(z.string().min(1).max(UNVERIFIED_EXTERNAL_LINK_LIMITS.domainLength))
+    .min(1)
+    .max(UNVERIFIED_EXTERNAL_LINK_LIMITS.domains),
+  pages: z.array(unverifiedExternalLinkPageSchema).min(1).max(UNVERIFIED_EXTERNAL_LINK_LIMITS.pages),
+});
+
 /** The job event that marks one page the run could not write. */
 export const GENERATION_PAGE_FLAGGED_EVENT_TYPE = "generation_page_flagged";
 
@@ -384,6 +419,8 @@ export type GenerationReviewPage = z.infer<typeof generationReviewPageSchema>;
 export type FlaggedPage = z.infer<typeof flaggedPageSchema>;
 export type PageOpenIssue = z.infer<typeof pageOpenIssueSchema>;
 export type PageNotice = z.infer<typeof pageNoticeSchema>;
+export type UnverifiedExternalLinkPage = z.infer<typeof unverifiedExternalLinkPageSchema>;
+export type UnverifiedExternalLinksEventData = z.infer<typeof unverifiedExternalLinksEventDataSchema>;
 export type PageNoticeKind = z.infer<typeof pageNoticeKindSchema>;
 export type FlaggedPageOutcome = z.infer<typeof flaggedPageOutcomeSchema>;
 export type PageLock = z.infer<typeof pageLockSchema>;

@@ -1343,7 +1343,7 @@ function createInternalApi(
         installationId: "installation-1",
       },
     }),
-    createInstallationAccessToken: async () => "install-token",
+    createRepositoryReadToken: async () => "install-token",
     markJobRunning: async (jobId) => {
       calls.running.push(jobId);
       calls.timeline.push("running");

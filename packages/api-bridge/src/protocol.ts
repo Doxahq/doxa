@@ -67,7 +67,6 @@ export const API_ENTRYPOINT_METHODS = {
     "getGenerationContext",
     "getGenerationExecutionContext",
     "getCurrentChangeProposalState",
-    "createInstallationAccessToken",
     "createRepositoryReadToken",
     "storeGenerationSiteAsset",
     "createModelAccessToken",

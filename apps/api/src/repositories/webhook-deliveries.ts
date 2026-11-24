@@ -4,7 +4,7 @@ import {
   type SourceProvider,
 } from "@doxahq/contracts";
 import { createDb, schema, type DbEnv } from "@doxahq/db";
-import { and, eq, notInArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, notInArray } from "drizzle-orm";
 
 export type WebhookDeliveryClaim = "claimed" | "duplicate";
 
@@ -41,7 +41,21 @@ export interface WebhookDeliveriesStore {
   ): Promise<void>;
 }
 
-export class WebhookDeliveriesRepository implements WebhookDeliveriesStore {
+/**
+ * The deliveries that the cleanup deletes: ignored ones, and failed ones
+ * (also malformed payloads). Processed deliveries stay, and so does any
+ * delivery linked to a generation job, which the queue outbox reads.
+ */
+export const CLEANUP_DELIVERY_STATUSES = ["ignored", "failed"] as const;
+
+export interface WebhookDeliveryCleanupStore {
+  /** Deletes at most `limit` old rows; returns how many it deleted. */
+  deleteOldUnprocessed(input: { createdBefore: Date; limit: number }): Promise<number>;
+}
+
+export class WebhookDeliveriesRepository
+  implements WebhookDeliveriesStore, WebhookDeliveryCleanupStore
+{
   private readonly db;
 
   constructor(env: DbEnv) {
@@ -171,6 +185,25 @@ export class WebhookDeliveriesRepository implements WebhookDeliveriesStore {
       errorCode: input.errorCode,
       processedAt: new Date(),
     });
+  }
+
+  async deleteOldUnprocessed(input: { createdBefore: Date; limit: number }): Promise<number> {
+    const batch = this.db
+      .select({ id: schema.scmWebhookDeliveries.id })
+      .from(schema.scmWebhookDeliveries)
+      .where(
+        and(
+          inArray(schema.scmWebhookDeliveries.status, [...CLEANUP_DELIVERY_STATUSES]),
+          lt(schema.scmWebhookDeliveries.createdAt, input.createdBefore),
+          isNull(schema.scmWebhookDeliveries.generationJobId),
+        ),
+      )
+      .limit(input.limit);
+    const deleted = await this.db
+      .delete(schema.scmWebhookDeliveries)
+      .where(inArray(schema.scmWebhookDeliveries.id, batch))
+      .returning({ id: schema.scmWebhookDeliveries.id });
+    return deleted.length;
   }
 
   private async updateOutcome(

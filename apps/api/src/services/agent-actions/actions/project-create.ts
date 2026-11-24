@@ -1,10 +1,12 @@
 import { z } from "zod";
+import { PlanLimitError } from "@doxahq/billing";
 import {
   createExampleProjectInputSchema,
   createProjectInputSchema,
   projectSchema,
 } from "@doxahq/contracts";
 import { ALL_APPROVAL_MODES, DEFAULT_TTL_HOURS } from "../action-definition";
+import { billingRefusalActionError } from "../billing-refusal";
 import { FRESH } from "../freshness";
 import { definePrincipalAction } from "../registered-action";
 import { emptySchema } from "./shared";
@@ -58,21 +60,27 @@ export const projectCreateAction = definePrincipalAction({
   }),
   capture: async () => ({}),
   checkFresh: async () => FRESH,
-  execute({ target, services }, payload) {
-    if (payload.source === "example") {
-      return services.projects.createExample({
+  async execute({ target, services }, payload) {
+    try {
+      if (payload.source === "example") {
+        return await services.projects.createExample({
+          userId: target.userId,
+          name: payload.name,
+          slug: payload.slug,
+          template: payload.template,
+        });
+      }
+      return await services.projects.createForRepository({
         userId: target.userId,
+        githubRepositoryId: payload.githubRepositoryId,
         name: payload.name,
         slug: payload.slug,
-        template: payload.template,
+        productionBranch: payload.productionBranch,
       });
+    } catch (err) {
+      // The project limit (`account.projects`): the agent gets the facts in the message.
+      if (err instanceof PlanLimitError) throw billingRefusalActionError(err);
+      throw err;
     }
-    return services.projects.createForRepository({
-      userId: target.userId,
-      githubRepositoryId: payload.githubRepositoryId,
-      name: payload.name,
-      slug: payload.slug,
-      productionBranch: payload.productionBranch,
-    });
   },
 });

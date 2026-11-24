@@ -534,3 +534,50 @@ describe("production generation admission with the credit meter (billing spec 10
     }
   });
 });
+
+describe("production generation admission with the repository size limit", () => {
+  function sizedService(sizeKb: number | undefined, maxRepositorySizeKb: number | undefined = 1_048_576) {
+    const admit = vi.fn(async () => ({ kind: "admitted" as const, metered: true, capCredits: 3_000, reservationId: "hold-1" }));
+    const create = vi.fn(async () => ({ outcome: "created" as const, job: queuedJob() }));
+    const findCompatiblePublished = vi.fn(async () => null);
+    const service = new ProductionGenerationAdmissionService({
+      source: { resolveTarget: async () => ({ revision: "b".repeat(40), treeHash: "c".repeat(40), sizeKb }) },
+      baselines: { findCompatiblePublished, handWrittenVersion: noHandWrittenVersion },
+      jobs: { create },
+      instructions: instructionsUnchanged(),
+      executionConfig,
+      metering: { mode: "on", admit, abandon: vi.fn(async () => undefined) },
+      maxRepositorySizeKb,
+    });
+    return { service, admit, create, findCompatiblePublished };
+  }
+
+  test("refuses a repository above the limit before credits, baselines or a job", async () => {
+    const { service, admit, create, findCompatiblePublished } = sizedService(1_572_864);
+    await expect(service.admit({ projectId: "project-1", userId: "user-1", force: true })).resolves.toEqual({
+      outcome: "repository_too_large",
+      sizeKb: 1_572_864,
+      limitKb: 1_048_576,
+      message: "This repository is 1.5 GB. Doxa generates docs for repositories up to 1 GB.",
+    });
+    expect(admit).not.toHaveBeenCalled();
+    expect(findCompatiblePublished).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test("admits a repository at the limit, and a source that does not know the size", async () => {
+    for (const sizeKb of [1_048_576, undefined]) {
+      const { service, create } = sizedService(sizeKb);
+      await expect(service.admit({ projectId: "project-1", userId: "user-1" })).resolves.toMatchObject({ outcome: "created" });
+      expect(create).toHaveBeenCalled();
+    }
+  });
+
+  test("uses a lower configured limit", async () => {
+    const { service } = sizedService(2_048, 1_024);
+    await expect(service.admit({ projectId: "project-1", userId: "user-1" })).resolves.toMatchObject({
+      outcome: "repository_too_large",
+      message: "This repository is 2 MB. Doxa generates docs for repositories up to 1 MB.",
+    });
+  });
+});

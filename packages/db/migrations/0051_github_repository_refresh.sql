@@ -1,0 +1,1 @@
+ALTER TABLE "github_installations" ADD COLUMN "repositories_refreshed_at" timestamp with time zone;

@@ -41,6 +41,18 @@ const eligibilityCases: EligibilityTestCase[] = [
       },
     },
     {
+      name: "a repository that GitHub took away is not connected",
+      input: {
+        ...eligiblePrivateProject,
+        repository: { connected: true, visibility: "private", connectionIssue: "installation_suspended" },
+      },
+      expected: {
+        available: false,
+        enabled: false,
+        reason: "repository_not_connected",
+      },
+    },
+    {
       name: "a repository must be connected",
       input: {
         ...eligiblePrivateProject,

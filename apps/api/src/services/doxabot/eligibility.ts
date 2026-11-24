@@ -4,6 +4,7 @@ import type {
   RepositoryVisibility,
 } from "@doxahq/contracts";
 import type { Env } from "../../env";
+import type { RepositoryConnectionIssue } from "../../repositories/github-lifecycle";
 
 export interface DoxabotDeploymentPolicy {
   enabled: boolean;
@@ -15,6 +16,11 @@ export type DoxabotRepositoryState =
   | {
       connected: true;
       visibility: RepositoryVisibility;
+      /**
+       * Set when GitHub took the repository away: the app lost it, or the
+       * installation is suspended or uninstalled. Doxabot cannot run then.
+       */
+      connectionIssue?: RepositoryConnectionIssue | null;
     };
 
 export interface EvaluateDoxabotEligibilityInput {
@@ -46,9 +52,11 @@ export function evaluateDoxabotEligibility(
   if (!input.deploymentPolicy.enabled) {
     return unavailable("global_disabled");
   }
-  if (!input.repository.connected) {
+  if (!input.repository.connected || input.repository.connectionIssue) {
     return unavailable("repository_not_connected");
   }
+  // The kill switch of the public repository rollout. Remove it, and the
+  // `public_repository_disabled` reason, after the rollout.
   if (
     input.repository.visibility === "public"
     && !input.deploymentPolicy.publicRepositoriesEnabled

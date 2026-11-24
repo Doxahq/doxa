@@ -1506,7 +1506,6 @@ function createEnv(input: {
         missingColumns: [],
       }),
       getCurrentChangeProposalState: async () => null,
-      createInstallationAccessToken: async () => "",
       createRepositoryReadToken: async () => "",
       storeGenerationSiteAsset: async () => ({ ref: "" }),
       createModelAccessToken: vi.fn(async () => null),

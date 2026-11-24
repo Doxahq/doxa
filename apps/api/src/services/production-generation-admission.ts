@@ -34,12 +34,19 @@ import {
 import type { BillingRefusal, GenerationMetering } from "./billing/generation-metering";
 import { meteredActionOf, requiredFeaturesOf, runModels } from "./billing/generation-metering";
 import { generationMeteringFromEnv } from "./billing/generation-metering-env";
+import {
+  checkRepositorySize,
+  maxRepositorySizeKbFromEnv,
+  type RepositoryTooLarge,
+} from "./repository-size";
 
 export type { ProductionGenerationBaseline };
 
 export interface ProductionGenerationTarget {
   revision: string;
   treeHash: string;
+  /** GitHub's repository size in KB. Absent: the source does not know it, so no size check. */
+  sizeKb?: number;
 }
 
 export interface ProductionGenerationSource {
@@ -54,7 +61,9 @@ export type ProductionGenerationAdmission =
       message: string;
     }
   /** Billing refused the run: 402 `credits_exhausted`, 403 `plan_limit` or another refusal (spec 10.6). */
-  | { outcome: "billing_refused"; error: BillingRefusal };
+  | { outcome: "billing_refused"; error: BillingRefusal }
+  /** The repository is above `MAX_REPOSITORY_SIZE_KB`: no job, no clone, no model call. */
+  | RepositoryTooLarge;
 
 export interface ProductionGenerationJobsStore {
   create(
@@ -72,6 +81,8 @@ export interface ProductionGenerationAdmissionDependencies {
   metering?: Pick<GenerationMetering, "mode" | "admit" | "abandon">;
   /** The planner, writer and fallback models of a run. Default: planner and writer. */
   runModels?: (config: GenerationExecutionConfig) => string[];
+  /** The largest repository a run accepts, in KB. Absent: no size limit. */
+  maxRepositorySizeKb?: number;
 }
 
 export class ProductionGenerationAdmissionService {
@@ -94,6 +105,7 @@ export class ProductionGenerationAdmissionService {
         resolveGenerationExecutionConfig(env),
       metering: generationMeteringFromEnv(env),
       runModels: (config) => runModels(env, config),
+      maxRepositorySizeKb: maxRepositorySizeKbFromEnv(env),
     });
   }
 
@@ -109,6 +121,12 @@ export class ProductionGenerationAdmissionService {
       await this.dependencies.source.resolveTarget(
         input.projectId,
       );
+    // Before any other check: a forced run of a too large repository is refused too.
+    const { maxRepositorySizeKb } = this.dependencies;
+    if (maxRepositorySizeKb !== undefined) {
+      const tooLarge = checkRepositorySize(target.sizeKb, maxRepositorySizeKb);
+      if (tooLarge) return tooLarge;
+    }
     const baseline =
       await this.dependencies.baselines.findCompatiblePublished({
         projectId: input.projectId,

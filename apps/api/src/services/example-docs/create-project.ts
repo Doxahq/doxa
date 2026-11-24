@@ -3,6 +3,7 @@ import type { ProjectTeam } from "@doxahq/contracts/teams";
 import type { Env } from "../../env";
 import { ProjectDeletionRepository } from "../../repositories/project-deletion";
 import { ProjectsRepository } from "../../repositories/projects";
+import { assertProjectLimit } from "../project-limit";
 import { publishExampleDocs } from "./publish";
 
 /**
@@ -23,6 +24,7 @@ export async function createExampleProject(
   },
 ): Promise<ProjectDto> {
   const { template, ...projectInput } = input;
+  await assertProjectLimit(env, input);
   const projects = new ProjectsRepository(env);
   const { project, siteId } =
     await projects.createWithoutRepository(projectInput);

@@ -702,6 +702,7 @@ interface.
 | `site.custom_domains` | `DocsDomainLimitPolicy` | Constant 1 |
 | `hosting` | Docs host resolution (section 9.4) | Operator list |
 | `team.seats` | Team invite create and accept | None |
+| `account.projects` | Project create (`POST /projects`, `POST /projects/example`, the agent `project.create` action), `ProjectLimitPolicy` in `plan-seams.ts`. Free 1, Pro 10, Enterprise and self-hosted unlimited (decided 2026-11-23). Existing projects above the limit stay. | None |
 | `team.role_permissions` | Member role change to a role other than owner | None |
 | `ai.doxa_agent` | Production generation admission | None |
 | `ai.doxabot` | Doxabot job admission, merge triggers | None |

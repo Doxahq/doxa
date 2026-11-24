@@ -3,6 +3,7 @@ import type { ProjectTeam } from "@doxahq/contracts/teams";
 import type { Env } from "../env";
 import { GitHubRepository } from "../repositories/github";
 import { CreateProjectError, ProjectsRepository } from "../repositories/projects";
+import { assertProjectLimit } from "./project-limit";
 import {
   RepositoryBranchesService,
   RepositoryBranchesUnavailableError,
@@ -57,6 +58,7 @@ export async function createRepositoryProject(
     team: ProjectTeam | null;
   },
 ): Promise<ProjectDto> {
+  await assertProjectLimit(env, input);
   await assertProductionBranchExists(env, input);
   return new ProjectsRepository(env).createForRepository(input);
 }

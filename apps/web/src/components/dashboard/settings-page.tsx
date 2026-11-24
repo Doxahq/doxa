@@ -3,6 +3,7 @@ import { Github, Link2 } from "lucide-react"
 
 import { FieldList, FieldRow, SectionLabel } from "~/components/dashboard/dashboard-header"
 import { AccountPageFrame } from "~/components/dashboard/settings/account-page-frame"
+import { GitHubInstallationsSection } from "~/components/dashboard/settings/github-installations-section"
 import { AccountSettingsSkeleton } from "~/components/dashboard/skeletons/account-skeletons"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
@@ -11,6 +12,7 @@ import { ACCOUNT_PAGES } from "~/lib/dashboard/account-pages"
 import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
 import { useGitHub } from "~/lib/dashboard/use-github"
 import { billingAccountsQueryOptions } from "~/lib/queries/billing"
+import { githubInstallationsQueryOptions } from "~/lib/queries/dashboard"
 
 /**
  * `/dashboard/settings`: Account settings, the profile and the GitHub connection.
@@ -26,6 +28,7 @@ export function SettingsPage() {
     { isPending: auth.isPending },
     { isPending: github.isLoading },
     useQuery(billingAccountsQueryOptions()),
+    useQuery(githubInstallationsQueryOptions()),
   ])
 
   if (isFirstLoad) return <AccountSettingsSkeleton />
@@ -38,6 +41,7 @@ export function SettingsPage() {
         repositoryCount={github.repositories.length}
         githubInstallUrl={github.githubInstallUrl}
       />
+      <GitHubInstallationsSection />
     </AccountPageFrame>
   )
 }

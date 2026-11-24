@@ -103,3 +103,107 @@ describe("GitHubRepository.removeRepositoriesExcept", () => {
     expect(query?.params).toEqual(["installation-row-1"]);
   });
 });
+
+function useProxyDb() {
+  mock.queries.length = 0;
+  mock.rows = [];
+  mock.createDb.mockReturnValue(
+    drizzle(
+      async (sql, params) => {
+        mock.queries.push({ sql, params });
+        return { rows: mock.rows };
+      },
+      { schema },
+    ),
+  );
+}
+
+/**
+ * Risk 7: a second Doxa user must not take over a repository record that
+ * another user's active installation has. The move happens only inside the
+ * upsert's WHERE, so a race cannot pass it. (The same SQL was checked on a
+ * real Postgres: another owner gets no row, the same owner or an inactive old
+ * installation moves the row.)
+ */
+describe("GitHubRepository.recordRepository", () => {
+  beforeEach(useProxyDb);
+
+  const record = () =>
+    new GitHubRepository({} as never).recordRepository({
+      installationId: "installation-row-new",
+      githubRepoId: "7",
+      fullName: "acme/docs",
+      owner: "acme",
+      name: "docs",
+    });
+
+  test("moves a repository only for the same owner or an unusable old installation", async () => {
+    await record();
+
+    const [query] = mock.queries;
+    const where = query?.sql.split("do update set")[1]?.split(" returning ")[0] ?? "";
+    expect(where).toContain('"github_repositories"."installation_id" = $17');
+    expect(where).toContain('"github_repositories"."disconnected_at" is not null');
+    expect(where).toContain('"old_installation"."id" = "github_repositories"."installation_id"');
+    expect(where).toContain('"old_installation"."user_id" = "new_installation"."user_id"');
+    expect(where).toContain('"old_installation"."status" <> $19');
+    expect(query?.params.slice(16)).toEqual(["installation-row-new", "installation-row-new", "active"]);
+  });
+
+  test("returns null when the move is refused", async () => {
+    mock.rows = [];
+
+    await expect(record()).resolves.toBeNull();
+  });
+});
+
+describe("GitHubRepository.transferInstallationOwner", () => {
+  beforeEach(useProxyDb);
+
+  const transfer = (toUserId = "user-2") =>
+    new GitHubRepository({} as never).transferInstallationOwner({
+      installationRowId: "installation-row-1",
+      fromUserId: "user-1",
+      toUserId,
+    });
+
+  test("moves only the owner's row, and only to a user of a shared team", async () => {
+    mock.rows = [["user-1"]];
+
+    await expect(transfer()).resolves.toBe("moved");
+
+    const update = mock.queries[1];
+    expect(update?.sql).toMatch(/^update "github_installations" set "user_id" = \$1/);
+    expect(update?.sql).toContain('"github_installations"."user_id" = $4');
+    expect(update?.sql).toContain('inner join "team_members" "to_member" on "from_member"."team_id" = "to_member"."team_id"');
+    expect(update?.params).toEqual(["user-2", expect.any(String), "installation-row-1", "user-1", "user-1", "user-2"]);
+  });
+
+  test("refuses a target with no shared team", async () => {
+    // The select finds the owner; the update then matches no row.
+    let call = 0;
+    mock.createDb.mockReturnValue(
+      drizzle(async (sql, params) => {
+        mock.queries.push({ sql, params });
+        call += 1;
+        return { rows: call === 1 ? [["user-1"]] : [] };
+      }, { schema }),
+    );
+
+    await expect(transfer("stranger")).resolves.toBe("target_not_allowed");
+  });
+
+  test("answers not_found to a user who does not own the installation", async () => {
+    mock.rows = [["someone-else"]];
+
+    await expect(transfer()).resolves.toBe("not_found");
+    expect(mock.queries).toHaveLength(1);
+  });
+
+  test("refuses a move to the owner", async () => {
+    mock.rows = [["user-1"]];
+
+    await expect(transfer("user-1")).resolves.toBe("target_not_allowed");
+    expect(mock.queries).toHaveLength(1);
+  });
+});

@@ -27,6 +27,7 @@ import {
 } from "../../repositories/preview-baselines";
 import type { PreviewAdmissionStop } from "../../repositories/preview-admission-guard";
 import type { ChangeProposalSnapshot } from "./change-proposal-state";
+import { checkRepositorySize, maxRepositorySizeKbFromEnv } from "../repository-size";
 import { GitHubPullRequestStateResolver } from "./github-pull-requests";
 import {
   evaluateDoxabotEligibility,
@@ -87,6 +88,8 @@ export interface PreviewRerunDependencies {
   /** The credit meter (billing spec 10.5). Absent: no metering, as with `BILLING_ENFORCEMENT=off`. */
   metering?: Pick<GenerationMetering, "mode" | "admit" | "abandon">;
   runModels?: (config: GenerationExecutionConfig) => string[];
+  /** The largest repository a run accepts, in KB (`MAX_REPOSITORY_SIZE_KB`). */
+  maxRepositorySizeKb?: number;
 }
 
 const QUEUE_FAILED_MESSAGE = "Doxa could not queue the preview generation. Try again.";
@@ -120,6 +123,7 @@ export class PreviewGenerationRerunService {
       pullRequests: GitHubPullRequestStateResolver.fromEnv(env),
       metering: generationMeteringFromEnv(env),
       runModels: (config) => runModels(env, config),
+      maxRepositorySizeKb: maxRepositorySizeKbFromEnv(env),
     });
   }
 
@@ -163,11 +167,23 @@ export class PreviewGenerationRerunService {
     if (current.baseRef !== context.productionBranch) {
       return { outcome: "blocked", reason: "base_not_production" };
     }
+    // The same size limit as a production run. Only the live answer
+    // carries the size; without it, the worker's clone is the backstop.
+    if (
+      this.deps.maxRepositorySizeKb !== undefined &&
+      checkRepositorySize(live?.repositorySizeKb, this.deps.maxRepositorySizeKb)
+    ) {
+      return { outcome: "blocked", reason: "repository_too_large" };
+    }
     // A person asks for this run, so the project setting that turns
     // automatic previews off does not stop it. Previews must exist at all.
     const eligibility = evaluateDoxabotEligibility({
       deploymentPolicy: this.deps.deploymentPolicy,
-      repository: { connected: true, visibility: context.repositoryVisibility },
+      repository: {
+        connected: true,
+        visibility: context.repositoryVisibility,
+        connectionIssue: context.connectionIssue,
+      },
       hasPublishedVersion: context.hasPublishedVersion,
       storedEnabled: context.storedEnabled,
     });

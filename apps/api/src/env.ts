@@ -59,6 +59,8 @@ export interface Env extends AuthEnv {
   DOXABOT_ENABLED?: string;
   DOXABOT_PUBLIC_REPOSITORIES_ENABLED?: string;
   DOXABOT_GENERATOR_FINGERPRINT?: string;
+  /** The largest repository a generation accepts, in KB (GitHub's `size`). Default 1048576 (1 GB). */
+  MAX_REPOSITORY_SIZE_KB?: string;
   DOXA_AGENT_PAGE_CONCURRENCY?: string;
   GENERATION_TIMEOUT_MS?: string;
   GENERATION_IDLE_TIMEOUT_MS?: string;

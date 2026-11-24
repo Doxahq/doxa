@@ -14,7 +14,7 @@ describe("founder slots", () => {
   it("holds a slot at Checkout and releases it when the Checkout expires", async () => {
     const billing = createTestBilling({ catalog: smallOffer(1) });
     const a = await owner(billing, "a");
-    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_yearly_founder_v1", requestId: "r1" });
+    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_yearly_founder_v2", requestId: "r1" });
     expect(await billing.store.getOfferSlot("founder_v1", a.id)).toMatchObject({ state: "held", checkoutSessionId: link.checkoutId });
     expect((await billing.offers.describe("founder_v1")).slotsLeft).toBe(0);
 
@@ -38,7 +38,7 @@ describe("founder slots", () => {
   it("holds through the trial and claims at the first paid invoice", async () => {
     const billing = createTestBilling({ catalog: smallOffer(1) });
     const a = await owner(billing, "a");
-    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v1", requestId: "r1" });
+    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v2", requestId: "r1" });
     billing.provider.completeCheckout(link.checkoutId);
     await billing.deliverWebhooks();
     const held = await billing.store.getOfferSlot("founder_v1", a.id);
@@ -56,7 +56,7 @@ describe("founder slots", () => {
   it("releases the slot when the trial ends without a payment", async () => {
     const billing = createTestBilling({ catalog: smallOffer(1) });
     const a = await owner(billing, "a");
-    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v1", requestId: "r1" });
+    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v2", requestId: "r1" });
     billing.provider.completeCheckout(link.checkoutId);
     await billing.deliverWebhooks();
     const customer = { provider: "memory" as const, customerId: (await billing.store.getAccount(a.id))!.providerCustomerId! };
@@ -74,7 +74,7 @@ describe("founder slots", () => {
     await billing.offers.release({ offerKey: "founder_v1", accountId: a.id });
     expect(await billing.store.getOfferSlot("founder_v1", a.id)).toMatchObject({ state: "claimed" });
 
-    const error = await billing.payments.createCheckout({ accountId: b.id, priceKey: "pro_yearly_founder_v1", requestId: "r2" }).catch((caught: unknown) => caught);
+    const error = await billing.payments.createCheckout({ accountId: b.id, priceKey: "pro_yearly_founder_v2", requestId: "r2" }).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(OfferClosedError);
     expect(error).toMatchObject({ code: "offer_closed", newPriceKey: "pro_yearly_v1" });
     const view = await billing.offers.describe("founder_v1");
@@ -87,7 +87,7 @@ describe("founder slots", () => {
     const billing = createTestBilling();
     const accounts = await Promise.all(Array.from({ length: 60 }, (_, index) => owner(billing, `u${index}`)));
     const results = await Promise.allSettled(
-      accounts.map((account, index) => billing.payments.createCheckout({ accountId: account.id, priceKey: "pro_monthly_founder_v1", requestId: `r${index}` })),
+      accounts.map((account, index) => billing.payments.createCheckout({ accountId: account.id, priceKey: "pro_monthly_founder_v2", requestId: `r${index}` })),
     );
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(50);
     expect(results.filter((result) => result.status === "rejected" && result.reason instanceof OfferClosedError)).toHaveLength(10);
@@ -97,7 +97,7 @@ describe("founder slots", () => {
     const billing = createTestBilling({ catalog: smallOffer(1) });
     const a = await owner(billing, "a");
     billing.provider.failNext("createCheckout");
-    await expect(billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v1", requestId: "r1" })).rejects.toThrow();
+    await expect(billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v2", requestId: "r1" })).rejects.toThrow();
     expect(await billing.store.getOfferSlot("founder_v1", a.id)).toMatchObject({ state: "released" });
   });
 
@@ -105,7 +105,7 @@ describe("founder slots", () => {
     const billing = createTestBilling();
     const founder = await owner(billing, "f");
     const standard = await owner(billing, "s");
-    for (const [account, priceKey] of [[founder, "pro_monthly_founder_v1"], [standard, "pro_monthly_v1"]] as const) {
+    for (const [account, priceKey] of [[founder, "pro_monthly_founder_v2"], [standard, "pro_monthly_v1"]] as const) {
       const link = await billing.payments.createCheckout({ accountId: account.id, priceKey, requestId: "r" });
       billing.provider.completeCheckout(link.checkoutId);
       await billing.deliverWebhooks();

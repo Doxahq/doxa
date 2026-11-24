@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { PlanLimitError } from "@doxahq/billing";
 import type { DocsDomainDto } from "@doxahq/contracts";
 
 const mocks = vi.hoisted(() => ({
@@ -208,9 +209,9 @@ describe("docs domain routes", () => {
     });
   });
 
-  test("returns a friendly conflict when the project reaches its domain limit", async () => {
+  test("returns 403 plan_limit when the project reaches its domain limit", async () => {
     mocks.docsDomainLifecycleService.createCustomDomain.mockRejectedValue(
-      new CreateCustomDocsDomainError("project_domain_limit_reached"),
+      new PlanLimitError({ key: "site.custom_domains", limit: 1, used: 1 }),
     );
 
     const response = await worker.fetch(
@@ -221,10 +222,10 @@ describe("docs domain routes", () => {
       createExecutionContext(),
     );
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({
       error: {
-        message: "This project has reached its custom domain limit.",
+        details: { code: "plan_limit", key: "site.custom_domains", limit: 1, used: 1 },
       },
     });
   });

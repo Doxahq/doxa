@@ -39,6 +39,18 @@ export function showBillingDenial(denial: BillingDenial | null): void {
   emit()
 }
 
+/**
+ * Opens the plan limit flow for a limit that the dashboard knows it reached
+ * before it asks the API, for example the branch limit of the branch menu.
+ * The account and plan come from the open project, as for a 403 answer.
+ */
+export function showPlanLimit(key: string, limit: number, used: number): void {
+  showBillingDenial({
+    kind: "plan_limit",
+    details: { code: "plan_limit", key, limit, used, plan: null, resetsAt: null, upgradeUrl: null },
+  })
+}
+
 /** Reports `error` when it is a billing denial. Returns true when it was one. */
 export function reportBillingDenial(error: unknown): boolean {
   const credits = creditsExhaustedDetails(error)

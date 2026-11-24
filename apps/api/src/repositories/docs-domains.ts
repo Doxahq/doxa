@@ -1,4 +1,5 @@
 import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { PlanLimitError } from "@doxahq/billing";
 import { createDb, schema } from "@doxahq/db";
 import { readDocsSearchTarget } from "../services/docs-search/site-provider";
 import type {
@@ -35,7 +36,6 @@ export type CreateCustomDocsDomainErrorCode =
   | "invalid_hostname"
   | "reserved_hostname"
   | "project_not_found"
-  | "project_domain_limit_reached"
   | "hostname_taken";
 
 export class CreateCustomDocsDomainError extends Error {
@@ -145,7 +145,11 @@ export class DocsDomainsRepository {
             ),
           );
         if (customDomainCount.value >= input.customDomainLimit) {
-          throw new CreateCustomDocsDomainError("project_domain_limit_reached");
+          throw new PlanLimitError({
+            key: "site.custom_domains",
+            limit: input.customDomainLimit,
+            used: customDomainCount.value,
+          });
         }
 
         const [existingHostname] = await transaction
@@ -564,8 +568,6 @@ function getCreateCustomDocsDomainMessage(
       return "This hostname is reserved for Doxa-managed docs domains.";
     case "project_not_found":
       return "Project not found.";
-    case "project_domain_limit_reached":
-      return "This project has reached its custom domain limit.";
     case "hostname_taken":
       return "This hostname is already connected to another docs project.";
   }

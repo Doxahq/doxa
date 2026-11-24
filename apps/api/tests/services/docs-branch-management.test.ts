@@ -128,12 +128,8 @@ describe("named branch management", () => {
     await createFromMain(service, "one");
 
     await expect(createFromMain(service, "two")).rejects.toMatchObject({
-      issues: [
-        expect.objectContaining({
-          code: "branch_limit_reached",
-          params: { max: 1 },
-        }),
-      ],
+      code: "plan_limit",
+      details: { key: "docs.branches_per_site", limit: 1, used: 1 },
     });
 
     const duplicateSubject = createSubject();

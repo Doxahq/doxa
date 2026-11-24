@@ -95,7 +95,15 @@ function DomainAddForm({ state }: { state: ReturnType<typeof useProjectDomains> 
         </form>
         {state.isDomainLimitReached ? (
           <p className="text-xs leading-5 text-muted-foreground">
-            Custom domain limit reached. Delete the current domain before you add another one.
+            Custom domain limit reached. Delete a domain, or{" "}
+            <button
+              type="button"
+              onClick={state.showDomainLimit}
+              className="text-foreground underline underline-offset-2 hover:text-primary-text"
+            >
+              upgrade for more
+            </button>
+            .
           </p>
         ) : (
           <p className="text-xs leading-5 text-muted-foreground">

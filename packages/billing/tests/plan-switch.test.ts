@@ -16,9 +16,9 @@ describe("monthly/yearly plan switch", () => {
 
   it("keeps a founder on the founder price of the other interval", async () => {
     const billing = createTestBilling();
-    const { account } = await paidProAccount(billing, "founder", "pro_yearly_founder_v1");
+    const { account } = await paidProAccount(billing, "founder", "pro_yearly_founder_v2");
     const result = await billing.payments.switchPlanInterval({ accountId: account.id, interval: "month", requestId: "s1" });
-    expect(result.priceKey).toBe("pro_monthly_founder_v1");
+    expect(result.priceKey).toBe("pro_monthly_founder_v2");
   });
 
   it("does nothing when the interval is already the same", async () => {

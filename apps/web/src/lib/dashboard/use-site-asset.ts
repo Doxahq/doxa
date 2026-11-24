@@ -3,6 +3,7 @@ import type { AssetRef, SiteAssetKind, ValidationIssue } from "@doxahq/site-conf
 
 import { isApiValidationError } from "~/lib/api-errors"
 import { getErrorMessage } from "~/lib/errors"
+import { planLimitDetails } from "~/lib/dashboard/billing-model"
 import { checkSiteAssetFile } from "~/lib/dashboard/site-asset-files"
 import { uploadSiteAsset } from "~/lib/site-assets-api"
 import { siteAssetPreviewQueryOptions } from "~/lib/queries/site-settings"
@@ -26,6 +27,8 @@ export function useSiteAssetUpload(projectId: string) {
       return { ok: true, ref: result.ref, warnings: result.warnings ?? [] }
     } catch (error) {
       if (isApiValidationError(error)) return { ok: false, issues: error.issues, message: null }
+      // The mutation cache opens the plan limit flow for a 403 plan_limit: the field shows nothing more.
+      if (planLimitDetails(error)) return { ok: false, issues: [], message: null }
       return { ok: false, issues: [], message: getErrorMessage(error, "The upload failed.") }
     }
   }

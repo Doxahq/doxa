@@ -67,7 +67,7 @@ describe("BILLING_ENFORCEMENT=shadow", () => {
     await expect(seams.searchPolicy.getSearchPolicy(PROJECT)).resolves.toEqual(PAID_PLAN_SEARCH_POLICY);
     await expect(seams.storageLimits.getStorageLimits(PROJECT)).resolves.toEqual(FREE_PLAN_STORAGE_LIMITS);
     expect(denials).toEqual([
-      { key: "docs.branches_per_site", limit: 3, current: 10, mode: "shadow", kind: "stricter_limit", plan: "free", projectId: PROJECT },
+      { key: "docs.branches_per_site", limit: 2, current: 10, mode: "shadow", kind: "stricter_limit", plan: "free", projectId: PROJECT },
       { key: "site.typesense_search", limit: false, current: true, mode: "shadow", kind: "stricter_limit", plan: "free", projectId: PROJECT },
     ]);
   });
@@ -104,7 +104,7 @@ describe("BILLING_ENFORCEMENT=shadow", () => {
 describe("BILLING_ENFORCEMENT=on", () => {
   test("a Free account gets the Free plan values", async () => {
     const { seams, denials } = setup("on");
-    await expect(seams.entitlements.getProjectEntitlements(PROJECT)).resolves.toEqual({ removePoweredBy: false, maxBranchesPerSite: 3 });
+    await expect(seams.entitlements.getProjectEntitlements(PROJECT)).resolves.toEqual({ removePoweredBy: false, maxBranchesPerSite: 2 });
     await expect(seams.entitlements.getSearchPolicy(PROJECT)).resolves.toEqual(FREE_PLAN_SEARCH_POLICY);
     await expect(seams.storageLimits.getStorageLimits(PROJECT)).resolves.toEqual(FREE_PLAN_STORAGE_LIMITS);
     expect(denials).toEqual([]);
@@ -138,7 +138,7 @@ describe("BILLING_ENFORCEMENT=on", () => {
     harness.billing.projects.set("team-project", { userId: OWNER, teamId: TEAM });
     await subscribePro(harness, "team", TEAM);
     await expect(seams.entitlements.getProjectEntitlements("team-project")).resolves.toMatchObject({ maxBranchesPerSite: 1000 });
-    await expect(seams.entitlements.getProjectEntitlements(PROJECT)).resolves.toMatchObject({ maxBranchesPerSite: 3 });
+    await expect(seams.entitlements.getProjectEntitlements(PROJECT)).resolves.toMatchObject({ maxBranchesPerSite: 2 });
   });
 
   test("team seats: a Free team cannot add a member; a Pro team can", async () => {

@@ -11,12 +11,12 @@ describe("daily quota", () => {
     const clock = new FakeClock(new Date("2026-11-13T23:59:58.000Z"));
     const store = new MemoryBillingStore();
     const quota = new UsageQuota({ store, clock });
-    for (let call = 1; call <= 100; call += 1) {
+    for (let call = 1; call <= 20; call += 1) {
       const result = await quota.consume("mcp.tool_calls", "acct_1", free);
       expect(result.allowed).toBe(true);
     }
     const over = await quota.consume("mcp.tool_calls", "acct_1", free);
-    expect(over).toMatchObject({ allowed: false, count: 101, limit: 100, resetsAt: new Date("2026-11-14T00:00:00.000Z") });
+    expect(over).toMatchObject({ allowed: false, count: 21, limit: 20, resetsAt: new Date("2026-11-14T00:00:00.000Z") });
     clock.advance(2_000);
     expect(await quota.consume("mcp.tool_calls", "acct_1", free)).toMatchObject({ allowed: true, count: 1 });
     expect(await quota.read("mcp.tool_calls", "acct_1")).toBe(1);
@@ -32,11 +32,11 @@ describe("daily quota", () => {
     expect(await quota.read("mcp.tool_calls", "acct_1")).toBe(0);
   });
 
-  it("lets exactly 100 of 200 parallel calls through", async () => {
+  it("lets exactly 20 of 200 parallel calls through", async () => {
     const store = new MemoryBillingStore();
     const quota = new UsageQuota({ store, clock: new FakeClock() });
     const results = await Promise.all(Array.from({ length: 200 }, () => quota.consume("mcp.tool_calls", "acct_1", free)));
-    expect(results.filter((result) => result.allowed)).toHaveLength(100);
+    expect(results.filter((result) => result.allowed)).toHaveLength(20);
   });
 });
 

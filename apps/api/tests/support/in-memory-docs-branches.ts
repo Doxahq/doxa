@@ -82,7 +82,7 @@ export class InMemoryDocsBranchStore
       );
 
       if (namedBranches.length >= input.maxBranches) {
-        return { status: "limit_reached" };
+        return { status: "limit_reached", used: namedBranches.length };
       }
 
       if (namedBranches.some((branch) => branch.name === input.request.name)) {

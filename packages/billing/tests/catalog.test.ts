@@ -42,9 +42,9 @@ describe("the Doxa catalog", () => {
     expect(Object.values(DOXA_CATALOG.prices).some((price) => price.plan === "pro")).toBe(true);
   });
 
-  it("gives Free 0 credits and Pro 5,000 credits a month", () => {
+  it("gives Free 0 credits and Pro 10,000 credits a month", () => {
     expect(DOXA_CATALOG.plans.free.limits["ai.credits_monthly"]).toBe(0);
-    expect(DOXA_CATALOG.plans.pro.limits["ai.credits_monthly"]).toBe(5_000);
+    expect(DOXA_CATALOG.plans.pro.limits["ai.credits_monthly"]).toBe(10_000);
     expect(DOXA_CATALOG.plans.pro.trial).toEqual({ days: 7, credits: 1_000, requiresPaymentMethod: true });
   });
 
@@ -84,11 +84,17 @@ describe("the Doxa catalog", () => {
   });
 
   it("keeps the decided prices (D4, D14)", () => {
-    expect(DOXA_CATALOG.prices.pro_monthly_founder_v1.amountCents).toBe(15_900);
-    expect(DOXA_CATALOG.prices.pro_yearly_founder_v1.amountCents).toBe(129 * 12 * 100);
+    expect(DOXA_CATALOG.prices.pro_monthly_founder_v2.amountCents).toBe(12_900);
+    expect(DOXA_CATALOG.prices.pro_yearly_founder_v2.amountCents).toBe(99 * 12 * 100);
     expect(DOXA_CATALOG.prices.pro_monthly_v1.amountCents).toBe(20_900);
     expect(DOXA_CATALOG.prices.pro_yearly_v1.amountCents).toBe(169 * 12 * 100);
     expect(DOXA_CATALOG.offers.founder_v1.maxAccounts).toBe(50);
+    expect(DOXA_CATALOG.offers.founder_v1.prices).toEqual({ month: "pro_monthly_founder_v2", year: "pro_yearly_founder_v2" });
+  });
+
+  it("keeps the founder v1 prices for their customers, closed to new Checkouts", () => {
+    expect(DOXA_CATALOG.prices.pro_monthly_founder_v1).toMatchObject({ amountCents: 15_900, availableForNewCustomers: false });
+    expect(DOXA_CATALOG.prices.pro_yearly_founder_v1).toMatchObject({ amountCents: 129 * 12 * 100, availableForNewCustomers: false });
   });
 
   it("uses a branded UNLIMITED that survives JSON", () => {
@@ -175,13 +181,14 @@ describe("price display helpers", () => {
   it("formats USD and the yearly saving of the pricing page", () => {
     expect(formatUsd(15_900)).toBe("$159");
     expect(formatUsd(150)).toBe("$1.50");
-    expect(monthlyEquivalentCents(DOXA_CATALOG.prices.pro_yearly_founder_v1)).toBe(12_900);
-    expect(yearlySavingsPercent(DOXA_CATALOG.prices.pro_monthly_founder_v1, DOXA_CATALOG.prices.pro_yearly_founder_v1)).toBe(19);
+    expect(monthlyEquivalentCents(DOXA_CATALOG.prices.pro_yearly_founder_v2)).toBe(9_900);
+    expect(yearlySavingsPercent(DOXA_CATALOG.prices.pro_monthly_founder_v2, DOXA_CATALOG.prices.pro_yearly_founder_v2)).toBe(23);
+    expect(yearlySavingsPercent(DOXA_CATALOG.prices.pro_monthly_v1, DOXA_CATALOG.prices.pro_yearly_v1)).toBe(19);
   });
 
   it("describes the founder offer open, and closed with the then prices", () => {
     const open = describeOffer(DOXA_CATALOG, "founder_v1", 12);
-    expect(open).toMatchObject({ open: true, slotsLeft: 38, prices: { year: { priceKey: "pro_yearly_founder_v1", monthlyEquivalentCents: 12_900 } } });
+    expect(open).toMatchObject({ open: true, slotsLeft: 38, prices: { year: { priceKey: "pro_yearly_founder_v2", monthlyEquivalentCents: 9_900 } } });
     const closed = describeOffer(DOXA_CATALOG, "founder_v1", 50);
     expect(closed).toMatchObject({ open: false, slotsLeft: 0, prices: { month: { priceKey: "pro_monthly_v1" }, year: { priceKey: "pro_yearly_v1" } } });
   });

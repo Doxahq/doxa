@@ -4,10 +4,10 @@ import { BillingStateError } from "../src/errors";
 import { DAY_MS, type ProviderCustomerRef } from "../src/index";
 import { PAYMENT_FAILED, ProviderRejectedError } from "../src/provider/errors";
 import { MEMORY_TEST_CARD, checkLedgerInvariant, createTestBilling, type TestBilling } from "../src/testing";
-import { paidProAccount, runJob } from "./helpers/pro";
+import { PRO_ALLOWANCE, paidProAccount, runJob } from "./helpers/pro";
 
 /** A Pro account in its 7-day trial, with the webhooks delivered. */
-async function trialingAccount(billing: TestBilling, priceKey = "pro_monthly_founder_v1") {
+async function trialingAccount(billing: TestBilling, priceKey = "pro_monthly_founder_v2") {
   const account = await billing.accounts.accountForOwner("user", "trial_user");
   const link = await billing.payments.createCheckout({ accountId: account.id, priceKey, requestId: "r1" });
   billing.provider.completeCheckout(link.checkoutId);
@@ -45,7 +45,7 @@ describe("Start Pro now (decision D22)", () => {
     const subscription = await billing.store.getSubscription(account.id);
     expect(subscription).toMatchObject({ status: "active", billingAnchor: billing.clock.now() });
     const after = await balanceOf(billing, account.id);
-    expect(after.granted).toBe(5_000);
+    expect(after.granted).toBe(PRO_ALLOWANCE);
     expect(after.windowStart).toEqual(billing.clock.now());
 
     const grants = await billing.store.listGrants(account.id);
@@ -58,7 +58,7 @@ describe("Start Pro now (decision D22)", () => {
     // The first paid invoice claims the founder slot (spec 7.5).
     expect((await billing.store.getOfferSlot("founder_v1", account.id))?.state).toBe("claimed");
     // A second read gives no second allowance and no second expiry.
-    expect((await balanceOf(billing, account.id)).granted).toBe(5_000);
+    expect((await balanceOf(billing, account.id)).granted).toBe(PRO_ALLOWANCE);
   });
 
   it("a declined card changes nothing: still trialing, the trial credits stay", async () => {
@@ -96,8 +96,8 @@ describe("Start Pro now (decision D22)", () => {
 
   it("previews the charge and the interval of the plan price", async () => {
     const billing = createTestBilling();
-    const { account } = await trialingAccount(billing, "pro_yearly_founder_v1");
-    expect(await billing.payments.previewStartProNow(account.id)).toEqual({ amountCents: 154_800, currency: "usd", intervalLabel: "year" });
+    const { account } = await trialingAccount(billing, "pro_yearly_founder_v2");
+    expect(await billing.payments.previewStartProNow(account.id)).toEqual({ amountCents: 118_800, currency: "usd", intervalLabel: "year" });
     const { account: paid } = await paidProAccount(billing);
     expect(((await refusal(billing.payments.previewStartProNow(paid.id))) as BillingStateError).code).toBe("not_trialing");
   });

@@ -6,6 +6,12 @@
       "amountCents": 15900,
       "usage": "ai_usage_monthly_v1"
     },
+    "pro_monthly_founder_v2": {
+      "plan": "pro",
+      "interval": "month",
+      "amountCents": 12900,
+      "usage": "ai_usage_monthly_v1"
+    },
     "pro_monthly_v1": {
       "plan": "pro",
       "interval": "month",
@@ -16,6 +22,12 @@
       "plan": "pro",
       "interval": "year",
       "amountCents": 154800,
+      "usage": "ai_usage_yearly_v1"
+    },
+    "pro_yearly_founder_v2": {
+      "plan": "pro",
+      "interval": "year",
+      "amountCents": 118800,
       "usage": "ai_usage_yearly_v1"
     },
     "pro_yearly_v1": {

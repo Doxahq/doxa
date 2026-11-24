@@ -1,4 +1,4 @@
-import { DAY_MS, type ProviderCustomerRef } from "../../src/index";
+import { DAY_MS, DOXA_CATALOG, type ProviderCustomerRef } from "../../src/index";
 import type { TestBilling } from "../../src/testing";
 
 /** A paid Pro account: Checkout, trial, trial end with a paid invoice. Webhooks delivered. */
@@ -12,6 +12,16 @@ export async function paidProAccount(billing: TestBilling, owner = "pro_user", p
   billing.provider.endTrial(customer);
   await billing.deliverWebhooks();
   return { account, customer };
+}
+
+/** The monthly credits of Pro, from the catalog. */
+export const PRO_ALLOWANCE = DOXA_CATALOG.plans.pro.limits["ai.credits_monthly"] as number;
+
+/** Spends exactly the Pro allowance, in jobs of 5,000 credits (50 + 4,950). */
+export async function useAllowance(billing: TestBilling, accountId: string, id: string) {
+  for (let index = 0; index * 5_000 < PRO_ALLOWANCE; index += 1) {
+    await runJob(billing, accountId, `${id}:${index}`, 16.5);
+  }
 }
 
 /** Runs one metered job that settles `usd` of model cost. */

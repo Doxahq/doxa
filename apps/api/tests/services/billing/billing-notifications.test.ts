@@ -113,20 +113,21 @@ describe("billing emails from the meter (BILLING_ENFORCEMENT=on)", () => {
     const setup = meteringSetup("on");
     const account = await subscribe(setup.harness);
 
-    await run(setup, "j1", "9.00"); // 2,750 credits: 55%
+    for (const id of ["j0a", "j0b", "j0c", "j0d"]) await run(setup, id, "4.00"); // 4 × 1,250: 5,000 credits, 50%
+    await run(setup, "j1", "9.00"); // +2,750: 7,750 = 77.5%
     expect(kinds(setup.store)).toEqual([]);
 
-    await run(setup, "j2", "4.50"); // +1,400: 4,150 = 83%
+    await run(setup, "j2", "4.50"); // +1,400: 9,150 = 91.5%
     expect(kinds(setup.store)).toEqual(["credits-low"]);
     const [low] = setup.store.deliveries;
     expect(low).toMatchObject({ recipientEmail: `${OWNER}@example.com`, recipientUserId: OWNER });
-    expect(low?.props).toMatchObject({ usedCredits: 4_150, allowanceCredits: 5_000, paygOn: true, billingUrl: `https://doxa.so/dashboard/billing/${account.id}` });
+    expect(low?.props).toMatchObject({ usedCredits: 9_150, allowanceCredits: 10_000, paygOn: true, billingUrl: `https://doxa.so/dashboard/billing/${account.id}` });
     expect(low?.props).not.toHaveProperty("unsubscribeUrl");
 
     await run(setup, "j3", "0.10"); // still in the 80% band: no second email
     expect(kinds(setup.store)).toEqual(["credits-low"]);
 
-    // 5,000 − 4,230 = 770 left; this run costs 1,250, so 480 credits of debt.
+    // 10,000 − 9,230 = 770 left; this run costs 1,250, so 480 credits of debt.
     await run(setup, "j4", "4.00");
     expect(kinds(setup.store)).toEqual(["credits-low", "payg-started"]);
     expect(setup.store.deliveries[1]?.props).toMatchObject({ chargeAtUsd: "$5", monthlyLimitUsd: "$30" });
@@ -197,15 +198,17 @@ describe("BILLING_ENFORCEMENT modes", () => {
   test("shadow: logs the email it would send and sends nothing", async () => {
     const setup = meteringSetup("shadow");
     await subscribe(setup.harness);
-    // Real usage first (the shadow meter debits nothing): 1,550 credits.
+    // Real usage first (the shadow meter debits nothing): 4 × 1,550 = 6,200 credits.
     const account = await setup.harness.core.accounts.accountForOwner("user", OWNER);
-    const subject = { kind: "job", id: "real-1" };
-    await setup.harness.core.meter.open({ accountId: account.id, actionKey: "generation.run", subject });
-    await setup.harness.core.meter.accrue({ subject, callId: "c", costUsd: "5.00" });
-    await setup.harness.core.meter.settle({ subject, outcome: "succeeded" });
+    for (const id of ["real-1", "real-2", "real-3", "real-4"]) {
+      const subject = { kind: "job", id };
+      await setup.harness.core.meter.open({ accountId: account.id, actionKey: "generation.run", subject });
+      await setup.harness.core.meter.accrue({ subject, callId: `${id}:c`, costUsd: "5.00" });
+      await setup.harness.core.meter.settle({ subject, outcome: "succeeded" });
+    }
     setup.jobs.job("j1", "running");
     await setup.metering.admit({ jobId: "j1", projectId: PROJECT, action: "generation.run", models: MODELS });
-    // Shadow prices the run from its usage records: 50 + $8 × 300 = 2,450; with the real 1,550 that is 4,000 (80%).
+    // Shadow prices the run from its usage records: 50 + $8 × 300 = 2,450; with the real 6,200 that is 8,650 (86.5%).
     vi.spyOn(setup.jobs, "usageCostUsd").mockResolvedValue("8.00");
     setup.jobs.job("j1", "succeeded");
     await setup.metering.settle("j1");

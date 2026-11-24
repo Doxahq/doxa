@@ -60,10 +60,11 @@ describe("create_branch", () => {
       name: LIMIT_BRANCH_NAME,
     });
     const error = toolError(outcome);
-    expect(error.code).toBe("validation_failed");
+    expect(error.code).toBe("plan_limit");
+    expect(error.message).toBe("The site has all 2 branches that its plan allows.");
     expect(error.hint).toContain("agent-install");
     expect(outcome.structured).toMatchObject({
-      error: { issues: [{ code: "branch_limit_reached" }] },
+      error: { details: { key: "docs.branches_per_site", limit: 2, used: 2 } },
     });
     expect(methods(harness)).toEqual(["branches.create", "branches.list"]);
   });

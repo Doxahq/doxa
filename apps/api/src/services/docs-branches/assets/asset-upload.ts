@@ -6,6 +6,7 @@ import {
   type DocsAssetContentType,
 } from "@doxahq/contracts/docs-assets";
 import type { DocsContentEditOrigin } from "@doxahq/contracts";
+import { PlanLimitError } from "@doxahq/billing";
 import { sha256Hex } from "@doxahq/docs-engine";
 import { createValidationIssue } from "@doxahq/site-config";
 import type { Env } from "../../../env";
@@ -329,12 +330,13 @@ interface StorageUsage {
   limitBytes: number;
 }
 
-function storageQuotaExceeded(usage: StorageUsage): DocsContentError {
-  return new DocsContentError(
-    "storage_quota_exceeded",
-    "This image would take the documentation over the storage of the plan.",
-    { usedBytes: usage.usedBytes, limitBytes: usage.limitBytes },
-  );
+/** The image would take the published version and the branch images over the plan storage. */
+function storageQuotaExceeded(usage: StorageUsage): PlanLimitError {
+  return new PlanLimitError({
+    key: "docs.storage_bytes",
+    limit: usage.limitBytes,
+    used: usage.usedBytes,
+  });
 }
 
 function requireBranch(context: ResolvedBranchContext): StoredDocsBranch {

@@ -13,7 +13,7 @@ import {
 } from "../src/index";
 import { checkLedgerInvariant, insertLegacyHeldReservation, subscriptionFixture } from "../src/testing";
 import { accountWithCredits, createTestBilling } from "./helpers/fixtures";
-import { paidProAccount, runJob } from "./helpers/pro";
+import { PRO_ALLOWANCE, paidProAccount, useAllowance } from "./helpers/pro";
 
 const job = (id: string) => ({ kind: "job", id });
 
@@ -218,7 +218,7 @@ describe("credit meter", () => {
     await billing.setSubscription(subscriptionFixture({ accountId: account.id }));
     await billing.meter.open({ accountId: account.id, actionKey: "generation.run", subject: job("pro") });
     const view = await billing.entitlements.forAccount(account.id);
-    expect((await billing.ledger.balance(account.id, view.creditContext)).available).toBe(5_000 + 1_000 - 450);
+    expect((await billing.ledger.balance(account.id, view.creditContext)).available).toBe(PRO_ALLOWANCE + 1_000 - 450);
   });
 });
 
@@ -385,8 +385,8 @@ describe("a continued job (the same subject, a second admission)", () => {
   it("counts the pay-as-you-go part of the earlier tries from their debt entries", async () => {
     const billing = createTestBilling();
     const { account } = await paidProAccount(billing);
-    // Use most of the 5,000 monthly credits, so the next try runs into debt.
-    await runJob(billing, account.id, "earlier", 16.5);
+    // Use the monthly credits, so the next try runs into debt.
+    await useAllowance(billing, account.id, "earlier");
     await billing.meter.open({ accountId: account.id, actionKey: "generation.run", subject, estimateCredits: 0, capCredits: 5_000 });
     await billing.meter.accrue({ subject, callId: "a1", costUsd: 1 });
     const first = await billing.meter.settle({ subject, outcome: "stopped" });

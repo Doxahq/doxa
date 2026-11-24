@@ -5,10 +5,10 @@ import {
   validateBranchName,
   type CreateDocsBranchInput,
 } from "@doxahq/contracts/docs-branches";
-import { createValidationIssue } from "@doxahq/contracts/validation-messages";
 import type { BranchServices } from "../../src/services/mcp-services";
 import { isCreatedByAgent } from "@doxahq/api/repositories/docs-branch-records";
 import { DocsBranchValidationError } from "@doxahq/api/services/docs-branches/management";
+import { PlanLimitError } from "@doxahq/api/services/billing/mcp-billing";
 import { DocsContentError } from "@doxahq/api/services/docs-content/errors";
 import { validateConfigForSite } from "@doxahq/api/services/docs-content/site-config";
 import type {
@@ -151,9 +151,7 @@ function createBranch(request: CreateDocsBranchInput) {
   const issues = validateBranchName(request.name);
   if (issues.length > 0) throw new DocsBranchValidationError(issues);
   if (request.name === LIMIT_BRANCH_NAME) {
-    throw new DocsBranchValidationError([
-      createValidationIssue("branch_limit_reached", "", { max: 10 }),
-    ]);
+    throw new PlanLimitError({ key: "docs.branches_per_site", limit: 2, used: 2 });
   }
   const [existing] = branchList().branches;
   if (!existing || existing.kind !== "named") throw new Error("No fixture.");

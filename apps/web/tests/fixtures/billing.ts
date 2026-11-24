@@ -18,8 +18,8 @@ export const FOUNDER_OFFER: BillingOffer = {
   slotsLeft: 37,
   maxAccounts: 50,
   prices: {
-    month: { priceKey: "pro_monthly_founder_v1", interval: "month", amountCents: 15_900, monthlyEquivalentCents: 15_900 },
-    year: { priceKey: "pro_yearly_founder_v1", interval: "year", amountCents: 154_800, monthlyEquivalentCents: 12_900 },
+    month: { priceKey: "pro_monthly_founder_v2", interval: "month", amountCents: 12_900, monthlyEquivalentCents: 12_900 },
+    year: { priceKey: "pro_yearly_founder_v2", interval: "year", amountCents: 118_800, monthlyEquivalentCents: 9_900 },
   },
   yearlySavingsPercent: 19,
 }
@@ -96,7 +96,7 @@ export const TRIAL_ACCOUNT: BillingAccountDetail = {
   planSource: "subscription",
   subscription: {
     status: "trialing",
-    priceKey: "pro_yearly_founder_v1",
+    priceKey: "pro_yearly_founder_v2",
     currentPeriodStart: "2026-11-10T00:00:00.000Z",
     currentPeriodEnd: "2026-11-17T00:00:00.000Z",
     cancelAt: null,
@@ -189,8 +189,8 @@ export const INVOICES: BillingInvoice[] = [
     invoiceId: "in_1",
     status: "paid",
     reason: "subscription_create",
-    amountDueCents: 154_800,
-    amountPaidCents: 154_800,
+    amountDueCents: 118_800,
+    amountPaidCents: 118_800,
     currency: "usd",
     usageCredits: 0,
     createdAt: "2026-10-14T10:00:00.000Z",
@@ -243,10 +243,10 @@ export const TEAM_SUMMARY: BillingAccountSummary = {
 /** Yearly founder to monthly, 19 days into the year. */
 export const YEAR_TO_MONTH_PREVIEW: BillingPlanIntervalPreview = {
   chargeTodayCents: 0,
-  creditCents: 148_912,
-  newPriceCents: 15_900,
+  creditCents: 112_616,
+  newPriceCents: 12_900,
   newInterval: "month",
-  balanceAfterCents: 133_012,
+  balanceAfterCents: 99_716,
 }
 
-export const START_PRO_NOW_PREVIEW: BillingStartProNowPreview = { amountCents: 154_800, currency: "usd", intervalLabel: "year" }
+export const START_PRO_NOW_PREVIEW: BillingStartProNowPreview = { amountCents: 118_800, currency: "usd", intervalLabel: "year" }

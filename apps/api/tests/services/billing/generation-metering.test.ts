@@ -1,4 +1,4 @@
-import { CreditsExhaustedError, DAY_MS, PlanLimitError, type BillingEnforcement } from "@doxahq/billing";
+import { CreditsExhaustedError, DAY_MS, DOXA_CATALOG, PlanLimitError, type BillingEnforcement } from "@doxahq/billing";
 import { insertLegacyHeldReservation, subscriptionFixture } from "@doxahq/billing/testing";
 import type { GenerationCreditsEventData } from "@doxahq/contracts/billing";
 import { describe, expect, test } from "vitest";
@@ -17,6 +17,8 @@ import { createBillingHarness, type BillingHarness } from "../../support/billing
 
 const OWNER = "user-1";
 const PROJECT = "project-a";
+/** The monthly credits of Pro, from the catalog. */
+const ALLOWANCE = DOXA_CATALOG.plans.pro.limits["ai.credits_monthly"] as number;
 const MODELS = ["claude-sonnet-5-5", "claude-haiku-5-5"];
 
 class FakeJobs implements MeteringJobsPort {
@@ -233,7 +235,7 @@ describe("admission (BILLING_ENFORCEMENT=on)", () => {
     const reason = await refusalReason(async ({ harness }, accountId) => {
       await subscribe(harness);
       await harness.core.settings.setPayg({ accountId, enabled: false });
-      await hold(harness, accountId, 4_800);
+      await hold(harness, accountId, ALLOWANCE - 200);
     });
     expect(reason).toBe("payg_off");
   });
@@ -242,7 +244,7 @@ describe("admission (BILLING_ENFORCEMENT=on)", () => {
     const reason = await refusalReason(async ({ harness }, accountId) => {
       await subscribe(harness);
       await harness.core.settings.setPayg({ accountId, enabled: true, monthlyLimitCents: 20_000 });
-      await hold(harness, accountId, 5_000 + 700);
+      await hold(harness, accountId, ALLOWANCE + 700);
     });
     expect(reason).toBe("max_debt");
   });
@@ -251,7 +253,7 @@ describe("admission (BILLING_ENFORCEMENT=on)", () => {
     const reason = await refusalReason(async ({ harness }, accountId) => {
       await subscribe(harness);
       await harness.core.settings.setPayg({ accountId, enabled: true, monthlyLimitCents: 500 });
-      await hold(harness, accountId, 5_000 + 200);
+      await hold(harness, accountId, ALLOWANCE + 200);
     });
     expect(reason).toBe("monthly_limit");
   });
@@ -263,7 +265,7 @@ describe("admission (BILLING_ENFORCEMENT=on)", () => {
       await harness.core.store.withAccountLock(accountId, harness.billing.clock.now(), (tx) =>
         tx.updateAccount({ aiPausedReason: "payment_failed" }),
       );
-      await hold(harness, accountId, 4_800);
+      await hold(harness, accountId, ALLOWANCE - 200);
     });
     expect(reason).toBe("past_due");
   });
@@ -351,7 +353,7 @@ describe("accrual and stop (BILLING_ENFORCEMENT=on)", () => {
     const { harness, metering, jobs } = setup("on");
     const account = await subscribe(harness);
     await harness.core.settings.setPayg({ accountId: account.id, enabled: true, monthlyLimitCents: 20_000 });
-    await hold(harness, account.id, 4_900);
+    await hold(harness, account.id, ALLOWANCE - 100);
     await admitRun(metering, "job-1");
     // $0.50 at markup 3 = 150 credits + base 50 = 200; the grants have 100 left for this run.
     await metering.accrue({ jobId: "job-1", callId: "call-1", costUsd: "0.50" });
@@ -383,7 +385,7 @@ describe("accrual and stop (BILLING_ENFORCEMENT=on)", () => {
     const account = await subscribe(harness);
     await harness.core.settings.setPayg({ accountId: account.id, enabled: false });
     await admitRun(metering, "job-1");
-    await hold(harness, account.id, 5_000 - 450);
+    await hold(harness, account.id, ALLOWANCE - 450);
     await metering.accrue({ jobId: "job-1", callId: "call-1", costUsd: "1.0" });
     await expect(metering.stopReason("job-1")).resolves.toBe("credits_exhausted");
   });

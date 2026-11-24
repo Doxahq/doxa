@@ -26,24 +26,24 @@ const compareText = JSON.stringify(COMPARE_ROWS)
 const proText = JSON.stringify(pro)
 
 describe("pricing page numbers come from the catalog", () => {
-  test("Pro: $129 yearly by default, $159 monthly, −19%", () => {
+  test("Pro: $99 yearly by default, $129 monthly, −23%", () => {
     expect(DEFAULT_BILLING).toBe("yearly")
-    expect(pro.billing?.yearly).toEqual({ price: "$129", per: "/ month", sub: "Billed yearly at $1,548 · cancel anytime" })
-    expect(pro.billing?.monthly.price).toBe("$159")
-    expect(BILLING_OPTIONS.find((option) => option.id === "yearly")?.note).toBe("−19%")
-    expect(DOXA_CATALOG.prices.pro_yearly_founder_v1.amountCents).toBe(154_800)
+    expect(pro.billing?.yearly).toEqual({ price: "$99", per: "/ month", sub: "Billed yearly at $1,188 · cancel anytime" })
+    expect(pro.billing?.monthly.price).toBe("$129")
+    expect(BILLING_OPTIONS.find((option) => option.id === "yearly")?.note).toBe("−23%")
+    expect(DOXA_CATALOG.prices.pro_yearly_founder_v2.amountCents).toBe(118_800)
   })
 
-  test("5,000 credits, pay-as-you-go at $0.01, the metered price, and no old prices", () => {
-    expect(proText).toContain("5,000 AI credits / month")
+  test("10,000 credits, pay-as-you-go at $0.01, the metered price, and no old prices", () => {
+    expect(proText).toContain("10,000 AI credits / month (included)")
     expect(proText).toContain("$0.01 per credit")
     expect(compareText).toContain("50 + model usage")
     expect(compareText).toContain("20 + model usage")
     expect(compareText).toContain("Pay-as-you-go, $0.01 each")
-    for (const old of ["10,000", "100 + 5 per page", "Packs", "100 credits", "first 100"]) {
+    for (const old of ["100 + 5 per page", "Packs", "100 credits", "first 100"]) {
       expect(compareText + proText + JSON.stringify(FAQ)).not.toContain(old)
     }
-    expect(FOUNDER_PRICE_NOTE).toBe("Founder price for the first 50 paying customers")
+    expect(FOUNDER_PRICE_NOTE).toBe("Founder price for the first 50 paying customers, locked in forever")
   })
 
   test("the docs chat lines are hidden while chat is planned (D10)", () => {
@@ -74,10 +74,10 @@ describe("pricing plans with GET /billing/offers", () => {
   test("shows N of 50 founder spots left while the offer is open", async () => {
     renderPlans([FOUNDER_OFFER])
     const card = screen.getByText("PRO").closest(".plan") as HTMLElement
-    expect(within(card).getByText("37 of 50 founder spots left")).toBeTruthy()
-    expect(within(card).getByText("$129")).toBeTruthy()
+    expect(within(card).getByText("37 of 50 founder spots left · price locked in forever")).toBeTruthy()
+    expect(within(card).getByText("$99")).toBeTruthy()
     await userEvent.click(within(card).getByRole("radio", { name: "Monthly" }))
-    expect(within(card).getByText("$159")).toBeTruthy()
+    expect(within(card).getByText("$129")).toBeTruthy()
     expect(within(card).getByRole("link", { name: /Upgrade to Pro/ }).getAttribute("href")).toBe(upgradeUrl("monthly"))
   })
 
@@ -105,7 +105,7 @@ describe("pricing plans with GET /billing/offers", () => {
     )
     await vi.waitFor(() => expect(queryClient.getQueryState(billingQueryKeys.offers())?.status).toBe("error"))
     const card = screen.getByText("PRO").closest(".plan") as HTMLElement
-    expect(within(card).getByText("$129")).toBeTruthy()
+    expect(within(card).getByText("$99")).toBeTruthy()
     expect(within(card).getByRole("link", { name: /Upgrade to Pro/ }).getAttribute("href")).toBe(GET_STARTED_URL)
   })
 })

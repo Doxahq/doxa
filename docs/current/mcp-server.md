@@ -297,11 +297,12 @@ approved publish of the branch. `build_preview` shows it too.
   and write nothing.
 - Quota: 50 images on one branch (`asset_limit_reached`). The published
   version, the images of all branches of the site, and the new file must fit
-  the plan storage (`storage_quota_exceeded`, free plan 100 MiB,
-  `FREE_PLAN_STORAGE_LIMITS`). The write checks this again under a site lock,
+  the plan storage (`plan_limit` with key `docs.storage_bytes`, free plan
+  20 MiB, `FREE_PLAN_STORAGE_LIMITS`). The write checks this again under a site lock,
   so parallel uploads to different branches cannot pass it together.
 - Site assets: logos, favicons, and social images have their own limit, 200
-  files and 50 MiB for each site (`storage_quota_exceeded`). A site lock makes
+  files and 50 MiB for each site on Free (`plan_limit` with key
+  `site.asset_files` or `site.asset_bytes`). A site lock makes
   the check and the write one step. A repeated upload of a stored file needs
   no quota. Nothing deletes an old site asset yet, so replacing a logo uses up
   this limit.

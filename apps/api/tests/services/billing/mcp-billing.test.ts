@@ -35,12 +35,12 @@ describe("MCP daily tool-call quota (billing spec 11)", () => {
     expect(await harness.core.store.findAccountByOwner("user", OWNER)).toBeNull();
   });
 
-  test("on: Free allows 100 calls a day, then plan_limit with the reset at 00:00 UTC", async () => {
+  test("on: Free allows 20 calls a day, then plan_limit with the reset at 00:00 UTC", async () => {
     const { billing, denials, harness } = setup("on");
-    for (let call = 0; call < 100; call += 1) await billing.consumeToolCall(PROJECT);
+    for (let call = 0; call < 20; call += 1) await billing.consumeToolCall(PROJECT);
     const refused = await billing.consumeToolCall(PROJECT).catch((error: unknown) => error);
     expect(refused).toBeInstanceOf(PlanLimitError);
-    expect((refused as PlanLimitError).details).toMatchObject({ key: "mcp.tool_calls_per_day", limit: 100, used: 101 });
+    expect((refused as PlanLimitError).details).toMatchObject({ key: "mcp.tool_calls_per_day", limit: 20, used: 21 });
     expect((refused as PlanLimitError).details.resetsAt?.toISOString()).toBe("2026-11-14T00:00:00.000Z");
     expect(denials).toEqual([expect.objectContaining({ key: "mcp.tool_calls_per_day", mode: "on", kind: "denied", plan: "free" })]);
     harness.billing.clock.set(new Date("2026-11-14T00:00:01.000Z"));
@@ -49,8 +49,8 @@ describe("MCP daily tool-call quota (billing spec 11)", () => {
 
   test("shadow counts and logs, and never refuses", async () => {
     const { billing, denials } = setup("shadow");
-    for (let call = 0; call < 101; call += 1) await billing.consumeToolCall(PROJECT);
-    expect(denials).toEqual([expect.objectContaining({ mode: "shadow", used: 101 })]);
+    for (let call = 0; call < 21; call += 1) await billing.consumeToolCall(PROJECT);
+    expect(denials).toEqual([expect.objectContaining({ mode: "shadow", used: 21 })]);
   });
 
   test("an unlimited plan skips the counter", async () => {
@@ -77,7 +77,7 @@ describe("get_account billing (billing spec 15.3)", () => {
       plan: "free",
       credits: { available: 0 },
       payg: { active: false, debt: 0 },
-      toolCalls: { today: 1, limit: 100, resetsAt: "2026-11-14T00:00:00.000Z" },
+      toolCalls: { today: 1, limit: 20, resetsAt: "2026-11-14T00:00:00.000Z" },
     });
     expect(accounts?.[1]).toMatchObject({ ownerKind: "team", teamId: TEAM, plan: "free" });
   });

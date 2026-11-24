@@ -49,7 +49,7 @@ describe("Start Pro now (decision D22)", () => {
     const dialog = await screen.findByRole("dialog")
     expect(within(dialog).getByRole("heading", { name: "Start Pro now?" })).toBeTruthy()
     expect(
-      await within(dialog).findByText("Ends your trial today. Stripe charges $1,548 for the year now. You get 5,000 AI credits each month."),
+      await within(dialog).findByText("Ends your trial today. Stripe charges $1,188 for the year now. You get 10,000 AI credits each month."),
     ).toBeTruthy()
     await userEvent.click(within(dialog).getByRole("button", { name: "Start Pro now" }))
 
@@ -62,7 +62,7 @@ describe("Start Pro now (decision D22)", () => {
     billingApi.getStartProNowPreview.mockRejectedValue(createApiError(503, { error: { message: "Down", details: { code: "provider_unavailable" } } }))
     renderStartProNow()
     expect(
-      await screen.findByText("Ends your trial today. Stripe charges the plan price now. You get 5,000 AI credits each month."),
+      await screen.findByText("Ends your trial today. Stripe charges the plan price now. You get 10,000 AI credits each month."),
     ).toBeTruthy()
   })
 
@@ -75,7 +75,7 @@ describe("Start Pro now (decision D22)", () => {
     )
     const { onOpenChange } = renderStartProNow()
     const dialog = await screen.findByRole("dialog")
-    await within(dialog).findByText(/Stripe charges \$1,548/)
+    await within(dialog).findByText(/Stripe charges \$1,188/)
     await userEvent.click(within(dialog).getByRole("button", { name: "Start Pro now" }))
 
     expect(await within(dialog).findByText("The card was declined. Update the payment method and try again.")).toBeTruthy()
@@ -93,7 +93,7 @@ describe("Start Pro now (decision D22)", () => {
     )
     renderStartProNow()
     const dialog = await screen.findByRole("dialog")
-    await within(dialog).findByText(/Stripe charges \$1,548/)
+    await within(dialog).findByText(/Stripe charges \$1,188/)
     await userEvent.click(within(dialog).getByRole("button", { name: "Start Pro now" }))
 
     expect(await within(dialog).findByText(/The trial already ended, so there is nothing to start/)).toBeTruthy()
@@ -103,7 +103,7 @@ describe("Start Pro now (decision D22)", () => {
 })
 
 function founderMonthlyTarget(): SwitchTarget {
-  const target = switchTargetPrice("pro_yearly_founder_v1")
+  const target = switchTargetPrice("pro_yearly_founder_v2")
   if (!target) throw new Error("The founder yearly price has no monthly sibling.")
   return target
 }
@@ -135,17 +135,17 @@ describe("the monthly/yearly switch dialog", () => {
     const { onConfirm, onOpenChange } = renderSwitch()
     const dialog = await screen.findByRole("dialog")
     expect(within(dialog).getByRole("heading", { name: "Switch to monthly?" })).toBeTruthy()
-    expect(within(dialog).getByText("Your plan changes today to $159 a month. You keep the founder price.")).toBeTruthy()
+    expect(within(dialog).getByText("Your plan changes today to $129 a month. You keep the founder price.")).toBeTruthy()
     // A loading state shaped like the rows, then the rows.
     expect(within(dialog).getByText("Loading the amounts")).toBeTruthy()
     act(() => answer(YEAR_TO_MONTH_PREVIEW))
     expect(await within(dialog).findByText("Unused part of your year")).toBeTruthy()
-    expect(within(dialog).getByText("about $1,489 to your balance")).toBeTruthy()
+    expect(within(dialog).getByText("about $1,126 to your balance")).toBeTruthy()
     expect(within(dialog).getByText("First month, from today")).toBeTruthy()
-    expect(within(dialog).getByText("$159, paid from the balance")).toBeTruthy()
+    expect(within(dialog).getByText("$129, paid from the balance")).toBeTruthy()
     expect(within(dialog).getByText("Charged to your card today")).toBeTruthy()
     expect(within(dialog).getByText("$0.00")).toBeTruthy()
-    expect(within(dialog).getByText(/not as a refund\. It pays the next monthly charges until it runs out, about 8 months\./)).toBeTruthy()
+    expect(within(dialog).getByText(/not as a refund\. It pays the next monthly charges until it runs out, about 7 months\./)).toBeTruthy()
     expect(billingApi.getPlanIntervalPreview).toHaveBeenCalledWith(ACCOUNT_ID, "month")
 
     await userEvent.click(within(dialog).getByRole("button", { name: "Switch to monthly" }))
@@ -157,7 +157,7 @@ describe("the monthly/yearly switch dialog", () => {
     billingApi.getPlanIntervalPreview.mockRejectedValue(createApiError(409, { error: { message: "Same", details: { code: "same_interval" } } }))
     renderSwitch()
     const dialog = await screen.findByRole("dialog")
-    expect(await within(dialog).findByText(/The new price is \$159 \/ month, billed monthly\./)).toBeTruthy()
+    expect(await within(dialog).findByText(/The new price is \$129 \/ month, billed monthly\./)).toBeTruthy()
     expect(within(dialog).queryByText("Charged to your card today")).toBeNull()
     expect(within(dialog).getByRole("button", { name: "Keep yearly" })).toBeTruthy()
   })
@@ -191,7 +191,7 @@ describe("the 402 trial credits dialog", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Start Pro now" }))
 
     expect(await screen.findByRole("heading", { name: "Start Pro now?" })).toBeTruthy()
-    expect(await screen.findByText(/Stripe charges \$1,548 for the year now/)).toBeTruthy()
+    expect(await screen.findByText(/Stripe charges \$1,188 for the year now/)).toBeTruthy()
     expect(billingApi.startProNow).not.toHaveBeenCalled()
     // Back returns to the reason.
     await userEvent.click(screen.getByRole("button", { name: "Back" }))

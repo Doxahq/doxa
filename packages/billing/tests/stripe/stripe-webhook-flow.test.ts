@@ -28,7 +28,7 @@ describe("stripe provider through the webhook flow (spec 14.1)", () => {
     const { kit, store, accounts, entitlements, payments, webhooks } = wired();
     await syncCatalog(kit);
     const account = await accounts.accountForOwner("user", "u1");
-    const link = await payments.createCheckout({ accountId: account.id, priceKey: "pro_monthly_founder_v1", requestId: "r1", email: "u1@example.test" });
+    const link = await payments.createCheckout({ accountId: account.id, priceKey: "pro_monthly_founder_v2", requestId: "r1", email: "u1@example.test" });
     const session = kit.fake.sessions.get(link.checkoutId)!;
     const subscription = kit.fake.completeSession(link.checkoutId);
     // A trial Checkout: the founder hold lasts through the trial.

@@ -100,7 +100,7 @@ describe("without a payment provider (BILLING_PROVIDER=none)", () => {
       send(OWNER, `/billing/accounts/${id}`),
       send(OWNER, `/billing/accounts/${id}/credits/entries`),
       send(OWNER, `/billing/accounts/${id}/invoices`),
-      send(OWNER, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v1" }),
+      send(OWNER, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v2" }),
       send(OWNER, `/billing/accounts/${id}/portal`, "POST", {}),
       send(OWNER, `/billing/accounts/${id}/payg`, "PUT", { enabled: false }),
       send(OWNER, "/billing/checkout/cs_1/sync", "POST"),
@@ -120,7 +120,7 @@ describe("billing account routes", () => {
     const id = await personalAccountId(harness);
     expect((await send(null, "/billing/accounts")).status).toBe(401);
     expect((await send(null, `/billing/accounts/${id}`)).status).toBe(401);
-    expect((await send(null, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v1" })).status).toBe(401);
+    expect((await send(null, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v2" })).status).toBe(401);
   });
 
   test("list the personal account and the team accounts the user can read", async () => {
@@ -257,7 +257,7 @@ describe("Checkout, Portal and the Checkout return", () => {
   test("Checkout takes an offer key and returns a provider URL that returns to the dashboard", async () => {
     const { harness, send } = setup();
     const id = await personalAccountId(harness);
-    const response = await send(OWNER, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_yearly_founder_v1" });
+    const response = await send(OWNER, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_yearly_founder_v2" });
     expect(response.status).toBe(200);
     const { url } = (await response.json()) as { url: string };
     const success = decodeURIComponent(new URL(url).searchParams.get("success") ?? "");
@@ -276,7 +276,7 @@ describe("Checkout, Portal and the Checkout return", () => {
     const { harness, send } = setup();
     const id = await personalAccountId(harness);
     const response = await send(OWNER, `/billing/accounts/${id}/checkout`, "POST", {
-      offer: "pro_yearly_founder_v1",
+      offer: "pro_yearly_founder_v2",
       returnPath: "/dashboard/projects/new?start=repository",
     });
     expect(response.status).toBe(200);
@@ -323,7 +323,7 @@ describe("Checkout, Portal and the Checkout return", () => {
   test("answers 503 where payments are not built in (Worker builds)", async () => {
     const { harness, send } = setup({ payments: false });
     const id = await personalAccountId(harness);
-    const response = await send(OWNER, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v1" });
+    const response = await send(OWNER, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v2" });
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ error: { details: { code: "billing_not_configured" } } });
   });
@@ -332,7 +332,7 @@ describe("Checkout, Portal and the Checkout return", () => {
     const { harness, send } = setup();
     const id = await personalAccountId(harness);
     for (let index = 0; index < BILLING_SESSIONS_PER_HOUR; index += 1) {
-      expect((await send(OWNER, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v1" })).status).toBe(200);
+      expect((await send(OWNER, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v2" })).status).toBe(200);
     }
     expect((await send(OWNER, `/billing/accounts/${id}/portal`, "POST", {})).status).toBe(429);
     harness.billing.clock.advance(60 * 60 * 1000);
@@ -352,7 +352,7 @@ describe("Checkout, Portal and the Checkout return", () => {
   test("the Checkout return syncs the account at once, only for a manager of that account", async () => {
     const { harness, send } = setup();
     const id = await personalAccountId(harness);
-    const created = await send(OWNER, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v1" });
+    const created = await send(OWNER, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v2" });
     const sessionId = new URL(((await created.json()) as { url: string }).url).pathname.split("/").pop() ?? "";
     harness.billing.provider.completeCheckout(sessionId);
 
@@ -404,7 +404,7 @@ describe("POST /billing/accounts/:accountId/plan-interval", () => {
   async function subscribed(setupResult: ReturnType<typeof setup>, userId = OWNER) {
     const { harness, send } = setupResult;
     const id = await personalAccountId(harness, userId);
-    const created = await send(userId, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v1" });
+    const created = await send(userId, `/billing/accounts/${id}/checkout`, "POST", { offer: "pro_monthly_founder_v2" });
     const sessionId = new URL(((await created.json()) as { url: string }).url).pathname.split("/").pop() ?? "";
     harness.billing.provider.completeCheckout(sessionId);
     expect((await send(userId, `/billing/checkout/${sessionId}/sync`, "POST")).status).toBe(200);
@@ -416,12 +416,12 @@ describe("POST /billing/accounts/:accountId/plan-interval", () => {
     const id = await subscribed(context);
     const response = await context.send(OWNER, `/billing/accounts/${id}/plan-interval`, "POST", { interval: "year" });
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ priceKey: "pro_yearly_founder_v1" });
+    expect(await response.json()).toEqual({ priceKey: "pro_yearly_founder_v2" });
     const detail = billingAccountDetailSchema.parse(await (await context.send(OWNER, `/billing/accounts/${id}`)).json());
-    expect(detail.subscription?.priceKey).toBe("pro_yearly_founder_v1");
+    expect(detail.subscription?.priceKey).toBe("pro_yearly_founder_v2");
     // The same interval again changes nothing.
     const same = await context.send(OWNER, `/billing/accounts/${id}/plan-interval`, "POST", { interval: "year" });
-    expect(await same.json()).toEqual({ priceKey: "pro_yearly_founder_v1" });
+    expect(await same.json()).toEqual({ priceKey: "pro_yearly_founder_v2" });
   });
 
   test("needs billing.manage: 403 for a team editor, 404 for a stranger", async () => {
@@ -446,7 +446,7 @@ describe("POST /billing/accounts/:accountId/plan-interval", () => {
 });
 
 /** A personal account in its Pro trial, through Checkout and the Checkout return. */
-async function trialingAccount(context: ReturnType<typeof setup>, offer = "pro_monthly_founder_v1"): Promise<string> {
+async function trialingAccount(context: ReturnType<typeof setup>, offer = "pro_monthly_founder_v2"): Promise<string> {
   const { harness, send } = context;
   const id = await personalAccountId(harness);
   const created = await send(OWNER, `/billing/accounts/${id}/checkout`, "POST", { offer });
@@ -511,16 +511,16 @@ describe("Start Pro now (decision D22)", () => {
     const id = await trialingAccount(context);
     const preview = await context.send(OWNER, `/billing/accounts/${id}/start-pro-now`);
     expect(preview.status).toBe(200);
-    expect(billingStartProNowPreviewSchema.parse(await preview.json())).toEqual({ amountCents: 15_900, currency: "usd", intervalLabel: "month" });
+    expect(billingStartProNowPreviewSchema.parse(await preview.json())).toEqual({ amountCents: 12_900, currency: "usd", intervalLabel: "month" });
 
     context.harness.billing.clock.advance(2 * DAY_MS);
     const response = await context.send(OWNER, `/billing/accounts/${id}/start-pro-now`, "POST");
     expect(response.status).toBe(200);
     const detail = billingAccountDetailSchema.parse(await response.json());
     expect(detail).toMatchObject({ plan: "pro", subscription: { status: "active" }, paymentMethod: MEMORY_TEST_CARD });
-    // The trial credits end; the 5,000 monthly allowance starts now, and
+    // The trial credits end; the 10,000 monthly allowance starts now, and
     // pay-as-you-go (off during the trial) adds its 1,000-credit debt room.
-    expect(detail.credits).toMatchObject({ granted: 5_000, available: 6_000, allowance: 5_000 });
+    expect(detail.credits).toMatchObject({ granted: 10_000, available: 11_000, allowance: 10_000 });
     expect(detail.payg.active).toBe(true);
 
     const again = await context.send(OWNER, `/billing/accounts/${id}/start-pro-now`, "POST");
@@ -575,9 +575,9 @@ describe("GET /billing/accounts/:accountId/plan-interval/preview", () => {
     expect(response.status).toBe(200);
     const preview = billingPlanIntervalPreviewSchema.parse(await response.json());
     // A trial has paid nothing, so there is no credit for unused time.
-    expect(preview).toEqual({ chargeTodayCents: 154_800, creditCents: 0, newPriceCents: 154_800, newInterval: "year", balanceAfterCents: 0 });
+    expect(preview).toEqual({ chargeTodayCents: 118_800, creditCents: 0, newPriceCents: 118_800, newInterval: "year", balanceAfterCents: 0 });
     const detail = billingAccountDetailSchema.parse(await (await context.send(OWNER, `/billing/accounts/${id}`)).json());
-    expect(detail.subscription?.priceKey).toBe("pro_monthly_founder_v1");
+    expect(detail.subscription?.priceKey).toBe("pro_monthly_founder_v2");
   });
 
   test("refuses a bad interval (400), the same interval and no subscription (409), and no payments (503)", async () => {

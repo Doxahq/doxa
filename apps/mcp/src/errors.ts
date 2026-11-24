@@ -233,6 +233,32 @@ function describeServiceError(error: unknown): ErrorFields | null {
 
 const BILLING_HINT = "Ask the user to open Billing in the Doxa dashboard. No tool buys or changes a plan.";
 
+const megabytes = (bytes: number) => `${Math.round(bytes / (1024 * 1024))} MB`;
+
+/** The plan limits of the docs site: what the agent can do before the user upgrades. */
+const STORAGE_LIMIT_ERRORS: Readonly<Record<string, { message: (limit: number) => string; hint: string }>> = {
+  "docs.branches_per_site": {
+    message: (limit) => `The site has all ${String(limit)} branches that its plan allows.`,
+    hint: "Reuse an existing branch, or ask the user to erase one or upgrade the plan in the Doxa dashboard.",
+  },
+  "docs.storage_bytes": {
+    message: (limit) => `This image would take the docs over the ${megabytes(limit)} of storage that the plan allows.`,
+    hint: "Use smaller images, or ask the user to upgrade the plan in the Doxa dashboard.",
+  },
+  "site.asset_bytes": {
+    message: (limit) => `This file would take the site files over the ${megabytes(limit)} that the plan allows.`,
+    hint: "Use a smaller file, or ask the user to upgrade the plan in the Doxa dashboard.",
+  },
+  "site.asset_files": {
+    message: (limit) => `The site has all ${String(limit)} files that its plan allows.`,
+    hint: "Ask the user to upgrade the plan in the Doxa dashboard.",
+  },
+  "site.custom_domains": {
+    message: (limit) => `The project has all ${String(limit)} custom domains that its plan allows.`,
+    hint: "Ask the user to remove a domain or upgrade the plan in the Doxa dashboard.",
+  },
+};
+
 function describeBillingError(error: unknown): ErrorFields | null {
   if (error instanceof PlanLimitError) {
     const { key, limit, used, resetsAt } = error.details;
@@ -246,6 +272,10 @@ function describeBillingError(error: unknown): ErrorFields | null {
         hint: resetsAt ? `Wait until ${resetsAt.toISOString()}, or upgrade the plan in the Doxa dashboard.` : BILLING_HINT,
         details,
       };
+    }
+    const storage = STORAGE_LIMIT_ERRORS[key];
+    if (storage && typeof limit === "number") {
+      return { code: "plan_limit", message: storage.message(limit), hint: storage.hint, details };
     }
     return { code: "plan_limit", message: `The account's plan does not allow ${key}.`, hint: BILLING_HINT, details };
   }

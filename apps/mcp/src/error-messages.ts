@@ -51,8 +51,6 @@ const DOCS_CONTENT_HINTS: Partial<Record<DocsContentErrorCode, string>> = {
     "Send the file to uploadUrl with an HTTP PUT first (the curl command of create_asset_upload), then call finish_asset_upload again.",
   asset_limit_reached:
     "Publish this branch, or reuse an image path that the branch already has.",
-  storage_quota_exceeded:
-    "Use smaller images, or ask the user to free storage on the plan.",
   mdx_invalid:
     "Read each listed page with read_page, fix it with write_page, then call publish_branch again.",
 };

@@ -60,7 +60,7 @@ export function subscriptionFixture(overrides: Partial<SubscriptionRecord> & Pic
   return {
     provider: "memory",
     providerSubscriptionId: "sub_test",
-    priceKey: "pro_monthly_founder_v1",
+    priceKey: "pro_monthly_founder_v2",
     planKey: "pro",
     status: "active",
     billingAnchor: start,
@@ -349,7 +349,7 @@ export function describeBillingProviderContract(name: string, factory: () => Pro
     it("reads the card and previews an interval switch without a change, when it supports them", async () => {
       const harness = await factory();
       const customer = await newCustomer(harness, "reads");
-      const priceKey = "pro_monthly_founder_v1";
+      const priceKey = "pro_monthly_founder_v2";
       const link = await harness.provider.createCheckout(checkoutInput(harness, customer, priceKey, "reads"));
       await harness.payCheckout(link.checkoutId);
       const before = await harness.provider.fetchCustomerState(customer);
@@ -359,7 +359,7 @@ export function describeBillingProviderContract(name: string, factory: () => Pro
         expect(card.last4).toMatch(/^\d{4}$/);
         expect(card.expMonth).toBeGreaterThanOrEqual(1);
       }
-      const preview = await harness.provider.previewPlanSwitch?.({ customer, subscriptionId, priceKey: "pro_yearly_founder_v1" });
+      const preview = await harness.provider.previewPlanSwitch?.({ customer, subscriptionId, priceKey: "pro_yearly_founder_v2" });
       if (preview) {
         for (const cents of [preview.chargeTodayCents, preview.creditCents, preview.balanceAfterCents]) expect(Number.isSafeInteger(cents) && cents >= 0).toBe(true);
       }
@@ -470,12 +470,12 @@ export function describeBillingStoreContract(name: string, makeStore: () => Prom
       expect(available).toBe(settled.outcome === "settled" ? 800 : 1_000);
     });
 
-    it("lets exactly 100 of 200 parallel quota consumes through with a limit of 100", async () => {
+    it("lets exactly 20 of 200 parallel quota consumes through with a limit of 20", async () => {
       const s = await services();
       const account = await owner(s, "u");
       const view = await s.entitlements.forAccount(account.id);
       const results = await Promise.all(Array.from({ length: 200 }, () => s.quota.consume("mcp.tool_calls", account.id, view.entitlements)));
-      expect(results.filter((result) => result.allowed)).toHaveLength(100);
+      expect(results.filter((result) => result.allowed)).toHaveLength(20);
     });
 
     it("claims one export per rolling window and restores the earlier one on release", async () => {

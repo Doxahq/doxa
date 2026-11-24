@@ -26,6 +26,8 @@ import { readBoundedBody, RequestBodyTooLarge } from "../http/bounded-body";
 import { toSafeErrorLog } from "../http/error-log";
 import { acceptsEventStream, streamProgress } from "../http/progress-stream";
 import { error, json, notFound, validationError } from "../http/response";
+import { PlanLimitError } from "@doxahq/billing";
+import { planLimitResponse } from "../http/billing-errors";
 import { DocsBranchAssetRead } from "../services/docs-branches/assets/asset-read";
 import { DocsBranchAssetUpload } from "../services/docs-branches/assets/asset-upload";
 import { DocsBranchDiffService } from "../services/docs-branches/branch-diff";
@@ -556,6 +558,9 @@ async function run(handler: () => Promise<Response>): Promise<Response> {
 
 /** The response for an expected failure, or null for an unexpected one. */
 function knownErrorResponse(cause: unknown): Response | null {
+  // The branch limit and the docs storage of the plan. The dashboard finds the account from the project.
+  if (cause instanceof PlanLimitError) return planLimitResponse(cause);
+
   if (cause instanceof DocsBranchValidationError) {
     return branchValidationError(cause.issues);
   }

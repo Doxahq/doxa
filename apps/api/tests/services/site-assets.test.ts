@@ -211,7 +211,8 @@ describe("site asset quota", () => {
     for (const seed of [1, 2, 3]) await service.upload("owner", "site", "logo", uniquePng(seed));
 
     await expect(service.upload("owner", "site", "logo", uniquePng(4))).rejects.toMatchObject({
-      code: "storage_quota_exceeded",
+      code: "plan_limit",
+      details: { key: "site.asset_files", limit: 3, used: 3 },
     });
     expect(store.write).toHaveBeenCalledTimes(3);
   });
@@ -222,7 +223,8 @@ describe("site asset quota", () => {
     await service.upload("owner", "site", "logo", uniquePng(1, 600));
 
     await expect(service.upload("owner", "site", "logo", uniquePng(2, 401))).rejects.toMatchObject({
-      code: "storage_quota_exceeded",
+      code: "plan_limit",
+      details: { key: "site.asset_bytes" },
     });
     await expect(service.upload("owner", "site", "logo", uniquePng(3, 400))).resolves.toBeDefined();
   });
@@ -279,7 +281,7 @@ describe("generation site assets", () => {
     for (const seed of [1, 2, 3]) await service.upload("owner", "site", "logo", uniquePng(seed));
     await expect(
       service.uploadForGeneration("project", "site", "logo", uniquePng(4)),
-    ).rejects.toMatchObject({ code: "storage_quota_exceeded" });
+    ).rejects.toMatchObject({ code: "plan_limit", details: { key: "site.asset_files" } });
     expect(store.write).toHaveBeenCalledTimes(3);
   });
 

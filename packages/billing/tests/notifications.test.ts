@@ -86,15 +86,17 @@ describe("readCreditSnapshot", () => {
     const deps = { store: billing.store, ledger: billing.ledger, catalog: billing.catalog, clock: billing.clock };
 
     let snap = await readCreditSnapshot(deps, account.id, await billing.entitlements.creditContext(account.id));
-    expect(snap).toMatchObject({ trialing: false, paygActive: true, allowance: { amount: 5_000, remaining: 5_000 }, debtThisWindow: 0, monthlyLimitCredits: 3_000 });
+    expect(snap).toMatchObject({ trialing: false, paygActive: true, allowance: { amount: 10_000, remaining: 10_000 }, debtThisWindow: 0, monthlyLimitCredits: 3_000 });
 
-    // 4,000 credits: 50 base + $13.17 × 3 × 100 = 3,951 + 50.
-    await runJob(billing, account.id, "j1", 13.17);
+    // 8,002 credits: 5,000 (50 + 4,950), then 50 base + $9.84 × 3 × 100 = 2,952 + 50.
+    await runJob(billing, account.id, "j1", 16.5);
+    await runJob(billing, account.id, "j1b", 9.84);
     snap = await readCreditSnapshot(deps, account.id, await billing.entitlements.creditContext(account.id));
-    expect(snap?.allowance).toEqual({ amount: 5_000, remaining: 999 });
+    expect(snap?.allowance).toEqual({ amount: 10_000, remaining: 1_998 });
     expect(kinds(snap!)).toEqual(["credits-low"]);
 
-    await runJob(billing, account.id, "j2", 4);
+    // 2,150 credits: more than the 1,998 left.
+    await runJob(billing, account.id, "j2", 7);
     snap = await readCreditSnapshot(deps, account.id, await billing.entitlements.creditContext(account.id));
     expect(snap?.debtThisWindow).toBeGreaterThan(0);
     expect(kinds(snap!)[0]).toBe("payg-started");

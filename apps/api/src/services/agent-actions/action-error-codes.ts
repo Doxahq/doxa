@@ -1,3 +1,4 @@
+import { PlanLimitError } from "@doxahq/billing";
 import type { ApprovalRequestError } from "@doxahq/contracts/approval-requests";
 import { toSafeErrorLog } from "../../http/error-log";
 import { CreateCustomDocsDomainError } from "../../repositories/docs-domains";
@@ -6,6 +7,7 @@ import { ProjectDeletionError } from "../../repositories/project-deletion";
 import { CreateProjectError } from "../../repositories/projects";
 import { DocsContentError } from "../docs-content/errors";
 import { DocsDomainProvisioningError } from "../docs-domain-lifecycle";
+import { billingRefusalActionError } from "./billing-refusal";
 import {
   ActionAccessDeniedError,
   ActionDeniedError,
@@ -41,6 +43,11 @@ export function describeKnownActionError(error: unknown): ApprovalRequestError |
 }
 
 function describeServiceError(error: unknown): ApprovalRequestError | null {
+  // An approved domain add can reach the custom domain limit of the plan.
+  if (error instanceof PlanLimitError) {
+    const refusal = billingRefusalActionError(error);
+    return { code: refusal.code, message: refusal.message };
+  }
   if (
     error instanceof ActionExecutionError ||
     error instanceof DocsContentError ||

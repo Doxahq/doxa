@@ -39,6 +39,7 @@ export function BillingAccountView({
 }) {
   const offer = hasLiveSubscription(detail) ? null : founderOffer(detail.offers)
   const trialing = detail.subscription?.status === "trialing"
+  const paid = detail.plan !== "free" && hasLiveSubscription(detail)
   const banner = isPastDue(detail) ? (
     <BillingPastDueBanner
       canManage={detail.canManage}
@@ -63,13 +64,18 @@ export function BillingAccountView({
         />
       ) : null}
       {offer ? <BillingPlanLimits detail={detail} /> : null}
-      {detail.subscription ? <BillingPaymentMethodSection detail={detail} actions={actions.updateCard} /> : null}
+      {/* A Free account pays nothing, even with an ended trial or a canceled plan on record. */}
+      {paid ? <BillingPaymentMethodSection detail={detail} actions={actions.updateCard} /> : null}
       {hasAiCredits(detail) ? <BillingCreditsSummaryRow detail={detail} /> : null}
-      <BillingInvoicesSection
-        invoices={invoices}
-        pages={invoicePages}
-        emptyText={trialing ? "No invoices yet. The first one comes when the trial ends." : "No invoices yet."}
-      />
+      {/* Free hides an empty list. A Free account that paid before, for example
+          a canceled Pro plan, keeps its invoices. */}
+      {paid || invoices.length > 0 ? (
+        <BillingInvoicesSection
+          invoices={invoices}
+          pages={invoicePages}
+          emptyText={trialing ? "No invoices yet. The first one comes when the trial ends." : "No invoices yet."}
+        />
+      ) : null}
     </BillingPageLayout>
   )
 }

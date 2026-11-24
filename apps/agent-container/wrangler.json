@@ -59,6 +59,9 @@
   "env": {
     "production": {
       "workers_dev": false,
+      "vars": {
+        "AGENT_EGRESS_MODE": "log"
+      },
       "containers": [
         {
           "name": "agent-container",

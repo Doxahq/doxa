@@ -93,10 +93,13 @@ export function createCard({ link: Link, resolveIcon, ExternalIcon }: CardDepend
               className="m-0! h-[180px] w-full rounded-none! border-0 object-cover object-center"
             />
           )}
-          {/* The icon sits beside the title, centered on its line. */}
+          {/* The icon sits beside the title, centered on its first line, so a
+              title that wraps keeps the icon at the top. The top margin puts
+              it on that line, 1px under center for normal cards so it meets
+              the letters' cap height, and centered for small ones. */}
           <div
             className={cn(
-              "flex items-center gap-2",
+              "flex items-start gap-2.5",
               variant === "image" && "p-4",
             )}
           >
@@ -104,14 +107,16 @@ export function createCard({ link: Link, resolveIcon, ExternalIcon }: CardDepend
               <IconComponent
                 className={cn(
                   "shrink-0 text-muted-foreground",
-                  variant === "normal" ? "size-5" : "size-4",
+                  variant === "normal" ? "mt-1 size-5.5" : "mt-0.5 size-4",
                 )}
               />
             )}
             <div
               className={cn(
                 "min-w-0 font-semibold",
-                variant === "normal" ? "text-lg" : "text-sm",
+                variant === "normal"
+                  ? "text-lg leading-7"
+                  : "text-sm leading-5",
                 className,
               )}
             >

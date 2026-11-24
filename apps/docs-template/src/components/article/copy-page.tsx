@@ -3,6 +3,8 @@ import {
   LuCheck,
   LuChevronDown,
   LuCopy,
+  LuExternalLink,
+  LuEye,
   LuFileCode,
   LuFileText,
 } from "react-icons/lu";
@@ -62,16 +64,19 @@ export function CopyPage({
   title,
   description,
   apiMethod,
+  markdownUrl,
 }: {
   options: CopyPageOptions;
   rawDoc: DeferredRawDoc;
   title: string;
   description?: string;
   apiMethod?: string;
+  /** The page's raw `.md` route. The menu links to it when it is set. */
+  markdownUrl?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(false);
-  const hasMultipleOptions = options.markdown && options.rawText;
+  const hasMenu = (options.markdown && options.rawText) || Boolean(markdownUrl);
   const primaryCopyAction = options.markdown ? copyMarkdown : copyText;
   const primaryCopyLabel = options.markdown
     ? "Copy page as markdown"
@@ -122,7 +127,7 @@ export function CopyPage({
         </span>
         <span>{copied ? "Copied" : "Copy page"}</span>
       </button>
-      {hasMultipleOptions && (
+      {hasMenu && (
         <>
           <div className="w-px self-stretch bg-border" />
           <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -133,27 +138,51 @@ export function CopyPage({
               <LuChevronDown className="size-3.5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-44">
-              <DropdownMenuItem
-                onSelect={copyMarkdown}
-                className="cursor-pointer"
-              >
-                <LuFileCode className="size-4" />
-                <div className="flex flex-col">
-                  <span>Copy as Markdown</span>
-                  <span className="text-xs text-muted-foreground">
-                    Copy as markdown
-                  </span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={copyText} className="cursor-pointer">
-                <LuFileText className="size-4" />
-                <div className="flex flex-col">
-                  <span>Copy as text</span>
-                  <span className="text-xs text-muted-foreground">
-                    Plain text
-                  </span>
-                </div>
-              </DropdownMenuItem>
+              {options.markdown && (
+                <DropdownMenuItem
+                  onSelect={copyMarkdown}
+                  className="cursor-pointer"
+                >
+                  <LuFileCode className="size-4" />
+                  <div className="flex flex-col">
+                    <span>Copy as Markdown</span>
+                    <span className="text-xs text-muted-foreground">
+                      Copy as markdown
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              )}
+              {options.rawText && (
+                <DropdownMenuItem
+                  onSelect={copyText}
+                  className="cursor-pointer"
+                >
+                  <LuFileText className="size-4" />
+                  <div className="flex flex-col">
+                    <span>Copy as text</span>
+                    <span className="text-xs text-muted-foreground">
+                      Plain text
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              )}
+              {markdownUrl && (
+                <DropdownMenuItem asChild className="cursor-pointer">
+                  <a href={markdownUrl} target="_blank" rel="noopener">
+                    <LuEye className="size-4" />
+                    <div className="flex flex-col">
+                      <span>View as Markdown</span>
+                      <span className="text-xs text-muted-foreground">
+                        Open in a new tab
+                      </span>
+                    </div>
+                    <LuExternalLink
+                      className="ml-auto size-3.5 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  </a>
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </>

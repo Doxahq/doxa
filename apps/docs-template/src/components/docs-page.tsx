@@ -6,6 +6,7 @@ import {
   type ComponentType,
   type LazyExoticComponent,
 } from "react";
+import { useDemoMode } from "@/src/contexts/demo-mode";
 import type {
   DocsRoutePageData,
   ParsedDocument,
@@ -24,6 +25,7 @@ import { ChatWithPage } from "@/src/components/article/chat-with-page";
 import { CopyPage } from "@/src/components/article/copy-page";
 import { Pagination } from "@/src/components/article/pagination";
 import { useChatContext } from "@/src/components/chat/chat-context";
+import { Footer } from "@/src/components/navigation/footer";
 import {
   hasSectionTabs,
   SectionTabs,
@@ -66,6 +68,7 @@ const mdxModules = Object.fromEntries(
 ) as Record<string, LazyExoticComponent<BundledMdxComponent>>;
 
 export function DocsPage({ data }: DocsPageProps) {
+  const isDemoMode = useDemoMode();
   const { isOpen: chatOpen, setCurrentPageContext } = useChatContext();
   const { slug, document: pageDocument } = data;
   if (!pageDocument) {
@@ -182,6 +185,11 @@ export function DocsPage({ data }: DocsPageProps) {
                         title={title}
                         description={description}
                         apiMethod={apiMethod}
+                        markdownUrl={
+                          data.features.rawMarkdown
+                            ? rawMarkdownUrl(pageDocument.href)
+                            : null
+                        }
                       />
                     )}
                   </div>
@@ -215,6 +223,7 @@ export function DocsPage({ data }: DocsPageProps) {
                   previous={data.previous}
                   next={data.next}
                 />
+                {!isDemoMode && <Footer />}
               </article>
             </div>
             {!chatOpen && (
@@ -283,6 +292,12 @@ function MdxContent({
       <MDXContent components={{ ...components, ...elements }} />
     </Suspense>
   );
+}
+
+/** The page's `.md` route (`src/lib/raw-markdown.ts`). The site root has none. */
+function rawMarkdownUrl(href: string): string | null {
+  const path = href.replace(/\/+$/, "");
+  return path ? `${path}.md` : null;
 }
 
 function ContentLoadingState({ label }: { label: string }) {

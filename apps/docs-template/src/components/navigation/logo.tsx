@@ -15,6 +15,11 @@ interface LogoProps {
 
 const LOGO_ASPECT = 193 / 160;
 
+/** The font of the site name next to the logo, and of the Doxa wordmark. */
+export const WORDMARK_FONT_STYLE = {
+  fontFamily: "'Sora', sans-serif",
+} as const;
+
 export function LogoMark({
   size = 28,
   doxa = false,
@@ -75,7 +80,7 @@ export function Logo({
       <LogoMark size={size} doxa={doxa} />
       <Tag
         className="text-[1em] font-semibold text-foreground"
-        style={{ fontFamily: "'Sora', sans-serif" }}
+        style={WORDMARK_FONT_STYLE}
       >
         {name}
       </Tag>

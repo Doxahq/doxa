@@ -29,7 +29,7 @@ export function TabsList({
       <TabsPrimitive.List
         data-slot="tabs-list"
         className={cn(
-          "inline-flex h-9 w-max min-w-full items-center justify-start rounded-lg bg-muted p-[3px] text-muted-foreground sm:w-fit sm:justify-center",
+          "inline-flex h-9 w-max min-w-full items-center justify-start gap-1 rounded-lg bg-muted p-[3px] text-muted-foreground sm:w-fit sm:justify-center",
           className,
         )}
         {...props}
@@ -46,7 +46,9 @@ export function TabsTrigger({
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "inline-flex h-[calc(100%-1px)] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-transparent px-4 py-2 text-xs font-medium whitespace-nowrap text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:shadow-sm dark:text-muted-foreground dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 dark:data-[state=active]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        // The active tab takes the brand color, so it reads as selected in
+        // every theme. Inactive tabs stay muted until hovered.
+        "inline-flex h-full flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-transparent px-4 py-2 text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-primary/15 data-[state=active]:text-primary [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}

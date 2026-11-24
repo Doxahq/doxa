@@ -43,7 +43,7 @@ export function Sidebar({ section, routes }: RuntimeSidebarProps = {}) {
   // limit that grows with the screen. Longer titles end in an ellipsis.
   return (
     <aside
-      className={`sticky top-[calc(var(--docs-navbar-h)+var(--docs-tabs-h))] hidden h-[calc(100dvh-var(--docs-navbar-h)-var(--docs-tabs-h))] w-max max-w-[240px] min-w-[240px] shrink-0 flex-col lg:max-w-[288px] xl:max-w-[336px] overscroll-contain md:flex ${isDemoMode ? "overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "overflow-y-auto"}`}
+      className={`sticky top-[calc(var(--docs-navbar-h)+var(--docs-tabs-h))] hidden h-[calc(100dvh-var(--docs-navbar-h)-var(--docs-tabs-h))] w-max max-w-[240px] min-w-[240px] shrink-0 flex-col lg:max-w-[288px] xl:max-w-[336px] overscroll-contain md:flex ${isDemoMode ? "overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "docs-sidebar-scroll overflow-y-auto"}`}
       aria-label="Page navigation"
     >
       {/* Radix wraps the content in a `display: table` box that grows with

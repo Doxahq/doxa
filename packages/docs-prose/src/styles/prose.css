@@ -76,6 +76,19 @@
   overflow-wrap: anywhere;
 }
 
+/* Inline code in a table cell stays on one line: a break splits its border
+ * and background into two broken boxes. A table that gets wider than the
+ * article scrolls sideways in its `ProseTable` box.
+ */
+.prose :where(th, td) :where(code):not(:where(pre code, [class~="not-prose"] *)) {
+  white-space: nowrap;
+}
+
+.prose-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 /* Inline code (single backtick), not code blocks inside <pre>.
  *
  * The font stack is pinned here rather than left to the host. Tailwind

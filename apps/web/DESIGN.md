@@ -356,7 +356,7 @@ Spacing follows Tailwind's 4px unit. The dashboard is a fixed three-zone shell.
   mode. Split mode: the MDX source on the left, the rendered preview in a
   browser frame on the right.
 - **Status bar** — at the bottom of the main area, from the sidebar edge to
-  the right edge, `status-bar-height` (2rem), on `sidebar`: `>_ email:path` on the left, the branch and green
+  the right edge, `status-bar-height` (2rem), on `sidebar`: `>_ :path` on the left, the branch and green
   `● ALL SYSTEMS OPERATIONAL` on the right.
 - **Menus and popovers** — `surface-menu`: `popover` fill (#141416),
   `menu-border` (#2e2e33), and the one soft shadow in the system. Highlights use

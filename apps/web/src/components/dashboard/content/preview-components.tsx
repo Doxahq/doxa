@@ -2,6 +2,7 @@ import { lazy, Suspense, type ComponentProps, type ReactNode } from "react"
 import {
   createMermaid,
   createPre,
+  ProseTable,
   Tabs,
   TabsContent,
   TabsList,
@@ -199,4 +200,5 @@ function PreviewImage({ src, ...props }: ComponentProps<"img">) {
 
 export const PREVIEW_ELEMENT_OVERRIDES: ProseElementMap = {
   img: PreviewImage,
+  table: ProseTable,
 }

@@ -117,8 +117,9 @@ describe("prose rendering", () => {
       '<Card title="Guide" icon="book" description="Read it." />\n',
       createProseComponents({ resolveIcon: () => Icon }),
     );
-    // One row: the icon, then the title, centered on each other.
-    expect(html).toMatch(/<div class="flex items-center gap-2"><svg class="[^"]*size-5[^"]*" data-icon="true"><\/svg><div class="[^"]*text-lg[^"]*">Guide<\/div><\/div>/);
+    // One row: the icon, then the title. The icon aligns to the top, so it
+    // stays on the first line when the title wraps.
+    expect(html).toMatch(/<div class="flex items-start gap-2.5"><svg class="[^"]*size-5.5[^"]*" data-icon="true"><\/svg><div class="[^"]*text-lg leading-7[^"]*">Guide<\/div><\/div>/);
     expect(html.indexOf("Guide")).toBeLessThan(html.indexOf("Read it."));
   });
 

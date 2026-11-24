@@ -58,6 +58,7 @@ export { createProseComponents, type CreateProseComponentsOptions } from "./comp
 
 export { ProseLink, type ProseLinkComponent, type ProseLinkProps } from "./components/link";
 export { Embed, type EmbedProps } from "./components/embed";
+export { ProseTable } from "./components/table";
 export { Note, type NoteProps, type NoteVariant } from "./components/note";
 export {
   Step,

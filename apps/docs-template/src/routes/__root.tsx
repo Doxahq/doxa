@@ -36,7 +36,6 @@ import {
   useChatContext,
 } from "@/src/components/chat/chat-context";
 import { FloatingChatBar } from "@/src/components/chat/floating-chat-bar";
-import { Footer } from "@/src/components/navigation/footer";
 import { Navbar } from "@/src/components/navigation/navbar";
 import { NavigationProgress } from "@/src/components/navigation/navigation-progress";
 import globalsCss from "@/src/styles/globals.css?url";
@@ -163,7 +162,6 @@ function RootDocument({
                     >
                       {children}
                     </main>
-                    {!isDemoMode && <Footer />}
                   </div>
                   {/* Before the first paint: the scroll position of a refresh, and the current TOC item. */}
                   <script

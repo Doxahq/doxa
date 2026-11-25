@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
 import { useSidebar } from "~/components/ui/sidebar"
+import { useDashboardBoot } from "~/lib/dashboard/dashboard-boot"
 import { useWorkspaceCrumb } from "~/lib/dashboard/workspace-context"
 import { projectDetailQueryOptions } from "~/lib/queries/dashboard"
 import { cn } from "~/lib/utils"
@@ -36,8 +37,12 @@ export function TopBar({
   actions?: ReactNode
   menu?: ReactNode
 }) {
+  // During the first load through `/dashboard` the workspace crumb waits for the
+  // page: it comes in the frame where the skeletons go, so "Overview" does not
+  // move on its own while the page loads.
+  const { booting } = useDashboardBoot()
   const workspaceCrumb = useWorkspaceCrumb()
-  const trail = workspaceCrumb ? [workspaceCrumb, ...crumbs] : crumbs
+  const trail = workspaceCrumb && !booting ? [workspaceCrumb, ...crumbs] : crumbs
   return (
     <header className="sticky top-0 z-20 flex h-13 shrink-0 items-center gap-3 border-b border-border bg-background pr-3.5 pl-3">
       <SidebarToggle className="size-8" />

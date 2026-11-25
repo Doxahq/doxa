@@ -49,6 +49,7 @@ import {
   type ModelCallDeadline,
 } from "./model-call-deadline";
 import { emitAgentSpan } from "./span";
+import { truncateUntrustedAwareOutput } from "./untrusted-content";
 import {
   isResponseSchemaRejected,
   rememberRejectedResponseSchema,
@@ -783,7 +784,8 @@ function truncateToolOutput(output: string, allowedChars: number): string {
     return "Tool output omitted because the per-run tool context budget is exhausted. Use the information already gathered to write the page.";
   }
   if (output.length <= allowedChars) return output;
-  return `${output.slice(0, allowedChars)}\n... (tool output truncated by per-run context budget; narrow future tool calls)`;
+  // A cut inside an untrusted-data block closes the block before the notice.
+  return truncateUntrustedAwareOutput(output, allowedChars, "... (tool output truncated by per-run context budget; narrow future tool calls)");
 }
 
 async function* streamLegacy(

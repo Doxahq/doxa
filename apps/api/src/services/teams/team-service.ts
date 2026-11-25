@@ -17,7 +17,9 @@ import {
   type TeamSummary,
 } from "@doxahq/contracts/teams";
 import { z } from "zod";
+import type { ProductAnalytics } from "@doxahq/analytics";
 import type { Env } from "../../env";
+import { productAnalyticsOf } from "../analytics/product-analytics";
 import { TeamsRepository } from "../../repositories/teams";
 import { dashboardActor } from "../agent-access/actor";
 import { MembershipProjectAccessPolicy } from "../agent-access/membership-project-access-policy";
@@ -40,6 +42,8 @@ export interface TeamServiceDeps {
   readonly inviteMailer: TeamInviteMailer;
   /** Billing spec 9.3 `team.seats`, at invite create and accept. Absent: no seat limit. */
   readonly seats?: TeamSeatPolicy;
+  /** Product analytics: team facts never carry a name or an email. Absent: nothing is reported. */
+  readonly analytics?: ProductAnalytics;
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -66,6 +70,7 @@ export class TeamService {
       newId: () => crypto.randomUUID(),
       inviteMailer: OutboxTeamInviteMailer.fromEnv(env),
       seats: planSeamsFromEnv(env).teamSeats,
+      analytics: productAnalyticsOf(env),
     });
   }
 
@@ -91,6 +96,7 @@ export class TeamService {
       );
     }
     const team = await this.deps.store.create({ name, ownerUserId: userId, now: this.deps.now() });
+    this.deps.analytics?.capture({ name: "team_created", distinctId: userId, properties: {} });
     return {
       id: team.id,
       name: team.name,
@@ -170,6 +176,7 @@ export class TeamService {
     });
     const created = await this.toInvite(invite, webOrigin);
     if (invitedEmail && created.url) await this.sendInviteEmail(teamId, invite, invitedEmail, created.url);
+    this.deps.analytics?.capture({ name: "team_invite_sent", distinctId: userId, properties: { role: input.role } });
     return { invite: created };
   }
 
@@ -282,6 +289,7 @@ export class TeamService {
     await this.assertSeatForAccept(userId, token);
     const result = await this.deps.store.acceptInvite(await hashInviteToken(token), userId, this.deps.now());
     if (result.outcome !== "accepted") throw new TeamInviteError(result.outcome);
+    this.deps.analytics?.capture({ name: "team_invite_accepted", distinctId: userId, properties: { role: result.role } });
     return { teamId: result.teamId, role: result.role };
   }
 

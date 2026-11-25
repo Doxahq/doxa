@@ -58,28 +58,32 @@ export const BILLING_OPTIONS = billingOptions(DEFAULT_PRO_OFFER)
 
 export const DEFAULT_BILLING: BillingPeriod = "yearly"
 
+/** A founder keeps the founder price while the subscription stays active (spec 7.5 rule 4). */
+export const FOUNDER_LOCK = "locked in forever"
+
 /** The offer line under the Pro price. With the live offer, it counts the spots left (spec 7.5). */
 export function founderOfferLine(offer: { open: boolean; slotsLeft: number; maxAccounts: number } | null): string | null {
-  if (!offer) return `Founder price for the first ${DEFAULT_PRO_OFFER.maxAccounts} paying customers`
+  if (!offer) return `Founder price for the first ${DEFAULT_PRO_OFFER.maxAccounts} paying customers, ${FOUNDER_LOCK}`
   if (!offer.open) return null
-  return `${offer.slotsLeft} of ${offer.maxAccounts} founder spots left`
+  return `${offer.slotsLeft} of ${offer.maxAccounts} founder spots left · price ${FOUNDER_LOCK}`
 }
 
 /**
- * "Upgrade to Pro": sign-in first, then the dashboard opens Checkout at this
- * interval (`/dashboard/billing?upgrade=`). A signed-in visitor goes on at once.
+ * "Upgrade to Pro": sign-up first (its "Sign in" link keeps the redirect), then
+ * the dashboard opens Checkout at this interval (`/dashboard/billing?upgrade=`).
+ * A signed-in visitor goes on at once.
  */
-export function upgradeUrl(period: BillingPeriod, signInUrl = "/login"): string {
+export function upgradeUrl(period: BillingPeriod, signUpUrl = "/signup"): string {
   const next = `/dashboard/billing?upgrade=${PERIOD_INTERVAL[period]}`
-  return `${signInUrl}?redirect=${encodeURIComponent(next)}`
+  return `${signUpUrl}?redirect=${encodeURIComponent(next)}`
 }
 
-/** "Founder price for the first 50 paying customers": the static note of the hero and the CTA bands. */
+/** "Founder price for the first 50 paying customers, locked in forever": the static note of the hero and the CTA bands. */
 export const FOUNDER_PRICE_NOTE = founderOfferLine(null) ?? ""
 
 const fmt = (value: number) => new Intl.NumberFormat("en-US").format(value)
 const proCreditsLimit = DOXA_CATALOG.plans.pro.limits["ai.credits_monthly"]
-/** 5,000: the Pro allowance. */
+/** 10,000: the Pro allowance. */
 export const PRO_MONTHLY_CREDITS = typeof proCreditsLimit === "number" ? proCreditsLimit : 0
 const generationPricing = DOXA_CATALOG.actions["generation.run"].pricing
 const doxabotPricing = DOXA_CATALOG.actions["doxabot.run"].pricing
@@ -99,11 +103,12 @@ const usd = (credits: number) => formatUsd(credits * creditCents)
 export const PRO_HIGHLIGHTS = {
   agent: "Doxa Agent writes docs from your GitHub repo",
   updates: "Keeps your docs updated with every PR or merge",
-  credits: `${fmt(PRO_MONTHLY_CREDITS)} AI credits / month`,
+  credits: `${fmt(PRO_MONTHLY_CREDITS)} AI credits / month (included)`,
   payg: `Pay-as-you-go above that, ${CREDIT_PRICE} per credit`,
 } as const
 
 const proLimits = DOXA_CATALOG.plans.pro.limits
+const freeMcpCallsPerDay = DOXA_CATALOG.plans.free.limits["mcp.tool_calls_per_day"]
 
 /** "Unlimited team seats", or "4 team seats" when Pro has a number for the limit. */
 function proLimitLine(key: LimitKey, noun: string): string {
@@ -173,10 +178,10 @@ export const PLANS: Plan[] = [
     sub: "No card needed",
     includes: "Included in Free:",
     checks: [
-      ["Docs site with search and llms.txt"],
-      ["3 branches per site with previews"],
-      ["100 MB docs storage, 1 custom domain"],
-      ["MCP server, 100 tool calls / day"],
+      ["Docs site with browser search and llms.txt"],
+      ["2 branches per site with previews"],
+      ["20 MB docs storage, 1 custom domain"],
+      [`MCP server, ${fmt(freeMcpCallsPerDay)} tool calls / day`],
     ],
     hosts: [{ label: "SHARED HOSTING" }, { label: "\"POWERED BY DOXA\" BADGE" }],
     cta: { label: "Start free ›", className: "btn btn--line", action: "start" },
@@ -198,6 +203,7 @@ export const PLANS: Plan[] = [
       ["Invite your team, unlimited seats"],
       ["Role-based permissions for every member"],
       ["Remove the \"Powered by Doxa\" badge"],
+      ["Browser search or instant cloud search"],
       ["Unlimited branches per site with previews"],
       ["Unlimited docs storage"],
       ["4 custom domains"],
@@ -263,13 +269,13 @@ export const COMPARE_ROWS: CompareRow[] = [
   item("Hosted MDX docs site", yes, yes, yes),
   item("Search and llms.txt", yes, yes, yes),
   ...(DOCS_CHAT_LIVE ? [item("AI chat on your docs site", no, yes, yes)] : []),
-  item("Branches per site with previews", v("3"), v("Unlimited"), v("Unlimited")),
-  item("Docs storage", v("100 MB"), v("Unlimited"), v("Unlimited")),
+  item("Branches per site with previews", v("2"), v("Unlimited"), v("Unlimited")),
+  item("Docs storage", v("20 MB"), v("Unlimited"), v("Unlimited")),
   item("Custom domains", v("1"), v("4"), v("Unlimited")),
   item("Remove \"Powered by Doxa\"", no, yes, yes),
   group("Agents & tools"),
   item("MCP server for Claude, Cursor, Codex", yes, yes, yes),
-  item("MCP tool calls per day", v("100"), v("Unlimited"), v("Unlimited")),
+  item("MCP tool calls per day", v("20"), v("Unlimited"), v("Unlimited")),
   group("Team"),
   item("Team seats", v("Owner only"), v("Unlimited"), v("Unlimited")),
   item("Role-based permissions", no, yes, yes),
@@ -289,7 +295,7 @@ export const FAQ: FaqItem[] = [
   {
     q: "Is the Free plan really free?",
     a: [
-      "Yes. The Free plan costs $0 and includes a docs site on shared hosting, and the MCP server, with 3 branches per site, 100 MB of docs storage and 1 custom domain. Free is for one owner. Team access, the Doxa Agent and Doxabot come with Pro.",
+      "Yes. The Free plan costs $0 and includes a docs site on shared hosting, and the MCP server, with 2 branches per site, 20 MB of docs storage and 1 custom domain. Free is for one owner. Team access, the Doxa Agent and Doxabot come with Pro.",
     ],
   },
   {
@@ -335,7 +341,7 @@ export const FAQ: FaqItem[] = [
   {
     q: "What is the founder price?",
     a: [
-      `The Pro prices on this page are a founder price for our first ${DEFAULT_PRO_OFFER.maxAccounts} paying customers. A founder keeps the price while the subscription stays active, also after a switch between monthly and yearly. After that, Pro prices go up for new customers. Pay-as-you-go credits cost ${CREDIT_PRICE} each on every plan.`,
+      `The Pro prices on this page are a founder price for our first ${DEFAULT_PRO_OFFER.maxAccounts} paying customers. The founder price is locked in forever: it never goes up while the subscription stays active, also after a switch between monthly and yearly. When all ${DEFAULT_PRO_OFFER.maxAccounts} spots are taken, Pro prices go up for new customers. Pay-as-you-go credits cost ${CREDIT_PRICE} each on every plan.`,
     ],
   },
 ]

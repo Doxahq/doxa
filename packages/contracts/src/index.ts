@@ -5,6 +5,7 @@ import {
   flaggedPageSchema,
   ownedPageFlagSchema,
   pageOpenIssuesSchema,
+  unverifiedExternalDomainsSchema,
   pageSourcesSchema,
 } from "./generation-reviews";
 import { siteConfigSchema } from "@doxahq/site-config";
@@ -112,6 +113,40 @@ export const githubRepositorySchema = z.object({
   defaultBranch: z.string(),
   isPrivate: z.boolean(),
 });
+
+/** A GitHub installation that the user owns in Doxa (Decision 6). */
+export const githubInstallationSchema = z.object({
+  id: z.string(),
+  accountLogin: z.string(),
+  accountType: z.string(),
+  status: z.enum(["active", "suspended", "deleted"]),
+});
+
+/** A Doxa user who shares a team with the owner, so can take over an installation. */
+export const githubInstallationTransferTargetSchema = z.object({
+  userId: z.string(),
+  name: z.string(),
+  email: z.string(),
+});
+
+/**
+ * `POST /github/repos/refresh`: the repository list after Doxa read it from
+ * GitHub again. `complete` is false when GitHub returned only part of it
+ * (the page cap, or the floor on the user's GitHub budget).
+ */
+export const githubRepositoriesRefreshResponseSchema = z.object({
+  repositories: z.array(githubRepositorySchema),
+  complete: z.boolean(),
+});
+
+export const githubInstallationsResponseSchema = z.object({
+  installations: z.array(githubInstallationSchema),
+  transferTargets: z.array(githubInstallationTransferTargetSchema),
+});
+
+export const transferGitHubInstallationInputSchema = z.object({
+  userId: z.string().min(1).max(200),
+}).strict();
 
 export const projectSchema = z.object({
   id: z.string(),
@@ -385,6 +420,8 @@ export const generationActionBlockedReasonSchema = z.enum([
   "base_not_production",
   /** Pull request previews are not available for the project. */
   "previews_unavailable",
+  /** The repository is larger than the limit for generations. */
+  "repository_too_large",
   /**
    * A newer push replaced this pull request preview longer ago than the
    * retention policy keeps it promotable.
@@ -574,6 +611,8 @@ export const docsRenderTargetSchema = z.enum([
   "preview",
   "generation_snapshot",
 ]);
+/** The kind of a preview channel: a pull request (`source_change`) or a Doxa branch. */
+export const docsPreviewKindSchema = z.enum(["source_change", "branch"]);
 export const docsDomainStatusSchema = z.enum(["active", "disabled"]);
 export const docsDomainVerificationStatusSchema = z.enum([
   "pending",
@@ -648,6 +687,13 @@ export const docsDomainResolutionSchema = docsHostResolutionSchema.extend({
   hostname: z.string(),
   domainKind: docsDomainKindSchema,
   renderTarget: docsRenderTargetSchema.optional(),
+  /**
+   * Set only on a `preview` render target: what the preview shows.
+   * `source_change` is a pull request, `branch` a Doxa branch. Optional, so
+   * an older resolver stays readable. An unknown value reads as absent, and
+   * readers treat absent as a pull request (the safe default).
+   */
+  previewKind: docsPreviewKindSchema.optional().catch(undefined),
   /**
    * Set only on the production `doxa.page` hostname of a site that has a
    * working custom domain: the dispatcher answers every request there with a
@@ -744,6 +790,12 @@ export const generationContextSchema = z.object({
    * none. Optional, so an older API stays readable.
    */
   doxabotInstructions: generationInstructionsSchema.nullable().optional(),
+  /**
+   * True while the site holds only starter content, so this run may fill the
+   * site branding that is still at its defaults. Optional, so an older API
+   * stays readable; absent means false.
+   */
+  brandingEligible: z.boolean().optional(),
 });
 
 export const generationExecutionContextSchema = generationContextSchema.extend({
@@ -1026,6 +1078,8 @@ export const stagedRuntimePageSchema = z.object({
   pageInputHash: sha256Schema,
   /** Issues that the writer could not fix; absent on older checkpoints. */
   openIssues: pageOpenIssuesSchema.optional(),
+  /** Outside domains that the page links to and the repository does not contain; absent on older checkpoints. */
+  unverifiedExternalDomains: unverifiedExternalDomainsSchema.optional(),
 });
 
 /** A page that a write stage could not write after its retries. */
@@ -1193,6 +1247,19 @@ export interface GenerateJobMessage {
 }
 
 export type GitHubRepositoryDto = z.infer<typeof githubRepositorySchema>;
+export type GitHubInstallationDto = z.infer<typeof githubInstallationSchema>;
+export type GitHubInstallationTransferTargetDto = z.infer<
+  typeof githubInstallationTransferTargetSchema
+>;
+export type GitHubRepositoriesRefreshResponseDto = z.infer<
+  typeof githubRepositoriesRefreshResponseSchema
+>;
+export type GitHubInstallationsResponseDto = z.infer<
+  typeof githubInstallationsResponseSchema
+>;
+export type TransferGitHubInstallationInput = z.infer<
+  typeof transferGitHubInstallationInputSchema
+>;
 export type ProjectDto = z.infer<typeof projectSchema>;
 export type CreateProjectInput = z.infer<typeof createProjectInputSchema>;
 export type ExampleDocsTemplate = z.infer<typeof exampleDocsTemplateSchema>;
@@ -1257,6 +1324,7 @@ export type UpdateDocsPreviewVisibilityInput = z.infer<
 export type DocsAccessPolicy = z.infer<typeof docsAccessPolicySchema>;
 export type DocsDomainKind = z.infer<typeof docsDomainKindSchema>;
 export type DocsRenderTarget = z.infer<typeof docsRenderTargetSchema>;
+export type DocsPreviewKind = z.infer<typeof docsPreviewKindSchema>;
 export type DocsDomainStatus = z.infer<typeof docsDomainStatusSchema>;
 export type DocsDomainVerificationStatus = z.infer<
   typeof docsDomainVerificationStatusSchema
@@ -1340,6 +1408,16 @@ export type ContainerGenerateStreamRecord = z.infer<
   typeof containerGenerateStreamRecordSchema
 >;
 
+export interface StoreGenerationSiteAssetInput {
+  jobId: string;
+  kind: "logo" | "favicon";
+  bytes: Uint8Array;
+}
+
+export interface StoreGenerationSiteAssetResult {
+  ref: string;
+}
+
 export interface InternalApiRpc {
   resolveDocsSite(projectSlug: string): Promise<DocsHostResolution | null>;
   resolveDocsProject(projectId: string): Promise<DocsHostResolution | null>;
@@ -1354,12 +1432,18 @@ export interface InternalApiRpc {
   getCurrentChangeProposalState(
     jobId: string,
   ): Promise<CurrentChangeProposalState | null>;
-  createInstallationAccessToken(installationId: string): Promise<string>;
   /**
    * A token that can only read the project's repository (contents and
    * metadata). The API resolves the installation and repository itself.
    */
   createRepositoryReadToken(projectId: string): Promise<string>;
+  /**
+   * Stores a logo or favicon that a generation found for the site branding.
+   * The API cleans, compresses, and counts it against the site quota.
+   */
+  storeGenerationSiteAsset(
+    input: StoreGenerationSiteAssetInput,
+  ): Promise<StoreGenerationSiteAssetResult>;
   /**
    * A short-lived Anthropic token for one generation stage, or null when the
    * API has no federation set up (local development, Workers).

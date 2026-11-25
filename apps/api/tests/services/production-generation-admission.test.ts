@@ -9,6 +9,7 @@ import {
   ProductionGenerationAdmissionService,
   type ProductionGenerationBaseline,
 } from "../../src/services/production-generation-admission";
+import { recordingProductAnalytics } from "../support/recording-product-analytics";
 
 const executionConfig: GenerationExecutionConfig = {
   plannerModel: "x-ai/grok-4.5:nitro",
@@ -429,6 +430,49 @@ describe("production generation admission", () => {
   });
 });
 
+describe("production generation admission analytics", () => {
+  function analyticsService(options: { baseline: ProductionGenerationBaseline | null; created?: "created" | "already_active" }) {
+    const recording = recordingProductAnalytics();
+    const service = new ProductionGenerationAdmissionService({
+      source: { resolveTarget: async () => ({ revision: "b".repeat(40), treeHash: "c".repeat(40) }) },
+      baselines: { findCompatiblePublished: async () => options.baseline, handWrittenVersion: noHandWrittenVersion },
+      jobs: { create: async () => ({ outcome: options.created ?? ("created" as const), job: queuedJob() }) },
+      instructions: instructionsUnchanged(),
+      executionConfig,
+      analytics: recording.analytics,
+    });
+    return { service, recording };
+  }
+
+  test("reports generation_started for the person who started the run, warm when a baseline exists", async () => {
+    const { service, recording } = analyticsService({
+      baseline: { versionId: "11111111-1111-4111-8111-111111111111", sourceRevision: "a".repeat(40), sourceTreeHash: "d".repeat(40), generatorFingerprint: "old", ...baselineState },
+    });
+    await service.admit({ projectId: "project-1", userId: "owner-1", startedBy: { userId: "member-1", via: "web" } });
+    expect(await recording.events()).toEqual([
+      {
+        kind: "event",
+        event: "generation_started",
+        distinctId: "member-1",
+        properties: { trigger: "manual", run: "warm", via: "web" },
+        groups: { project: "project-1" },
+      },
+    ]);
+  });
+
+  test("a merge run counts for the owner, cold without a baseline", async () => {
+    const { service, recording } = analyticsService({ baseline: null });
+    await service.admit({ projectId: "project-1", userId: "owner-1", trigger: "merge" });
+    expect((await recording.events())[0]).toMatchObject({ distinctId: "owner-1", properties: { trigger: "merge", run: "cold" } });
+  });
+
+  test("reports nothing when another run is already active", async () => {
+    const { service, recording } = analyticsService({ baseline: null, created: "already_active" });
+    await service.admit({ projectId: "project-1", userId: "owner-1" });
+    expect(await recording.events()).toEqual([]);
+  });
+});
+
 function queuedJob(): GenerationJobDto {
   return {
     id: "22222222-2222-4222-8222-222222222222",
@@ -532,5 +576,52 @@ describe("production generation admission with the credit meter (billing spec 10
       expect(run.action).toBe("generation.run");
       expect(run.features).toEqual(["ai.doxa_agent"]);
     }
+  });
+});
+
+describe("production generation admission with the repository size limit", () => {
+  function sizedService(sizeKb: number | undefined, maxRepositorySizeKb: number | undefined = 1_048_576) {
+    const admit = vi.fn(async () => ({ kind: "admitted" as const, metered: true, capCredits: 3_000, reservationId: "hold-1" }));
+    const create = vi.fn(async () => ({ outcome: "created" as const, job: queuedJob() }));
+    const findCompatiblePublished = vi.fn(async () => null);
+    const service = new ProductionGenerationAdmissionService({
+      source: { resolveTarget: async () => ({ revision: "b".repeat(40), treeHash: "c".repeat(40), sizeKb }) },
+      baselines: { findCompatiblePublished, handWrittenVersion: noHandWrittenVersion },
+      jobs: { create },
+      instructions: instructionsUnchanged(),
+      executionConfig,
+      metering: { mode: "on", admit, abandon: vi.fn(async () => undefined) },
+      maxRepositorySizeKb,
+    });
+    return { service, admit, create, findCompatiblePublished };
+  }
+
+  test("refuses a repository above the limit before credits, baselines or a job", async () => {
+    const { service, admit, create, findCompatiblePublished } = sizedService(1_572_864);
+    await expect(service.admit({ projectId: "project-1", userId: "user-1", force: true })).resolves.toEqual({
+      outcome: "repository_too_large",
+      sizeKb: 1_572_864,
+      limitKb: 1_048_576,
+      message: "This repository is 1.5 GB. Doxa generates docs for repositories up to 1 GB.",
+    });
+    expect(admit).not.toHaveBeenCalled();
+    expect(findCompatiblePublished).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test("admits a repository at the limit, and a source that does not know the size", async () => {
+    for (const sizeKb of [1_048_576, undefined]) {
+      const { service, create } = sizedService(sizeKb);
+      await expect(service.admit({ projectId: "project-1", userId: "user-1" })).resolves.toMatchObject({ outcome: "created" });
+      expect(create).toHaveBeenCalled();
+    }
+  });
+
+  test("uses a lower configured limit", async () => {
+    const { service } = sizedService(2_048, 1_024);
+    await expect(service.admit({ projectId: "project-1", userId: "user-1" })).resolves.toMatchObject({
+      outcome: "repository_too_large",
+      message: "This repository is 2 MB. Doxa generates docs for repositories up to 1 MB.",
+    });
   });
 });

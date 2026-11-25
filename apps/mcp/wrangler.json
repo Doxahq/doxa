@@ -79,7 +79,8 @@
         "DOCS_RENDERER_BASE_URL": "",
         "DOCS_CUSTOM_DOMAIN_CNAME_TARGET": "cname.doxa.page",
         "MCP_DEV_AUTH_BYPASS": "false",
-        "DOXA_PROD_SEARCH_PAID_PROJECT_IDS": "*"
+        "DOXA_PROD_SEARCH_PAID_PROJECT_IDS": "*",
+        "POSTHOG_KEY": "${OPS_POSTHOG_PROJECT_KEY}"
       },
       "services": [
         {

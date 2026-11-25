@@ -1,5 +1,6 @@
 import type { AgentOptions as AgentLoopOptions, Message, RunResult, TokenUsage } from "./types";
 import { executeTool, toToolDefinitions } from "./tool";
+import { truncateUntrustedAwareOutput } from "./untrusted-content";
 
 const DEFAULT_MAX_STEPS = 50;
 const DEFAULT_MAX_TOOL_OUTPUT_CHARS = 48_000;
@@ -69,7 +70,8 @@ function truncateToolOutput(output: string, allowedChars: number): string {
     return "Tool output omitted because the per-run tool context budget is exhausted.";
   }
   if (output.length <= allowedChars) return output;
-  return `${output.slice(0, allowedChars)}\n... (tool output truncated)`;
+  // A cut inside an untrusted-data block closes the block before the notice.
+  return truncateUntrustedAwareOutput(output, allowedChars, "... (tool output truncated)");
 }
 
 function mergeUsage(current: TokenUsage | undefined, next: TokenUsage | undefined): TokenUsage | undefined {

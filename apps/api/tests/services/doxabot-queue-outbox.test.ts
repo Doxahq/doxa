@@ -49,11 +49,15 @@ describe("Doxabot queue outbox publisher", () => {
     expect(
       harness.jobs.listPendingDoxabotQueuePublications,
     ).toHaveBeenCalledWith(10);
-    expect(harness.queue.send).toHaveBeenCalledWith({
-      jobId: pendingPublication.jobId,
-      projectId: pendingPublication.projectId,
-      userId: pendingPublication.ownerUserId,
-    });
+    // A recovered publication keeps the preview quiet window.
+    expect(harness.queue.send).toHaveBeenCalledWith(
+      {
+        jobId: pendingPublication.jobId,
+        projectId: pendingPublication.projectId,
+        userId: pendingPublication.ownerUserId,
+      },
+      { delaySeconds: 120 },
+    );
     expect(
       harness.deliveries.markGenerationJobPublished,
     ).toHaveBeenCalledWith(pendingPublication.jobId);

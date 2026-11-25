@@ -4,6 +4,7 @@ import { RERUN_EVENT_TYPES } from "../repositories/job-events";
 import { JobsRepository, type GenerationRerunSource } from "../repositories/jobs";
 import type { Defer } from "./generation-dispatch";
 import { getRerunBlockedReason } from "./generation-actions";
+import type { GenerationStartedBy } from "./generation-analytics";
 import { GenerationStartService, type GenerationStartOutcome } from "./generation-start";
 import {
   PreviewGenerationRerunService,
@@ -24,6 +25,8 @@ export interface GenerationRerunInput {
   force: boolean;
   /** Starts a production run from the pages written in the editor. */
   seed?: boolean;
+  /** The person and the surface that started the run again (product analytics). */
+  startedBy?: GenerationStartedBy;
 }
 
 export interface GenerationRerunDependencies {
@@ -97,6 +100,7 @@ export class GenerationRerunService {
             force: input.force,
             seed: input.seed,
             trigger: "manual",
+            ...(input.startedBy ? { startedBy: input.startedBy } : {}),
           });
     if (outcome.outcome === "started") {
       // Both runs keep the link, so each page links to the other run.

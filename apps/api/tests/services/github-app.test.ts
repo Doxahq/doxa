@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   GitHubAuthorizationError,
+  GitHubRepositoryListError,
   createInstallationAccessToken,
+  fetchRepositoryDefaultBranch,
   exchangeUserAuthorizationCode,
+  fetchGitHubTokenUser,
   findUserInstallation,
   listInstallationRepositories,
   listUserInstallationRepositories,
@@ -15,14 +18,23 @@ describe("createInstallationAccessToken", () => {
 
   test("uses local token for local installations", async () => {
     await expect(
-      createInstallationAccessToken({ LOCAL_GITHUB_TOKEN: "ghs_local" } as never, "local-dev"),
+      createInstallationAccessToken({ LOCAL_GITHUB_TOKEN: "ghs_local" } as never, "local-dev", null),
     ).resolves.toEqual({ token: "ghs_local", expiresAt: null });
   });
 
   test("fails clearly when local token is missing", async () => {
-    await expect(createInstallationAccessToken({} as never, "local-dev")).rejects.toThrow(
+    await expect(createInstallationAccessToken({} as never, "local-dev", null)).rejects.toThrow(
       "LOCAL_GITHUB_TOKEN is required for local repository generation.",
     );
+  });
+
+  test("never asks GitHub for a token without a repository scope", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(createInstallationAccessToken({} as never, "456", null)).rejects.toThrow(
+      "A GitHub installation token must be limited to repositories.",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
@@ -126,12 +138,13 @@ describe("findUserInstallation", () => {
       .fn()
       .mockResolvedValueOnce(Response.json({ installations: firstPage }))
       .mockResolvedValueOnce(
-        Response.json({ installations: [{ id: 4242, account: { login: "acme", type: "Organization" } }] }),
+        Response.json({ installations: [{ id: 4242, account: { id: 900, login: "acme", type: "Organization" } }] }),
       );
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(findUserInstallation("ghu_user", "4242")).resolves.toEqual({
       installationId: "4242",
+      accountId: "900",
       accountLogin: "acme",
       accountType: "Organization",
     });
@@ -204,5 +217,120 @@ describe("listUserInstallationRepositories", () => {
 
     expect(listed.complete).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(50);
+  });
+
+  test("stops before the next page when the user's GitHub budget is below the floor", async () => {
+    const fullPage = Array.from({ length: 100 }, (_, index) => ({
+      id: index + 1,
+      full_name: `acme/repo-${index}`,
+      name: `repo-${index}`,
+      private: false,
+      owner: { login: "acme" },
+    }));
+    const fetchMock = vi.fn(async () =>
+      Response.json({ repositories: fullPage }, { headers: { "x-ratelimit-remaining": "499" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const listed = await listUserInstallationRepositories("ghu_user", "4242", { minRateLimitRemaining: 500 });
+
+    expect(listed).toMatchObject({ complete: false });
+    expect(listed.repositories).toHaveLength(100);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("a last page below the floor still makes a complete list", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      Response.json({ repositories: [] }, { headers: { "x-ratelimit-remaining": "3" } }),
+    ));
+
+    await expect(
+      listUserInstallationRepositories("ghu_user", "4242", { minRateLimitRemaining: 500 }),
+    ).resolves.toEqual({ repositories: [], complete: true });
+  });
+
+  test("a rate limit gives a typed error with the seconds until the reset", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-23T12:00:00Z"));
+    const reset = Math.floor(new Date("2026-11-23T12:10:00Z").getTime() / 1000);
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response("API rate limit exceeded", {
+        status: 403,
+        headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(reset) },
+      }),
+    ));
+
+    const failure = await listUserInstallationRepositories("ghu_user", "4242").catch((caught: unknown) => caught);
+    vi.useRealTimers();
+
+    expect(failure).toBeInstanceOf(GitHubRepositoryListError);
+    expect(failure).toMatchObject({ status: 403, rateLimited: true, retryAfterSeconds: 600 });
+    expect((failure as GitHubRepositoryListError).isAuthorizationRefusal).toBe(false);
+  });
+
+  test("a refused token is an authorization refusal, not a rate limit", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("Bad credentials", { status: 401 })));
+
+    const failure = await listUserInstallationRepositories("ghu_user", "4242").catch((caught: unknown) => caught);
+
+    expect(failure).toMatchObject({ status: 401, rateLimited: false, retryAfterSeconds: null });
+    expect((failure as GitHubRepositoryListError).isAuthorizationRefusal).toBe(true);
+  });
+});
+
+describe("fetchRepositoryDefaultBranch", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("reads the default branch with a token of that repository only", async () => {
+    // A local installation uses LOCAL_GITHUB_TOKEN, so the read is the only request.
+    const fetchMock = vi.fn(async () => Response.json({ id: 333, default_branch: "trunk" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchRepositoryDefaultBranch({ LOCAL_GITHUB_TOKEN: "ghs_local" } as never, "local-dev", "333"),
+    ).resolves.toBe("trunk");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.github.com/repositories/333",
+      expect.objectContaining({ headers: expect.objectContaining({ authorization: "Bearer ghs_local" }) }),
+    );
+  });
+
+  test("throws when GitHub refuses the read, and returns null without a branch", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("no", { status: 404 })));
+    await expect(
+      fetchRepositoryDefaultBranch({ LOCAL_GITHUB_TOKEN: "ghs_local" } as never, "local-dev", "333"),
+    ).rejects.toThrow("(404)");
+
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ id: 333 })));
+    await expect(
+      fetchRepositoryDefaultBranch({ LOCAL_GITHUB_TOKEN: "ghs_local" } as never, "local-dev", "333"),
+    ).resolves.toBeNull();
+  });
+});
+
+describe("fetchGitHubTokenUser", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("returns the GitHub user of the token", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ id: 5150, login: "octo-admin" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchGitHubTokenUser("ghu_user")).resolves.toEqual({ githubUserId: "5150", login: "octo-admin" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.github.com/user",
+      expect.objectContaining({ headers: expect.objectContaining({ authorization: "Bearer ghu_user" }) }),
+    );
+  });
+
+  test("throws when GitHub fails or sends no id", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("no", { status: 500 })));
+    await expect(fetchGitHubTokenUser("ghu_user")).rejects.toThrow("(500)");
+
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ login: "x" })));
+    await expect(fetchGitHubTokenUser("ghu_user")).rejects.toThrow("no id");
   });
 });

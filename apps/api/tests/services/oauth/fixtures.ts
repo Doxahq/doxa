@@ -10,6 +10,7 @@ import type {
   PendingConsent,
   PendingConsentStore,
 } from "../../../src/services/oauth/pending-consent-store";
+import type { ProductAnalytics } from "@doxahq/analytics";
 
 export const OWNER = "owner-user";
 export const OTHER = "other-user";
@@ -111,6 +112,7 @@ export function consentService(
   oauth: Pick<OAuthApi, "completeAuthorization"> = fakeOAuthApi(),
   now: () => Date = () => NOW,
   projects: ProjectAccessPolicy = ownerPolicy(),
+  analytics?: ProductAnalytics,
 ): ConsentService {
   return new ConsentService({
     consents: store,
@@ -118,6 +120,7 @@ export function consentService(
     projects,
     now,
     newGrantRef: () => GRANT_REF,
+    ...(analytics ? { analytics } : {}),
   });
 }
 

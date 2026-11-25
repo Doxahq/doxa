@@ -1,21 +1,13 @@
 import { SwitchRow } from "~/components/dashboard/content/site-settings/fields/controls"
-import { SectionDescription, SectionLabel } from "~/components/dashboard/dashboard-header"
 import { EMAIL_CATEGORY_COPY } from "~/lib/dashboard/email-preferences-model"
 import { useEmailPreferences } from "~/lib/dashboard/use-email-preferences"
 
-/** Account settings → Email notifications: one switch for each category. Invites always send. */
+/** Notifications → Email notifications: one switch for each category. Invites always send. The page heading names it. */
 export function EmailNotificationsSection() {
   const state = useEmailPreferences()
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <SectionLabel>Email notifications</SectionLabel>
-        <SectionDescription>
-          The emails that Doxa sends to your account address. Team invites always send.
-        </SectionDescription>
-      </div>
-
       {state.isLoading ? (
         <p className="surface-card px-5 py-4 text-sm text-muted-foreground">Loading email settings…</p>
       ) : state.loadError ? (

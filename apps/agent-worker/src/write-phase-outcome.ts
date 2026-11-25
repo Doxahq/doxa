@@ -1,4 +1,9 @@
-import { pageNoticeSchema, type PageNotice } from "@doxahq/contracts/generation-reviews";
+import {
+  pageNoticeSchema,
+  unverifiedExternalLinkPageSchema,
+  type PageNotice,
+  type UnverifiedExternalLinkPage,
+} from "@doxahq/contracts/generation-reviews";
 import { z } from "zod";
 import type { FailedGenerationPage, PageBatchOutcome } from "./generation-page-failures";
 import type { BehindInstructionCandidate } from "./page-notices";
@@ -60,15 +65,23 @@ const behindInstructionCandidateSchema = z.object({
 const pageNoticePayloadSchema = z.object({
   openIssueNotices: z.array(pageNoticeSchema),
   behindCandidates: z.array(behindInstructionCandidateSchema),
+  /** Absent in a payload that an older worker stored. */
+  unverifiedExternalLinks: z.array(unverifiedExternalLinkPageSchema).default([]),
 });
 
 /** The notices of a run, stored next to its checkpoints. */
 export interface PageNoticePayload {
   openIssueNotices: PageNotice[];
   behindCandidates: BehindInstructionCandidate[];
+  /** Written pages that link to outside domains the repository does not contain. */
+  unverifiedExternalLinks: UnverifiedExternalLinkPage[];
 }
 
-export const EMPTY_PAGE_NOTICE_PAYLOAD: PageNoticePayload = { openIssueNotices: [], behindCandidates: [] };
+export const EMPTY_PAGE_NOTICE_PAYLOAD: PageNoticePayload = {
+  openIssueNotices: [],
+  behindCandidates: [],
+  unverifiedExternalLinks: [],
+};
 
 /** Where a write phase stores its notices, under the run's checkpoint prefix. */
 export function pageNoticePayloadKey(checkpointPrefix: string, scope: string): string {
@@ -84,7 +97,11 @@ export async function storePageNoticePayload(
   key: string,
   payload: PageNoticePayload,
 ): Promise<string | null> {
-  if (payload.openIssueNotices.length === 0 && payload.behindCandidates.length === 0) return null;
+  if (
+    payload.openIssueNotices.length === 0
+    && payload.behindCandidates.length === 0
+    && payload.unverifiedExternalLinks.length === 0
+  ) return null;
   await bucket.put(key, JSON.stringify(payload), {
     httpMetadata: { contentType: "application/json; charset=utf-8" },
   });

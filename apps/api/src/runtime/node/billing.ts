@@ -1,4 +1,4 @@
-import { DOXA_CATALOG, systemClock, type BillingConfig, type BillingProvider, type Clock } from "@doxahq/billing";
+import { DOXA_CATALOG, systemClock, type BillingConfig, type BillingLifecycleEvents, type BillingProvider, type Clock } from "@doxahq/billing";
 import { BillingPayments, BillingWebhooks, createBillingProvider } from "@doxahq/billing/payments";
 import type { Env } from "../../env";
 import { billingCoreFromEnv, type BillingCore } from "../../services/billing/core";
@@ -7,6 +7,9 @@ import { BillingJobs, type BillingJobLog } from "./billing-jobs";
 import { generationMeteringFromEnv } from "../../services/billing/generation-metering-env";
 import type { GenerationMetering } from "../../services/billing/generation-metering";
 import { queueHostingTierRefresh } from "../../services/billing/hosting-tier";
+import { billingLifecycleAnalytics } from "../../services/billing/billing-analytics";
+import { productAnalyticsOf } from "../../services/analytics/product-analytics";
+import { BillingOwnershipRepository } from "../../repositories/billing-ownership";
 
 /**
  * Payments on the Node origin (billing spec 6.2: `@doxahq/billing/payments`
@@ -40,8 +43,23 @@ export function createNodeBillingPayments(options: NodeBillingPaymentsOptions): 
         log,
         metering: () => generationMeteringFromEnv(env, { core: () => coreFor(env) }),
         onPlanChanged: (accountId) => queueHostingTierRefresh(env, accountId, () => coreFor(env)),
+        lifecycle: () =>
+          billingLifecycleAnalytics({
+            analytics: () => productAnalyticsOf(env),
+            ownerUserId: (accountId) => billingOwnerUserId(coreFor(env), new BillingOwnershipRepository(env), accountId),
+          }),
       }),
   };
+}
+
+/** The Doxa user ID of the account owner (a team's first owner), for billing events without a signed-in user. */
+async function billingOwnerUserId(
+  core: BillingCore,
+  contacts: Pick<BillingOwnershipRepository, "billingContactOf">,
+  accountId: string,
+): Promise<string | null> {
+  const account = await core.store.getAccount(accountId);
+  return account ? ((await contacts.billingContactOf(account))?.userId ?? null) : null;
 }
 
 /** The payments runtime of one env. Nothing is built until a method runs. */
@@ -53,6 +71,8 @@ export function createBillingPaymentsRuntime(input: {
   metering?: () => Pick<GenerationMetering, "sweep">;
   /** Billing spec 9.4: the account's sites take the hosting tier of the new plan. */
   onPlanChanged?: (accountId: string) => Promise<unknown>;
+  /** Product analytics of the billing lifecycle (`billing-analytics.ts`). */
+  lifecycle?: () => BillingLifecycleEvents;
 }): BillingPaymentsRuntime {
   const { provider, log } = input;
   let built: { core: BillingCore; payments: BillingPayments; webhooks: BillingWebhooks; jobs: BillingJobs } | null = null;
@@ -60,6 +80,7 @@ export function createBillingPaymentsRuntime(input: {
     if (built) return built;
     const core = input.core();
     const count = (name: string, fields: Readonly<Record<string, string | number | boolean | null>>) => log(name, fields);
+    const lifecycle = input.lifecycle?.();
     const payments = new BillingPayments({
       store: core.store,
       catalog: core.catalog,
@@ -87,6 +108,7 @@ export function createBillingPaymentsRuntime(input: {
         count,
         alert: (name, fields) => log(name, { level: "error", ...fields }),
       },
+      ...(lifecycle ? { lifecycle } : {}),
     });
     const webhooks = new BillingWebhooks({
       store: core.store,
@@ -97,6 +119,7 @@ export function createBillingPaymentsRuntime(input: {
       ledger: core.ledger,
       offers: core.offers,
       log: (event) => log(event.name, event.fields),
+      ...(lifecycle ? { lifecycle } : {}),
     });
     built = {
       core,

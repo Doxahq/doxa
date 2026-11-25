@@ -53,7 +53,8 @@ export function actionServicesFromEnv(
     projects: projectsPort(env, projects),
     generation: {
       hasActiveGeneration: (projectId) => new ProjectDeletionRepository(env).hasActiveGeneration(projectId),
-      start: (input) => GenerationStartService.fromEnv(env, options).start(input),
+      // An agent run counts for the user the agent acts for (the action's target).
+      start: (input) => GenerationStartService.fromEnv(env, options).start({ ...input, startedBy: { userId: input.userId, via: "mcp" } }),
       cancel: (input) => cancelGeneration(env, input),
     },
   };
@@ -125,8 +126,8 @@ function projectsPort(env: Env, projects: ProjectsRepository): ProjectsPort {
       return project ? { id: project.id, name: project.name } : null;
     },
     // An agent creates personal projects: its payload has no team.
-    createExample: (input) => createExampleProject(env, { ...input, team: null }),
-    createForRepository: (input) => createRepositoryProject(env, { ...input, team: null }),
+    createExample: (input) => createExampleProject(env, { ...input, team: null, via: "mcp" }),
+    createForRepository: (input) => createRepositoryProject(env, { ...input, team: null, via: "mcp" }),
     delete: (input) => deleteProject(env, input),
   };
 }

@@ -37,11 +37,11 @@ export const PRO_NO_TRIAL_LINE = "This account already had a trial, so Stripe ch
 
 /** The price lines of the Pro trial dialog for one interval. */
 export interface ProOfferPriceView {
-  /** "$129", the monthly amount; null when no price is known. */
+  /** "$99", the monthly amount; null when no price is known. */
   amount: string | null
-  /** "Billed yearly at $1,548" or "Billed monthly". */
+  /** "Billed yearly at $1,188" or "Billed monthly". */
   billedLine: string
-  /** The first charge when the trial ends: "$1,548 for the year" or "$159 for the first month". */
+  /** The first charge when the trial ends: "$1,188 for the year" or "$129 for the first month". */
   firstCharge: string
   /** "Founder price" while the founder offer is open: the offer's label, with no spots count. */
   founderLine: string | null

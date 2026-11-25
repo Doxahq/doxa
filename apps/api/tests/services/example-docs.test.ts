@@ -6,6 +6,7 @@ import { renderExampleDocsModule } from "../../scripts/generate-example-docs.mjs
 import { createR2DocsContentStore } from "../../src/services/docs-content/store";
 import { createExampleDocsPages } from "../../src/services/example-docs/template";
 import { createMemoryR2Bucket } from "../support/memory-r2-bucket";
+import { recordingProductAnalytics } from "../support/recording-product-analytics";
 
 const SITE_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -92,7 +93,7 @@ describe("createExampleProject", () => {
 
     const project = await createExampleProject(
       { DOCS_BUCKET: storage.bucket } as never,
-      { userId: "user-1", name: "Acme", team: null },
+      { userId: "user-1", name: "Acme", team: null, via: "web" },
     );
 
     const [seed] = mocks.publishSeedVersion.mock.calls[0];
@@ -142,6 +143,7 @@ describe("createExampleProject", () => {
       team: null,
       name: "Acme",
       template: "empty",
+      via: "web",
     });
 
     expect(mocks.createWithoutRepository).toHaveBeenCalledWith({
@@ -164,17 +166,37 @@ describe("createExampleProject", () => {
     ).toHaveLength(1);
   });
 
+  test("reports project_created with the template as its source, after the example is published", async () => {
+    const recording = recordingProductAnalytics();
+    const env = { DOCS_BUCKET: createMemoryR2Bucket().bucket, PRODUCT_ANALYTICS: recording.binding } as never;
+
+    await createExampleProject(env, { userId: "user-1", team: null, name: "Acme", template: "empty", via: "mcp" });
+
+    expect(await recording.events()).toEqual([
+      {
+        kind: "event",
+        event: "project_created",
+        distinctId: "user-1",
+        properties: { source: "empty", via: "mcp" },
+        groups: { project: "project-1" },
+      },
+    ]);
+  });
+
   test("removes the project when the example cannot be published", async () => {
     const { bucket } = createMemoryR2Bucket();
     mocks.publishSeedVersion.mockRejectedValue(new Error("database down"));
+    const recording = recordingProductAnalytics();
 
     await expect(
-      createExampleProject({ DOCS_BUCKET: bucket } as never, {
+      createExampleProject({ DOCS_BUCKET: bucket, PRODUCT_ANALYTICS: recording.binding } as never, {
         userId: "user-1",
         team: null,
         name: "Acme",
+        via: "web",
       }),
     ).rejects.toThrow("database down");
+    expect(await recording.events()).toEqual([]);
     expect(mocks.deleteForUser).toHaveBeenCalledWith({
       userId: "user-1",
       projectId: "project-1",

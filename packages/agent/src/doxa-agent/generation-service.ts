@@ -109,6 +109,11 @@ import { splicedPageInstructions, validateSplicedPage } from "./spliced-page-gat
 import { openIssuesOfShippedPage, softContentIssuesOfPage } from "../utils/page-open-issues";
 import type { PageOpenIssue } from "@doxahq/contracts/generation-reviews";
 import { deterministicPageRendererFor } from "./deterministic-pages";
+import {
+  createRepositoryDomainIndex,
+  unverifiedExternalDomainsOf,
+  withUnverifiedExternalLinkIssue,
+} from "../utils/external-links";
 
 export type PageWriteTarget = FlattenedStructurePage;
 
@@ -477,6 +482,8 @@ export async function generateDocumentation(
   const artifactRoot = config.artifactRoot ?? config.cwd;
   const fullOutputDir = await resolveProjectPath(artifactRoot, outputDir);
   await mkdir(fullOutputDir, { recursive: true });
+  // The outside-link check of the pages: one index for the run, so each domain is scanned once.
+  const repositoryDomains = createRepositoryDomainIndex({ cwd: config.cwd, excludedRoots: [fullOutputDir] });
   const writerLimiter = config.pageWriterLimiter;
   // With a shared limiter the pool can hold its ceiling; the limiter sets the width.
   const concurrency = writerLimiter?.max ?? config.concurrency ?? DEFAULT_CONCURRENCY;
@@ -792,6 +799,9 @@ export async function generateDocumentation(
     }, authored.recorded);
     const contentHash = hashString(content);
     const pageInputHash = pageInputHashes[targetPageId];
+    // Flags outside domains that the repository does not contain; the links stay in the page.
+    const unverifiedExternalDomains = await unverifiedExternalDomainsOf(content, repositoryDomains);
+    const openIssues = withUnverifiedExternalLinkIssue(authored.openIssues, unverifiedExternalDomains);
 
     return {
       page: {
@@ -802,7 +812,8 @@ export async function generateDocumentation(
         dependencies,
         contentHash,
         pageInputHash,
-        ...(authored.openIssues?.length ? { openIssues: authored.openIssues } : {}),
+        ...(openIssues.length ? { openIssues } : {}),
+        ...(unverifiedExternalDomains.length ? { unverifiedExternalDomains } : {}),
       },
       cacheEntry: {
         pageId: targetPageId,

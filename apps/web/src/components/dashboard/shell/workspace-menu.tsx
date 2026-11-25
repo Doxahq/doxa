@@ -49,7 +49,7 @@ export function WorkspaceMenu() {
               <button
                 type="button"
                 aria-label="Workspace menu"
-                className="group -ml-1 flex w-fit items-center gap-1.5 rounded-md py-1.5 pr-1.5 pl-2 transition-colors duration-100 ease-out hover:bg-overlay data-[state=open]:bg-secondary"
+                className="group -ml-1 flex w-fit items-center gap-1.5 rounded-md py-1.5 pr-1.5 pl-2 transition-colors duration-100 ease-out hover:bg-overlay data-[state=open]:bg-overlay"
               >
                 <LogoWordmark size={14} />
                 <ChevronDown

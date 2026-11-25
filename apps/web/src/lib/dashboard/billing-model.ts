@@ -32,7 +32,7 @@ export const FOUNDER_OFFER_KEY = "founder_v1"
 export { formatUsd }
 
 const proMonthlyCredits = DOXA_CATALOG.plans.pro.limits["ai.credits_monthly"]
-/** The Pro allowance (5,000). */
+/** The Pro allowance (10,000). */
 export const DOXA_PRO_CREDITS = typeof proMonthlyCredits === "number" ? proMonthlyCredits : 0
 const proTrial = DOXA_CATALOG.plans.pro.trial
 export const TRIAL_SENTENCE = proTrial
@@ -492,7 +492,7 @@ export function estimatePaygSentence(estimate: CreditEstimate, detail: BillingAc
 
 export function founderSpotsLine(offer: BillingOffer): string | null {
   if (!offer.open) return null
-  return `${formatCredits(offer.slotsLeft)} of ${formatCredits(offer.maxAccounts)} founder spots left`
+  return `${formatCredits(offer.slotsLeft)} of ${formatCredits(offer.maxAccounts)} founder spots left · price locked in forever`
 }
 
 export function founderOffer(offers: readonly BillingOffer[]): BillingOffer | null {
@@ -604,6 +604,7 @@ const LIMIT_LABELS: Record<string, string> = {
   "site.asset_files": "site files",
   "site.custom_domains": "custom domains",
   "team.seats": "team seats",
+  "account.projects": "projects",
   "mcp.tool_calls_per_day": "MCP tool calls today",
   "docs.export_window_hours": "docs exports",
   "ai.credits_monthly": "AI credits",

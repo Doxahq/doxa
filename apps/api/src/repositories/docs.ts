@@ -89,6 +89,29 @@ export class DocsRepository {
     };
   }
 
+  /**
+   * True while the site of the project holds nothing but starter content:
+   * no generation, editor, or import publication yet. A first generation may
+   * then fill the site branding.
+   */
+  async holdsOnlyStarterContent(projectId: string): Promise<boolean> {
+    const [publication] = await this.db
+      .select({ id: schema.docsPublications.id })
+      .from(schema.docsPublications)
+      .innerJoin(
+        schema.docsSites,
+        eq(schema.docsPublications.siteId, schema.docsSites.id),
+      )
+      .where(
+        and(
+          eq(schema.docsSites.projectId, projectId),
+          ne(schema.docsPublications.kind, "starter"),
+        ),
+      )
+      .limit(1);
+    return !publication;
+  }
+
   async resolveByProjectId(
     projectId: string,
   ): Promise<DocsHostResolution | null> {

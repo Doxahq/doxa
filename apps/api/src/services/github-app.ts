@@ -28,6 +28,7 @@ interface UserInstallationsResponse {
   installations?: Array<{
     id: number;
     account?: {
+      id?: number;
       login?: string;
       type?: string;
     } | null;
@@ -80,10 +81,16 @@ export function isLostInstallationAccess(error: unknown): boolean {
     && LOST_INSTALLATION_STATUSES.includes(error.status);
 }
 
+/**
+ * A short-lived GitHub token limited to `scope`. Doxa never asks GitHub for a
+ * token that covers every repository of an installation. Only a local
+ * installation takes no scope: it uses one developer token, which cannot be
+ * scoped.
+ */
 export async function createInstallationAccessToken(
   env: Env,
   installationId: string,
-  scope?: InstallationAccessTokenScope,
+  scope: InstallationAccessTokenScope | null,
 ): Promise<InstallationAccessToken> {
   if (isLocalInstallation(installationId)) {
     const token = env.LOCAL_GITHUB_TOKEN;
@@ -92,9 +99,12 @@ export async function createInstallationAccessToken(
     }
     return { token, expiresAt: null };
   }
+  if (!scope) {
+    throw new Error("A GitHub installation token must be limited to repositories.");
+  }
 
   const appJwt = await createGitHubAppJwt(env);
-  const body = scope ? scopedTokenBody(scope) : undefined;
+  const body = scopedTokenBody(scope);
   const response = await fetch(`${GITHUB_API_BASE_URL}/app/installations/${installationId}/access_tokens`, {
     method: "POST",
     headers: githubHeaders(`Bearer ${appJwt}`),
@@ -150,8 +160,35 @@ export async function listInstallationRepositories(token: string) {
 
 export interface UserInstallation {
   installationId: string;
+  /** The GitHub ID of the user or organization that has the installation. */
+  accountId: string | null;
   accountLogin: string;
   accountType: string;
+}
+
+/** The GitHub user that a user token belongs to. */
+export interface GitHubTokenUser {
+  githubUserId: string;
+  login: string;
+}
+
+/**
+ * The GitHub user of a user token. The install flow uses it to prove which
+ * GitHub account the Doxa user controls now: a Doxa account does not need a
+ * linked GitHub sign-in.
+ */
+export async function fetchGitHubTokenUser(userToken: string): Promise<GitHubTokenUser> {
+  const response = await fetch(`${GITHUB_API_BASE_URL}/user`, {
+    headers: githubHeaders(`Bearer ${userToken}`),
+  });
+  if (!response.ok) {
+    throw new Error(`GitHub user request failed (${response.status}).`);
+  }
+  const payload = (await response.json()) as { id?: number; login?: string };
+  if (typeof payload.id !== "number" || !payload.login) {
+    throw new Error("GitHub user response has no id.");
+  }
+  return { githubUserId: String(payload.id), login: payload.login };
 }
 
 /**
@@ -219,6 +256,7 @@ export async function findUserInstallation(
     if (match) {
       return {
         installationId: String(match.id),
+        accountId: typeof match.account?.id === "number" ? String(match.account.id) : null,
         accountLogin: match.account?.login ?? "unknown",
         accountType: match.account?.type ?? "User",
       };
@@ -234,16 +272,48 @@ export type InstallationRepositoryRecord = ReturnType<typeof toRepositoryRecord>
 export interface UserInstallationRepositories {
   repositories: InstallationRepositoryRecord[];
   /**
-   * False when the list stopped at the page cap. Then a repository missing
-   * from it can still be one that the user can access.
+   * False when the list stopped at the page cap or at the rate limit floor.
+   * Then a repository missing from it can still be one that the user can
+   * access.
    */
   complete: boolean;
 }
 
-/** The repositories of the installation that this user can access. */
+export interface ListUserInstallationRepositoriesOptions {
+  /**
+   * Stop before the next page when fewer requests than this are left in the
+   * user's hourly GitHub budget (`x-ratelimit-remaining`). GitHub shares that
+   * budget with every app and token of the user. Absent: no floor.
+   */
+  minRateLimitRemaining?: number;
+}
+
+/** GitHub refused the repository list of a user token. */
+export class GitHubRepositoryListError extends Error {
+  constructor(
+    readonly status: number,
+    readonly rateLimited: boolean,
+    /** Seconds until the limit resets, when GitHub says so. */
+    readonly retryAfterSeconds: number | null = null,
+  ) {
+    super(`GitHub user installation repositories request failed (${status}${rateLimited ? ", rate limited" : ""}).`);
+    this.name = "GitHubRepositoryListError";
+  }
+
+  /** The token cannot read the list: revoked, expired, or not a token of this app. */
+  get isAuthorizationRefusal(): boolean {
+    return !this.rateLimited && (this.status === 401 || this.status === 403 || this.status === 404);
+  }
+}
+
+/**
+ * The repositories of the installation that this user can access. Pages are
+ * read one after another, at most {@link MAX_USER_REPOSITORY_PAGES} of them.
+ */
 export async function listUserInstallationRepositories(
   userToken: string,
   installationId: string,
+  options: ListUserInstallationRepositoriesOptions = {},
 ): Promise<UserInstallationRepositories> {
   const repositories: InstallationRepositoryRecord[] = [];
   for (let page = 1; page <= MAX_USER_REPOSITORY_PAGES; page += 1) {
@@ -252,16 +322,65 @@ export async function listUserInstallationRepositories(
       { headers: githubHeaders(`Bearer ${userToken}`) },
     );
     if (!response.ok) {
-      throw new Error(`GitHub user installation repositories request failed (${response.status}).`);
+      const rateLimited = await isGitHubRateLimited(response);
+      throw new GitHubRepositoryListError(
+        response.status,
+        rateLimited,
+        rateLimited ? retryAfterSeconds(response) : null,
+      );
     }
 
     const payload = (await response.json()) as InstallationRepositoriesResponse;
     const pageRepositories = payload.repositories ?? [];
     repositories.push(...pageRepositories.map(toRepositoryRecord));
     if (pageRepositories.length < GITHUB_PAGE_SIZE) return { repositories, complete: true };
+    if (belowRateLimitFloor(response, options.minRateLimitRemaining)) return { repositories, complete: false };
   }
 
   return { repositories, complete: false };
+}
+
+function belowRateLimitFloor(response: Response, floor: number | undefined): boolean {
+  if (floor === undefined) return false;
+  const remaining = Number(response.headers.get("x-ratelimit-remaining"));
+  return Number.isFinite(remaining) && remaining < floor;
+}
+
+/** From `retry-after`, else from `x-ratelimit-reset` (epoch seconds). Null when GitHub gives neither. */
+function retryAfterSeconds(response: Response, nowMs = Date.now()): number | null {
+  const retryAfter = Number(response.headers.get("retry-after"));
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return Math.ceil(retryAfter);
+  const reset = Number(response.headers.get("x-ratelimit-reset"));
+  if (Number.isFinite(reset) && reset > 0) return Math.max(1, Math.ceil(reset - nowMs / 1000));
+  return null;
+}
+
+/**
+ * The default branch of one repository, read with a token limited to that
+ * repository and to metadata. For an event that names a repository without
+ * its branch (`installation_repositories`). Costs two GitHub requests: the
+ * token and the read. Null when GitHub does not return a branch.
+ */
+export async function fetchRepositoryDefaultBranch(
+  env: Env,
+  installationId: string,
+  repositoryId: string,
+): Promise<string | null> {
+  const numericId = Number(repositoryId);
+  const { token } = await createInstallationAccessToken(env, installationId, {
+    repositoryIds: [numericId],
+    permissions: { metadata: "read" },
+  });
+  const response = await fetch(`${GITHUB_API_BASE_URL}/repositories/${encodeURIComponent(repositoryId)}`, {
+    headers: githubHeaders(`Bearer ${token}`),
+  });
+  if (!response.ok) {
+    throw new Error(`GitHub repository request failed (${response.status}).`);
+  }
+  const payload = (await response.json()) as { default_branch?: unknown };
+  return typeof payload.default_branch === "string" && payload.default_branch.length > 0
+    ? payload.default_branch
+    : null;
 }
 
 /** The code exchange failed at GitHub, for example because the code expired. */

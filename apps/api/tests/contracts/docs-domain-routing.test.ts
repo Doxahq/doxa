@@ -56,3 +56,32 @@ test("identifies the renderer target without changing the public URL contract", 
 
   expect(resolution.renderTarget).toBe("production");
 });
+
+describe("preview kind of a docs host resolution", () => {
+  const preview = {
+    siteId: "site-1",
+    projectId: "project-1",
+    projectSlug: "example",
+    publishedVersionId: "version-1",
+    artifactPrefix: "sites/site-1/versions/version-1",
+    manifestPath: "sites/site-1/versions/version-1/manifest.json",
+    accessPolicy: "public",
+    hostname: "example-pr-1.doxa.page",
+    domainKind: "doxa_subdomain",
+    renderTarget: "preview",
+  } as const;
+
+  test.each(["source_change", "branch"] as const)("keeps %s", (previewKind) => {
+    expect(docsDomainResolutionSchema.parse({ ...preview, previewKind }).previewKind).toBe(previewKind);
+  });
+
+  test("reads a resolution from an older resolver without the kind", () => {
+    expect(docsDomainResolutionSchema.parse(preview).previewKind).toBeUndefined();
+  });
+
+  test("reads an unknown kind as absent, so the resolution still parses", () => {
+    const parsed = docsDomainResolutionSchema.parse({ ...preview, previewKind: "future_kind" });
+    expect(parsed.previewKind).toBeUndefined();
+    expect(parsed.renderTarget).toBe("preview");
+  });
+});

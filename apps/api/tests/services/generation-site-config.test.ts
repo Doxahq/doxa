@@ -11,10 +11,11 @@ import { createApiRouter } from "../../src/http/app";
 import { withGenerationSiteConfig } from "../../src/services/generation-site-config";
 import { createMemoryR2Bucket } from "../support/memory-r2-bucket";
 
-const mocks = vi.hoisted(() => ({ resolve: vi.fn() }));
+const mocks = vi.hoisted(() => ({ resolve: vi.fn(), starterOnly: vi.fn() }));
 vi.mock("../../src/repositories/docs", () => ({
   DocsRepository: class {
     resolveByProjectId = mocks.resolve;
+    holdsOnlyStarterContent = mocks.starterOnly;
   },
 }));
 
@@ -78,6 +79,37 @@ describe("generation settings snapshot", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.resolve.mockResolvedValue(resolution);
+    mocks.starterOnly.mockResolvedValue(false);
+  });
+
+  test("allows branding while the site holds only starter content", async () => {
+    mocks.resolve.mockResolvedValue(null);
+    mocks.starterOnly.mockResolvedValue(true);
+    const { request } = fixture();
+    const result = generationContextSchema.parse(
+      await (await request()).json(),
+    );
+    expect(result.brandingEligible).toBe(true);
+    expect(mocks.starterOnly).toHaveBeenCalledWith("project");
+  });
+
+  test("does not allow branding after a real publication", async () => {
+    const { objects, request } = fixture();
+    const bundle = await createRuntimeDocsArtifacts({
+      siteId: "site",
+      versionId: "published",
+      projectSlug: "project",
+      projectName: "Project",
+      pages: [],
+    });
+    for (const file of bundle.files)
+      objects.set(`${prefix}/${file.path}`, file.content);
+    const response = await request();
+    expect(response.status).toBe(200);
+    const result = generationContextSchema.parse(await response.json());
+    expect(result.siteConfig).toBeDefined();
+    expect(result.brandingEligible).toBe(false);
+    expect(mocks.starterOnly).toHaveBeenCalledWith("project");
   });
 
   test("does not look up settings for a missing project", async () => {

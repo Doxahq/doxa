@@ -49,6 +49,11 @@ export class RepositoryInstructionsRefusedError extends RepositoryInstructionsUn
 }
 
 export interface RepositoryInstructionsReadOptions {
+  /**
+   * The commit to read the file at: the base commit of the run. Without it
+   * the read takes the tip of the production branch.
+   */
+  ref?: string;
   fetchRequest?: typeof fetch;
   /** Waits between attempts; tests pass one that resolves at once. */
   wait?: (ms: number) => Promise<void>;
@@ -61,9 +66,11 @@ type ReadAttempt =
   | { outcome: "refused"; failure: unknown };
 
 /**
- * Reads `.doxa/instructions.md` from the default branch through the GitHub
- * API. The file never comes from a pull request, so a contributor cannot
- * change Doxabot's instructions by opening one.
+ * Reads `.doxa/instructions.md` through the GitHub API, at the base commit of
+ * the run (`options.ref`), else at the tip of the production branch. The file
+ * never comes from a pull request head, so a contributor cannot change
+ * Doxabot's instructions by opening one, and a push during the run does not
+ * change the file the run reads.
  *
  * Only two answers are stable: the file, and 404 (no file). A network error,
  * a timeout, a rate limit, a server error or a body that does not arrive is
@@ -82,7 +89,7 @@ export async function readRepositoryInstructionsFile(
   let lastFailure: unknown;
   for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
     if (attempt > 0) await wait(RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]);
-    const result = await readOnce(access, fetchRequest);
+    const result = await readOnce(access, fetchRequest, options.ref);
     if (result.outcome === "file") return result.file;
     if (result.outcome === "refused") throw new RepositoryInstructionsRefusedError(result.failure);
     lastFailure = result.failure;
@@ -90,10 +97,14 @@ export async function readRepositoryInstructionsFile(
   throw new RepositoryInstructionsUnavailableError(lastFailure);
 }
 
-async function readOnce(access: RepositoryReadAccess, fetchRequest: typeof fetch): Promise<ReadAttempt> {
+async function readOnce(
+  access: RepositoryReadAccess,
+  fetchRequest: typeof fetch,
+  ref: string | undefined,
+): Promise<ReadAttempt> {
   let response: Response;
   try {
-    response = await fetchRequest(fileUrl(access), {
+    response = await fetchRequest(fileUrl(access, ref), {
       method: "GET",
       headers: { ...githubApiHeaders(access.token), accept: "application/vnd.github.raw+json" },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -115,10 +126,11 @@ async function readOnce(access: RepositoryReadAccess, fetchRequest: typeof fetch
   }
 }
 
-function fileUrl(access: RepositoryReadAccess): string {
+/** `target.defaultBranch` is the project's production branch (`getProductionSource`). */
+function fileUrl(access: RepositoryReadAccess, ref: string | undefined): string {
   const { owner, name, defaultBranch } = access.target;
   return `${GITHUB_API_BASE_URL}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`
-    + `/contents/${DOXABOT_REPOSITORY_INSTRUCTIONS_PATH}?ref=${encodeURIComponent(defaultBranch)}`;
+    + `/contents/${DOXABOT_REPOSITORY_INSTRUCTIONS_PATH}?ref=${encodeURIComponent(ref ?? defaultBranch)}`;
 }
 
 function isTransientStatus(status: number): boolean {

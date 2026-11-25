@@ -369,7 +369,7 @@ export type BillingPlanIntervalPreview = z.infer<typeof billingPlanIntervalPrevi
 /**
  * `GET /billing/accounts/:accountId/start-pro-now`: what Start Pro now
  * (decision D22) charges today, for the confirm dialog. `intervalLabel` is
- * the billing interval of the plan price: "$159 / month".
+ * the billing interval of the plan price: "$129 / month".
  */
 export const billingStartProNowPreviewSchema = z
   .object({

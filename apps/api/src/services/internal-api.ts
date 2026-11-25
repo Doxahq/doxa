@@ -10,6 +10,8 @@ import type {
   GenerationRepairDiagnostic,
   GenerationUsageRecord,
   MarkJobStoppedInput,
+  StoreGenerationSiteAssetInput,
+  StoreGenerationSiteAssetResult,
 } from "@doxahq/contracts";
 import { markJobStoppedInputSchema } from "@doxahq/contracts";
 import type { GenerationInternalApi } from "@doxahq/generation";
@@ -17,12 +19,13 @@ import type { Env } from "../env";
 import { DocsRepository } from "../repositories/docs";
 import { GitHubRepository } from "../repositories/github";
 import { JobsRepository } from "../repositories/jobs";
+import { ProjectsRepository } from "../repositories/projects";
+import { SiteAssetsService } from "./site-assets/service";
 import {
   GenerationObservabilityRepository,
   toGenerationDiagnosticMetadata,
 } from "../repositories/generation-observability";
 import { resolveDocsHost as resolveDocsHostForEnv } from "./docs-host-resolution";
-import { createInstallationAccessToken } from "./github-app";
 import { ReviewRunsService } from "./doxabot/review-runs";
 import {
   CANCELLED_PREVIEW_CHECK,
@@ -38,7 +41,8 @@ import { createRepositoryReadAccess } from "./repository-read-access";
 import { GenerationReviewService } from "./generation-reviews/review-service";
 import { PendingMergesRepository } from "../repositories/pending-merges";
 import { generationMeteringFromEnv } from "./billing/generation-metering-env";
-import type { GenerationMetering, RunOutcome } from "./billing/generation-metering";
+import type { RunOutcome } from "./billing/generation-metering";
+import { reportGenerationFinishedInBackground, type GenerationEndDetails } from "./generation-analytics";
 import { closeStoppedPreviewCheck } from "./billing/stopped-preview-check";
 import {
   assertSafeArtifactKey,
@@ -81,14 +85,13 @@ export class InternalApi extends WorkerEntrypoint<Env> implements InternalApiRpc
     return getCurrentChangeProposalState(this.env, jobId);
   }
 
-  async createInstallationAccessToken(installationId: string) {
-    const token = await createInstallationAccessToken(this.env, installationId);
-    return token.token;
-  }
-
   async createRepositoryReadToken(projectId: string) {
     const access = await createRepositoryReadAccess(this.env, projectId);
     return access.token;
+  }
+
+  storeGenerationSiteAsset(input: StoreGenerationSiteAssetInput) {
+    return storeGenerationSiteAsset(this.env, input);
   }
 
   createModelAccessToken() {
@@ -194,10 +197,8 @@ export class InternalApi extends WorkerEntrypoint<Env> implements InternalApiRpc
 export function createLocalGenerationInternalApi(env: Env): GenerationInternalApi {
   return {
     getGenerationContext: (projectId) => getGenerationContext(env, projectId),
-    createInstallationAccessToken: async (installationId) => {
-      const token = await createInstallationAccessToken(env, installationId);
-      return token.token;
-    },
+    createRepositoryReadToken: async (projectId) =>
+      (await createRepositoryReadAccess(env, projectId)).token,
     markJobRunning: (jobId) => markJobRunning(env, jobId),
     markJobFailed: (jobId, message) => markJobFailed(env, jobId, message),
     markJobCancelled: (jobId, message) => markJobCancelled(env, jobId, message),
@@ -281,13 +282,17 @@ async function markJobRunning(env: Env, jobId: string): Promise<void> {
 
 async function markJobFailed(env: Env, jobId: string, message: string): Promise<void> {
   const failed = await new JobsRepository(env).markFailed(jobId, message);
-  if (failed) await settleRun(env, jobId, "failed");
+  if (failed) await endRun(env, jobId, "failed");
   if (failed) await generationNotifierFromEnv(env).finished(jobId, "failed", message);
 }
 
-/** Billing spec 10.5 step 5. The meter never throws here: the job has ended either way. */
-function settleRun(env: Env, jobId: string, outcome?: RunOutcome, metering?: GenerationMetering): Promise<void> {
-  return (metering ?? generationMeteringFromEnv(env)).settle(jobId, outcome);
+/**
+ * Billing spec 10.5 step 5, then `generation_finished` in the background.
+ * The meter never throws here: the job has ended either way.
+ */
+async function endRun(env: Env, jobId: string, outcome?: RunOutcome, details?: GenerationEndDetails): Promise<void> {
+  await generationMeteringFromEnv(env).settle(jobId, outcome);
+  reportGenerationFinishedInBackground(env, jobId, details);
 }
 
 /** Billing spec 10.5 step 2: the usage record first, then the meter, keyed by the call ID. */
@@ -309,7 +314,7 @@ async function markJobStopped(env: Env, jobId: string, rawInput: MarkJobStoppedI
   const input = markJobStoppedInputSchema.parse(rawInput);
   const jobs = new JobsRepository(env);
   if (!(await jobs.markStoppedCredits(jobId, input))) return;
-  await settleRun(env, jobId, "stopped");
+  await endRun(env, jobId, "stopped", { stopReason: input.reason, ...pagesWritten(input.finishedPageCount) });
   await closeStoppedPreviewCheck(env, jobs, ReviewRunsService.fromEnv(env), { jobId, reason: input.reason });
 }
 
@@ -321,7 +326,7 @@ async function markJobCancelled(env: Env, jobId: string, message: string): Promi
   const jobs = new JobsRepository(env);
   const check = { title: CANCELLED_PREVIEW_CHECK.title, summary: message };
   if (!(await jobs.markCancelled(jobId, message, "generation_cancelled", undefined, check))) return;
-  await settleRun(env, jobId, "cancelled");
+  await endRun(env, jobId, "cancelled");
   await closePreviewCheck(jobs, ReviewRunsService.fromEnv(env), { jobId, message, check });
 }
 
@@ -338,7 +343,7 @@ async function markJobSuperseded(
     undefined,
     SUPERSEDED_PREVIEW_CHECK,
   );
-  if (superseded) await settleRun(env, jobId, "superseded");
+  if (superseded) await endRun(env, jobId, "superseded");
 }
 
 /**
@@ -346,6 +351,33 @@ async function markJobSuperseded(
  * credit meter stopped the run (billing spec 10.5 step 4). The worker then
  * asks `getJobStopReason` and ends the run as `stopped_credits`.
  */
+/**
+ * The project comes from the job, never from the caller, and only an active
+ * job can store an asset.
+ */
+async function storeGenerationSiteAsset(
+  env: Env,
+  input: StoreGenerationSiteAssetInput,
+): Promise<StoreGenerationSiteAssetResult> {
+  if (input.kind !== "logo" && input.kind !== "favicon") {
+    throw new Error("Unsupported generation site asset kind.");
+  }
+  if (!(await isJobActive(env, input.jobId))) {
+    throw new Error("The generation job is not active.");
+  }
+  const projectId = await new JobsRepository(env).findProjectId(input.jobId);
+  if (!projectId) throw new Error("Generation job not found.");
+  const site = await new ProjectsRepository(env).getDocsSiteForProject(projectId);
+  if (!site) throw new Error("Docs site not found.");
+  const stored = await SiteAssetsService.fromEnv(env).uploadForGeneration(
+    projectId,
+    site.siteId,
+    input.kind,
+    input.bytes,
+  );
+  return { ref: stored.ref };
+}
+
 async function isJobActive(env: Env, jobId: string): Promise<boolean> {
   if (!(await new JobsRepository(env).isActive(jobId))) return false;
   const metering = generationMeteringFromEnv(env);
@@ -374,7 +406,7 @@ async function publishJobOutput(env: Env, jobId: string, input: PublishJobInput)
     artifactPrefix: input.artifactPrefix,
     manifestPath: input.manifestPath,
   });
-  await settleRun(env, jobId, "succeeded");
+  await endRun(env, jobId, "succeeded");
   await generationNotifierFromEnv(env).finished(jobId, "succeeded");
 
   return { versionId: version.id };
@@ -400,9 +432,13 @@ async function completeJobOutput(
     await new PendingMergesRepository(env).clearCoveredByJob(jobId);
   }
   // Decision D12: a Doxabot run that changed no page pays the usage only.
-  await settleRun(env, jobId, input.regeneratedPageCount === 0 ? "no_change" : "pages_changed");
+  await endRun(env, jobId, input.regeneratedPageCount === 0 ? "no_change" : "pages_changed", pagesWritten(input.regeneratedPageCount));
   await generationNotifierFromEnv(env).finished(jobId, "succeeded");
   return completed;
+}
+
+function pagesWritten(count: number | undefined): GenerationEndDetails {
+  return count === undefined ? {} : { pagesWritten: count };
 }
 
 function createReviewRun(

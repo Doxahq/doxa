@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 
-import { PRO_REASON_GENERATION } from "~/lib/dashboard/ai-access"
+import { PRO_GATE_GENERATION } from "~/lib/dashboard/ai-access"
 import { loadInstructionsOffer } from "~/lib/dashboard/instructions-offer"
 import { useProGate } from "~/lib/dashboard/pro-trial-dialog"
 import { useProjectAiAccess } from "~/lib/dashboard/use-ai-access"
@@ -28,7 +28,7 @@ export function useGenerationStartFlow(
   const proGate = useProGate(useProjectAiAccess(projectId))
 
   async function requestGeneration(): Promise<void> {
-    if (proGate(PRO_REASON_GENERATION)) return
+    if (proGate(PRO_GATE_GENERATION)) return
     if (!options.skipInstructionsOffer && (await loadInstructionsOffer(queryClient, projectId, canConfigureInstructions))) {
       setIsOfferOpen(true)
       return

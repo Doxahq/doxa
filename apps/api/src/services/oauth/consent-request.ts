@@ -36,6 +36,21 @@ export function clientDisplayName(consent: PendingConsent): string {
   return name.slice(0, CLIENT_NAME_MAX_LENGTH);
 }
 
+const ANALYTICS_LABEL_MAX_LENGTH = 64;
+const NOT_A_LABEL_CHARACTER = /[^\p{L}\p{N} ._()-]+/gu;
+
+/**
+ * The client as product analytics names it (`clientLabel`): the registered
+ * name in letters, digits, spaces and `._()-`, else the host of a client ID
+ * metadata document. Never the redirect URI.
+ */
+export function analyticsClientLabel(client: { readonly clientName: string | null; readonly clientId?: string }): string {
+  const metadataUrl = client.clientId ? clientMetadataUrl(client.clientId) : null;
+  const source = client.clientName?.trim() || (metadataUrl ? new URL(metadataUrl).hostname : "");
+  const label = source.replace(NOT_A_LABEL_CHARACTER, " ").replace(/\s+/g, " ").trim().slice(0, ANALYTICS_LABEL_MAX_LENGTH).trim();
+  return label || "unnamed client";
+}
+
 /**
  * A client ID that is an https URL is a client ID metadata document: the
  * provider fetched it from that domain, so its identity is verified.

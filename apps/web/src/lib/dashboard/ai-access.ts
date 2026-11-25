@@ -37,6 +37,15 @@ export const PRO_TRIAL_ASK_OWNER = "Ask an owner or admin of this account to sta
 export const PRO_REASON_REPOSITORY = "A full generation from your repository needs Pro."
 export const PRO_REASON_GENERATION = "Generating docs needs Pro."
 
+/** What a Pro gate asks for: the reason line of the dialog and the feature's machine code for analytics. */
+export interface ProGateReason {
+  readonly feature: string
+  readonly reason: string
+}
+
+export const PRO_GATE_REPOSITORY: ProGateReason = { feature: "repository_generation", reason: PRO_REASON_REPOSITORY }
+export const PRO_GATE_GENERATION: ProGateReason = { feature: "generation", reason: PRO_REASON_GENERATION }
+
 /**
  * True when the plan has the Doxa Agent. An unknown plan key (a newer API)
  * counts as true: the API decides, and the dashboard never hides a feature

@@ -55,7 +55,10 @@ describe("site asset upload route", () => {
       truncated: false,
     });
     const response = await request(upload());
-    expect(response.status).toBe(422);
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { details: { code: "plan_limit", key: "site.asset_files", limit: 200, used: 200 } },
+    });
     expect(mocks.put).not.toHaveBeenCalled();
   });
   test("requires a session", async () => {

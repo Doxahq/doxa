@@ -117,7 +117,10 @@ export const AGENT_FAQ: { q: string; a: AgentFaqRun[] }[] = [
   },
   {
     q: "Does it work with public repositories, GitLab or Bitbucket?",
-    a: ["Today it works with private GitHub repositories. ", { ph: "[PUBLIC REPOSITORY, GITLAB AND BITBUCKET PLANS]" }],
+    a: [
+      "It works with public and private GitHub repositories. It ignores pull requests from forks. ",
+      { ph: "[GITLAB AND BITBUCKET PLANS]" },
+    ],
   },
   {
     q: "Which AI models does it use?",

@@ -18,7 +18,7 @@ export function monthlyEquivalentCents(price: Pick<PriceDefinition, "amountCents
   return price.interval === "year" ? Math.round(price.amountCents / 12) : price.amountCents;
 }
 
-/** What a yearly price saves against 12 monthly payments, as a whole percent. `−19%` on the pricing page. */
+/** What a yearly price saves against 12 monthly payments, as a whole percent. `−23%` on the pricing page. */
 export function yearlySavingsPercent(monthly: PriceDefinition, yearly: PriceDefinition): number {
   const twelveMonths = monthly.amountCents * 12;
   if (twelveMonths <= 0) return 0;

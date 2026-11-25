@@ -4,14 +4,25 @@ import { LuChevronLeft, LuChevronRight } from "react-icons/lu";
 import { getSectionFromPath } from "@/src/settings/sections";
 import { formatApiTitle } from "@/src/lib/api-reference";
 import { getPageRoutesForSection } from "@/src/lib/pageroutes";
-import { createDocsNearRoutePreload } from "@/src/lib/preload-policy";
+import {
+  createDocsNearRoutePreload,
+  type DocsLinkPreloadPolicy,
+} from "@/src/lib/preload-policy";
 import { Link } from "@/src/lib/transition";
+import { cn } from "@/src/lib/utils";
 
 interface PageLink {
   title: string;
   href: string;
   badge?: string;
 }
+
+type PageDirection = "previous" | "next";
+
+const DIRECTIONS = {
+  previous: { label: "Previous", rel: "prev" },
+  next: { label: "Next", rel: "next" },
+} as const satisfies Record<PageDirection, { label: string; rel: string }>;
 
 function getPreviousNext(path: string) {
   const targetHref = `/${path.replace(/^\/+/, "")}`;
@@ -29,6 +40,10 @@ function getPreviousNext(path: string) {
   return { prev, next };
 }
 
+/**
+ * Two cards to the previous and the next page. The next card always takes the
+ * right column, so it does not move when there is no previous page.
+ */
 export function Pagination({
   pathname,
   previous,
@@ -38,52 +53,64 @@ export function Pagination({
   previous?: PageLink | null;
   next?: PageLink | null;
 }) {
-  const docsNearRoutePreload = createDocsNearRoutePreload(
-    useSiteConfig().features
-  );
-  const res =
+  const preload = createDocsNearRoutePreload(useSiteConfig().features);
+  const pages =
     previous !== undefined || next !== undefined
       ? { prev: previous ?? null, next: next ?? null }
       : getPreviousNext(pathname);
+  if (!pages.prev && !pages.next) return null;
 
   return (
-    <div className="mt-12 flex items-center justify-between gap-4 border-t pt-6 pb-4">
-      {res.prev ? (
-        <Link
-          rel="prev"
-          href={res.prev.href}
-          {...docsNearRoutePreload}
-          title={`Previous: ${formatApiTitle(res.prev.title, res.prev.badge)}`}
-          className="group flex flex-col items-start gap-1 no-underline!"
-        >
-          <span className="flex items-center text-xs text-muted-foreground">
-            <LuChevronLeft className="mr-0.5 h-3 w-3" />
-            Previous
-          </span>
-          <span className="text-sm font-medium text-foreground group-hover:text-primary">
-            {formatApiTitle(res.prev.title, res.prev.badge)}
-          </span>
-        </Link>
-      ) : (
-        <div />
+    <nav
+      aria-label="Previous and next page"
+      className="not-prose grid grid-cols-2 gap-4"
+    >
+      {pages.prev && (
+        <PageLinkCard
+          direction="previous"
+          page={pages.prev}
+          preload={preload}
+        />
       )}
-      {res.next && (
-        <Link
-          rel="next"
-          href={res.next.href}
-          {...docsNearRoutePreload}
-          title={`Next: ${formatApiTitle(res.next.title, res.next.badge)}`}
-          className="group ml-auto flex flex-col items-end gap-1 no-underline!"
-        >
-          <span className="flex items-center text-xs text-muted-foreground">
-            Next
-            <LuChevronRight className="ml-0.5 h-3 w-3" />
-          </span>
-          <span className="text-sm font-medium text-foreground group-hover:text-primary">
-            {formatApiTitle(res.next.title, res.next.badge)}
-          </span>
-        </Link>
+      {pages.next && (
+        <PageLinkCard direction="next" page={pages.next} preload={preload} />
       )}
-    </div>
+    </nav>
+  );
+}
+
+function PageLinkCard({
+  direction,
+  page,
+  preload,
+}: {
+  direction: PageDirection;
+  page: PageLink;
+  preload: DocsLinkPreloadPolicy;
+}) {
+  const { label, rel } = DIRECTIONS[direction];
+  const title = formatApiTitle(page.title, page.badge);
+  const isNext = direction === "next";
+
+  return (
+    <Link
+      rel={rel}
+      href={page.href}
+      {...preload}
+      title={`${label}: ${title}`}
+      className={cn(
+        "group flex min-w-0 flex-col gap-1.5 rounded-lg border px-4 py-3.5 transition-colors hover:border-primary",
+        isNext && "col-start-2 items-end text-right"
+      )}
+    >
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        {!isNext && <LuChevronLeft className="size-3.5" aria-hidden="true" />}
+        {label}
+        {isNext && <LuChevronRight className="size-3.5" aria-hidden="true" />}
+      </span>
+      <span className="text-[15px] font-semibold text-foreground transition-colors group-hover:text-primary">
+        {title}
+      </span>
+    </Link>
   );
 }

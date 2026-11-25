@@ -13,6 +13,7 @@ import {
   type GitHubAuthAccount,
 } from "./github-identity";
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "./password-policy";
+import { authEventHooks, type AuthEvents } from "./auth-events";
 
 export interface AuthEnv extends DbEnv {
   AUTH_KV?: KVNamespace;
@@ -56,6 +57,8 @@ export interface AuthMailer {
 
 export interface CreateAuthOptions {
   readonly mailer?: AuthMailer;
+  /** Sign-up, sign-in and verification events, such as for product analytics. */
+  readonly events?: AuthEvents;
 }
 
 export function createAuth(
@@ -65,6 +68,7 @@ export function createAuth(
   options: CreateAuthOptions = {},
 ) {
   const { mailer } = options;
+  const eventHooks = options.events ? authEventHooks(options.events) : null;
   const disableSignUp = env.AUTH_SIGNUPS_ENABLED?.trim() !== "true";
   const db = createDb(env);
   const cf = (request as CfRequest | undefined)?.cf ?? {};
@@ -142,6 +146,8 @@ export function createAuth(
       sendOnSignIn: true,
       autoSignInAfterVerification: true,
       expiresIn: EMAIL_VERIFICATION_EXPIRES_IN_SECONDS,
+      // Called once, when a link verifies the address, unlike a user update hook.
+      ...(eventHooks ? { afterEmailVerification: eventHooks.emailVerified } : {}),
       ...(mailer
         ? {
             sendVerificationEmail: ({ user, url }) =>
@@ -169,7 +175,13 @@ export function createAuth(
     databaseHooks: {
       // The provider options do not cover ID token sign-in, so this hook is
       // the check that holds for every path that creates a user.
-      ...(disableSignUp ? { user: { create: { before: refuseNewUser } } } : {}),
+      user: {
+        create: {
+          ...(disableSignUp ? { before: refuseNewUser } : {}),
+          ...(eventHooks ? { after: eventHooks.userCreated } : {}),
+        },
+      },
+      ...(eventHooks ? { session: { create: { after: eventHooks.sessionCreated } } } : {}),
       account: {
         create: {
           after: async (account) =>

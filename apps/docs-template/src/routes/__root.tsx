@@ -36,7 +36,6 @@ import {
   useChatContext,
 } from "@/src/components/chat/chat-context";
 import { FloatingChatBar } from "@/src/components/chat/floating-chat-bar";
-import { Footer } from "@/src/components/navigation/footer";
 import { Navbar } from "@/src/components/navigation/navbar";
 import { NavigationProgress } from "@/src/components/navigation/navigation-progress";
 import globalsCss from "@/src/styles/globals.css?url";
@@ -145,6 +144,10 @@ function RootDocument({
                   className="flex h-screen"
                   style={{ display: "flex", height: "100vh" }}
                 >
+                  {/* Keep this id, and keep this shell a direct child of <body>:
+                      the dispatcher's preview banner
+                      (apps/docs-dispatcher/src/preview-banner.ts) finds the
+                      shell through it. */}
                   <div
                     id="app-scroll-container"
                     data-scroll-restoration-id={DOCS_SCROLL_RESTORATION_ID}
@@ -159,7 +162,6 @@ function RootDocument({
                     >
                       {children}
                     </main>
-                    {!isDemoMode && <Footer />}
                   </div>
                   {/* Before the first paint: the scroll position of a refresh, and the current TOC item. */}
                   <script

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ProviderEvent, RawWebhook } from "../src/provider/provider";
 import { createTestBilling } from "../src/testing";
-import { paidProAccount, runJob } from "./helpers/pro";
+import { paidProAccount, runJob, useAllowance } from "./helpers/pro";
 
 async function openDebt(billing: ReturnType<typeof createTestBilling>, accountId: string) {
   const view = await billing.entitlements.forAccount(accountId);
@@ -16,8 +16,8 @@ describe("pay-as-you-go webhooks", () => {
     expect(billing.provider.usageState(customer)?.thresholdCents).toBe(500);
     expect((await billing.entitlements.forAccount(account.id)).entitlements.plan).toBe("pro");
 
-    // Use the 5,000 allowance, then 600 credits of debt: 50 + ceil(x × 300).
-    await runJob(billing, account.id, "j1", 16.5); // 50 + 4950 = 5000
+    // Use the allowance, then 600 credits of debt: 50 + ceil(x × 300).
+    await useAllowance(billing, account.id, "j1");
     await runJob(billing, account.id, "j2", 1.83); // 50 + 549 = 599 -> all debt
     expect(await openDebt(billing, account.id)).toBe(599);
 
@@ -38,7 +38,7 @@ describe("pay-as-you-go webhooks", () => {
   it("turns pay-as-you-go off after a failed charge and on again after the invoice is paid", async () => {
     const billing = createTestBilling();
     const { account, customer } = await paidProAccount(billing);
-    await runJob(billing, account.id, "j1", 16.5);
+    await useAllowance(billing, account.id, "j1");
     await runJob(billing, account.id, "j2", 1.83);
     billing.provider.setCardFails(customer, true);
     await billing.payments.reportPendingUsage();
@@ -58,7 +58,7 @@ describe("pay-as-you-go webhooks", () => {
   it("sweeps a small debt once a month and sets the threshold back", async () => {
     const billing = createTestBilling();
     const { account, customer } = await paidProAccount(billing);
-    await runJob(billing, account.id, "j1", 16.5);
+    await useAllowance(billing, account.id, "j1");
     await runJob(billing, account.id, "j2", 0.4); // 50 + 120 = 170 credits of debt
     await billing.payments.reportPendingUsage();
     expect(billing.provider.drainWebhooks()).toEqual([]); // below the $5 threshold
@@ -77,7 +77,7 @@ describe("pay-as-you-go webhooks", () => {
   it("a sweep whose threshold reset failed sets it back on the provider's retry", async () => {
     const billing = createTestBilling();
     const { account } = await paidProAccount(billing);
-    await runJob(billing, account.id, "j1", 16.5);
+    await useAllowance(billing, account.id, "j1");
     await runJob(billing, account.id, "j2", 0.4);
     await billing.payments.reportPendingUsage();
     billing.provider.drainWebhooks();
@@ -101,7 +101,7 @@ describe("pay-as-you-go webhooks", () => {
   it("a late failure event of a paid invoice does not pause the account", async () => {
     const billing = createTestBilling();
     const { account, customer } = await paidProAccount(billing);
-    await runJob(billing, account.id, "j1", 16.5);
+    await useAllowance(billing, account.id, "j1");
     await runJob(billing, account.id, "j2", 1.83);
     await billing.payments.reportPendingUsage();
     await billing.deliverWebhooks();
@@ -124,7 +124,7 @@ describe("pay-as-you-go webhooks", () => {
   it("an old sweep's paid event does not undo a newer sweep", async () => {
     const billing = createTestBilling();
     const { account } = await paidProAccount(billing);
-    await runJob(billing, account.id, "j1", 16.5);
+    await useAllowance(billing, account.id, "j1");
     await runJob(billing, account.id, "j2", 0.4);
     await billing.payments.reportPendingUsage();
     billing.provider.drainWebhooks();
@@ -142,7 +142,7 @@ describe("pay-as-you-go webhooks", () => {
 
     // A month later: new debt, and the next sweep lowers the threshold.
     billing.clock.advance(35 * 24 * 60 * 60 * 1_000);
-    await runJob(billing, account.id, "j3", 16.5); // the new month's 5,000 credits
+    await useAllowance(billing, account.id, "j3"); // the new month's allowance
     await runJob(billing, account.id, "j4", 0.3); // 50 + 90 = 140 credits of debt
     await billing.payments.reportPendingUsage();
     billing.provider.drainWebhooks();
@@ -199,7 +199,7 @@ describe("pay-as-you-go webhooks", () => {
   it("clears debt from a renewal invoice with usage lines", async () => {
     const billing = createTestBilling();
     const { account, customer } = await paidProAccount(billing);
-    await runJob(billing, account.id, "j1", 16.5);
+    await useAllowance(billing, account.id, "j1");
     await runJob(billing, account.id, "j2", 0.4);
     billing.provider.emit({
       type: "usage_invoice.paid",
@@ -214,7 +214,7 @@ describe("pay-as-you-go webhooks", () => {
   it("flags a dispute and turns pay-as-you-go off; a usage refund writes an adjustment", async () => {
     const billing = createTestBilling();
     const { account, customer } = await paidProAccount(billing);
-    await runJob(billing, account.id, "j1", 16.5);
+    await useAllowance(billing, account.id, "j1");
     await runJob(billing, account.id, "j2", 1.83);
     await billing.payments.reportPendingUsage();
     await billing.deliverWebhooks();

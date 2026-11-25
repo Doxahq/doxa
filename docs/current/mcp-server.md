@@ -297,11 +297,12 @@ approved publish of the branch. `build_preview` shows it too.
   and write nothing.
 - Quota: 50 images on one branch (`asset_limit_reached`). The published
   version, the images of all branches of the site, and the new file must fit
-  the plan storage (`storage_quota_exceeded`, free plan 100 MiB,
-  `FREE_PLAN_STORAGE_LIMITS`). The write checks this again under a site lock,
+  the plan storage (`plan_limit` with key `docs.storage_bytes`, free plan
+  20 MiB, `FREE_PLAN_STORAGE_LIMITS`). The write checks this again under a site lock,
   so parallel uploads to different branches cannot pass it together.
 - Site assets: logos, favicons, and social images have their own limit, 200
-  files and 50 MiB for each site (`storage_quota_exceeded`). A site lock makes
+  files and 50 MiB for each site on Free (`plan_limit` with key
+  `site.asset_files` or `site.asset_bytes`). A site lock makes
   the check and the write one step. A repeated upload of a stored file needs
   no quota. Nothing deletes an old site asset yet, so replacing a logo uses up
   this limit.
@@ -523,6 +524,13 @@ URLs. Rate limits count per Cloudflare location.
   `agent_activity`.
 - A successful call of a tool with `describeActivity` also adds rows to
   `agent_live_events`. See `docs/current/agent-live-activity.md`.
+- Product analytics: each request builds a PostHog client
+  (`createWorkerProductAnalytics` in `apps/api/src/services/analytics`) that
+  sends each record at once. The request flushes it in `waitUntil` after the
+  response body ends, also an SSE stream, and only then closes its database
+  pool, because the opt-out check reads `user_privacy_settings`. Without
+  `POSTHOG_KEY` analytics is off. Production reads the key from
+  `${OPS_POSTHOG_PROJECT_KEY}`.
 
 ## Local development
 

@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from "react"
 
 import { useBranchContext } from "~/lib/dashboard/use-branch-context"
+import { useRenderedPathname } from "~/lib/dashboard/use-rendered-pathname"
 
 export type ProjectBranchState = ReturnType<typeof useBranchContext>
 
@@ -11,7 +12,8 @@ const ProjectBranchContext = createContext<ProjectBranchState | null>(null)
  *
  * The selection lives in React state, so two callers of `useBranchContext`
  * would drift apart. The sidebar, the top bar, the status bar and the editor
- * all read this single instance instead.
+ * all read this single instance instead. Site settings opened from outside
+ * the content editor use `main`, because only the editor shows the branch.
  */
 export function ProjectBranchProvider({
   projectId,
@@ -20,7 +22,8 @@ export function ProjectBranchProvider({
   projectId: string
   children: ReactNode
 }) {
-  const branch = useBranchContext(projectId)
+  const pathname = useRenderedPathname()
+  const branch = useBranchContext(projectId, pathname)
   return <ProjectBranchContext.Provider value={branch}>{children}</ProjectBranchContext.Provider>
 }
 

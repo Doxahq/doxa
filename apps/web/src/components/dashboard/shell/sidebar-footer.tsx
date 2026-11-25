@@ -1,6 +1,8 @@
 import { Link, useNavigate } from "@tanstack/react-router"
+import { useRef, useState } from "react"
 import { BookText, ChevronRight, ChevronsUpDown, Github, LogOut, PanelsTopLeft, UserRound } from "lucide-react"
 
+import { ThemeMenuItem } from "~/components/dashboard/shell/theme-menu-item"
 import { UserAvatar } from "~/components/dashboard/shell/user-avatar"
 import {
   DropdownMenu,
@@ -34,9 +36,13 @@ export function SiteSettingsButton({ projectId }: { projectId: string }) {
   )
 }
 
+/** The widest the account menu gets, in pixels: about the row width at the default sidebar width. */
+const ACCOUNT_MENU_MAX_WIDTH = 320
+
 /**
  * Avatar, name and the menu of the person's own account: their email, then
- * Account settings and Sign out. A person with no name shows their email.
+ * Account settings, the theme switch and Sign out. A person with no name
+ * shows their email.
  * Workspaces, projects and billing are in the logo menu.
  */
 export function UserRow({ showLinks = true }: { showLinks?: boolean }) {
@@ -46,6 +52,11 @@ export function UserRow({ showLinks = true }: { showLinks?: boolean }) {
   const displayName = user?.name?.trim() || user?.email || (isPending ? "" : "Account")
   const email = user?.email ?? ""
   const showsEmailInMenu = email !== "" && displayName !== email
+  // The menu renders in a portal, outside the sidebar, so it cannot read `--sidebar-width`.
+  // It takes the width of this row (the sidebar minus its padding) each time it opens,
+  // up to ACCOUNT_MENU_MAX_WIDTH, so a wide sidebar does not stretch the short rows.
+  const rowRef = useRef<HTMLDivElement>(null)
+  const [menuWidth, setMenuWidth] = useState<number>()
 
   async function handleSignOut() {
     await signOut().catch(() => undefined)
@@ -53,8 +64,13 @@ export function UserRow({ showLinks = true }: { showLinks?: boolean }) {
   }
 
   return (
-    <div className="flex items-center gap-1.5 pt-1">
-      <DropdownMenu>
+    <div ref={rowRef} className="flex items-center gap-1.5 pt-1">
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (!open || !rowRef.current) return
+          setMenuWidth(Math.min(rowRef.current.getBoundingClientRect().width, ACCOUNT_MENU_MAX_WIDTH))
+        }}
+      >
         <DropdownMenuTrigger asChild>
           <button
             type="button"
@@ -66,7 +82,12 @@ export function UserRow({ showLinks = true }: { showLinks?: boolean }) {
             <ChevronsUpDown aria-hidden="true" className="size-3.5 shrink-0 text-faint" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="start" className="w-64">
+        <DropdownMenuContent
+          side="top"
+          align="start"
+          className="w-64"
+          style={menuWidth ? { width: menuWidth } : undefined}
+        >
           {showsEmailInMenu ? (
             <>
               <DropdownMenuLabel className="truncate font-normal text-muted-foreground">{email}</DropdownMenuLabel>
@@ -79,6 +100,7 @@ export function UserRow({ showLinks = true }: { showLinks?: boolean }) {
               Account settings
             </Link>
           </DropdownMenuItem>
+          <ThemeMenuItem />
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => void handleSignOut()}>
             <LogOut />

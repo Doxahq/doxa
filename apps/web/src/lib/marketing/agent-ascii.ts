@@ -1,3 +1,8 @@
+import { subscribeToTheme } from "~/lib/theme/theme"
+
+/** The glyph color before the page styles load: the dark theme's ice. */
+const ICE_RGB_FALLBACK = "156 194 255"
+
 /**
  * The ASCII grid behind the Doxa Agent hero art, in the page's own language:
  * dotted guide lines with a "+" where two lines cross. Slow pulses ring out from
@@ -9,6 +14,8 @@
  * a pre-rendered strip (one row per opacity step), 15 frames a second, and
  * nothing while the canvas is off screen. It animates for every visitor, also
  * with Reduce Motion on (a product decision).
+ *
+ * The glyphs take the page's `--ice-rgb` color and redraw when the theme changes.
  *
  * Returns a function that stops the loop and the observers.
  */
@@ -55,6 +62,7 @@ export function attachAsciiGrid(canvas: HTMLCanvasElement, core: HTMLElement | n
 
   // GLYPHS across, LEVELS of opacity down, so drawing never changes globalAlpha.
   const buildAtlas = () => {
+    const ice = getComputedStyle(canvas).getPropertyValue("--ice-rgb").trim() || ICE_RGB_FALLBACK
     atlas = document.createElement("canvas")
     atlas.width = GLYPHS.length * CW * dpr
     atlas.height = LEVELS * CH * dpr
@@ -65,7 +73,7 @@ export function attachAsciiGrid(canvas: HTMLCanvasElement, core: HTMLElement | n
     a.textAlign = "center"
     a.textBaseline = "middle"
     for (let l = 0; l < LEVELS; l++) {
-      a.fillStyle = `rgba(156, 194, 255, ${(((l + 1) / LEVELS) * MAX_ALPHA).toFixed(3)})`
+      a.fillStyle = `rgb(${ice} / ${(((l + 1) / LEVELS) * MAX_ALPHA).toFixed(3)})`
       GLYPHS.forEach((g, i) => a.fillText(g, i * CW + CW / 2, l * CH + CH / 2 + 0.5))
     }
   }
@@ -200,17 +208,21 @@ export function attachAsciiGrid(canvas: HTMLCanvasElement, core: HTMLElement | n
       : new IntersectionObserver(([entry]) => (entry.isIntersecting ? start() : stop()))
   if (view) view.observe(canvas)
   else start()
-  // Redraw the glyphs once JetBrains Mono has loaded.
-  void document.fonts?.ready.then(() => {
-    if (stopped) return
+  const redrawGlyphs = () => {
     buildAtlas()
     buildBase()
     draw(performance.now())
+  }
+  // Redraw the glyphs once JetBrains Mono has loaded, and in the new color when the theme changes.
+  void document.fonts?.ready.then(() => {
+    if (!stopped) redrawGlyphs()
   })
+  const unsubscribeTheme = subscribeToTheme(redrawGlyphs)
 
   return () => {
     stopped = true
     stop()
+    unsubscribeTheme()
     resize?.disconnect()
     view?.disconnect()
   }

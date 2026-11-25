@@ -94,19 +94,19 @@ describe("Plan and invoices", () => {
     expect(within(plan).getByText(/Hosting, the editor, 1 custom domain and MCP\./)).toBeTruthy()
 
     const upgrade = section("Upgrade to Pro")
-    expect(within(upgrade).getByText("$129")).toBeTruthy()
-    expect(within(upgrade).getByText(/Billed yearly at \$1,548/)).toBeTruthy()
+    expect(within(upgrade).getByText("$99")).toBeTruthy()
+    expect(within(upgrade).getByText(/Billed yearly at \$1,188/)).toBeTruthy()
     expect(within(upgrade).getByText(/37 of 50 founder spots left/)).toBeTruthy()
     expect(within(upgrade).getByText("AI")).toBeTruthy()
     expect(within(upgrade).getByText("Site and team")).toBeTruthy()
     expect(within(upgrade).getByText("Docs written from your repo")).toBeTruthy()
     expect(within(upgrade).getByRole("radio", { name: /Yearly/ }).getAttribute("aria-checked")).toBe("true")
     await userEvent.click(within(upgrade).getByRole("button", { name: "Start 7-day Pro trial" }))
-    expect(handlers.upgrade.onUpgrade).toHaveBeenCalledWith("pro_yearly_founder_v1")
+    expect(handlers.upgrade.onUpgrade).toHaveBeenCalledWith("pro_yearly_founder_v2")
     await userEvent.click(within(upgrade).getByRole("radio", { name: /Monthly/ }))
-    expect(within(upgrade).getByText("$159")).toBeTruthy()
+    expect(within(upgrade).getByText("$129")).toBeTruthy()
     await userEvent.click(within(upgrade).getByRole("button", { name: "Start 7-day Pro trial" }))
-    expect(handlers.upgrade.onUpgrade).toHaveBeenLastCalledWith("pro_monthly_founder_v1")
+    expect(handlers.upgrade.onUpgrade).toHaveBeenLastCalledWith("pro_monthly_founder_v2")
 
     // The limits come from the entitlements; the API sends no use, so there are no bars.
     const limits = section("Plan limits")
@@ -115,7 +115,7 @@ describe("Plan and invoices", () => {
 
     expect(screen.queryByRole("heading", { name: "Payment method" })).toBeNull()
     expect(screen.queryByRole("link", { name: /AI credits/ })).toBeNull()
-    expect(within(section("Invoices")).getByText("No invoices yet.")).toBeTruthy()
+    expect(screen.queryByRole("heading", { name: "Invoices" })).toBeNull()
   })
 
   test("ended trial: Free with one line of history, and an upgrade that says Stripe charges today", async () => {
@@ -132,6 +132,16 @@ describe("Plan and invoices", () => {
     expect(within(upgrade).getByRole("button", { name: "Upgrade to Pro" })).toBeTruthy()
     expect(within(upgrade).getByText("This account already had a trial, so Stripe charges the first payment today.")).toBeTruthy()
     expect(within(upgrade).queryByText(/trial with/)).toBeNull()
+    // The ended trial left a subscription on record, but Free has nothing to pay with or for.
+    expect(screen.queryByRole("heading", { name: "Payment method" })).toBeNull()
+    expect(screen.queryByRole("heading", { name: "Invoices" })).toBeNull()
+  })
+
+  test("canceled Pro, now Free: its past invoices stay, without a payment method", async () => {
+    await renderPlan(ENDED_TRIAL_ACCOUNT, INVOICES)
+
+    expect(within(section("Invoices")).getByRole("table", { name: "Invoices" })).toBeTruthy()
+    expect(screen.queryByRole("heading", { name: "Payment method" })).toBeNull()
   })
 
   test("trial: the trial end, the charge after it, Start Pro now, the switch and Cancel trial", async () => {
@@ -140,7 +150,7 @@ describe("Plan and invoices", () => {
     expect(within(plan).getByText("Trial")).toBeTruthy()
     expect(within(plan).getByText("Founder price")).toBeTruthy()
     expect(within(plan).getByText("Trial ends on Nov 17, 2026")).toBeTruthy()
-    expect(within(plan).getByText("Then $1,548 for the year at the founder price, charged on Nov 17, 2026.")).toBeTruthy()
+    expect(within(plan).getByText("Then $1,188 for the year at the founder price, charged on Nov 17, 2026.")).toBeTruthy()
     expect(within(plan).getByText("Cancel before Nov 17, 2026 and you pay nothing. Your docs stay online on Free.")).toBeTruthy()
     expect(within(plan).getByRole("button", { name: "Start Pro now" })).toBeTruthy()
     expect(within(plan).getByRole("button", { name: "Switch to monthly" })).toBeTruthy()
@@ -158,7 +168,7 @@ describe("Plan and invoices", () => {
     const handlers = await renderPlan(ACTIVE_WITH_DEBT)
     const plan = section("Plan")
     expect(within(plan).getByText("Active")).toBeTruthy()
-    expect(within(plan).getByText("$1,548 / year · Renews on Nov 14, 2027")).toBeTruthy()
+    expect(within(plan).getByText("$1,188 / year · Renews on Nov 14, 2027")).toBeTruthy()
     expect(within(plan).getByText("The founder price stays while the plan stays active.")).toBeTruthy()
     expect(within(plan).queryByRole("button", { name: "Start Pro now" })).toBeNull()
     await userEvent.click(within(plan).getByRole("button", { name: "Cancel plan" }))

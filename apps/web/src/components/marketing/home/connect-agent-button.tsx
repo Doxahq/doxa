@@ -1,3 +1,4 @@
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { AGENT_SETUP_PROMPT } from "~/lib/marketing/links"
 import { useCopied } from "~/lib/mcp/copied"
 
@@ -12,8 +13,9 @@ const AGENTS = [
 /**
  * "Agent setup" in the home hero, after context.dev: the logos of three agents, then the
  * label. A click copies the one-line setup prompt that the visitor pastes into their agent.
+ * `location` names the section for the `cta_clicked` event.
  */
-export function ConnectAgentButton() {
+export function ConnectAgentButton({ location }: { location: string }) {
   const { copied, copy } = useCopied()
   const done = copied === COPY_KEY
 
@@ -21,7 +23,10 @@ export function ConnectAgentButton() {
     <button
       type="button"
       className={`btn btn--line hero__connect${done ? " is-copied" : ""}`}
-      onClick={() => copy(AGENT_SETUP_PROMPT, COPY_KEY)}
+      onClick={() => {
+        ctaClickHandler(location, "connect_agent")()
+        copy(AGENT_SETUP_PROMPT, COPY_KEY)
+      }}
       title={AGENT_SETUP_PROMPT}
     >
       <span className="hero__connect-logos" aria-hidden="true">

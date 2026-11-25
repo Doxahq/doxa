@@ -24,10 +24,13 @@ export function SidebarSectionLabel({
 export const SIDEBAR_NAV_ITEM_CLASS =
   "mt-1 flex w-full items-center gap-3 rounded-md px-3 py-[9px] text-left text-[14.5px] font-medium whitespace-nowrap transition-colors duration-100 ease-out [&>svg]:size-[18px] [&>svg]:shrink-0"
 
-/** Active: a quiet grey fill, a step above the hover fill. No accent color. */
+/**
+ * Active: the `--sidebar-active` fill, a step above the hover fill. No accent color.
+ * In the light theme it is a white chip with a thin edge, because the sidebar is grey.
+ */
 export function sidebarNavItemState(active: boolean): string {
   return active
-    ? "bg-secondary text-foreground"
+    ? "bg-sidebar-active text-foreground shadow-(--sidebar-active-shadow)"
     : "text-body hover:bg-overlay hover:text-foreground"
 }
 

@@ -7,8 +7,9 @@ import type { CreditsExhaustedErrorDetails } from "@doxahq/contracts/billing"
 import { CreditsExhaustedContent, PlanLimitContent } from "~/components/dashboard/billing/billing-denial-dialog"
 import { Dialog, DialogContent } from "~/components/ui/dialog"
 import { ApiRequestError, createApiError } from "~/lib/api-errors"
-import { creditsExhaustedDetails, planLimitDetails } from "~/lib/dashboard/billing-model"
-import { reportBillingDenial, showBillingDenial } from "~/lib/dashboard/billing-denials"
+import { creditsExhaustedDetails, planLimitDetails, proTrialLimitReason, proTrialUnlocks } from "~/lib/dashboard/billing-model"
+import { reportBillingDenial, showBillingDenial, showPlanLimit, useBillingDenial } from "~/lib/dashboard/billing-denials"
+import { renderHook } from "@testing-library/react"
 
 afterEach(() => {
   cleanup()
@@ -85,7 +86,7 @@ describe("the 402 dialog, one action per reason (spec 10.6)", () => {
 
     renderReason("trial_credits")
     expect(screen.queryByText("Finished pages stay on the draft branch.")).toBeNull()
-    expect(screen.getByText(/Start Pro now to get 5,000 AI credits each month and continue this run\./)).toBeTruthy()
+    expect(screen.getByText(/Start Pro now to get 10,000 AI credits each month and continue this run\./)).toBeTruthy()
   })
 
   test("max_debt says that runs continue in about 20 minutes", () => {
@@ -121,5 +122,33 @@ describe("billing denials from the API", () => {
 
     // Any other error is not a billing denial.
     expect(reportBillingDenial(createApiError(403, { error: { message: "Forbidden" } }))).toBe(false)
+  })
+})
+
+describe("the docs site limits of Free open the Pro trial", () => {
+  test.each(["docs.branches_per_site", "docs.storage_bytes", "site.asset_bytes", "site.asset_files", "site.custom_domains"])(
+    "Pro unlocks %s",
+    (key) => {
+      expect(proTrialUnlocks("free", key)).toBe(true)
+      expect(proTrialUnlocks("pro", key)).toBe(false)
+    },
+  )
+
+  test("the reason names the use, the Free limit and what Pro has", () => {
+    const MB = 1024 * 1024
+    const storage = { code: "plan_limit", key: "docs.storage_bytes", limit: 20 * MB, used: 19 * MB, plan: null, resetsAt: null, upgradeUrl: null } as const
+    expect(proTrialLimitReason(storage, "free")).toBe("You use 19 MB of 20 MB docs storage on Free. Pro has no limit.")
+    const branches = { ...storage, key: "docs.branches_per_site", limit: 2, used: 2 }
+    expect(proTrialLimitReason(branches, "free")).toBe("You use 2 of 2 branches on this site on Free. Pro has no limit.")
+  })
+
+  test("showPlanLimit reports a limit that the dashboard found before the API", () => {
+    const { result, rerender } = renderHook(() => useBillingDenial())
+    showPlanLimit("docs.branches_per_site", 2, 2)
+    rerender()
+    expect(result.current).toEqual({
+      kind: "plan_limit",
+      details: { code: "plan_limit", key: "docs.branches_per_site", limit: 2, used: 2, plan: null, resetsAt: null, upgradeUrl: null },
+    })
   })
 })

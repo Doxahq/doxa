@@ -1,4 +1,5 @@
 import { CopyIcon } from "~/components/marketing/mcp/copy-icon"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { AGENT_SETUP_PROMPT } from "~/lib/marketing/links"
 import { useCopied } from "~/lib/mcp/copied"
 
@@ -24,7 +25,10 @@ export function OnboardAgentButton({ className }: { className?: string }) {
     <button
       type="button"
       className={`agent-cta${done ? " is-copied" : ""}${className ? ` ${className}` : ""}`}
-      onClick={() => copy(AGENT_SETUP_PROMPT, COPY_KEY)}
+      onClick={() => {
+        ctaClickHandler("footer", "connect_agent")()
+        copy(AGENT_SETUP_PROMPT, COPY_KEY)
+      }}
       title={AGENT_SETUP_PROMPT}
     >
       {done ? <CheckIcon /> : <CopyIcon />}

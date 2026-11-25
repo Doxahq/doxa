@@ -17,6 +17,12 @@ max_task_count = 1
 
 alert_emails       = ["<you@example.com>"]
 monthly_budget_usd = 120
+# Budget notices (default: 80% actual and 100% forecast), for example an early one:
+# budget_notifications = [
+#   { type = "ACTUAL", threshold_percent = 20 },
+#   { type = "ACTUAL", threshold_percent = 80 },
+#   { type = "FORECASTED", threshold_percent = 100 },
+# ]
 
 # Repositories whose deploy workflows may take the AWS deploy role.
 # Newer repos send owner@<owner-id>/<name>@<repo-id> in the OIDC subject: use that form for them.
@@ -77,6 +83,7 @@ api_environment = {
   DOXA_AGENT_MAX_PAGES                = "120"
   DOXABOT_ENABLED                     = "false"
   DOXABOT_PUBLIC_REPOSITORIES_ENABLED = "false"
+  MAX_REPOSITORY_SIZE_KB              = "1048576"
   GENERATION_TIMEOUT_MS               = "720000"
   GENERATION_IDLE_TIMEOUT_MS          = "90000"
   GENERATION_OVERALL_TIMEOUT_MS       = "10800000"
@@ -84,6 +91,9 @@ api_environment = {
   STRUCTURE_STAGE_TIMEOUT_MS          = "1800000"
   PAGE_BATCH_TIMEOUT_MS               = "1800000"
   FINALIZATION_TIMEOUT_MS             = "600000"
+
+  # Optional product analytics. Unset, the API sends no analytics.
+  # POSTHOG_KEY = "<posthog-project-key>"
 
   # R2 over the S3 API.
   R2_ENDPOINT = "https://<cloudflare-account-id>.r2.cloudflarestorage.com"

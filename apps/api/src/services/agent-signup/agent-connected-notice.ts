@@ -25,7 +25,7 @@ export function createAgentConnectedNotifier(env: Env): AgentConnectedNotifier {
         agentName: event.agentName,
         tokenName: event.tokenName,
         permissions: [...event.scopes],
-        manageUrl: `${outbox.links.webOrigin}/dashboard/settings`,
+        manageUrl: `${outbox.links.webOrigin}/dashboard/settings/agents`,
       },
       { email, userId: event.userId },
       `agent-connected:${event.registrationId}`,

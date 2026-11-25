@@ -39,6 +39,11 @@ const commitResponseSchema = z.object({
   }),
 }).passthrough();
 
+/** GitHub `GET /repos/{owner}/{name}`: `size` is in KB. */
+const repositoryResponseSchema = z.object({
+  size: z.number().int().nonnegative(),
+}).passthrough();
+
 export class GitHubProductionGenerationSource
   implements ProductionGenerationSource
 {
@@ -87,13 +92,14 @@ export class GitHubProductionGenerationSource
     const owner = encodeURIComponent(repository.owner);
     const name = encodeURIComponent(repository.name);
     const branch = encodeURIComponent(repository.defaultBranch);
-    const response = await this.fetchRequest(
-      `${GITHUB_API_BASE_URL}/repos/${owner}/${name}/commits/${branch}`,
-      {
+    const repositoryUrl = `${GITHUB_API_BASE_URL}/repos/${owner}/${name}`;
+    const [response, sizeKb] = await Promise.all([
+      this.fetchRequest(`${repositoryUrl}/commits/${branch}`, {
         method: "GET",
         headers: githubApiHeaders(token),
-      },
-    );
+      }),
+      this.repositorySizeKb(repositoryUrl, token),
+    ]);
     if (!response.ok) {
       throw new Error(
         `GitHub default branch lookup failed (${response.status}).`,
@@ -111,6 +117,26 @@ export class GitHubProductionGenerationSource
     return {
       revision: parsed.data.sha,
       treeHash: parsed.data.commit.tree.sha,
+      sizeKb,
     };
+  }
+
+  /**
+   * The repository size that GitHub reports, for the size limit. A failed
+   * lookup fails the start: without the size, the limit cannot be checked.
+   */
+  private async repositorySizeKb(repositoryUrl: string, token: string): Promise<number> {
+    const response = await this.fetchRequest(repositoryUrl, {
+      method: "GET",
+      headers: githubApiHeaders(token),
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub repository lookup failed (${response.status}).`);
+    }
+    const parsed = repositoryResponseSchema.safeParse(await response.json());
+    if (!parsed.success) {
+      throw new Error("GitHub repository response was invalid.");
+    }
+    return parsed.data.size;
   }
 }

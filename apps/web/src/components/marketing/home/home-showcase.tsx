@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 
 const DOCS_DEMO_URL = `${DOCS_URL}/overview/?demo=true`
@@ -34,7 +35,7 @@ export function HomeShowcase() {
               <a className="btn btn--line btn--sm" href={DOCS_URL}>
                 Read the docs ›
               </a>
-              <a className="btn btn--light btn--sm" href={GET_STARTED_URL}>
+              <a className="btn btn--light btn--sm" href={GET_STARTED_URL} onClick={ctaClickHandler("home_showcase", "get_started")}>
                 Start free ›
               </a>
             </div>

@@ -474,14 +474,24 @@ Doxabot settings choose what a pull request merged into the production branch
 starts (`doxabot_automation_settings.merge_trigger`). The merge trigger does not
 depend on the pull request previews setting (`enabled`): a merge feeds it also
 while previews are off. It needs Doxabot to be available for the project (a
-connected private repository and a first publish). The dashboard shows it as
-its own card, "When a pull request merges".
+connected repository, public or private, and a first publish). The dashboard
+shows it as its own card, "When a pull request merges".
 
 | Value | Result |
 | --- | --- |
-| `manual` | The merge is listed on the project overview. A person starts the update. |
-| `batched` (default) | One run starts when no pull request merged for `batch_quiet_minutes` (15, 30, 60, or 360; default 30). |
+| `manual` (default) | The merge is listed on the project overview. A person starts the update. |
+| `batched` | One run starts when no pull request merged for `batch_quiet_minutes` (15, 30, 60, or 360; default 30). |
 | `every_merge` | A run starts after each merge. |
+
+The default is `manual`, so a project runs nothing after a merge until its
+owner picks another trigger. Projects that stored a value before this default
+keep it.
+
+Pull requests from forks never start a preview, whatever the author. A merged
+pull request from a fork still counts for the merge trigger, because a
+maintainer accepted its code. Pull requests from bot accounts are skipped,
+unless the owner allows the bot by name. See "Which pull requests Doxabot
+uses" in [`../github-app.md`](../github-app.md).
 
 Every run goes to a review, so no trigger changes the live site by itself.
 The settings update is partial: a client sends only the fields it changes.

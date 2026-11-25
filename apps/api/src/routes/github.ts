@@ -1,5 +1,5 @@
 import { getCookie } from "hono/cookie";
-import { readBodyText, requestBodyTooLarge } from "../http/body";
+import { readBodyText, readValidBody, requestBodyTooLarge } from "../http/body";
 import { RequestBodyTooLarge } from "../http/bounded-body";
 import { createApiRouter } from "../http/app";
 import type { ApiApp, ApiContext } from "../http/app";
@@ -9,9 +9,17 @@ import { withUser } from "../http/auth";
 import { error, json } from "../http/response";
 import { GitHubRepository, type RepositoryBranchTarget } from "../repositories/github";
 import {
+  transferGitHubInstallationInputSchema,
+  type GitHubInstallationsResponseDto,
+} from "@doxahq/contracts";
+import { GitHubLifecycleRepository, type GitHubInstaller } from "../repositories/github-lifecycle";
+import { decideInstallationClaim } from "../services/github-install-owner";
+import {
   GitHubAuthorizationError,
   exchangeUserAuthorizationCode,
+  fetchGitHubTokenUser,
   findUserInstallation,
+  type GitHubTokenUser,
   isLocalInstallation,
   listUserInstallationRepositories,
 } from "../services/github-app";
@@ -26,11 +34,16 @@ import {
 } from "../services/github-install-state";
 import { verifyGitHubWebhook } from "../services/github-webhook";
 import {
+  GitHubRepositoryRefreshService,
+  repositoryRefreshResponse,
+} from "../services/github-repository-refresh";
+import {
   RepositoryBranchesService,
   RepositoryBranchesUnavailableError,
 } from "../services/repository-branches";
 import { DoxabotWebhookOrchestrator } from "../services/doxabot/webhook-orchestrator";
 import { MergeGenerationScheduler } from "../services/doxabot/merge-generations";
+import { productAnalyticsOf } from "../services/analytics/product-analytics";
 
 export function createGitHubRoutes(): ApiApp {
   const app = createApiRouter();
@@ -192,6 +205,48 @@ export function createGitHubRoutes(): ApiApp {
       }
 
       const repo = new GitHubRepository(context.env);
+      let githubUser: GitHubTokenUser;
+      let currentOwnerUserId: string | null;
+      let installer: GitHubInstaller | null;
+      try {
+        [githubUser, currentOwnerUserId, installer] = await Promise.all([
+          fetchGitHubTokenUser(userToken),
+          repo.findInstallationOwner(access.installationId),
+          new GitHubLifecycleRepository(context.env).findInstaller(access.installationId),
+        ]);
+      } catch (caught) {
+        console.error("GitHub installation owner check failed.", caught instanceof Error ? caught.message : caught);
+        return fail("GitHub could not be reached. Connect GitHub again.", 502);
+      }
+      const claim = decideInstallationClaim({
+        userId,
+        currentOwnerUserId,
+        accountType: access.accountType,
+        accountId: access.accountId,
+        githubUserId: githubUser.githubUserId,
+        installer,
+      });
+      switch (claim.outcome) {
+        case "accept":
+          break;
+        case "installer_unknown":
+          // GitHub sends the webhook a few seconds after the install. The
+          // dashboard asks the user to try again with this installation.
+          return withSetCookies(
+            redirectToDashboard(context, "pending", access.installationId),
+            [clearNonce],
+          );
+        case "not_installer":
+          return fail(
+            `Only the GitHub user who installed Doxabot on ${access.accountLogin} (${claim.installerLogin}) can connect it. Ask them to connect it and add you to their Doxa team.`,
+            403,
+          );
+        case "not_account_owner":
+          return fail(`Only the GitHub user ${access.accountLogin} can connect this installation.`, 403);
+        case "owned_by_other_user":
+          return fail("This GitHub installation is connected to another Doxa account.", 409);
+      }
+
       const installation = await repo.recordInstallation({
         userId,
         installationId: access.installationId,
@@ -227,7 +282,44 @@ export function createGitHubRoutes(): ApiApp {
         );
       }
 
+      // The count only: repository names never leave Doxa.
+      const repoCount = listed.repositories.length;
+      productAnalyticsOf(context.env).capture({ name: "github_app_installed", distinctId: userId, properties: { repo_count: repoCount } });
       return withSetCookies(redirectToDashboard(context, "connected"), [clearNonce]);
+    }),
+  );
+
+  // The installations that the user owns, and the users they can move one to.
+  app.get("/installations", (context) =>
+    withUser(context, async (userId) => {
+      const repo = new GitHubRepository(context.env);
+      const [installations, transferTargets] = await Promise.all([
+        repo.listInstallationsForOwner(userId),
+        repo.listOwnerTransferTargets(userId),
+      ]);
+      return json({ installations, transferTargets } satisfies GitHubInstallationsResponseDto);
+    }),
+  );
+
+  // Moves an installation to another Doxa user (Decision 6). Only its owner
+  // can, and only to a user who shares a Doxa team with them.
+  app.post("/installations/:installationId/owner", (context) =>
+    withUser(context, async (userId) => {
+      const installationRowId = context.req.param("installationId");
+      if (!UUID_PATTERN.test(installationRowId)) return error("Installation not found.", 404);
+      const body = await readValidBody(context.req.raw, transferGitHubInstallationInputSchema);
+      if (!body) return error("Choose the Doxa user to move the installation to.", 400);
+
+      const result = await new GitHubRepository(context.env).transferInstallationOwner({
+        installationRowId,
+        fromUserId: userId,
+        toUserId: body.userId,
+      });
+      if (result === "not_found") return error("Installation not found.", 404);
+      if (result === "target_not_allowed") {
+        return error("You can move an installation only to a member of one of your Doxa teams.", 403);
+      }
+      return json({ ok: true });
     }),
   );
 
@@ -236,6 +328,15 @@ export function createGitHubRoutes(): ApiApp {
       const repos = await new GitHubRepository(context.env).listReposForUser(userId);
       return json({ repositories: repos });
     }),
+  );
+
+  // Reads the repository list from GitHub again, for a repository that no
+  // webhook added. It uses the user's GitHub sign-in, so it spends only their
+  // GitHub budget. A cooldown per installation limits what clicks cost.
+  app.post("/repos/refresh", (context) =>
+    withUser(context, async (userId) =>
+      repositoryRefreshResponse(await GitHubRepositoryRefreshService.fromEnv(context.env).refresh(userId)),
+    ),
   );
 
   // The production branch picker of a new project. Only a repository of the
@@ -331,8 +432,15 @@ function installNonceCookie(env: Pick<Env, "BETTER_AUTH_URL">, value: string, ma
   return `${INSTALL_NONCE_COOKIE}=${value}; Path=${INSTALL_NONCE_COOKIE_PATH}; Max-Age=${maxAgeSeconds}; HttpOnly; SameSite=Lax${secure}`;
 }
 
-function redirectToDashboard(context: ApiContext, outcome: "connected" | "requested"): Response {
-  return redirect(`${getWebOrigin(context.req.raw, context.env)}/dashboard?github=${outcome}`);
+function redirectToDashboard(
+  context: ApiContext,
+  outcome: "connected" | "requested" | "pending",
+  installationId?: string,
+): Response {
+  const url = new URL("/dashboard", getWebOrigin(context.req.raw, context.env));
+  url.searchParams.set("github", outcome);
+  if (installationId) url.searchParams.set("installation_id", installationId);
+  return redirect(url.toString());
 }
 
 function redirect(location: string, setCookies: string[] = []): Response {

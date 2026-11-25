@@ -29,13 +29,15 @@ export const DOXA_CATALOG = defineCatalog({
       },
       limits: {
         "ai.credits_monthly": 0,
-        "docs.branches_per_site": 3,
-        "docs.storage_bytes": 100 * MB,
+        "docs.branches_per_site": 2,
+        "docs.storage_bytes": 20 * MB,
         "site.asset_bytes": 50 * MB,
         "site.asset_files": 200,
         "site.custom_domains": 1,
         "team.seats": 1,
-        "mcp.tool_calls_per_day": 100,
+        // Decided 2026-11-23 (cost limits): the pricing page offers "a docs site" on Free.
+        "account.projects": 1,
+        "mcp.tool_calls_per_day": 10,
         "docs.export_window_hours": 24,
       },
     },
@@ -46,7 +48,7 @@ export const DOXA_CATALOG = defineCatalog({
       enforceCredits: true,
       features: featuresExcept("agents.approval_rules"),
       limits: {
-        "ai.credits_monthly": 5_000,
+        "ai.credits_monthly": 10_000, // 5,000 until 2026-11-24
         "docs.branches_per_site": UNLIMITED,
         "docs.storage_bytes": UNLIMITED,
         // Decided 2026-11-14: Pro site assets are unlimited, like "Unlimited docs storage" on the pricing page.
@@ -54,6 +56,8 @@ export const DOXA_CATALOG = defineCatalog({
         "site.asset_files": UNLIMITED,
         "site.custom_domains": 4,
         "team.seats": UNLIMITED,
+        // Decided 2026-11-23 (cost limits). No number on the pricing page yet.
+        "account.projects": 10,
         "mcp.tool_calls_per_day": UNLIMITED,
         "docs.export_window_hours": 1,
       },
@@ -73,6 +77,7 @@ export const DOXA_CATALOG = defineCatalog({
         "site.asset_files": UNLIMITED,
         "site.custom_domains": UNLIMITED,
         "team.seats": UNLIMITED,
+        "account.projects": UNLIMITED,
         "mcp.tool_calls_per_day": UNLIMITED,
         "docs.export_window_hours": 1,
       },
@@ -91,6 +96,7 @@ export const DOXA_CATALOG = defineCatalog({
         "site.asset_files": UNLIMITED,
         "site.custom_domains": UNLIMITED,
         "team.seats": UNLIMITED,
+        "account.projects": UNLIMITED,
         "mcp.tool_calls_per_day": UNLIMITED,
         "docs.export_window_hours": 0,
       },
@@ -100,8 +106,11 @@ export const DOXA_CATALOG = defineCatalog({
   // `usage` names the usage price that goes into the same Checkout. It has the
   // same interval, because Checkout refuses mixed intervals (section 10.10).
   prices: {
-    pro_monthly_founder_v1: { plan: "pro", interval: "month", amountCents: 15_900, usage: "ai_usage_monthly_v1" },
-    pro_yearly_founder_v1: { plan: "pro", interval: "year", amountCents: 154_800, usage: "ai_usage_yearly_v1" }, // $129 x 12
+    // Founder v1 ($159 / $129 x 12): replaced by v2 on 2026-11-24, before launch.
+    pro_monthly_founder_v1: { plan: "pro", interval: "month", amountCents: 15_900, usage: "ai_usage_monthly_v1", availableForNewCustomers: false },
+    pro_yearly_founder_v1: { plan: "pro", interval: "year", amountCents: 154_800, usage: "ai_usage_yearly_v1", availableForNewCustomers: false },
+    pro_monthly_founder_v2: { plan: "pro", interval: "month", amountCents: 12_900, usage: "ai_usage_monthly_v1" },
+    pro_yearly_founder_v2: { plan: "pro", interval: "year", amountCents: 118_800, usage: "ai_usage_yearly_v1" }, // $99 x 12
     pro_monthly_v1: { plan: "pro", interval: "month", amountCents: 20_900, usage: "ai_usage_monthly_v1" }, // decision D14
     pro_yearly_v1: { plan: "pro", interval: "year", amountCents: 202_800, usage: "ai_usage_yearly_v1" }, // $169 x 12
   },
@@ -117,7 +126,7 @@ export const DOXA_CATALOG = defineCatalog({
     founder_v1: {
       label: "Founder price",
       maxAccounts: 50,
-      prices: { month: "pro_monthly_founder_v1", year: "pro_yearly_founder_v1" },
+      prices: { month: "pro_monthly_founder_v2", year: "pro_yearly_founder_v2" },
       then: { month: "pro_monthly_v1", year: "pro_yearly_v1" },
     },
   },

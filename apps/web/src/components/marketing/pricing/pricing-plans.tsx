@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { DEMO_URL, GET_STARTED_URL, SIGN_IN_URL } from "~/lib/marketing/links"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
+import { DEMO_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 import {
   DEFAULT_BILLING,
   DEFAULT_PRO_OFFER,
@@ -16,17 +17,18 @@ import {
   type PlanAction,
   type PlanPricing,
 } from "~/lib/marketing/pricing"
-import { billingOffersQueryOptions } from "~/lib/queries/billing"
+import { billingOffersQueryOptions, isBillingNotConfigured } from "~/lib/queries/billing"
 import { RichText } from "./rich-text"
 
 /**
- * "Upgrade to Pro" opens sign-in, then Checkout, only when the server takes
- * payments: `GET /billing/offers` answered. Without a payment provider it
- * answers 503 `billing_not_configured`, and the button keeps today's link
- * (get started), so it never leads to a billing error page.
+ * "Start trial" opens sign-up with the trial in the URL, then Checkout. Only when
+ * the API answers that it takes no payments (503 `billing_not_configured`) does the
+ * button fall back to plain sign-up, so it never leads to a billing error page. The
+ * link keeps the trial while the offers load, and when they fail for another reason
+ * (network, CORS), so a quick click never loses it.
  */
 function actionUrl(action: PlanAction, billing: BillingPeriod, paymentsOpen: boolean): string {
-  if (action === "upgrade") return paymentsOpen ? upgradeUrl(billing, SIGN_IN_URL) : GET_STARTED_URL
+  if (action === "upgrade") return paymentsOpen ? upgradeUrl(billing, GET_STARTED_URL) : GET_STARTED_URL
   return action === "contact" ? DEMO_URL : GET_STARTED_URL
 }
 
@@ -34,7 +36,8 @@ function actionUrl(action: PlanAction, billing: BillingPeriod, paymentsOpen: boo
 function useProOffer() {
   const offersQuery = useQuery(billingOffersQueryOptions())
   const live = offersQuery.data?.find((offer) => offer.offerKey === FOUNDER_OFFER_KEY) ?? null
-  return { prices: (live ?? DEFAULT_PRO_OFFER) as OfferPrices, live, paymentsOpen: offersQuery.data !== undefined }
+  const paymentsOpen = !(offersQuery.isError && isBillingNotConfigured(offersQuery.error))
+  return { prices: (live ?? DEFAULT_PRO_OFFER) as OfferPrices, live, paymentsOpen }
 }
 
 function Check() {
@@ -50,7 +53,7 @@ function PlanPrice({ pricing }: { pricing: PlanPricing }) {
     typeof pricing.price === "string" ? (
       <strong>{pricing.price}</strong>
     ) : (
-      <strong className="ph" style={{ fontFamily: "var(--display)", fontSize: 44, color: "#fafafa" }}>
+      <strong className="ph" style={{ fontFamily: "var(--display)", fontSize: 44, color: "var(--heading)" }}>
         {pricing.price.ph}
       </strong>
     )
@@ -105,7 +108,7 @@ function PlanCard({ plan }: { plan: Plan }) {
       {pro && (offer.live?.open ?? true) ? (
         <span
           className="plan__tag chip"
-          style={{ background: "#0a0a0a", color: "#9cc2ff", borderColor: "rgba(61, 123, 255, 0.6)" }}
+          style={{ background: "var(--night)", color: "var(--ice)", borderColor: "rgba(61, 123, 255, 0.6)" }}
         >
           Founder price
         </span>
@@ -146,7 +149,11 @@ function PlanCard({ plan }: { plan: Plan }) {
             </span>
           ))}
         </div>
-        <a className={plan.cta.className} href={actionUrl(plan.cta.action, billing, offer.paymentsOpen)}>
+        <a
+          className={plan.cta.className}
+          href={actionUrl(plan.cta.action, billing, offer.paymentsOpen)}
+          onClick={ctaClickHandler("pricing_plans", plan.cta.action, plan.id)}
+        >
           {plan.cta.label}
         </a>
       </div>

@@ -5,6 +5,7 @@ vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 const { MAX_CLAIMS_PER_CLIENT_IP_PER_HOUR, MAX_CLAIMS_PER_LOGIN_HINT_AND_IP_PER_HOUR, MAX_CLAIMS_PER_LOGIN_HINT_PER_HOUR, MAX_USER_CODE_ATTEMPTS, MAX_ACTIVE_AGENT_TOKENS_PER_USER } =
   await import("../../../src/services/agent-signup/agent-signup-config");
 const { MCP_RESOURCE, OTHER, OTHER_PROJECT, OWNER, OWNER_EMAIL, PROJECT_A, WEB_ORIGIN, harness, registered } = await import("./fakes");
+const { recordingProductAnalytics } = await import("../../support/recording-product-analytics");
 
 const ALL_PROJECTS = { kind: "all" } as const;
 const WRONG_CODE = "000000";
@@ -287,5 +288,21 @@ describe("the claim page", () => {
     const { grant, attemptToken } = await approved(context);
     expect(await context.consent.approve(approval(attemptToken, grant.userCode), OTHER)).toEqual({ kind: "not_found" });
     expect([...context.claims.claims.values()][0]!.approvedUserId).toBe(OWNER);
+  });
+});
+
+describe("mcp_agent_connected", () => {
+  it("reports an approved claim with the client label and the approved scope count, and not a wrong code", async () => {
+    const recording = recordingProductAnalytics();
+    const context = harness({ analytics: recording.analytics });
+    const claim = await registered(context);
+
+    await context.consent.approve(approval(claim.attemptToken, differentCode(claim.grant.userCode)), OWNER);
+    expect(await recording.events()).toEqual([]);
+    await context.consent.approve(approval(claim.attemptToken, claim.grant.userCode, { scopes: ["docs:read", "docs:write"] }), OWNER);
+
+    expect(await recording.events()).toEqual([
+      { kind: "event", event: "mcp_agent_connected", distinctId: OWNER, properties: { client: "Claude Code", scope_count: 2 }, groups: {} },
+    ]);
   });
 });

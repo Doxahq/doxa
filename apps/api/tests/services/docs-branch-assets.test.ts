@@ -24,6 +24,7 @@ import { DocsBranchDiffService } from "../../src/services/docs-branches/branch-d
 import { createMaterializer } from "../../src/services/docs-branches/materialize";
 import { computeSyncPlan } from "../../src/services/docs-branches/sync-plan";
 import { prepareWorkingChanges } from "../../src/services/docs-branches/working-changes";
+import { PlanLimitError } from "@doxahq/billing";
 import { DocsContentError } from "../../src/services/docs-content/errors";
 import type { ImageCompressor } from "../../src/services/site-assets/image-compression";
 import type { SvgCleaner } from "../../src/services/site-assets/image-content";
@@ -69,6 +70,12 @@ async function expectRejection(
 ) {
   await expect(promise).rejects.toBeInstanceOf(DocsContentError);
   await expect(promise).rejects.toMatchObject({ code });
+}
+
+/** The image would take the site over the docs storage of the plan. */
+async function expectStorageLimit(promise: Promise<unknown>) {
+  await expect(promise).rejects.toBeInstanceOf(PlanLimitError);
+  await expect(promise).rejects.toMatchObject({ details: { key: "docs.storage_bytes" } });
 }
 
 describe("image type detection", () => {
@@ -418,10 +425,7 @@ describe("branch image upload", () => {
     const { send } = uploadFixture({ maxDocsStorageBytes: versionBytes + 100 });
 
     await send("first.png", png(60));
-    await expectRejection(
-      send("second.png", png(60)),
-      "storage_quota_exceeded",
-    );
+    await expectStorageLimit(send("second.png", png(60)));
   });
 
   describe("the plan storage covers the whole site", () => {
@@ -454,19 +458,19 @@ describe("branch image upload", () => {
     test("counts the images of every branch", async () => {
       const { sendTo } = await twoBranches(100);
       await sendTo(BRANCH_ID, "first.png", png(60));
-      await expectRejection(sendTo(OTHER_BRANCH, "second.png", png(60)), "storage_quota_exceeded");
+      await expectStorageLimit(sendTo(OTHER_BRANCH, "second.png", png(60)));
     });
 
     test("allows a file that fills the plan exactly and refuses one byte more", async () => {
       const { sendTo } = await twoBranches(100);
       await sendTo(BRANCH_ID, "first.png", png(60));
-      await expectRejection(sendTo(OTHER_BRANCH, "over.png", png(41)), "storage_quota_exceeded");
+      await expectStorageLimit(sendTo(OTHER_BRANCH, "over.png", png(41)));
       await expect(sendTo(OTHER_BRANCH, "fits.png", png(40))).resolves.toBeDefined();
     });
 
     test("measures the published version, not an older base of the branch", async () => {
       const { sendTo } = await twoBranches(10, OLD_VERSION);
-      await expectRejection(sendTo(OTHER_BRANCH, "first.png", png(60)), "storage_quota_exceeded");
+      await expectStorageLimit(sendTo(OTHER_BRANCH, "first.png", png(60)));
     });
 
     test("a deleted branch gives its storage back", async () => {
@@ -480,7 +484,7 @@ describe("branch image upload", () => {
       const { sendTo, registered } = await twoBranches(100);
       await sendTo(BRANCH_ID, "first.png", png(60));
       registered.length = 0;
-      await expectRejection(sendTo(OTHER_BRANCH, "second.png", png(60)), "storage_quota_exceeded");
+      await expectStorageLimit(sendTo(OTHER_BRANCH, "second.png", png(60)));
       expect(registered).toEqual([]);
     });
 
@@ -494,7 +498,7 @@ describe("branch image upload", () => {
     test("refuses when a parallel upload took the last bytes first", async () => {
       const { sendTo, branches, scope } = await twoBranches(100);
       vi.spyOn(branches, "writeChanges").mockResolvedValueOnce("storage_quota_exceeded");
-      await expectRejection(sendTo(BRANCH_ID, "first.png", png(60)), "storage_quota_exceeded");
+      await expectStorageLimit(sendTo(BRANCH_ID, "first.png", png(60)));
       expect(await branches.listChanges(scope)).toEqual([]);
     });
 
@@ -517,8 +521,8 @@ describe("branch image upload", () => {
       await sendTo(BRANCH_ID, "first.png", png(60));
       const versionBytes = await createBranchContentFixture().store.versionSize(BASE_PREFIX);
       await expect(sendTo(OTHER_BRANCH, "second.png", png(60))).rejects.toMatchObject({
-        code: "storage_quota_exceeded",
-        details: { usedBytes: (versionBytes ?? 0) + 60, limitBytes: (versionBytes ?? 0) + 100 },
+        code: "plan_limit",
+        details: { key: "docs.storage_bytes", used: (versionBytes ?? 0) + 60, limit: (versionBytes ?? 0) + 100 },
       });
     });
   });

@@ -1,5 +1,6 @@
 import {
   createProseComponents,
+  ProseTable,
   Tabs,
   TabsContent,
   TabsList,
@@ -57,4 +58,5 @@ export const components = createProseComponents({
  */
 export const elements: ProseElementMap = {
   img: ZoomableImage,
+  table: ProseTable,
 };

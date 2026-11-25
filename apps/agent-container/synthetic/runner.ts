@@ -965,16 +965,12 @@ class SyntheticInternalApi {
     return this.status === "queued" || this.status === "running";
   }
 
-  async createInstallationAccessToken() {
+  async createRepositoryReadToken() {
     this.reporter.log(
       "api.installation_token.created",
       "Issued a local synthetic installation token.",
     );
     return "synthetic-installation-token-never-sent";
-  }
-
-  async createRepositoryReadToken() {
-    return this.createInstallationAccessToken();
   }
 
   async createModelAccessToken() {

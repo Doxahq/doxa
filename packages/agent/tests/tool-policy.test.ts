@@ -8,6 +8,7 @@ import {
 } from "../src/core";
 import { globTool } from "../src/core/tools/glob";
 import { grepTool } from "../src/core/tools/grep";
+import { unwrapUntrustedRepositoryContent } from "../src/core/untrusted-content";
 import type { AgentToolPolicy } from "../src/types";
 
 const runCommand = vi.hoisted(() => vi.fn());
@@ -201,9 +202,9 @@ describe("repository search policy", () => {
       ),
     );
 
-    await expect(
-      globTool(project).execute({ pattern: "**/*.ts" }),
-    ).resolves.toBe("src/included.ts");
+    expect(
+      unwrapUntrustedRepositoryContent(await globTool(project).execute({ pattern: "**/*.ts" })),
+    ).toBe("src/included.ts");
   });
 });
 

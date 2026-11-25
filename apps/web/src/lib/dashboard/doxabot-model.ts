@@ -1,6 +1,10 @@
-import type {
-  DoxabotSettingsDto,
-  DoxabotUnavailableReason,
+import {
+  DOXABOT_ALLOWED_BOT_LOGINS_LIMIT,
+  doxabotBotLoginSchema,
+  normalizeBotLogin,
+  type DoxabotAutomationWarning,
+  type DoxabotSettingsDto,
+  type DoxabotUnavailableReason,
 } from "@doxahq/contracts"
 
 export type DoxabotViewKind =
@@ -52,12 +56,13 @@ const unavailableContent: Record<
     description:
       "Run and publish the first documentation generation before enabling pull request previews.",
   },
+  // The API still sends this reason while public repositories are switched
+  // off in production.
   public_repository_disabled: {
-    statusLabel: "Private only",
+    statusLabel: "Unavailable",
     statusTone: "muted",
-    title: "Public repositories are not supported yet",
-    description:
-      "Doxabot is currently limited to private repositories. Public repository support can be enabled in a future rollout.",
+    title: "Not available yet",
+    description: "Doxabot is not available for public repositories yet.",
   },
   repository_not_connected: {
     statusLabel: "Repository required",
@@ -122,6 +127,20 @@ export function getDoxabotViewModel(
         }
   }
 
+  if (
+    settings.unavailableReason === "repository_not_connected"
+    && isRepositoryConnectionWarning(settings.automationWarning)
+  ) {
+    return {
+      kind: settings.unavailableReason,
+      statusLabel: "Stopped",
+      statusTone: "warning",
+      title: "Doxabot lost access to the repository",
+      description: "The notice at the top of this page says what happened and how to fix it.",
+      ...action,
+    }
+  }
+
   return {
     kind: settings.unavailableReason,
     ...unavailableContent[settings.unavailableReason],
@@ -147,4 +166,93 @@ function getAction(
         nextEnabled: true,
         actionDisabled: isSaving || !settings.available,
       }
+}
+
+export interface DoxabotAutomationNotice {
+  warning: DoxabotAutomationWarning
+  title: string
+  description: string
+}
+
+const SITE_STAYS_LIVE = "Your site stays live with the docs that are published now."
+
+const automationNoticeContent: Record<
+  DoxabotAutomationWarning,
+  Omit<DoxabotAutomationNotice, "warning">
+> = {
+  repository_privatized: {
+    title: "The repository is now private",
+    description: `Doxabot turned off pull request previews and set merge updates to manual. ${SITE_STAYS_LIVE} Change a setting below to start updates again.`,
+  },
+  repository_removed: {
+    title: "The repository was removed from the GitHub App",
+    description: `Doxabot cannot read the repository, so updates stopped. ${SITE_STAYS_LIVE} Add the repository to the doxabot GitHub App again to start updates.`,
+  },
+  repository_deleted: {
+    title: "The repository was deleted on GitHub",
+    description: `Updates stopped because the repository is gone. ${SITE_STAYS_LIVE} Connect a repository to update the docs again.`,
+  },
+  installation_suspended: {
+    title: "The GitHub App is suspended",
+    description: `The doxabot GitHub App was suspended on GitHub, so updates stopped. ${SITE_STAYS_LIVE} Unsuspend the app in your GitHub settings to start updates.`,
+  },
+  installation_deleted: {
+    title: "The GitHub App was uninstalled",
+    description: `The doxabot GitHub App was removed from GitHub, so updates stopped. ${SITE_STAYS_LIVE} Install the app again to start updates.`,
+  },
+}
+
+/** What stopped Doxabot, as text for the page banner. Null when nothing did. */
+export function getDoxabotAutomationNotice(
+  settings: DoxabotSettingsDto | null,
+): DoxabotAutomationNotice | null {
+  const warning = settings?.automationWarning ?? null
+  if (!warning) return null
+  return { warning, ...automationNoticeContent[warning] }
+}
+
+/**
+ * True when the repository link itself is broken (not only made private). The
+ * previews card then points to the banner, not to "Connect a repository".
+ */
+export function isRepositoryConnectionWarning(
+  warning: DoxabotAutomationWarning | null | undefined,
+): boolean {
+  return Boolean(warning) && warning !== "repository_privatized"
+}
+
+export type AddBotLoginResult =
+  | { ok: true; logins: string[] }
+  | { ok: false; error: string }
+
+/**
+ * Adds a bot login to the list. It refuses a name that is not a GitHub login,
+ * a name already in the list (with or without `[bot]`), and a full list.
+ */
+export function addAllowedBotLogin(
+  logins: readonly string[],
+  input: string,
+): AddBotLoginResult {
+  const parsed = doxabotBotLoginSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Enter a GitHub login." }
+  }
+  const login = parsed.data
+  const key = normalizeBotLogin(login)
+  if (logins.some((existing) => normalizeBotLogin(existing) === key)) {
+    return { ok: false, error: `${login} is already in the list.` }
+  }
+  if (logins.length >= DOXABOT_ALLOWED_BOT_LOGINS_LIMIT) {
+    return { ok: false, error: `You can allow up to ${DOXABOT_ALLOWED_BOT_LOGINS_LIMIT} bots.` }
+  }
+  return { ok: true, logins: [...logins, login] }
+}
+
+/** Removes a bot login, matched without case and without `[bot]`. */
+export function removeAllowedBotLogin(
+  logins: readonly string[],
+  login: string,
+): string[] {
+  const key = normalizeBotLogin(login)
+  return logins.filter((existing) => normalizeBotLogin(existing) !== key)
 }

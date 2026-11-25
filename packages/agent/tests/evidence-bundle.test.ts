@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { ProjectPathAccessError } from "../src/core/tools/project-path";
 import { buildPageEvidenceBundle } from "../src/doxa-agent/evidence-bundle";
+import { unwrapUntrustedRepositoryContent } from "../src/core/untrusted-content";
 import type {
   DocPage,
   ProjectAnalysis,
@@ -425,7 +426,8 @@ function evidenceContentChars(context: string): number {
   return context
     .split("\n\n---\n\n")
     .reduce((total, section) => {
+      // Title, path, blank line, then the excerpt inside its untrusted-data block.
       const lines = section.split("\n");
-      return total + lines.slice(3).join("\n").length;
+      return total + unwrapUntrustedRepositoryContent(lines.slice(3).join("\n")).length;
     }, 0);
 }

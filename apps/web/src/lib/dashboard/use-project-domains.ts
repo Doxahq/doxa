@@ -9,6 +9,8 @@ import {
   removeDomain,
   replaceDomain,
 } from "~/lib/dashboard/cache"
+import { showPlanLimit } from "~/lib/dashboard/billing-denials"
+import { planLimitDetails } from "~/lib/dashboard/billing-model"
 import { hasReachedCustomDomainLimit } from "~/lib/dashboard/domain-limit"
 import { getPendingMutationId } from "~/lib/dashboard/mutation-state"
 import { getErrorMessage } from "~/lib/errors"
@@ -108,7 +110,10 @@ export function useProjectDomains(projectId: string) {
   const errors = [
     validationError,
     domainsQuery.error ? getErrorMessage(domainsQuery.error, "Failed to load docs domains.") : null,
-    createMutation.error ? getErrorMessage(createMutation.error, "Failed to add docs domain.") : null,
+    // The plan limit dialog explains a 403 plan_limit: no second message here.
+    createMutation.error && !planLimitDetails(createMutation.error)
+      ? getErrorMessage(createMutation.error, "Failed to add docs domain.")
+      : null,
     refreshMutation.error ? getErrorMessage(refreshMutation.error, "Failed to refresh docs domain.") : null,
   ]
 
@@ -117,12 +122,18 @@ export function useProjectDomains(projectId: string) {
   const isDomainLimitReached = domainsQuery.isSuccess
     && hasReachedCustomDomainLimit(domains, customDomainLimit)
   const canAddDomain = domainsQuery.isSuccess && !isDomainLimitReached
+  const customDomainCount = domains.filter((domain) => domain.kind === "custom_domain").length
+
+  function showDomainLimit() {
+    showPlanLimit("site.custom_domains", customDomainLimit, customDomainCount)
+  }
 
   return {
     domains,
     customDomainLimit,
     canAddDomain,
     isDomainLimitReached,
+    showDomainLimit,
     hostname,
     setHostname,
     addDomain,

@@ -1,6 +1,6 @@
 import type { CreateDocsBranchInput } from "@doxahq/contracts/docs-branches";
 import { z } from "zod";
-import { DocsBranchValidationError } from "@doxahq/api/services/docs-branches/management";
+import { PlanLimitError } from "@doxahq/api/services/billing/mcp-billing";
 import { HintedToolError } from "../../errors";
 import { defineMcpTool, type ToolContext } from "../../tool-definition";
 import { projectIdInput, writeAnnotations } from "../shared";
@@ -71,13 +71,13 @@ async function withBranchLimitHint(
   );
   return new HintedToolError(
     error,
-    `Existing branches: ${names.join(", ")}. Reuse one of them, or ask the user to erase one in the dashboard.`,
+    `Existing branches: ${names.join(", ")}. Reuse one of them, or ask the user to erase one or upgrade the plan in the Doxa dashboard.`,
   );
 }
 
 function isBranchLimitError(error: unknown): boolean {
   return (
-    error instanceof DocsBranchValidationError &&
-    error.issues.some((issue) => issue.code === "branch_limit_reached")
+    error instanceof PlanLimitError &&
+    error.details.key === "docs.branches_per_site"
   );
 }

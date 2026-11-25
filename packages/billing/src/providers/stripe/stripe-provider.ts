@@ -45,6 +45,7 @@ import {
   META_ACCOUNT,
   META_MANAGED,
   META_PORTAL,
+  META_POSTHOG_PERSON,
   META_PRICE_KEY,
   METER_CUSTOMER_KEY,
   METER_EVENT_MAX_AGE_MS,
@@ -64,6 +65,7 @@ import {
   isThresholdInvoice,
   mapInvoice,
   mapSubscription,
+  planInvoiceRef,
   planSwitchPreviewOf,
   productPlanOf,
   stripeCustomer,
@@ -146,7 +148,7 @@ export class StripeBillingProvider implements BillingProvider {
         {
           ...(input.email ? { email: input.email } : {}),
           ...(input.name ? { name: input.name } : {}),
-          metadata: { [META_ACCOUNT]: input.accountId, [META_MANAGED]: "true" },
+          metadata: { [META_ACCOUNT]: input.accountId, [META_MANAGED]: "true", ...personMetadata(input) },
         },
         { idempotencyKey: input.idempotencyKey },
       );
@@ -155,13 +157,15 @@ export class StripeBillingProvider implements BillingProvider {
   }
 
   /**
-   * Sets the account's current email and name on a customer that has others.
-   * Checkout shows the customer's email locked, so it must be the owner's
-   * email of today. A null value leaves the field as it is.
+   * Sets the account's current email, name and owner ID on a customer that
+   * has others. Checkout shows the customer's email locked, so it must be the
+   * owner's email of today. A null value leaves the field as it is.
    */
   private async syncContact(customer: Stripe.Customer, input: EnsureCustomerInput): Promise<ProviderCustomerRef> {
-    const changes = contactChanges({ email: customer.email, name: customer.name ?? null }, input);
-    if (changes) await this.stripe.customers.update(customer.id, changes);
+    const contact = contactChanges({ email: customer.email, name: customer.name ?? null }, input);
+    // A customer made before the analytics join, or after an owner change, gets the owner's ID too.
+    const person = personMetadataChange(customer, input);
+    if (contact || person) await this.stripe.customers.update(customer.id, { ...contact, ...(person ? { metadata: person } : {}) });
     return stripeCustomer(customer.id);
   }
 
@@ -428,8 +432,10 @@ export class StripeBillingProvider implements BillingProvider {
         const customer = customerRefOf(event.data.object.customer);
         return customer ? { ...base, type: "customer.changed", customer } : ignored;
       }
-      case "checkout.session.expired":
-        return { ...base, type: "checkout.expired", checkoutId: event.data.object.id };
+      case "checkout.session.expired": {
+        const session = event.data.object;
+        return { ...base, type: "checkout.expired", checkoutId: session.id, accountId: session.client_reference_id ?? session.metadata?.[META_ACCOUNT] ?? null };
+      }
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted":
@@ -454,7 +460,8 @@ export class StripeBillingProvider implements BillingProvider {
           return { ...base, type: event.type === "invoice.paid" ? "usage_invoice.paid" : "usage_invoice.failed", invoice: usageInvoiceRef(invoice, customerId) };
         }
         // A subscription invoice: the state (first paid invoice, past due) comes from a fresh fetch.
-        return { ...base, type: "customer.changed", customer: stripeCustomer(customerId) };
+        const invoiceRef = planInvoiceRef(invoice, event.type === "invoice.paid" ? "paid" : "failed");
+        return { ...base, type: "customer.changed", customer: stripeCustomer(customerId), invoice: invoiceRef };
       }
       case "charge.refunded":
         return this.refundEvent(base, event.data.object);
@@ -716,6 +723,17 @@ const PLAN_SWITCH_PRORATION = "create_prorations" as const;
 type PlanSwitchItem = { readonly id: string; readonly price: string } | { readonly id: string; readonly deleted: true } | { readonly price: string };
 
 /** Escapes a value for a Stripe search query string literal. */
+/** `metadata.posthog_person_distinct_id`, when the input names the owner. */
+function personMetadata(input: EnsureCustomerInput): Record<string, string> {
+  return input.personDistinctId ? { [META_POSTHOG_PERSON]: input.personDistinctId } : {};
+}
+
+/** The person metadata to set on an existing customer, or null when it already holds it. */
+function personMetadataChange(customer: Stripe.Customer, input: EnsureCustomerInput): Record<string, string> | null {
+  if (!input.personDistinctId || customer.metadata?.[META_POSTHOG_PERSON] === input.personDistinctId) return null;
+  return personMetadata(input);
+}
+
 function escapeSearch(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }

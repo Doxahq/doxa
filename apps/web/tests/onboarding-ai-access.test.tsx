@@ -120,6 +120,33 @@ describe("Doxa Agent access", () => {
     expect(screen.getByText("loading")).toBeTruthy()
     await waitFor(() => expect(screen.getByText("open")).toBeTruthy())
   })
+
+  // The workspace menu enables the same query once the page settles. A failed
+  // read has no data, so its new fetch is `pending` again: the card must not
+  // turn back into its skeleton.
+  test("the hook stays open while a failed read runs again", async () => {
+    billingApi.listBillingAccounts.mockRejectedValue(new ApiRequestError("Billing is not configured", 503, "billing_not_configured"))
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const seen: string[] = []
+    function Probe() {
+      const kind = useNewProjectAiAccess({ teamId: null }).kind
+      seen.push(kind)
+      return <span>{kind}</span>
+    }
+    render(withClient(<Probe />, client))
+    await waitFor(() => expect(screen.getByText("open")).toBeTruthy())
+    seen.length = 0
+    let finishRefetch: () => void = () => {}
+    billingApi.listBillingAccounts.mockImplementation(
+      () => new Promise((_, reject) => (finishRefetch = () => reject(new ApiRequestError("Billing is not configured", 503, "billing_not_configured")))),
+    )
+    const refetch = client.refetchQueries({ queryKey: ["billing"] })
+    await waitFor(() => expect(client.isFetching()).toBeGreaterThan(0))
+    finishRefetch()
+    await refetch
+    expect(screen.getByText("open")).toBeTruthy()
+    expect(seen).not.toContain("loading")
+  })
 })
 
 describe("onboarding start card", () => {

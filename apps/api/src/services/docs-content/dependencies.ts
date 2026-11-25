@@ -1,5 +1,6 @@
 import type { Env } from "../../env";
 import { DocsBranchesRepository } from "../../repositories/docs-branches";
+import { productAnalyticsOf } from "../analytics/product-analytics";
 import { planSeamsFromEnv } from "../billing/plan-seams";
 import { createR2SiteAssetStore } from "../site-assets/store";
 import { createR2DocsContentStore, type R2DocsReadOptions } from "./store";
@@ -14,5 +15,6 @@ export function createDocsContentDependencies(
     branches: new DocsBranchesRepository(env),
     entitlements: planSeamsFromEnv(env).entitlements,
     assets: createR2SiteAssetStore(env.DOCS_BUCKET),
+    analytics: productAnalyticsOf(env),
   };
 }

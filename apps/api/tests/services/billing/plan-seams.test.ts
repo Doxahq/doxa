@@ -67,7 +67,7 @@ describe("BILLING_ENFORCEMENT=shadow", () => {
     await expect(seams.searchPolicy.getSearchPolicy(PROJECT)).resolves.toEqual(PAID_PLAN_SEARCH_POLICY);
     await expect(seams.storageLimits.getStorageLimits(PROJECT)).resolves.toEqual(FREE_PLAN_STORAGE_LIMITS);
     expect(denials).toEqual([
-      { key: "docs.branches_per_site", limit: 3, current: 10, mode: "shadow", kind: "stricter_limit", plan: "free", projectId: PROJECT },
+      { key: "docs.branches_per_site", limit: 2, current: 10, mode: "shadow", kind: "stricter_limit", plan: "free", projectId: PROJECT },
       { key: "site.typesense_search", limit: false, current: true, mode: "shadow", kind: "stricter_limit", plan: "free", projectId: PROJECT },
     ]);
   });
@@ -104,7 +104,7 @@ describe("BILLING_ENFORCEMENT=shadow", () => {
 describe("BILLING_ENFORCEMENT=on", () => {
   test("a Free account gets the Free plan values", async () => {
     const { seams, denials } = setup("on");
-    await expect(seams.entitlements.getProjectEntitlements(PROJECT)).resolves.toEqual({ removePoweredBy: false, maxBranchesPerSite: 3 });
+    await expect(seams.entitlements.getProjectEntitlements(PROJECT)).resolves.toEqual({ removePoweredBy: false, maxBranchesPerSite: 2 });
     await expect(seams.entitlements.getSearchPolicy(PROJECT)).resolves.toEqual(FREE_PLAN_SEARCH_POLICY);
     await expect(seams.storageLimits.getStorageLimits(PROJECT)).resolves.toEqual(FREE_PLAN_STORAGE_LIMITS);
     expect(denials).toEqual([]);
@@ -138,7 +138,7 @@ describe("BILLING_ENFORCEMENT=on", () => {
     harness.billing.projects.set("team-project", { userId: OWNER, teamId: TEAM });
     await subscribePro(harness, "team", TEAM);
     await expect(seams.entitlements.getProjectEntitlements("team-project")).resolves.toMatchObject({ maxBranchesPerSite: 1000 });
-    await expect(seams.entitlements.getProjectEntitlements(PROJECT)).resolves.toMatchObject({ maxBranchesPerSite: 3 });
+    await expect(seams.entitlements.getProjectEntitlements(PROJECT)).resolves.toMatchObject({ maxBranchesPerSite: 2 });
   });
 
   test("team seats: a Free team cannot add a member; a Pro team can", async () => {
@@ -164,5 +164,64 @@ describe("BILLING_ENFORCEMENT=on", () => {
     await seams.entitlements.getSearchPolicy(PROJECT);
     await seams.storageLimits.getStorageLimits(PROJECT);
     expect(reads).toBe(1);
+  });
+});
+
+describe("account.projects at project create", () => {
+  const NEW_USER = "user-2";
+  const MEMBER_OF_TEAM = "user-3";
+
+  test("off: no count, no billing", async () => {
+    const { seams, builds } = setup("off");
+    expect(seams.projectLimit.active).toBe(false);
+    await expect(seams.projectLimit.assertProjectAvailable({ userId: OWNER, teamId: null })).resolves.toBeUndefined();
+    expect(builds()).toBe(0);
+  });
+
+  test("on: a Free account gets one project; the second is refused with the account and plan", async () => {
+    const { harness, seams, denials } = setup("on");
+    await expect(seams.projectLimit.assertProjectAvailable({ userId: NEW_USER, teamId: null })).resolves.toBeUndefined();
+
+    harness.billing.projects.set("new-user-project", { userId: NEW_USER });
+    const account = await harness.core.accounts.accountForOwner("user", NEW_USER);
+    const refused = seams.projectLimit.assertProjectAvailable({ userId: NEW_USER, teamId: null });
+    await expect(refused).rejects.toBeInstanceOf(PlanLimitError);
+    await expect(refused).rejects.toMatchObject({
+      details: { key: "account.projects", limit: 1, used: 1, accountId: account.id, plan: "free" },
+    });
+    expect(denials).toEqual([
+      expect.objectContaining({ key: "account.projects", mode: "on", kind: "denied", plan: "free", accountId: account.id, limit: 1, used: 1 }),
+    ]);
+  });
+
+  test("on: Pro allows 10 projects", async () => {
+    const { harness, seams } = setup("on");
+    await subscribePro(harness, "user", OWNER);
+    for (let index = 0; index < 7; index += 1) harness.billing.projects.set(`pro-${index}`, { userId: OWNER });
+    // 2 from setup + 7 = 9: the tenth fits.
+    await expect(seams.projectLimit.assertProjectAvailable({ userId: OWNER, teamId: null })).resolves.toBeUndefined();
+    harness.billing.projects.set("pro-9", { userId: OWNER });
+    await expect(seams.projectLimit.assertProjectAvailable({ userId: OWNER, teamId: null })).rejects.toMatchObject({
+      details: { key: "account.projects", limit: 10, used: 10 },
+    });
+  });
+
+  test("on: a team project counts against the team's account, not the user's", async () => {
+    const { harness, seams } = setup("on");
+    // The owner's personal account is full (2 projects on Free); the team has none.
+    await expect(seams.projectLimit.assertProjectAvailable({ userId: OWNER, teamId: TEAM })).resolves.toBeUndefined();
+    harness.billing.projects.set("team-project", { userId: MEMBER_OF_TEAM, teamId: TEAM });
+    await expect(seams.projectLimit.assertProjectAvailable({ userId: OWNER, teamId: TEAM })).rejects.toMatchObject({
+      details: { key: "account.projects", used: 1 },
+    });
+    await expect(seams.projectLimit.assertProjectAvailable({ userId: OWNER, teamId: null })).rejects.toMatchObject({
+      details: { key: "account.projects", used: 2 },
+    });
+  });
+
+  test("shadow: logs the denial and allows the project", async () => {
+    const { seams, denials } = setup("shadow");
+    await expect(seams.projectLimit.assertProjectAvailable({ userId: OWNER, teamId: null })).resolves.toBeUndefined();
+    expect(denials).toEqual([expect.objectContaining({ key: "account.projects", mode: "shadow", kind: "denied", used: 2 })]);
   });
 });

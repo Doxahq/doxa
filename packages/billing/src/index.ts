@@ -127,6 +127,9 @@ export {
   type ExportQuotaStatus,
 } from "./quotas/export-quota";
 
+// Types only: the API's analytics adapter implements this port; the payments live in `/payments`.
+export type { AccountSubscriptionSnapshot, BillingLifecycleEvents, SubscriptionLifecycleChange } from "./lifecycle-events";
+
 export { BillingNotConfiguredError, NOT_TRIALING, PAYMENT_FAILED, ProviderRejectedError, ProviderSignatureError, ProviderUnavailableError } from "./provider/errors";
 export * from "./provider/provider";
 

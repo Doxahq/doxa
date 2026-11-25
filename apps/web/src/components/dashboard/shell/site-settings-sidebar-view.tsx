@@ -103,7 +103,7 @@ export function SiteSettingsSidebarView({ projectId }: { projectId: string }) {
         <div className="grid grid-cols-[32px_minmax(0,1fr)] items-center gap-2.5 rounded-lg border border-border bg-card p-2.5">
           <span
             aria-hidden="true"
-            className="grid size-8 place-items-center font-mono text-sm font-bold text-foreground"
+            className="grid size-8 place-items-center font-mono text-sm font-bold text-monogram-foreground"
             style={{ backgroundColor: monogramColor }}
           >
             {siteName.trim().charAt(0).toUpperCase() || "?"}

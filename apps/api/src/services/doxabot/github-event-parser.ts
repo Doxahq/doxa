@@ -1,7 +1,9 @@
 import type {
+  InstallationLifecycleAction,
   NormalizedRepositoryLifecycleEvent,
   NormalizedSourceControlEvent,
   RepositoryLifecycleAction,
+  RepositoryLifecycleChange,
   SourceControlEventParseResult,
   SourceControlIrrelevantReason,
   SourceRepository,
@@ -11,20 +13,29 @@ import { z } from "zod";
 const githubIdSchema = z.number().int().positive();
 const gitObjectIdSchema = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 
+/** Names are optional: only lifecycle events use them, and GitHub always sends them. */
+const githubRepositoryNamesSchema = {
+  name: z.string().min(1).optional(),
+  full_name: z.string().min(1).optional(),
+  owner: z.object({ login: z.string().min(1) }).optional(),
+};
+
 const githubRepositorySchema = z.object({
   id: githubIdSchema,
   private: z.boolean(),
   default_branch: z.string().min(1),
+  ...githubRepositoryNamesSchema,
 });
 
 /**
  * The short repository object of `installation` and
- * `installation_repositories` events: no default branch.
+ * `installation_repositories` events: no default branch and no owner.
  */
 const githubRepositoryReferenceSchema = z.object({
   id: githubIdSchema,
   private: z.boolean(),
   default_branch: z.string().min(1).optional(),
+  ...githubRepositoryNamesSchema,
 });
 
 const githubInstallationSchema = z.object({
@@ -35,6 +46,8 @@ const githubUserSchema = z.object({
   id: githubIdSchema,
   login: z.string().min(1),
   avatar_url: z.url().nullable(),
+  /** `User`, `Bot` or `Organization`. */
+  type: z.string().optional(),
 });
 
 const pullRequestActionSchema = z.enum([
@@ -56,7 +69,10 @@ const pullRequestPayloadSchema = z.object({
   action: pullRequestActionSchema,
   number: z.number().int().positive(),
   installation: githubInstallationSchema,
-  repository: githubRepositorySchema,
+  repository: githubRepositorySchema.extend({
+    /** The repository size in KB. A bad value is dropped, not refused. */
+    size: z.number().int().nonnegative().optional().catch(undefined),
+  }),
   /** On "edited": what changed. `base` is set when the target branch moved. */
   changes: z.object({ base: z.unknown().optional() }).passthrough().optional(),
   pull_request: z.object({
@@ -74,20 +90,8 @@ const pullRequestPayloadSchema = z.object({
       // Null when the fork was deleted.
       repo: z.object({ id: githubIdSchema }).nullable().optional(),
     }),
-    author_association: z.string().optional(),
   }),
 });
-
-/**
- * Authors whose pull requests from a fork may start a generation (SEC-026).
- * Anyone can open a pull request from a fork of a public repository; only
- * people the repository already trusts may spend Doxa's model budget.
- */
-const TRUSTED_FORK_AUTHOR_ASSOCIATIONS: ReadonlySet<string> = new Set([
-  "OWNER",
-  "MEMBER",
-  "COLLABORATOR",
-]);
 
 const pushPayloadSchema = z.object({
   ref: z.string().min(1),
@@ -147,7 +151,8 @@ const installationEnvelopeSchema = z.object({
 const installationPayloadSchema = z.object({
   action: installationActionSchema,
   installation: githubInstallationSchema,
-  repositories: z.array(githubRepositoryReferenceSchema).default([]),
+  /** The GitHub user who acted. On `created`, the user who installed the app. */
+  sender: z.object({ id: githubIdSchema, login: z.string().min(1) }).optional(),
 });
 
 const repositoryActionMap: Record<
@@ -167,13 +172,13 @@ const repositoryActionMap: Record<
 
 const installationActionMap: Record<
   z.infer<typeof installationActionSchema>,
-  RepositoryLifecycleAction
+  InstallationLifecycleAction
 > = {
-  created: "connected",
-  deleted: "disconnected",
-  new_permissions_accepted: "updated",
-  suspend: "disconnected",
-  unsuspend: "connected",
+  created: "created",
+  deleted: "deleted",
+  new_permissions_accepted: "permissions_accepted",
+  suspend: "suspended",
+  unsuspend: "unsuspended",
 };
 
 export interface ParseGitHubEventInput {
@@ -220,15 +225,12 @@ function parsePullRequest(
   if (payload.action === "edited" && payload.changes?.base === undefined) {
     return irrelevant("unsupported_action");
   }
-  // GitHub always sends head.repo; null means a deleted fork.
+  // GitHub always sends head.repo; null means a deleted fork. Doxabot
+  // previews no pull request from a fork, whoever opened it (Decision 3).
+  // The event still goes on: a merged fork pull request feeds the merge
+  // trigger, and the orchestrator stops a preview made before this rule.
   const headRepo = payload.pull_request.head.repo;
   const fromFork = headRepo === null || (headRepo !== undefined && headRepo.id !== payload.repository.id);
-  if (
-    fromFork &&
-    !TRUSTED_FORK_AUTHOR_ASSOCIATIONS.has(payload.pull_request.author_association ?? "")
-  ) {
-    return irrelevant("untrusted_fork");
-  }
 
   return normalized({
     kind: "change_proposal",
@@ -248,6 +250,9 @@ function parsePullRequest(
             avatarUrl: payload.pull_request.user.avatar_url,
           }
         : null,
+      authorIsBot: payload.pull_request.user?.type === "Bot",
+      fromFork,
+      ...(payload.repository.size !== undefined ? { repositorySizeKb: payload.repository.size } : {}),
       draft: payload.pull_request.draft,
       merged: payload.pull_request.merged,
       baseRef: payload.pull_request.base.ref,
@@ -296,6 +301,7 @@ function parseRepository(
     toRepositoryLifecycleEvent({
       deliveryId: input.deliveryId,
       action: repositoryActionMap[parsed.data.action],
+      change: parsed.data.action,
       repository: parsed.data.repository,
       installationId: parsed.data.installation.id,
     }),
@@ -334,6 +340,7 @@ function parseInstallationRepositories(
       toRepositoryLifecycleEvent({
         deliveryId: input.deliveryId,
         action,
+        change: parsed.data.action,
         repository,
         installationId: parsed.data.installation.id,
       }),
@@ -352,39 +359,51 @@ function parseInstallation(
 
   const parsed = installationPayloadSchema.safeParse(input.payload);
   if (!parsed.success) return malformed();
-  if (parsed.data.repositories.length === 0) {
-    return irrelevant("no_repository_changes");
-  }
 
-  return normalized(
-    ...parsed.data.repositories.map((repository) =>
-      toRepositoryLifecycleEvent({
-        deliveryId: input.deliveryId,
-        action: installationActionMap[parsed.data.action],
-        repository,
-        installationId: parsed.data.installation.id,
-      }),
-    ),
-  );
+  // One event for the whole installation: a suspend or an uninstall applies
+  // to every repository, also when GitHub does not list them.
+  const { sender } = parsed.data;
+  return normalized({
+    kind: "installation_lifecycle",
+    deliveryId: input.deliveryId,
+    provider: "github",
+    installationExternalId: String(parsed.data.installation.id),
+    action: installationActionMap[parsed.data.action],
+    // Only the sender of `created` is kept: that user installed the app, and
+    // only that user can claim an organization installation (Decision 6).
+    ...(parsed.data.action === "created" && sender
+      ? { sender: { externalId: String(sender.id), login: sender.login } }
+      : {}),
+  });
 }
 
 function toRepositoryLifecycleEvent(input: {
   deliveryId: string;
   action: RepositoryLifecycleAction;
+  change: RepositoryLifecycleChange;
   repository: z.infer<typeof githubRepositoryReferenceSchema>;
   installationId: number;
 }): NormalizedRepositoryLifecycleEvent {
-  const { default_branch: defaultBranch } = input.repository;
+  const {
+    default_branch: defaultBranch,
+    full_name: fullName,
+    name,
+    owner,
+  } = input.repository;
   return {
     kind: "repository_lifecycle",
     deliveryId: input.deliveryId,
     action: input.action,
+    change: input.change,
     repository: {
       provider: "github",
       externalId: String(input.repository.id),
       installationExternalId: String(input.installationId),
       visibility: input.repository.private ? "private" : "public",
       ...(defaultBranch ? { defaultBranch } : {}),
+      ...(fullName ? { fullName } : {}),
+      ...(owner ? { owner: owner.login } : {}),
+      ...(name ? { name } : {}),
     },
   };
 }

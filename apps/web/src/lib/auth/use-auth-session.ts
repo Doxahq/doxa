@@ -1,5 +1,6 @@
 import { authClient } from "@doxahq/auth/client"
 
+import { resetAnalyticsPerson } from "~/lib/analytics/browser-analytics"
 import { DEFAULT_REDIRECT_PATH } from "~/lib/auth/safe-redirect"
 
 export type SignInProvider = "google" | "github"
@@ -19,6 +20,8 @@ export async function signIn(
   if (error) throw new Error(error.message || "Sign-in could not start.")
 }
 
+/** Signs out, and gives analytics a new anonymous ID so the next person here is not linked to this one. */
 export async function signOut(): Promise<void> {
+  resetAnalyticsPerson()
   await authClient.signOut()
 }

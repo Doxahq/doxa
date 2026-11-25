@@ -29,7 +29,7 @@ async function customerOf(billing: TestBilling, accountId: string): Promise<Prov
 /** A founder who paid (claimed slot), then cancelled. */
 async function lapsedFounder(billing: TestBilling, owner: string) {
   const account = await billing.accounts.accountForOwner("user", owner);
-  const link = await billing.payments.createCheckout({ accountId: account.id, priceKey: "pro_monthly_founder_v1", requestId: "r1" });
+  const link = await billing.payments.createCheckout({ accountId: account.id, priceKey: "pro_monthly_founder_v2", requestId: "r1" });
   billing.provider.completeCheckout(link.checkoutId);
   await billing.deliverWebhooks();
   const customer = await customerOf(billing, account.id);
@@ -45,7 +45,7 @@ describe("M1: a founder who cancelled pays the price of that day", () => {
   it("refuses the founder price again once the offer is full", async () => {
     const billing = createTestBilling({ catalog: smallOffer(1) });
     const { account } = await lapsedFounder(billing, "a");
-    const error = await billing.payments.createCheckout({ accountId: account.id, priceKey: "pro_monthly_founder_v1", requestId: "r2" }).catch((caught: unknown) => caught);
+    const error = await billing.payments.createCheckout({ accountId: account.id, priceKey: "pro_monthly_founder_v2", requestId: "r2" }).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(OfferClosedError);
     expect(error).toMatchObject({ newPriceKey: "pro_monthly_v1" });
     // The claimed slot stays claimed: the offer means "the first N paying customers".
@@ -55,8 +55,8 @@ describe("M1: a founder who cancelled pays the price of that day", () => {
   it("gives the founder price again while the offer still has room, without a second slot", async () => {
     const billing = createTestBilling({ catalog: smallOffer(2) });
     const { account } = await lapsedFounder(billing, "a");
-    const link = await billing.payments.createCheckout({ accountId: account.id, priceKey: "pro_monthly_founder_v1", requestId: "r2" });
-    expect(billing.provider.checkoutRow(link.checkoutId)?.priceKey).toBe("pro_monthly_founder_v1");
+    const link = await billing.payments.createCheckout({ accountId: account.id, priceKey: "pro_monthly_founder_v2", requestId: "r2" });
+    expect(billing.provider.checkoutRow(link.checkoutId)?.priceKey).toBe("pro_monthly_founder_v2");
     expect((await billing.offers.describe("founder_v1")).slotsLeft).toBe(1);
   });
 });
@@ -247,12 +247,12 @@ describe("founder cap: a lapsed hold whose payment is coming keeps counting", ()
     const billing = createTestBilling({ catalog: smallOffer(1) });
     const a = await billing.accounts.accountForOwner("user", "a");
     const b = await billing.accounts.accountForOwner("user", "b");
-    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v1", requestId: "r1" });
+    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v2", requestId: "r1" });
     billing.provider.completeCheckout(link.checkoutId);
     const late = billing.provider.drainWebhooks(); // the API is paused: the webhooks wait
     billing.clock.advance(40 * MINUTE_MS);
     expect(await billing.payments.releaseExpiredHolds()).toEqual({ released: 0, kept: 1 });
-    await expect(billing.payments.createCheckout({ accountId: b.id, priceKey: "pro_monthly_founder_v1", requestId: "r2" })).rejects.toBeInstanceOf(OfferClosedError);
+    await expect(billing.payments.createCheckout({ accountId: b.id, priceKey: "pro_monthly_founder_v2", requestId: "r2" })).rejects.toBeInstanceOf(OfferClosedError);
     for (const raw of late) await billing.webhooks.handle(raw);
     expect((await billing.offers.describe("founder_v1")).slotsLeft).toBe(0);
   });
@@ -260,7 +260,7 @@ describe("founder cap: a lapsed hold whose payment is coming keeps counting", ()
   it("releases a lapsed hold whose Checkout expired", async () => {
     const billing = createTestBilling({ catalog: smallOffer(1) });
     const a = await billing.accounts.accountForOwner("user", "a");
-    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v1", requestId: "r1" });
+    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v2", requestId: "r1" });
     await billing.provider.expireCheckout(link.checkoutId);
     billing.provider.drainWebhooks();
     billing.clock.advance(40 * MINUTE_MS);
@@ -271,7 +271,7 @@ describe("founder cap: a lapsed hold whose payment is coming keeps counting", ()
   it("keeps a trial hold past the trial end until the first invoice is paid", async () => {
     const billing = createTestBilling({ catalog: smallOffer(1) });
     const a = await billing.accounts.accountForOwner("user", "a");
-    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v1", requestId: "r1" });
+    const link = await billing.payments.createCheckout({ accountId: a.id, priceKey: "pro_monthly_founder_v2", requestId: "r1" });
     billing.provider.completeCheckout(link.checkoutId);
     await billing.deliverWebhooks();
     billing.clock.advance(7 * DAY_MS + MINUTE_MS); // the first invoice is still a draft at the provider

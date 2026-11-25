@@ -57,18 +57,34 @@ describe("tabs", () => {
 });
 
 describe("diagram", () => {
-  test("initializes the host's mermaid once and renders the loading state", () => {
-    const mermaid = { initialize: vi.fn(), render: vi.fn() };
-    const Mermaid = createMermaid(mermaid);
+  test("draws the host's SVG into the server HTML, with scoped ids", () => {
+    const render = vi.fn((_text: string, options?: { idPrefix?: string }) => ({
+      svg: `<svg aria-labelledby="${options?.idPrefix}title"><title id="${options?.idPrefix}title">Build</title><g id="A"><path marker-end="url(#A)"/></g><a href="#install">Install</a></svg>`,
+    }));
+    const Mermaid = createMermaid({ render });
     const html = renderToStaticMarkup(<Mermaid chart={"graph TD\nA-->B"} />);
-    expect(mermaid.initialize).toHaveBeenCalledTimes(1);
-    expect(mermaid.initialize).toHaveBeenCalledWith({
-      startOnLoad: false,
-      theme: "neutral",
-      securityLevel: "strict",
-    });
-    expect(html).toContain('data-state="loading"');
+    expect(render).toHaveBeenCalledTimes(1);
+    const prefix = render.mock.calls[0][1]?.idPrefix ?? "";
+    expect(prefix).toMatch(/^doxa-mermaid-[a-zA-Z0-9_-]+-$/);
+    expect(html).toContain('data-state="rendered"');
     expect(html).toContain("doxa-mermaid not-prose");
+    expect(html).toContain(`id="${prefix}A"`);
+    expect(html).toContain(`url(#${prefix}A)`);
+    expect(html).toContain(`aria-labelledby="${prefix}title"`);
+    // A link to a page anchor keeps its target.
+    expect(html).toContain('href="#install"');
+  });
+
+  test("shows the parse error in place of the diagram", () => {
+    const Mermaid = createMermaid({
+      render: () => {
+        throw new Error("Parse error on line 2");
+      },
+    });
+    const html = renderToStaticMarkup(<Mermaid chart={"flowchart LR\n  A -->"} />);
+    expect(html).toContain('data-state="error"');
+    expect(html).toContain("This diagram could not be drawn.");
+    expect(html).toContain("Parse error on line 2");
   });
 });
 

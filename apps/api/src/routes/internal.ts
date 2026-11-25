@@ -13,7 +13,6 @@ import { DocsRepository } from "../repositories/docs";
 import { GitHubRepository } from "../repositories/github";
 import { JobsRepository } from "../repositories/jobs";
 import { ProjectsRepository } from "../repositories/projects";
-import { createInstallationAccessToken } from "../services/github-app";
 import { resolveDocsHost } from "../services/docs-host-resolution";
 import { parseGenerationPreviewSubdomain } from "../utils/docs-url";
 import { withGenerationSiteConfig } from "../services/generation-site-config";
@@ -108,11 +107,6 @@ export function createInternalRoutes(): ApiApp {
     return json({
       context: await withGenerationSiteConfig(context.env, generationContext),
     });
-  });
-
-  app.post("/github/installations/:installationId/access-token", async (context) => {
-    const token = await createInstallationAccessToken(context.env, context.req.param("installationId"));
-    return json({ token });
   });
 
   app.post("/jobs/:jobId/running", async (context) => {

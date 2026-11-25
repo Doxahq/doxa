@@ -750,16 +750,22 @@ describe("the order of the limits", () => {
 });
 
 /** The rule keeps these out of the code, so a change has to edit this test. */
-test("the Worker has no secrets, no private route and no logs", async () => {
+test("the Worker has no secrets, no private route and no traces", async () => {
   const { readFileSync } = await import("node:fs");
   const config = JSON.parse(
     readFileSync(new URL("../wrangler.json", import.meta.url), "utf8"),
-  ) as Record<string, unknown> & { observability: Record<string, unknown>; compatibility_flags: string[] };
+  ) as Record<string, unknown> & {
+    observability: { enabled: boolean; traces: { enabled: boolean } };
+    compatibility_flags: string[];
+  };
 
   expect(config.workers_dev).toBe(false);
   expect(config.preview_urls).toBe(false);
-  expect(config.logpush).toBe(false);
-  expect(config.observability.enabled).toBe(false);
+  // Invocation logs name only the RPC method and the outcome
+  // (docs/current/observability.md). A trace records each outgoing fetch
+  // with its URL, and a playground URL can carry a reader's API key.
+  expect(config.observability.enabled).toBe(true);
+  expect(config.observability.traces.enabled).toBe(false);
   expect(config.compatibility_flags).toContain("global_fetch_strictly_public");
   expect(config.compatibility_flags).not.toContain("nodejs_compat");
   for (const binding of [

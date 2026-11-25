@@ -25,6 +25,7 @@ import {
 } from "../provider/provider";
 import type { BillingStore } from "../store/store";
 import type { BillingAccount, Page, SubscriptionRecord, SubscriptionStatus } from "../store/types";
+import { NO_BILLING_LIFECYCLE_EVENTS, notifyLifecycle, subscriptionChanges, type BillingLifecycleEvents } from "../lifecycle-events";
 
 export interface BillingPaymentEvents {
   /** `billing.plan_changed` (spec 9.4): the API rewrites the hosting tier of the account's sites. */
@@ -52,6 +53,8 @@ export interface BillingPaymentsDeps {
   /** `BillingConfig.returnBaseUrl`: an origin. */
   readonly returnBaseUrl: string;
   readonly events?: BillingPaymentEvents;
+  /** Product analytics facts (`BillingLifecycleEvents`). Default: none. */
+  readonly lifecycle?: BillingLifecycleEvents;
 }
 
 export interface SyncResult {
@@ -87,6 +90,10 @@ export class BillingPayments {
 
   get provider(): BillingProvider {
     return this.deps.provider;
+  }
+
+  private get lifecycle(): BillingLifecycleEvents {
+    return this.deps.lifecycle ?? NO_BILLING_LIFECYCLE_EVENTS;
   }
 
   private now(): Date {
@@ -133,13 +140,20 @@ export class BillingPayments {
   }
 
   /** Creates or reuses the provider customer of the account and stores its ID. */
-  async ensureCustomer(input: { accountId: string; email?: string | null; name?: string | null }): Promise<ProviderCustomerRef> {
+  async ensureCustomer(input: {
+    accountId: string;
+    email?: string | null;
+    name?: string | null;
+    /** The owner's Doxa user ID, for the provider's analytics join. */
+    personDistinctId?: string | null;
+  }): Promise<ProviderCustomerRef> {
     const account = await this.account(input.accountId);
     const existing = this.customerOf(account);
     const customer = await this.deps.provider.ensureCustomer({
       accountId: account.id,
       email: input.email ?? null,
       name: input.name ?? null,
+      personDistinctId: input.personDistinctId ?? null,
       existing,
       idempotencyKey: `customer:${account.id}`,
     });
@@ -162,6 +176,10 @@ export class BillingPayments {
     requestId: string;
     email?: string | null;
     name?: string | null;
+    /** The owner's Doxa user ID, stored on the provider customer for the analytics join. */
+    personDistinctId?: string | null;
+    /** The Doxa user who opens the Checkout, for `checkoutStarted`. */
+    actorUserId?: string | null;
     /** A dashboard path to return to in place of the billing page (`BillingInputError` when it is not one). */
     returnPath?: string | null;
   }): Promise<CheckoutLink> {
@@ -208,7 +226,12 @@ export class BillingPayments {
         if (!hold.granted) throw new OfferClosedError(offerKey, hold.thenPrices[price.interval]);
         releaseOnFailure = before?.state !== "held" && before?.state !== "claimed";
       }
-      const customer = await this.ensureCustomer({ accountId: account.id, email: input.email ?? null, name: input.name ?? null });
+      const customer = await this.ensureCustomer({
+        accountId: account.id,
+        email: input.email ?? null,
+        name: input.name ?? null,
+        personDistinctId: input.personDistinctId ?? null,
+      });
       // The provider's truth, not only the mirror: a subscription whose webhook
       // has not arrived yet (or any live status) refuses a second Checkout.
       const state = await this.deps.provider.fetchCustomerState(customer);
@@ -231,6 +254,16 @@ export class BillingPayments {
         tx.updateAccount({ openCheckout: { checkoutId: link.checkoutId, priceKey: input.priceKey, expiresAt: link.expiresAt } }),
       );
       if (offerKey) await this.deps.offers.attachCheckout({ offerKey, accountId: account.id, checkoutSessionId: link.checkoutId });
+      notifyLifecycle(() =>
+        this.lifecycle.checkoutStarted?.({
+          accountId: account.id,
+          priceKey: input.priceKey,
+          interval: price.interval,
+          trial: trialDays !== null,
+          founder: offerKey !== null,
+          actorUserId: input.actorUserId ?? null,
+        }),
+      );
       return link;
     } catch (error) {
       await this.clearCheckoutSlot(account.id, null);
@@ -468,7 +501,7 @@ export class BillingPayments {
       });
     }
 
-    const { from, to, newSubscription } = await this.deps.store.withAccountLock(accountId, now, async (tx) => {
+    const { from, to, newSubscription, changes } = await this.deps.store.withAccountLock(accountId, now, async (tx) => {
       const previous = await tx.getSubscription();
       const next = mirrorOf(accountId, customer, state, previous, now);
       if (next) await tx.upsertSubscription(next);
@@ -487,6 +520,8 @@ export class BillingPayments {
         from: fromPlan,
         to: entitlements.plan,
         newSubscription: next !== null && next.providerSubscriptionId !== previous?.providerSubscriptionId ? next : null,
+        // Under the lock, so two syncs at the same moment see each change once.
+        changes: subscriptionChanges({ catalog: this.deps.catalog, previous, next, now }),
       };
     });
 
@@ -499,6 +534,7 @@ export class BillingPayments {
       });
     }
     if (from !== to) await this.deps.events?.planChanged?.({ accountId, from, to });
+    for (const change of changes) notifyLifecycle(() => this.lifecycle.subscriptionChanged?.(change));
     this.count("billing.sync", { accountId, changed: from !== to });
     return { accountId, from, to, changed: from !== to };
   }

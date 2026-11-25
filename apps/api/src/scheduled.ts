@@ -7,6 +7,7 @@ import { DocsPrerenderTaskMaintenance } from "./services/docs-prerender-tasks";
 import { runDocsSearchMaintenance } from "./services/docs-search/maintenance";
 import { MergeGenerationScheduler } from "./services/doxabot/merge-generations";
 import { DoxabotQueueOutboxPublisher } from "./services/doxabot/queue-outbox";
+import { cleanUpWebhookDeliveriesFromEnv } from "./services/doxabot/webhook-delivery-cleanup";
 import { EmailDeliverySweeper } from "./services/email/email-delivery-sweeper";
 import { EmailSuppressionSync, isFirstCronRunOfHour } from "./services/email/email-suppression-sync";
 import { purgeAgentLiveEvents } from "./services/agent-live/agent-live-purge";
@@ -37,6 +38,7 @@ export function runScheduledJobs(scheduledTime: number, env: Env, context: Execu
   run(runDomainStatusChecks(env));
   run(runApprovalSweep(env, context));
   run(runMergeGenerations(env, context));
+  if (isFirstCronRunOfHour(scheduledTime)) run(runWebhookDeliveryCleanup(env));
   const emailSweeper = EmailDeliverySweeper.fromEnv(env);
   if (emailSweeper) run(emailSweeper.run());
   const suppressionSync = isFirstCronRunOfHour(scheduledTime) ? EmailSuppressionSync.fromEnv(env) : null;
@@ -75,6 +77,11 @@ async function runDomainStatusChecks(env: Env): Promise<unknown> {
 /** Async, so a failed setup rejects this job only and the other jobs still run. */
 async function runMergeGenerations(env: Env, context: ExecutionContext): Promise<unknown> {
   return MergeGenerationScheduler.fromEnv(env, (work) => context.waitUntil(work)).run();
+}
+
+/** Hourly. Async, so a failed setup rejects this job only and the other jobs still run. */
+async function runWebhookDeliveryCleanup(env: Env): Promise<unknown> {
+  return cleanUpWebhookDeliveriesFromEnv(env);
 }
 
 /** Async, so a failed setup rejects this job only and the other jobs still run. */

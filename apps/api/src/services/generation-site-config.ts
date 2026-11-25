@@ -11,11 +11,13 @@ export async function withGenerationSiteConfig<T extends GenerationContext>(
   context: T | null,
 ): Promise<T | null> {
   if (!context) return null;
-  const [resolution, entitlements] = await Promise.all([
-    new DocsRepository(env).resolveByProjectId(context.project.id),
+  const docs = new DocsRepository(env);
+  const [resolution, entitlements, brandingEligible] = await Promise.all([
+    docs.resolveByProjectId(context.project.id),
     planSeamsFromEnv(env).entitlements.getProjectEntitlements(context.project.id),
+    docs.holdsOnlyStarterContent(context.project.id),
   ]);
-  if (!resolution) return { ...context, entitlements };
+  if (!resolution) return { ...context, entitlements, brandingEligible };
   if (
     resolution.siteId !== context.project.siteId ||
     resolution.projectId !== context.project.id
@@ -38,5 +40,5 @@ export async function withGenerationSiteConfig<T extends GenerationContext>(
       projectName: context.project.name,
     },
   );
-  return { ...context, siteConfig: config, entitlements };
+  return { ...context, siteConfig: config, entitlements, brandingEligible };
 }

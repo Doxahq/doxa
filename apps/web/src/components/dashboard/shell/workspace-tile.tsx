@@ -21,7 +21,7 @@ export function WorkspaceTile({
     <span
       aria-hidden="true"
       className={cn(
-        "grid size-7 shrink-0 place-items-center rounded-[5px] font-mono text-[10.5px] font-bold text-foreground",
+        "grid size-7 shrink-0 place-items-center rounded-[5px] font-mono text-[10.5px] font-bold text-monogram-foreground",
         className,
         "leading-none",
       )}

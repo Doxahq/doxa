@@ -3,6 +3,8 @@ import type { ProjectTeam } from "@doxahq/contracts/teams";
 import type { Env } from "../../env";
 import { ProjectDeletionRepository } from "../../repositories/project-deletion";
 import { ProjectsRepository } from "../../repositories/projects";
+import { assertProjectLimit } from "../project-limit";
+import { captureProjectCreated, type ProjectCreationVia } from "../project-analytics";
 import { publishExampleDocs } from "./publish";
 
 /**
@@ -20,9 +22,11 @@ export async function createExampleProject(
     template?: ExampleDocsTemplate;
     /** Authorized by the caller; null makes a personal project. */
     team: ProjectTeam | null;
+    via: ProjectCreationVia;
   },
 ): Promise<ProjectDto> {
-  const { template, ...projectInput } = input;
+  const { template, via, ...projectInput } = input;
+  await assertProjectLimit(env, input);
   const projects = new ProjectsRepository(env);
   const { project, siteId } =
     await projects.createWithoutRepository(projectInput);
@@ -34,6 +38,7 @@ export async function createExampleProject(
       name: project.name,
       template,
     });
+    captureProjectCreated(env, { userId: input.userId, projectId: project.id, source: template === "empty" ? "empty" : "starter", via });
     return { ...project, publishedVersionId: version.id };
   } catch (err) {
     await new ProjectDeletionRepository(env).deleteForUser({

@@ -1,6 +1,7 @@
 import { BranchIcon, EyeIcon, ShieldIcon } from "~/components/marketing/agent/agent-icons"
 import { Hr, Ticks } from "~/components/marketing/guides"
 import { SiteNav } from "~/components/marketing/site-nav"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 
 export function AgentHero() {
@@ -24,7 +25,7 @@ export function AgentHero() {
             current with every merge.
           </p>
           <div className="row">
-            <a className="btn btn--light" href={GET_STARTED_URL}>
+            <a className="btn btn--light" href={GET_STARTED_URL} onClick={ctaClickHandler("agent_hero", "get_started")}>
               Get started ›
             </a>
             <a className="btn btn--line" href={DOCS_URL}>

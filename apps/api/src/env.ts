@@ -1,3 +1,4 @@
+import type { AnalyticsEnv } from "@doxahq/analytics";
 import type { AuthEnv } from "@doxahq/auth";
 import type { DocsCacheInvalidationRpc, GenerateJobMessage } from "@doxahq/contracts";
 import type { AgentContainerBinding, GenerationMode } from "@doxahq/generation";
@@ -7,8 +8,9 @@ import type { ModelTokenBroker } from "./services/model-access/model-token-broke
 import type { ImageCompressor } from "./services/site-assets/image-compression";
 import type { SvgCleaner } from "./services/site-assets/image-content";
 import type { BillingPaymentsBinding } from "./services/billing/payments-port";
+import type { ProductAnalyticsBinding } from "./services/analytics/product-analytics";
 
-export interface Env extends AuthEnv {
+export interface Env extends AuthEnv, AnalyticsEnv {
   DOCS_CACHE_INVALIDATOR?: DocsCacheInvalidationRpc;
   PRERENDER_QUEUE?: PrerenderQueueRpc;
   DOCS_BUCKET: R2Bucket;
@@ -59,6 +61,8 @@ export interface Env extends AuthEnv {
   DOXABOT_ENABLED?: string;
   DOXABOT_PUBLIC_REPOSITORIES_ENABLED?: string;
   DOXABOT_GENERATOR_FINGERPRINT?: string;
+  /** The largest repository a generation accepts, in KB (GitHub's `size`). Default 1048576 (1 GB). */
+  MAX_REPOSITORY_SIZE_KB?: string;
   DOXA_AGENT_PAGE_CONCURRENCY?: string;
   GENERATION_TIMEOUT_MS?: string;
   GENERATION_IDLE_TIMEOUT_MS?: string;
@@ -135,6 +139,11 @@ export interface Env extends AuthEnv {
    * origin has it: `@doxahq/billing/payments` stays out of Worker builds.
    */
   BILLING_PAYMENTS?: BillingPaymentsBinding;
+  /**
+   * Product analytics (`productAnalyticsOf`). The composition root sets it
+   * when `POSTHOG_KEY` is set; without it, analytics is a no-op.
+   */
+  PRODUCT_ANALYTICS?: ProductAnalyticsBinding;
 }
 
 export function isDocsPreviewGateEnabled(value: string | undefined): boolean {

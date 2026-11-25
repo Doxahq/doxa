@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { ExternalLink, Loader2 } from "lucide-react"
+import { CircleX, ExternalLink, Loader2, type LucideIcon } from "lucide-react"
 import type { BillingAccountDetail } from "@doxahq/contracts/billing"
 
 import { SectionLabel } from "~/components/dashboard/dashboard-header"
@@ -8,6 +8,7 @@ import { BillingStatusBadge } from "~/components/dashboard/billing/billing-statu
 import { StartProNowDialog } from "~/components/dashboard/billing/start-pro-now-dialog"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
+import { captureBrowserEvent } from "~/lib/analytics/capture-browser-event"
 import { isFounderPrice, switchTargetPrice } from "~/lib/dashboard/billing-model"
 import { planCardView, type PlanCardView } from "~/lib/dashboard/billing-plan-view"
 
@@ -41,7 +42,10 @@ export function BillingPlanSection({ detail, actions }: { detail: BillingAccount
       switchLabel={target?.interval === "year" ? "Switch to yearly" : "Switch to monthly"}
       canSwitch={canSwitch}
       actions={actions}
-      onStartPro={() => setDialog("start")}
+      onStartPro={() => {
+        captureBrowserEvent("upgrade_clicked", { location: "billing_plan_start_pro_now" })
+        setDialog("start")
+      }}
       onSwitch={() => setDialog("switch")}
     />
   ) : null
@@ -131,14 +135,14 @@ function PlanButtons({
   }
   if (view.state === "trial" || view.state === "active") {
     list.push(
-      <PortalButton key="cancel" isPending={actions.isPortalPending} onClick={actions.onCancel}>
+      <PortalButton key="cancel" isPending={actions.isPortalPending} onClick={actions.onCancel} icon={CircleX}>
         {view.state === "trial" ? "Cancel trial" : "Cancel plan"}
       </PortalButton>,
     )
   }
   if (view.state === "canceled") {
     list.push(
-      <PortalButton key="manage" isPending={actions.isPortalPending} onClick={actions.onManage} icon>
+      <PortalButton key="manage" isPending={actions.isPortalPending} onClick={actions.onManage} icon={ExternalLink}>
         Manage in Stripe
       </PortalButton>,
     )
@@ -150,21 +154,18 @@ function PlanButtons({
 function PortalButton({
   isPending,
   onClick,
-  icon = false,
+  icon: Icon,
   children,
 }: {
   isPending: boolean
   onClick: () => void
-  icon?: boolean
+  /** The icon before the label. The spinner takes its place while the portal opens. */
+  icon: LucideIcon
   children: ReactNode
 }) {
   return (
     <Button variant="outline" size="sm" disabled={isPending} onClick={onClick}>
-      {isPending ? (
-        <Loader2 aria-hidden="true" className="animate-spin" />
-      ) : icon ? (
-        <ExternalLink aria-hidden="true" />
-      ) : null}
+      {isPending ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Icon aria-hidden="true" />}
       {children}
     </Button>
   )

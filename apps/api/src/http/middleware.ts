@@ -5,7 +5,17 @@ import type { ApiBindings } from "./app";
 import { enforceMutationCsrf } from "./csrf";
 
 const CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
-const CORS_ALLOW_HEADERS = ["content-type", "authorization", "x-doxa-user-id"];
+// posthog-js `tracing_headers` adds all three PostHog IDs to dashboard calls,
+// so an API error links to the person's session replay. A missing one fails
+// the preflight of every dashboard call.
+const CORS_ALLOW_HEADERS = [
+  "content-type",
+  "authorization",
+  "x-doxa-user-id",
+  "x-posthog-distinct-id",
+  "x-posthog-session-id",
+  "x-posthog-window-id",
+];
 const CORS_MAX_AGE_SECONDS = 86_400;
 
 export function securityHeaders(): MiddlewareHandler<ApiBindings> {

@@ -1129,5 +1129,6 @@ export function toStagedRuntimePage(
     contentHash: createHash("sha256").update(content).digest("hex"),
     pageInputHash: page.pageInputHash,
     ...(page.openIssues?.length ? { openIssues: page.openIssues } : {}),
+    ...(page.unverifiedExternalDomains?.length ? { unverifiedExternalDomains: page.unverifiedExternalDomains } : {}),
   };
 }

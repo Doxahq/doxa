@@ -6,7 +6,11 @@
 .pg { line-height: normal; }
 .pg :where(img, svg, video, canvas) { display: inline; vertical-align: baseline; }
 .pg a { color: inherit; text-decoration: none; }
-.pg a:hover { color: #ffffff; }
+.pg a:hover { color: var(--hi); }
+
+/* The WebGL aurora (components/marketing/aurora.tsx) paints light glows on black. The light
+   theme inverts it to soft glows on white; the hue turn keeps each glow's own hue. */
+:root[data-theme="light"] .pg .hero__aurora { filter: invert(1) hue-rotate(180deg); }
 
 /* A section off screen pauses its CSS animations (usePauseOffscreenAnimations). */
 .pg > [data-offscreen], .pg > [data-offscreen] *, .pg > [data-offscreen] *::before, .pg > [data-offscreen] *::after { animation-play-state: paused !important; }
@@ -14,37 +18,37 @@
 /* ---------- Guide lines ---------- */
 .pg .rails { position: absolute; top: 0; bottom: 0; left: var(--gutter); right: var(--gutter); z-index: 6; pointer-events: none; background-image: var(--dash-y), var(--dash-y); background-size: 1px 8px, 1px 8px; background-position: left top, right top; background-repeat: repeat-y; }
 .pg .hr { position: relative; z-index: 6; height: 1px; background-image: var(--dash-x); background-size: 8px 1px; background-repeat: repeat-x; }
-.pg .hr::before, .pg .hr::after { content: "+"; position: absolute; top: 0; padding: 0 2px; transform: translate(-50%, -50%); font: 400 13px/1 var(--mono); color: #8a8a8f; background: var(--night); }
+.pg .hr::before, .pg .hr::after { content: "+"; position: absolute; top: 0; padding: 0 2px; transform: translate(-50%, -50%); font: 400 13px/1 var(--mono); color: var(--ink-9); background: var(--night); }
 .pg .hr::before { left: var(--gutter); }
 .pg .hr::after { left: calc(100% - var(--gutter)); }
 .pg .col { padding-left: var(--gutter); padding-right: var(--gutter); }
 
 /* ---------- Shared ---------- */
 .pg .label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
-.pg .display { font-family: var(--display); font-weight: 700; letter-spacing: -0.03em; text-transform: uppercase; color: #fafafa; }
-.pg .mark { background: var(--accent); color: #ffffff; padding: 0 0.1em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.pg .display { font-family: var(--display); font-weight: 700; letter-spacing: -0.03em; text-transform: uppercase; color: var(--heading); }
+.pg .mark { background: var(--accent); color: var(--on-accent); padding: 0 0.1em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 
 /* ---------- Nav ---------- */
 .pg .nav { position: relative; z-index: 7; display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 64px; padding: 0 32px; }
 /* The GitHub link, before the nav buttons on every page. */
-.pg .nav__github { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: #a1a1a1; transition: color 0.15s ease; }
-.pg .nav__github:hover { color: #ffffff; }
+.pg .nav__github { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: var(--muted); transition: color 0.15s ease; }
+.pg .nav__github:hover { color: var(--hi); }
 
 /* The Resources dropdown of the top bar, after baseten.co: the open trigger fills, and each dashed column is one category. The panel's top padding keeps the hover alive between the trigger and the columns. */
 .pg .navmenu { position: relative; }
 .pg .navmenu__trigger { display: inline-flex; align-items: center; gap: 4px; margin: -6px -10px; padding: 6px 10px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease; }
-.pg .navmenu__trigger svg { color: #8a8a8f; transition: transform 0.15s ease, color 0.15s ease; }
-.pg .navmenu__trigger.on { color: #ffffff; }
+.pg .navmenu__trigger svg { color: var(--ink-9); transition: transform 0.15s ease, color 0.15s ease; }
+.pg .navmenu__trigger.on { color: var(--hi); }
 .pg .navmenu__panel { position: absolute; top: 100%; left: -10px; z-index: 20; padding-top: 16px; opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s; }
 .pg .navmenu:hover .navmenu__panel, .pg .navmenu:has(:focus-visible) .navmenu__panel { opacity: 1; visibility: visible; transform: none; }
-.pg .navmenu:hover .navmenu__trigger, .pg .navmenu:has(:focus-visible) .navmenu__trigger { background: var(--accent); color: #ffffff; }
-.pg .navmenu:hover .navmenu__trigger svg, .pg .navmenu:has(:focus-visible) .navmenu__trigger svg { color: #ffffff; transform: rotate(180deg); }
-.pg .navmenu__columns { display: grid; grid-template-columns: repeat(2, 200px); border: 1px dashed rgba(255, 255, 255, 0.18); background: #0a0a0a; box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.75); }
-.pg .navmenu__column + .navmenu__column { border-left: 1px dashed rgba(255, 255, 255, 0.18); }
-.pg .navmenu__title { display: block; padding: 12px 16px; border-bottom: 1px dashed rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.05); font: 400 12px/18px var(--mono); color: #a1a1a1; }
+.pg .navmenu:hover .navmenu__trigger, .pg .navmenu:has(:focus-visible) .navmenu__trigger { background: var(--accent); color: var(--on-accent); }
+.pg .navmenu:hover .navmenu__trigger svg, .pg .navmenu:has(:focus-visible) .navmenu__trigger svg { color: var(--on-accent); transform: rotate(180deg); }
+.pg .navmenu__columns { display: grid; grid-template-columns: repeat(2, 200px); border: 1px dashed rgb(var(--hi-rgb) / 0.18); background: var(--night); box-shadow: 0 20px 48px -12px rgb(0 0 0 / calc(0.75 * var(--shadow-strength))); }
+.pg .navmenu__column + .navmenu__column { border-left: 1px dashed rgb(var(--hi-rgb) / 0.18); }
+.pg .navmenu__title { display: block; padding: 12px 16px; border-bottom: 1px dashed rgb(var(--hi-rgb) / 0.18); background: rgb(var(--hi-rgb) / 0.05); font: 400 12px/18px var(--mono); color: var(--muted); }
 .pg .navmenu__column ul { margin: 0; padding: 6px 0; list-style: none; }
-.pg .navmenu__column a { display: block; padding: 10px 16px; color: #ededed; white-space: nowrap; transition: background-color 0.15s ease, color 0.15s ease; }
-.pg .navmenu__column a:hover, .pg .navmenu__column a:focus-visible, .pg .navmenu__column a.on { background: rgba(255, 255, 255, 0.07); color: #ffffff; }
+.pg .navmenu__column a { display: block; padding: 10px 16px; color: var(--text); white-space: nowrap; transition: background-color 0.15s ease, color 0.15s ease; }
+.pg .navmenu__column a:hover, .pg .navmenu__column a:focus-visible, .pg .navmenu__column a.on { background: rgb(var(--hi-rgb) / 0.07); color: var(--hi); }
 .pg .brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: 0.22em; }
 
 /* ---------- Box bands ---------- */
@@ -57,36 +61,70 @@
 /* Cells start folded. `Band` (components/marketing/band.tsx) fills them in from a random end
    when the band scrolls into view. */
 .pg .cell { position: absolute; top: 0; bottom: 1px; transform: scaleX(0); transform-origin: 0% 50%; }
-.pg .c-blue { background: #3d7bff; }
-.pg .c-deep { background: #2453c9; }
-.pg .c-ice { background: #9cc2ff; }
-.pg .c-pale { background: rgba(156, 194, 255, 0.08); }
-.pg .c-lav { background: #c4a1ff; }
+.pg .c-blue { background: var(--accent); }
+.pg .c-deep { background: var(--deep); }
+.pg .c-ice { background: var(--ice); }
+.pg .c-pale { background: rgb(var(--ice-rgb) / 0.08); }
+.pg .c-lav { background: var(--lav); }
 
 /* ---------- Footer ---------- */
-.pg .foot { position: relative; overflow: hidden; isolation: isolate; background: #050505; }
-.pg .foot .hr::before, .pg .foot .hr::after { background: #050505; }
+.pg .foot { position: relative; overflow: hidden; isolation: isolate; background: var(--well-1); }
+.pg .foot .hr::before, .pg .foot .hr::after { background: var(--well-1); }
 .pg .foot__grid { display: grid; grid-template-columns: 1.3fr repeat(5, minmax(0, 1fr)); gap: 40px; padding: 72px 32px 40px; }
-.pg .foot__logo { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: 0.22em; color: #fafafa; }
+.pg .foot__brand { display: flex; flex-direction: column; gap: 18px; }
+.pg .foot__social { display: flex; gap: 14px; color: var(--muted); }
+.pg .foot__logo { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: 0.22em; color: var(--heading); }
 .pg .foot__col { display: flex; flex-direction: column; gap: 12px; }
 .pg .foot__col .label { margin-bottom: 6px; }
-.pg .foot__col a { font-size: 14px; color: #c7c7c7; width: fit-content; }
+.pg .foot__col a { font-size: 14px; color: var(--body); width: fit-content; }
+/* "Privacy choices" is a button that opens a dialog, drawn as one of the column links. */
+.pg .foot__choices { appearance: none; padding: 0; border: 0; background: none; font: inherit; font-size: 14px; color: var(--body); text-align: left; width: fit-content; cursor: pointer; }
+.pg .foot__choices:hover { color: var(--hi); }
 .pg .foot__base { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 22px 32px 26px; }
 .pg .foot__credit a:hover { color: var(--text); }
-.pg .status { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border: 1px solid rgba(127, 214, 160, 0.5); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: #7fd6a0; }
-.pg .status i { width: 6px; height: 6px; background: #7fd6a0; animation: mk-blink 1.6s steps(1) infinite; }
-.pg .foot__mark { position: relative; height: clamp(120px, 16vw, 250px); overflow: hidden; }
-.pg .foot__mark > span { position: absolute; left: 50%; top: 0; transform: translateX(-50%); font-family: var(--display); font-weight: 700; font-size: min(26vw, 380px); line-height: 0.8; letter-spacing: -0.05em; color: rgba(255, 255, 255, 0.05); white-space: nowrap; user-select: none; }
+.pg .status { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border: 1px solid rgb(var(--ok-rgb) / 0.5); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ok); }
+.pg .status i { width: 6px; height: 6px; background: var(--ok); animation: mk-blink 1.6s steps(1) infinite; }
+.pg .foot__start { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+/* The theme menu (theme-switch.tsx). The button holds every preference, and `data-theme-preference`
+   on <html> keeps only the saved one, so it is right before React runs. The menu opens upward. */
+.pg .themes { position: relative; display: inline-flex; }
+.pg .themes__trigger { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 9px 0 10px; border: 1px solid var(--line-strong); background: none; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); cursor: pointer; transition: background-color 0.15s ease, border-color 0.15s ease; }
+.pg .themes__trigger:hover, .pg .themes__trigger[aria-expanded="true"] { background: rgb(var(--hi-rgb) / 0.07); border-color: rgb(var(--hi-rgb) / 0.28); }
+.pg .themes__trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pg .themes__current { display: none; align-items: center; gap: 6px; }
+:root:not([data-theme-preference]) .pg .themes__current[data-option="system"],
+:root[data-theme-preference="system"] .pg .themes__current[data-option="system"],
+:root[data-theme-preference="dark"] .pg .themes__current[data-option="dark"],
+:root[data-theme-preference="light"] .pg .themes__current[data-option="light"] { display: inline-flex; }
+.pg .themes__chevron { color: var(--dim); transition: transform 0.15s ease; }
+.pg .themes__trigger[aria-expanded="true"] .themes__chevron { transform: rotate(180deg); }
+.pg .themes__menu { position: absolute; z-index: 30; bottom: calc(100% + 6px); left: 0; min-width: 100%; width: max-content; padding: 4px; border: 1px solid var(--line-strong); background: var(--well-9); box-shadow: 0 18px 40px -16px rgb(0 0 0 / calc(0.9 * var(--shadow-strength))); animation: mk-themes-in 0.14s ease-out; }
+.pg .themes__option { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 128px; height: 30px; padding: 0 10px; border: 0; background: none; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); text-align: left; cursor: pointer; transition: background-color 0.12s ease, color 0.12s ease; }
+.pg .themes__option:hover, .pg .themes__option:focus-visible { background: rgb(var(--hi-rgb) / 0.07); color: var(--hi); outline: none; }
+.pg .themes__option[aria-checked="true"] { color: var(--text); }
+.pg .themes__check { margin-left: auto; color: var(--ice); }
+@keyframes mk-themes-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+/* The pixel "DOXA" spans the content column, dissolves at the bottom, and its lowest 15% hangs below the page edge (footer-mark.tsx). */
+.pg .foot__mark { position: relative; padding: clamp(28px, 4vw, 56px) var(--gutter) 0; overflow: hidden; }
+.pg .foot__art { position: relative; }
+.pg .foot__glow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.pg .foot__wordmark { display: block; width: 100%; height: auto; user-select: none; }
+.pg .foot__pixels--solid { fill: rgb(var(--hi-rgb) / 0.14); }
+.pg .foot__pixels--edge { fill: rgb(var(--hi-rgb) / 0.06); }
+/* The same strength reads darker on the light page, so light uses a little less. */
+:root[data-theme="light"] .pg .foot__pixels--solid { fill: rgb(var(--hi-rgb) / 0.11); }
+:root[data-theme="light"] .pg .foot__pixels--edge { fill: rgb(var(--hi-rgb) / 0.045); }
+.pg .foot__pixels--spark { fill: rgb(var(--ice-rgb) / 0.45); }
 /* "Onboard your agent": a pill that copies the agent setup prompt, after context.dev. Used in the footer and the home hero. */
-.pg .agent-cta { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 18px; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 999px; background: rgba(10, 10, 10, 0.72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); color: #ededed; font-family: var(--sans); font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.1s ease; }
-.pg .agent-cta svg { flex-shrink: 0; color: #a1a1a1; transition: color 0.15s ease; }
-.pg .agent-cta:hover { border-color: rgba(156, 194, 255, 0.7); background: rgba(24, 32, 52, 0.85); color: #ffffff; }
-.pg .agent-cta:hover svg { color: #9cc2ff; }
+.pg .agent-cta { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 18px; border: 1px solid rgb(var(--hi-rgb) / 0.28); border-radius: 999px; background: rgb(var(--night-rgb) / 0.72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); color: var(--text); font-family: var(--sans); font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.1s ease; }
+.pg .agent-cta svg { flex-shrink: 0; color: var(--muted); transition: color 0.15s ease; }
+.pg .agent-cta:hover { border-color: rgb(var(--ice-rgb) / 0.7); background: rgb(var(--cta-hover-rgb) / 0.85); color: var(--hi); }
+.pg .agent-cta:hover svg { color: var(--ice); }
 .pg .agent-cta:active { transform: scale(0.97); }
-.pg .agent-cta:focus-visible { outline: 2px solid #3d7bff; outline-offset: 3px; }
-.pg .agent-cta.is-copied, .pg .agent-cta.is-copied:hover { border-color: rgba(127, 214, 160, 0.6); color: #ffffff; }
-.pg .agent-cta.is-copied svg { color: #7fd6a0; }
-.pg .foot__agent { position: absolute; left: 50%; top: 42%; z-index: 1; transform: translate(-50%, -50%); }
+.pg .agent-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.pg .agent-cta.is-copied, .pg .agent-cta.is-copied:hover { border-color: rgb(var(--ok-rgb) / 0.6); color: var(--hi); }
+.pg .agent-cta.is-copied svg { color: var(--ok); }
+.pg .foot__agent { position: absolute; left: 50%; top: 48%; z-index: 1; transform: translate(-50%, -50%); }
 .pg .foot__agent:active { transform: translate(-50%, -50%) scale(0.97); }
 @media (max-width: 1100px) {
   .pg .foot__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -107,7 +145,7 @@
 @keyframes mk-ember { 0% { opacity: 0; transform: translateY(0); } 15% { opacity: 0.9; } 100% { opacity: 0; transform: translateY(-90px); } }
 @keyframes mk-engine { from { opacity: 0.75; transform: translate(-50%, -50%) scale(0.85); } to { opacity: 1; transform: translate(-50%, -50%) scale(1.12); } }
 @keyframes mk-out { 0% { left: 0; opacity: 0; } 10%, 88% { opacity: 1; } 100% { left: calc(100% - 5px); opacity: 0; } }
-@keyframes mk-ping { 0%, 70%, 100% { border-color: rgba(255, 255, 255, 0.16); background: transparent; } 80% { border-color: #3d7bff; background: rgba(61, 123, 255, 0.14); } }
+@keyframes mk-ping { 0%, 70%, 100% { border-color: rgb(var(--hi-rgb) / 0.16); background: transparent; } 80% { border-color: var(--accent); background: rgba(61, 123, 255, 0.14); } }
 @keyframes mk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 @keyframes mk-ring {
   0% { width: 6px; height: 6px; opacity: 0; }

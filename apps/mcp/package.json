@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.1",
+    "@doxahq/analytics": "workspace:*",
     "@doxahq/api": "workspace:*",
     "@doxahq/contracts": "workspace:*",
     "@doxahq/db": "workspace:*",

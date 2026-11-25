@@ -20,7 +20,6 @@ export type DocsContentErrorCode =
   | "asset_upload_limit_reached"
   /** Concurrent requests of one member kept changing its open MCP upload URLs. */
   | "asset_upload_busy"
-  | "storage_quota_exceeded"
   /** A changed page on the branch fails the MDX check, so it cannot go live. */
   | "mdx_invalid"
   /** A review decision would remove a page that a person edited on the branch. */
@@ -55,7 +54,6 @@ export function getDocsContentErrorStatus(code: DocsContentErrorCode): number {
     case "no_changes":
     case "asset_limit_reached":
     case "asset_upload_limit_reached":
-    case "storage_quota_exceeded":
     case "mdx_invalid":
       return 422;
     case "asset_too_large":

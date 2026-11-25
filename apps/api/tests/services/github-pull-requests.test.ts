@@ -17,6 +17,8 @@ const context: DoxabotAutomationContext = {
   productionBranch: "main",
   storedEnabled: true,
   mergeTrigger: "batched",
+  allowedBotLogins: [],
+  connectionIssue: null,
   hasPublishedVersion: true,
   publishedBaseline: { versionId: "22222222-2222-4222-8222-222222222222", sourceRevision: baseRevision },
 };

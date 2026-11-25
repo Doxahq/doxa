@@ -7,6 +7,7 @@ import { BillingIntervalControl } from "~/components/dashboard/billing/billing-i
 import { FIELD_LABEL_CLASS } from "~/components/dashboard/dashboard-header"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
+import { captureBrowserEvent } from "~/lib/analytics/capture-browser-event"
 import { PRO_TRIAL_ACTION } from "~/lib/dashboard/ai-access"
 import { formatUsd, founderSpotsLine, TRIAL_SENTENCE } from "~/lib/dashboard/billing-model"
 import { PRO_TRIAL_DAYS } from "~/lib/dashboard/pro-trial-offer"
@@ -88,7 +89,13 @@ export function BillingUpgradeCard({
       <div className="flex flex-wrap items-center gap-3 border-t border-divider px-5 py-4 sm:px-6">
         {canManage ? (
           <>
-            <Button disabled={isPending} onClick={() => onUpgrade(price.priceKey)}>
+            <Button
+              disabled={isPending}
+              onClick={() => {
+                captureBrowserEvent("upgrade_clicked", { location: "billing_upgrade_card", interval })
+                onUpgrade(price.priceKey)
+              }}
+            >
               {isPending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
               {trialAvailable ? PRO_TRIAL_ACTION : "Upgrade to Pro"}
             </Button>

@@ -22,8 +22,8 @@ const forPlan = (plan: PlanKey) =>
 describe("entitlement adapters", () => {
   it("maps Free to the free contracts", () => {
     const free = forPlan("free");
-    expect(toProjectEntitlements(free)).toEqual({ removePoweredBy: false, maxBranchesPerSite: 3 });
-    expect(toPlanStorageLimits(free)).toEqual({ maxDocsStorageBytes: 100 * 1024 * 1024, maxSiteAssetBytes: 50 * 1024 * 1024, maxSiteAssetFiles: 200 });
+    expect(toProjectEntitlements(free)).toEqual({ removePoweredBy: false, maxBranchesPerSite: 2 });
+    expect(toPlanStorageLimits(free)).toEqual({ maxDocsStorageBytes: 20 * 1024 * 1024, maxSiteAssetBytes: 50 * 1024 * 1024, maxSiteAssetFiles: 200 });
     expect(toPlanSearchPolicy(free)).toBe(FREE_PLAN_SEARCH_POLICY);
     expect(toCustomDomainLimit(free)).toBe(1);
     expect(toHostingTier(free)).toBe("shared");
@@ -43,7 +43,7 @@ describe("entitlement adapters", () => {
 
   it("builds the API seams from a project lookup", async () => {
     const adapters = createEntitlementAdapters(async (projectId) => forPlan(projectId === "p_pro" ? "pro" : "free"));
-    expect(await adapters.entitlements.getProjectEntitlements("p_free")).toEqual({ removePoweredBy: false, maxBranchesPerSite: 3 });
+    expect(await adapters.entitlements.getProjectEntitlements("p_free")).toEqual({ removePoweredBy: false, maxBranchesPerSite: 2 });
     expect(await adapters.searchPolicy.getSearchPolicy("p_pro")).toBe(PAID_PLAN_SEARCH_POLICY);
     expect(await adapters.storageLimits.getStorageLimits("p_free")).toMatchObject({ maxSiteAssetFiles: 200 });
     expect(await adapters.docsDomainLimit.getLimit({ userId: "u", projectId: "p_pro" })).toBe(4);

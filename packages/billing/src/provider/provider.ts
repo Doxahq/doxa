@@ -52,6 +52,12 @@ export interface EnsureCustomerInput {
   readonly accountId: string;
   readonly email: string | null;
   readonly name: string | null;
+  /**
+   * Stored as `metadata.posthog_person_distinct_id`: the Doxa user ID of the
+   * account owner, so product analytics can join revenue to that person.
+   * Null or absent leaves the stored value as it is.
+   */
+  readonly personDistinctId?: string | null;
   /** An existing customer to reuse, when the account has one. */
   readonly existing: ProviderCustomerRef | null;
   readonly idempotencyKey: string;
@@ -189,6 +195,16 @@ export interface UsageInvoiceRef {
   readonly hostedInvoiceUrl: string | null;
 }
 
+/** A paid or failed invoice of the plan price (no usage lines), for the lifecycle events. */
+export interface PlanInvoiceRef {
+  readonly invoiceId: string;
+  readonly outcome: "paid" | "failed";
+  /** The amount paid, or the amount due for a failed payment. */
+  readonly amountCents: number;
+  /** The provider's payment attempt count, when it gives one. */
+  readonly attempt: number | null;
+}
+
 interface EventBase {
   /** The provider event ID, unique for each provider. */
   readonly id: string;
@@ -205,14 +221,24 @@ interface EventBase {
  * needs it (`checkout.session.expired` releases the slot, spec 7.5).
  */
 export type ProviderEvent =
-  | (EventBase & { readonly type: "customer.changed"; readonly customer: ProviderCustomerRef })
+  | (EventBase & {
+      readonly type: "customer.changed";
+      readonly customer: ProviderCustomerRef;
+      /** Set when a plan invoice was paid or failed: the change is that payment. */
+      readonly invoice?: PlanInvoiceRef;
+    })
   | (EventBase & {
       readonly type: "checkout.completed";
       readonly checkoutId: string;
       readonly customer: ProviderCustomerRef | null;
       readonly accountId: string | null;
     })
-  | (EventBase & { readonly type: "checkout.expired"; readonly checkoutId: string })
+  | (EventBase & {
+      readonly type: "checkout.expired";
+      readonly checkoutId: string;
+      /** `client_reference_id` of the Checkout, when the provider has it. */
+      readonly accountId?: string | null;
+    })
   | (EventBase & { readonly type: "usage_invoice.created"; readonly invoice: UsageInvoiceRef })
   | (EventBase & { readonly type: "usage_invoice.paid"; readonly invoice: UsageInvoiceRef })
   | (EventBase & { readonly type: "usage_invoice.failed"; readonly invoice: UsageInvoiceRef })

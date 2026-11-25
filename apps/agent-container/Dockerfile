@@ -25,4 +25,6 @@ RUN mkdir -p /app/.workspaces && chown node:node /app/.workspaces
 USER node
 
 EXPOSE 8789
+# Trusts the egress CA of the Cloudflare runtime when it is there; see the script.
+ENTRYPOINT ["sh", "/app/apps/agent-container/scripts/trust-egress-ca.sh"]
 CMD ["pnpm", "--filter", "@doxahq/agent-container", "start"]

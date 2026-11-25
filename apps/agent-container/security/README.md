@@ -69,5 +69,42 @@ tests (`lab.test.mjs`) and the security assertions over the recorded results
   Outside media, hidden content and raw HTML are findings.
 - An error probe completes only when it fails with the provider error that it
   forced.
-- Zero lab traffic does not prove that production blocks egress: the
-  production agent container has general internet access.
+- Zero lab traffic does not prove that production blocks egress. The lab
+  runs the image on plain Docker, without the Workers runtime, so the egress
+  gate (`src/egress.ts`) does not run here. See "Egress allow list" below.
+
+## Egress allow list
+
+In production, the Worker intercepts every HTTP and HTTPS request of the agent
+container (`AgentContainer.outbound` in `src/worker.ts`). `AGENT_EGRESS_MODE`
+on the `doxa-agent-container` Worker sets what the gate does:
+
+- `log`: forward everything, and log each
+  host once per run (`eventType: "agent_egress"`, `listed: false` for a host
+  that `enforce` would refuse).
+- `enforce`: the container has no direct internet. Only `github.com`,
+  `api.anthropic.com`, `openrouter.ai` and the hosts in
+  `AGENT_EGRESS_ALLOWED_HOSTS` are forwarded, over HTTPS only. Other requests
+  get 403 with `x-doxa-egress: refused` and log `agent_egress_refused`.
+- `off` (default, and any unknown value): the behavior before the gate. A deploy changes nothing until the mode is set.
+
+The unit tests (`tests/egress.test.ts`) check the decision and the gate. They
+also check that the hosts this lab stands in for (`allowedHosts` in
+`run.mjs`) are on the allow list.
+
+The lab cannot check `enforce` end to end, because the gate runs only in the
+Cloudflare runtime. Check it by hand on a staging deploy of the agent
+container, never on production first:
+
+1. Deploy with `AGENT_EGRESS_MODE=log`. Run one generation. In the Worker logs,
+   find the `agent_egress` lines of the run: every host must have
+   `listed: true`, and the run must complete (this also proves that Node and
+   git trust the egress CA, `scripts/trust-egress-ca.sh`).
+2. Set `AGENT_EGRESS_MODE=enforce` and deploy again. Run one generation: it
+   must complete.
+3. Run the probe in the same container while a run holds it (or in a test
+   build): `node -e "fetch('https://example.com').then(r=>console.log(r.status, r.headers.get('x-doxa-egress')))"`.
+   It must print `403 refused`, and the Worker logs must show
+   `agent_egress_refused` with `host: "example.com"`. Also check that
+   `node -e "require('net').connect(443,'1.1.1.1').on('connect',()=>console.log('open')).on('error',e=>console.log(e.code))"`
+   does not print `open`: raw TCP must not leave without the gate.

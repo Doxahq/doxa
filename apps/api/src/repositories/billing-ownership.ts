@@ -13,6 +13,8 @@ export interface BillingAccountUsage {
    * projects that have no team (billing spec 8.1).
    */
   countCustomDomains(input: { ownerKind: OwnerKind; ownerId: string; exceptProjectId: string }): Promise<number>;
+  /** The account's projects, for the `account.projects` limit. Same ownership rule as above. */
+  countProjects(input: { ownerKind: OwnerKind; ownerId: string }): Promise<number>;
 }
 
 /** The recent runs of a project, for the credit estimate (billing spec 10.5). */
@@ -22,6 +24,8 @@ export interface BillingRunHistory {
 }
 
 export interface BillingContact {
+  /** The owner's Doxa user ID: product analytics counts billing facts for this person. */
+  userId: string;
   email: string | null;
   name: string | null;
 }
@@ -61,10 +65,7 @@ export class BillingOwnershipRepository implements ProjectOwnershipPort, Billing
   }
 
   async countCustomDomains(input: { ownerKind: OwnerKind; ownerId: string; exceptProjectId: string }): Promise<number> {
-    const owner =
-      input.ownerKind === "team"
-        ? eq(projects.teamId, input.ownerId)
-        : and(eq(projects.userId, input.ownerId), isNull(projects.teamId));
+    const owner = accountProjectsFilter(input);
     const [row] = await this.db
       .select({ value: count() })
       .from(docsDomains)
@@ -73,24 +74,29 @@ export class BillingOwnershipRepository implements ProjectOwnershipPort, Billing
     return row?.value ?? 0;
   }
 
+  async countProjects(input: { ownerKind: OwnerKind; ownerId: string }): Promise<number> {
+    const [row] = await this.db.select({ value: count() }).from(projects).where(accountProjectsFilter(input));
+    return row?.value ?? 0;
+  }
+
   async billingContactOf(owner: { ownerKind: OwnerKind; ownerId: string | null }): Promise<BillingContact | null> {
     if (!owner.ownerId) return null;
     if (owner.ownerKind === "user") {
       const [row] = await this.db
-        .select({ email: user.email, name: user.name })
+        .select({ userId: user.id, email: user.email, name: user.name })
         .from(user)
         .where(eq(user.id, owner.ownerId))
         .limit(1);
-      return row ? { email: row.email ?? null, name: row.name ?? null } : null;
+      return row ? { userId: row.userId, email: row.email ?? null, name: row.name ?? null } : null;
     }
     const [row] = await this.db
-      .select({ email: user.email })
+      .select({ userId: user.id, email: user.email })
       .from(teamMembers)
       .innerJoin(user, eq(user.id, teamMembers.userId))
       .where(and(eq(teamMembers.teamId, owner.ownerId), eq(teamMembers.role, "owner")))
       .orderBy(asc(teamMembers.createdAt), asc(teamMembers.userId))
       .limit(1);
-    return row ? { email: row.email ?? null, name: null } : null;
+    return row ? { userId: row.userId, email: row.email ?? null, name: null } : null;
   }
 
   async recentJobIds(projectId: string, limit: number): Promise<string[]> {
@@ -102,4 +108,11 @@ export class BillingOwnershipRepository implements ProjectOwnershipPort, Billing
       .limit(limit);
     return rows.map((row) => row.id);
   }
+}
+
+/** The projects of one billing account (billing spec 8.1). */
+function accountProjectsFilter(input: { ownerKind: OwnerKind; ownerId: string }) {
+  return input.ownerKind === "team"
+    ? eq(projects.teamId, input.ownerId)
+    : and(eq(projects.userId, input.ownerId), isNull(projects.teamId));
 }

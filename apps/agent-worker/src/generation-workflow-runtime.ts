@@ -95,6 +95,11 @@ import {
 } from "./execution-context-failure";
 import { checkPageFailureBudgetStep, NO_STEP_RETRIES, runBestEffortStep, settleWritePhase } from "./best-effort-step";
 import {
+  isSiteBrandingEnabled,
+  runSiteBrandingStep,
+  type SiteBrandingStepResult,
+} from "./site-branding";
+import {
   pageNoticePayloadKey,
   readPageNoticePayload,
   storePageNoticePayload,
@@ -148,6 +153,8 @@ import {
   behindInstructionsNotices,
   openIssueNotices,
   recordPageNotices,
+  recordUnverifiedExternalLinks,
+  unverifiedExternalLinkPages,
 } from "./page-notices";
 import {
   applyPageLocks,
@@ -830,7 +837,7 @@ export class GenerationWorkflowRunner {
           // Every read comes before the flag events, so a failed read never
           // repeats them when the step is retried.
           const noticesKey = await this.storeNoticePayload(input.jobId, pageNoticePayloadKey(checkpointPrefix, "full"), {
-            openIssueNotices: await this.collectOpenIssueNotices(input.jobId, outcome.keys),
+            ...await this.collectWrittenPageNotices(input.jobId, outcome.keys),
             behindCandidates: [],
           });
           const { flaggedPages } = planWithFailedPages(
@@ -855,6 +862,14 @@ export class GenerationWorkflowRunner {
       });
       const pageKeys = writeOutcome.keys;
       const failedPageIds = new Set(writeOutcome.failedPages.map((page) => page.id));
+
+      const branding = await this.siteBrandingStep(
+        step,
+        event.timestamp,
+        overallTimeoutMs,
+        input.jobId,
+        prepared.context,
+      );
 
       const published = await step.do(
         "assemble upload and publish artifacts",
@@ -883,7 +898,7 @@ export class GenerationWorkflowRunner {
             versionId: prepared.versionId,
             projectSlug: prepared.context.project.slug,
             projectName: prepared.context.project.name,
-            siteConfig: prepared.context.siteConfig,
+            siteConfig: branding.siteConfig ?? prepared.context.siteConfig,
             entitlements: prepared.context.entitlements,
             pages: pages.map(({ title, route, navigationPath, content }) => ({
               title,
@@ -966,19 +981,26 @@ export class GenerationWorkflowRunner {
   }
 
   /**
-   * The notices of the pages the writer kept with open issues. Notices only
-   * add information, so a failed checkpoint read gives none rather than a
-   * failed step.
+   * The notices of the pages the writer kept with open issues, and the pages
+   * that link to outside domains the repository does not contain. Notices
+   * only add information, so a failed checkpoint read gives none rather than
+   * a failed step.
    */
-  private async collectOpenIssueNotices(jobId: string, pageKeys: readonly string[]): Promise<PageNotice[]> {
+  private async collectWrittenPageNotices(
+    jobId: string,
+    pageKeys: readonly string[],
+  ): Promise<Pick<PageNoticePayload, "openIssueNotices" | "unverifiedExternalLinks">> {
     try {
-      const writtenBatches = await Promise.all(
+      const writtenPages = (await Promise.all(
         pageKeys.map((key) => readPageCheckpoint(this.env.DOCS_BUCKET, key)),
-      );
-      return openIssueNotices(writtenBatches.flat());
+      )).flat();
+      return {
+        openIssueNotices: openIssueNotices(writtenPages),
+        unverifiedExternalLinks: unverifiedExternalLinkPages(writtenPages),
+      };
     } catch (error) {
       logBestEffortStepError(jobId, "open_issue_notices", error);
-      return [];
+      return { openIssueNotices: [], unverifiedExternalLinks: [] };
     }
   }
 
@@ -1001,6 +1023,34 @@ export class GenerationWorkflowRunner {
    * reads the payload that an earlier step stored, adds the notices of the
    * pages that the ledger marks as exhausted, and logs and skips a failure.
    */
+  /**
+   * Fills the default branding of a first generation's site. Best effort: a
+   * failure or a timeout keeps the settings of the context.
+   */
+  private siteBrandingStep(
+    step: GenerationWorkflowStep,
+    startedAt: Date,
+    overallTimeoutMs: number,
+    jobId: string,
+    context: GenerationContext,
+  ): Promise<SiteBrandingStepResult> {
+    const fallback: SiteBrandingStepResult = { siteConfig: null };
+    if (context.brandingEligible !== true || !isSiteBrandingEnabled(this.env)) {
+      return Promise.resolve(fallback);
+    }
+    return runBestEffortStep({
+      step,
+      name: "discover site branding",
+      config: bestEffortStepConfig(startedAt, overallTimeoutMs, SITE_BRANDING_TIMEOUT_MS),
+      fallback,
+      onError: (error) => logBestEffortStepError(jobId, "site_branding", error),
+      work: async () => {
+        await ensureJobActive(this.env, jobId);
+        return runSiteBrandingStep({ env: this.env, jobId, context });
+      },
+    });
+  }
+
   private async recordNoticesStep(
     step: GenerationWorkflowStep,
     jobId: string,
@@ -1028,6 +1078,11 @@ export class GenerationWorkflowRunner {
           ],
           addJobEvent: (noticeEvent) => this.env.API.addJobEvent(jobId, noticeEvent),
           onError: (_notice, error) => logBestEffortStepError(jobId, "page_notice", error),
+        });
+        await recordUnverifiedExternalLinks({
+          pages: payload.unverifiedExternalLinks,
+          addJobEvent: (linkEvent) => this.env.API.addJobEvent(jobId, linkEvent),
+          onError: (error) => logBestEffortStepError(jobId, "unverified_external_links", error),
         });
       },
     });
@@ -1643,7 +1698,7 @@ export class GenerationWorkflowRunner {
           const runFingerprint = analysisResult.analysisState.projectInstructionsFingerprint;
           const previousRunFingerprint = reusableState?.analysis.projectInstructionsFingerprint;
           const noticesKey = await this.storeNoticePayload(input.jobId, pageNoticePayloadKey(checkpointPrefix, checkpointScope), {
-            openIssueNotices: await this.collectOpenIssueNotices(input.jobId, outcome.keys),
+            ...await this.collectWrittenPageNotices(input.jobId, outcome.keys),
             behindCandidates: behindInstructionCandidates({
               previousPages: reusableState?.pages ?? [],
               previousRunFingerprint,
@@ -1732,6 +1787,16 @@ export class GenerationWorkflowRunner {
           new Set(baselinePageStates(reusableState).keys()),
         );
 
+      const branding = isPreview
+        ? { siteConfig: null }
+        : await this.siteBrandingStep(
+            step,
+            event.timestamp,
+            overallTimeoutMs,
+            input.jobId,
+            context,
+          );
+
       const assembled = await step.do(
         isPreview
           ? "assemble and upload incremental preview artifacts"
@@ -1789,7 +1854,7 @@ export class GenerationWorkflowRunner {
             versionId: prepared.versionId,
             projectSlug: context.project.slug,
             projectName: context.project.name,
-            siteConfig: context.siteConfig,
+            siteConfig: branding.siteConfig ?? context.siteConfig,
             entitlements: context.entitlements,
             pages: pages.map(
               ({
@@ -2178,11 +2243,6 @@ function assertRevisionAwareExecutionContext(
       "Preview generation context is incomplete.",
     );
   }
-  if (context.repository.isPrivate !== true) {
-    throw new NonRetryableError(
-      "Doxabot previews are disabled for public repositories.",
-    );
-  }
   if (
     context.job.sourceInstallationExternalId !==
     context.repository.installationId
@@ -2330,6 +2390,9 @@ function behindInstructionsField(
 }
 
 /** A best-effort step failed; the run goes on without what it would add. */
+/** GitHub, the homepage, its images, and Context.dev when it is on. */
+const SITE_BRANDING_TIMEOUT_MS = 90_000;
+
 function logBestEffortStepError(jobId: string, step: string, error: unknown): void {
   console.warn(JSON.stringify({
     service: "doxa-agent-worker",

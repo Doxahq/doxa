@@ -47,6 +47,22 @@ export const normalizedChangeProposalEventSchema = z.object({
     number: z.number().int().positive(),
     // Optional for webhook deliveries normalized before author tracking existed.
     author: sourceAuthorSchema.nullable().optional(),
+    /**
+     * True when GitHub marks the author as a bot account (`user.type` is
+     * `Bot`). Optional for deliveries normalized before this field existed.
+     */
+    authorIsBot: z.boolean().optional(),
+    /**
+     * True when the head branch is in another repository (a fork), or the
+     * fork was deleted. Optional for deliveries normalized before this field
+     * existed; those came only from the repository or from trusted forks.
+     */
+    fromFork: z.boolean().optional(),
+    /**
+     * The repository size in KB (`repository.size` of the webhook). Optional:
+     * older deliveries did not keep it, and GitHub may leave it out.
+     */
+    repositorySizeKb: z.number().int().nonnegative().optional(),
     draft: z.boolean(),
     merged: z.boolean(),
     baseRef: z.string().min(1),
@@ -78,19 +94,73 @@ export const repositoryLifecycleActionSchema = z.enum([
  */
 export const lifecycleRepositorySchema = sourceRepositorySchema.extend({
   defaultBranch: z.string().min(1).optional(),
+  /** `owner/name`. Optional: older deliveries did not keep it. */
+  fullName: z.string().min(1).optional(),
+  /** The login of the account that owns the repository. */
+  owner: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
 }).strict();
+
+/**
+ * What happened to the repository on GitHub: `added` and `removed` come from
+ * `installation_repositories`, the others are `repository` event actions.
+ */
+export const repositoryLifecycleChangeSchema = z.enum([
+  "added",
+  "removed",
+  "created",
+  "deleted",
+  "edited",
+  "renamed",
+  "transferred",
+  "privatized",
+  "publicized",
+  "archived",
+  "unarchived",
+]);
 
 export const normalizedRepositoryLifecycleEventSchema = z.object({
   kind: z.literal("repository_lifecycle"),
   deliveryId: z.string().min(1),
   action: repositoryLifecycleActionSchema,
+  /** Optional for deliveries normalized before this field existed. */
+  change: repositoryLifecycleChangeSchema.optional(),
   repository: lifecycleRepositorySchema,
+}).strict();
+
+export const installationLifecycleActionSchema = z.enum([
+  "created",
+  "deleted",
+  "suspended",
+  "unsuspended",
+  "permissions_accepted",
+]);
+
+/**
+ * An `installation` event. It is about the whole installation: GitHub does
+ * not always list its repositories.
+ */
+export const normalizedInstallationLifecycleEventSchema = z.object({
+  kind: z.literal("installation_lifecycle"),
+  deliveryId: z.string().min(1),
+  provider: sourceProviderSchema,
+  installationExternalId: z.string().min(1),
+  action: installationLifecycleActionSchema,
+  /**
+   * The GitHub user who sent the event. Only `created` keeps it: that user
+   * installed the app. Optional for older deliveries.
+   */
+  sender: z.object({
+    externalId: z.string().min(1),
+    login: z.string().min(1),
+  }).strict().optional(),
 }).strict();
 
 export const normalizedSourceControlEventSchema = z.discriminatedUnion("kind", [
   normalizedChangeProposalEventSchema,
   normalizedDefaultBranchPushEventSchema,
   normalizedRepositoryLifecycleEventSchema,
+  normalizedInstallationLifecycleEventSchema,
 ]);
 
 export const sourceControlIrrelevantReasonSchema = z.enum([
@@ -98,6 +168,7 @@ export const sourceControlIrrelevantReasonSchema = z.enum([
   "unsupported_action",
   "non_default_branch_push",
   "no_repository_changes",
+  /** Kept so stored deliveries stay readable. The parser no longer returns it. */
   "untrusted_fork",
 ]);
 
@@ -136,6 +207,15 @@ export type RepositoryLifecycleAction = z.infer<
 >;
 export type NormalizedRepositoryLifecycleEvent = z.infer<
   typeof normalizedRepositoryLifecycleEventSchema
+>;
+export type RepositoryLifecycleChange = z.infer<
+  typeof repositoryLifecycleChangeSchema
+>;
+export type InstallationLifecycleAction = z.infer<
+  typeof installationLifecycleActionSchema
+>;
+export type NormalizedInstallationLifecycleEvent = z.infer<
+  typeof normalizedInstallationLifecycleEventSchema
 >;
 export type NormalizedSourceControlEvent = z.infer<
   typeof normalizedSourceControlEventSchema

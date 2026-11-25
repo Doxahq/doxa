@@ -16,6 +16,7 @@ import { LiveSiteCard } from "~/components/dashboard/overview/live-site-card"
 import { OpenPreviewsCard } from "~/components/dashboard/overview/open-previews-card"
 import { SetupChecklist } from "~/components/dashboard/overview/setup-checklist"
 import { ProjectOverviewSkeleton } from "~/components/dashboard/skeletons/project-skeletons"
+import { useDashboardPageReady } from "~/lib/dashboard/dashboard-boot"
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
 import {
@@ -88,6 +89,9 @@ export function ProjectOverviewPage({ projectId }: { projectId: string }) {
     { isPending: mdxQuery.isLoading },
     { isPending: setup.isLoading },
   ])
+  // The dashboard loading screen of a `/dashboard` entry stays until now, so
+  // the user never sees this page's skeleton after it.
+  useDashboardPageReady(!isFirstLoad)
   if (isFirstLoad) return <ProjectOverviewSkeleton />
 
   const { project, latestJob } = workspace

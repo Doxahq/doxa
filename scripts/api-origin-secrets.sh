@@ -37,7 +37,8 @@ Asks for each missing secret of the API origin and writes it to SSM.
 
 Options:
   --list                 Show which secrets are set and which are missing. Change nothing.
-  --overwrite NAME       Ask for NAME again even if it is set (to rotate it). Repeat for more names.
+  --overwrite NAME       Write only NAME, even if it is set (to rotate it). Repeat for more names.
+                         The script then skips every other secret and does not check them.
   --environment NAME     Environment of the SSM path /doxa/api/NAME (default: production).
   --region REGION        AWS region (default: us-east-1).
   --tfvars PATH          Variables file with api_secret_names
@@ -93,6 +94,16 @@ secret_names() {
 
 NAMES="$(secret_names "$TFVARS")"
 [ -n "$NAMES" ] || fail "${TFVARS} has no api_secret_names."
+
+# With --overwrite, work on those names only: no SSM check for the others.
+TARGET_ONLY=false
+if [ -n "${OVERWRITE_NAMES// /}" ]; then
+  for name in $OVERWRITE_NAMES; do
+    case " $(echo $NAMES) " in *" ${name} "*) ;; *) fail "${name} is not in api_secret_names of ${TFVARS}." ;; esac
+  done
+  NAMES="$OVERWRITE_NAMES"
+  TARGET_ONLY=true
+fi
 
 command -v aws >/dev/null 2>&1 || fail "The AWS CLI is not installed."
 command -v node >/dev/null 2>&1 || fail "Node.js is not installed."
@@ -189,7 +200,7 @@ missing=""
 generated=""
 saved=0
 for name in $NAMES; do
-  if is_set "$name" && ! contains "$OVERWRITE_NAMES" "$name"; then
+  if [ "$TARGET_ONLY" != true ] && is_set "$name"; then
     echo "  ${name}: set, skipped."
     continue
   fi
@@ -235,6 +246,10 @@ if [ "$saved" -gt 0 ]; then
   echo "Saved ${saved}. Running tasks keep their old values: deploy the origin again to load the new ones."
 fi
 
+if [ "$TARGET_ONLY" = true ]; then
+  [ -z "$missing" ] || { echo "Not saved:${missing}"; exit 1; }
+  exit 0
+fi
 if [ -n "$missing" ]; then
   echo "Still missing:${missing}"
   echo "The ECS task cannot start until every secret is set. Run this script again to add them."

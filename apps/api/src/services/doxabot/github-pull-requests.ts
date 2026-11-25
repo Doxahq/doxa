@@ -48,6 +48,10 @@ const githubPullRequestSchema = z.object({
   base: z.object({
     ref: z.string().min(1),
     sha: gitObjectIdSchema,
+    repo: z
+      .object({ size: z.number().int().nonnegative().optional() })
+      .nullable()
+      .optional(),
   }),
   head: z.object({
     sha: gitObjectIdSchema,
@@ -144,6 +148,9 @@ export class GitHubPullRequestStateResolver
       baseRevision: pullRequest.base.sha,
       headRevision: pullRequest.head.sha,
       sourceUpdatedAt: new Date(pullRequest.updated_at),
+      ...(pullRequest.base.repo?.size !== undefined
+        ? { repositorySizeKb: pullRequest.base.repo.size }
+        : {}),
     };
   }
 }

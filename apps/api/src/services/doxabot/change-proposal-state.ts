@@ -11,6 +11,8 @@ export interface ChangeProposalSnapshot {
   baseRevision: string;
   headRevision: string;
   sourceUpdatedAt: Date;
+  /** GitHub's `size` of the base repository, in KB, when GitHub sent it. */
+  repositorySizeKb?: number;
 }
 
 export interface ChangeProposalStateResolver {

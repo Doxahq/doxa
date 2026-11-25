@@ -17,6 +17,7 @@ import { Input } from "~/components/ui/input"
 import { Label } from "~/components/ui/label"
 import { branchNameError } from "~/lib/dashboard/branch-name-validation"
 import { useDialogFocusReturn } from "~/lib/dashboard/use-dialog-focus-return"
+import { planLimitDetails } from "~/lib/dashboard/billing-model"
 import { getErrorMessage } from "~/lib/errors"
 import { docsBranchQueryKeys } from "~/lib/queries/docs-branches"
 import { createDocsBranch } from "~/lib/docs-branches-api"
@@ -66,6 +67,11 @@ export function CreateBranchDialog(props: CreateBranchDialogProps) {
       props.onOpenChange(false)
     },
     onError: (error) => {
+      // A 403 plan_limit opens the plan limit flow (the mutation cache reports it): this dialog makes way.
+      if (planLimitDetails(error)) {
+        props.onOpenChange(false)
+        return
+      }
       setServerError(isApiValidationError(error)
         ? (error.issues[0]?.message ?? "The branch name is not valid.")
         : getErrorMessage(error, "The branch could not be created."))

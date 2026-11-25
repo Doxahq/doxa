@@ -48,10 +48,20 @@ export function SidebarViewFooter({ children }: { children: ReactNode }) {
   return <div className="shrink-0 border-t border-divider px-2 pt-1.5 pb-2">{children}</div>
 }
 
+/**
+ * The back button: a full-width row, so the whole row is the target. The arrow sits in a
+ * bordered tile, which reads as a control even before the pointer reaches it.
+ */
 const BACK_BUTTON_CLASS =
-  "-ml-1 flex h-7 w-fit max-w-full items-center gap-1.5 rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-overlay hover:text-foreground [&_svg]:size-4 [&_svg]:shrink-0"
+  "group/back flex h-9 w-full min-w-0 items-center gap-2.5 rounded-md px-1.5 text-left text-foreground transition-colors hover:bg-overlay focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+
+const BACK_ICON_CLASS =
+  "grid size-6 shrink-0 place-items-center rounded-md border border-border bg-card text-muted-foreground transition-colors group-hover/back:border-border-strong group-hover/back:text-foreground [&_svg]:size-3.5"
 
 const VIEW_LABEL_CLASS = "font-mono text-[11px] font-medium tracking-[0.16em] text-foreground uppercase"
+
+/** The view name under a "Back to <place>" button: the title of the view, so it is larger than a group label. */
+const VIEW_TITLE_CLASS = "font-mono text-[13px] font-semibold tracking-[0.14em] text-foreground uppercase"
 
 /**
  * Back arrow and uppercase label at the top of a nested view. With
@@ -72,7 +82,7 @@ export function SidebarViewHeader({
   children?: ReactNode
 }) {
   return (
-    <div className="flex shrink-0 flex-col gap-2.5 border-b border-divider px-3 py-2.5">
+    <div className="flex shrink-0 flex-col gap-2 border-b border-divider px-2 py-2">
       <button
         type="button"
         onClick={onBack}
@@ -80,14 +90,16 @@ export function SidebarViewHeader({
         title={backLabel}
         className={BACK_BUTTON_CLASS}
       >
-        <ArrowLeft aria-hidden="true" />
+        <span aria-hidden="true" className={BACK_ICON_CLASS}>
+          <ArrowLeft />
+        </span>
         {backText ? (
-          <span className="truncate text-[13px]">{backText}</span>
+          <span className="truncate text-[13.5px] font-medium">{backText}</span>
         ) : (
           <span className={cn("truncate", VIEW_LABEL_CLASS)}>{label}</span>
         )}
       </button>
-      {backText ? <span className={VIEW_LABEL_CLASS}>{label}</span> : null}
+      {backText ? <span className={cn("px-1.5 pt-1.5 pb-1", VIEW_TITLE_CLASS)}>{label}</span> : null}
       {children}
     </div>
   )

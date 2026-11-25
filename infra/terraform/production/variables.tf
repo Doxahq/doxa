@@ -133,6 +133,15 @@ variable "monthly_budget_usd" {
   default     = 120
 }
 
+variable "budget_notifications" {
+  description = "Budget notices to alert_emails (see the monitoring module). Null keeps the module default: 80% actual and 100% forecast."
+  type = list(object({
+    type              = string
+    threshold_percent = number
+  }))
+  default = null
+}
+
 variable "enable_execute_command" {
   description = "Allow `aws ecs execute-command` into the API container, for a debug session only. Turn it off again after the session."
   type        = bool

@@ -39,6 +39,14 @@ export default defineConfig(({ command, mode }) => {
     assertSafeProductionEnv(loadEnv(mode, appRoot, "VITE_"))
   }
 
+  // The dev server's server routes read PostHog settings from process.env, as
+  // the Worker does. Locally they come from .env.local (optional).
+  if (command === "serve") {
+    for (const [name, value] of Object.entries(loadEnv(mode, appRoot, "POSTHOG_"))) {
+      process.env[name] ??= value
+    }
+  }
+
   return {
     resolve: {
       alias: collaborationStubAlias,

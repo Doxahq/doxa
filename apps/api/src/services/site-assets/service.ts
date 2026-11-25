@@ -5,6 +5,7 @@ import {
   createValidationIssue,
   type SiteAssetKind,
 } from "@doxahq/site-config";
+import { PlanLimitError } from "@doxahq/billing";
 import type { Env } from "../../env";
 import { ProjectsRepository } from "../../repositories/projects";
 import { DocsContentError } from "../docs-content/errors";
@@ -73,6 +74,28 @@ export class SiteAssetsService {
     input: Uint8Array,
   ): Promise<SiteAssetUploadResponse> {
     const { siteId } = await this.resolveSite(userId, projectId);
+    return this.store(projectId, siteId, kind, input);
+  }
+
+  /**
+   * Stores an image that a generation found for the site branding. The
+   * caller resolved the site from the job, so no user check applies here.
+   */
+  uploadForGeneration(
+    projectId: string,
+    siteId: string,
+    kind: SiteAssetKind,
+    input: Uint8Array,
+  ): Promise<SiteAssetUploadResponse> {
+    return this.store(projectId, siteId, kind, input);
+  }
+
+  private async store(
+    projectId: string,
+    siteId: string,
+    kind: SiteAssetKind,
+    input: Uint8Array,
+  ): Promise<SiteAssetUploadResponse> {
     const asset = await this.compress(
       await prepareSiteAssetIsolated(input, kind, this.deps.svgCleaner),
       kind,
@@ -138,15 +161,11 @@ export class SiteAssetsService {
       this.deps.storageLimits.getStorageLimits(projectId),
       this.deps.store.usage(siteId),
     ]);
-    if (
-      usage.files >= limits.maxSiteAssetFiles ||
-      usage.bytes + addedBytes > limits.maxSiteAssetBytes
-    ) {
-      throw new DocsContentError(
-        "storage_quota_exceeded",
-        "This site stores the most logos, favicons, and social images that the plan allows.",
-        { usedBytes: usage.bytes, limitBytes: limits.maxSiteAssetBytes, usedFiles: usage.files, limitFiles: limits.maxSiteAssetFiles },
-      );
+    if (usage.files >= limits.maxSiteAssetFiles) {
+      throw new PlanLimitError({ key: "site.asset_files", limit: limits.maxSiteAssetFiles, used: usage.files });
+    }
+    if (usage.bytes + addedBytes > limits.maxSiteAssetBytes) {
+      throw new PlanLimitError({ key: "site.asset_bytes", limit: limits.maxSiteAssetBytes, used: usage.bytes });
     }
   }
 

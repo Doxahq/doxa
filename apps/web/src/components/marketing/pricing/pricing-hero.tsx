@@ -1,5 +1,6 @@
 import { Hr, Ticks } from "~/components/marketing/guides"
 import { SiteNav } from "~/components/marketing/site-nav"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { DEMO_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 import { FOUNDER_PRICE_NOTE } from "~/lib/marketing/pricing"
 
@@ -24,7 +25,7 @@ export function PricingHero() {
             branding and higher limits.
           </p>
           <div className="row">
-            <a className="btn btn--light" href={GET_STARTED_URL}>
+            <a className="btn btn--light" href={GET_STARTED_URL} onClick={ctaClickHandler("pricing_hero", "get_started")}>
               Start free ›
             </a>
             <a className="btn btn--line" href={DEMO_URL}>

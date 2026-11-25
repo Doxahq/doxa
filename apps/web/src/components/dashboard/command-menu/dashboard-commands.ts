@@ -9,11 +9,13 @@ import {
   Globe,
   Info,
   LogOut,
+  Mail,
   Maximize2,
   PanelLeft,
   PenLine,
   Plus,
   Settings,
+  ShieldCheck,
   UserRound,
   Users,
 } from "lucide-react"
@@ -21,6 +23,7 @@ import {
 import { DoxabotIcon } from "~/components/dashboard/doxabot/doxabot-icon"
 import { useSidebar } from "~/components/ui/sidebar"
 import { useDashboardAuth } from "~/lib/auth/dashboard-auth-context"
+import { ACCOUNT_PAGES } from "~/lib/dashboard/account-pages"
 import { DOXA_DOCS_URL, DOXA_GITHUB_URL } from "~/lib/dashboard/external-links"
 import type { KeySequence } from "~/lib/dashboard/key-sequence"
 import { useShell } from "~/lib/dashboard/shell-context"
@@ -130,9 +133,33 @@ export function useDashboardCommands(projectId: string | null): DashboardCommand
       group: "account",
       label: "Account settings",
       icon: UserRound,
-      keywords: ["profile", "approvals"],
+      keywords: ["profile", "github"],
       sequence: ["g", "a"],
-      run: () => void navigate({ to: "/dashboard/settings" }),
+      run: () => void navigate({ to: ACCOUNT_PAGES.account.path }),
+    },
+    {
+      id: "email-notifications",
+      group: "account",
+      label: ACCOUNT_PAGES.emailNotifications.title,
+      icon: Mail,
+      keywords: ["notifications", "emails", "unsubscribe"],
+      run: () => void navigate({ to: ACCOUNT_PAGES.emailNotifications.path }),
+    },
+    {
+      id: "connected-agents",
+      group: "account",
+      label: ACCOUNT_PAGES.connectedAgents.title,
+      icon: Bot,
+      keywords: ["mcp", "agents", "revoke"],
+      run: () => void navigate({ to: ACCOUNT_PAGES.connectedAgents.path }),
+    },
+    {
+      id: "agent-approvals",
+      group: "account",
+      label: ACCOUNT_PAGES.agentApprovals.title,
+      icon: ShieldCheck,
+      keywords: ["approvals", "permissions", "allow", "block"],
+      run: () => void navigate({ to: ACCOUNT_PAGES.agentApprovals.path }),
     },
     {
       id: "teams",

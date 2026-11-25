@@ -14,6 +14,7 @@ import { AgentClaimConsentService } from "../../../src/services/agent-signup/age
 import { AgentClaimService } from "../../../src/services/agent-signup/agent-claim-service";
 import { OWNER } from "../oauth/fixtures";
 import { ownerPolicy } from "../oauth/fixtures";
+import type { ProductAnalytics } from "@doxahq/analytics";
 
 export { OWNER, OTHER, PROJECT_A, OTHER_PROJECT } from "../oauth/fixtures";
 export const OWNER_EMAIL = "owner@doxa.test";
@@ -172,7 +173,7 @@ export class Clock {
   }
 }
 
-export function harness(options: { emails?: Record<string, string> } = {}) {
+export function harness(options: { emails?: Record<string, string>; analytics?: ProductAnalytics } = {}) {
   const clock = new Clock();
   const tokens = new MemoryAgentTokenStore();
   const claims = new MemoryAgentClaimStore(tokens, clock);
@@ -187,7 +188,14 @@ export function harness(options: { emails?: Record<string, string> } = {}) {
     now: clock.now,
     newId: () => crypto.randomUUID(),
   });
-  const consent = new AgentClaimConsentService({ claims, tokens, accounts, projects, now: clock.now });
+  const consent = new AgentClaimConsentService({
+    claims,
+    tokens,
+    accounts,
+    projects,
+    now: clock.now,
+    ...(options.analytics ? { analytics: options.analytics } : {}),
+  });
   return { clock, tokens, claims, agent, consent, notifyConnected };
 }
 

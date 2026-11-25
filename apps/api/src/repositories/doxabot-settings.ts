@@ -1,5 +1,6 @@
 import {
   doxabotBatchQuietMinutesSchema,
+  type DoxabotAutomationWarning,
   type DoxabotBatchQuietMinutes,
   type DoxabotMergeTrigger,
   type RepositoryVisibility,
@@ -9,6 +10,10 @@ import {
 import { createDb, schema, type DbEnv } from "@doxahq/db";
 import { and, eq } from "drizzle-orm";
 import { isClearedGenerationBaseline } from "./generation-baseline-reset";
+import {
+  repositoryConnectionIssue,
+  type RepositoryConnectionIssue,
+} from "./github-lifecycle";
 import {
   optionalProductionBranchSql,
   productionBranchSql,
@@ -23,6 +28,8 @@ export type DoxabotProjectRepositoryState =
       defaultBranch: string;
       /** The branch that production generations read (`productionBranchSql`). */
       productionBranch: string;
+      /** Why the repository cannot be used now; null when it can. */
+      connectionIssue: RepositoryConnectionIssue | null;
     };
 
 export interface DoxabotProjectSettingsState {
@@ -33,12 +40,18 @@ export interface DoxabotProjectSettingsState {
   storedEnabled: boolean;
   mergeTrigger: DoxabotMergeTrigger;
   batchQuietMinutes: DoxabotBatchQuietMinutes;
+  allowedBotLogins: string[];
+  /** Why Doxabot stopped updating the site on its own, or null. */
+  automationWarning: DoxabotAutomationWarning | null;
   updatedAt: Date | null;
 }
 
-/** The merge settings of a project without a settings row. */
+/**
+ * The merge settings of a project without a settings row. Merge runs stay
+ * off until the owner turns them on (Decision 7).
+ */
 export const DEFAULT_MERGE_SETTINGS = {
-  mergeTrigger: "batched",
+  mergeTrigger: "manual",
   batchQuietMinutes: 30,
 } as const satisfies {
   mergeTrigger: DoxabotMergeTrigger;
@@ -60,6 +73,13 @@ export interface DoxabotAutomationContext {
   productionBranch: string;
   storedEnabled: boolean;
   mergeTrigger: DoxabotMergeTrigger;
+  /** Bot logins whose pull requests get previews; every other bot is skipped. */
+  allowedBotLogins: string[];
+  /**
+   * Why the repository cannot be used now: removed from the app, deleted, or
+   * the installation is suspended or uninstalled. Null when it can.
+   */
+  connectionIssue: RepositoryConnectionIssue | null;
   /** The site serves a published version. Previews need one to exist. */
   hasPublishedVersion: boolean;
   /**
@@ -148,18 +168,26 @@ export class DoxabotSettingsRepository
         repositoryId: schema.githubRepositories.id,
         repositoryIsPrivate: schema.githubRepositories.isPrivate,
         repositoryDefaultBranch: schema.githubRepositories.defaultBranch,
+        repositoryDisconnectedReason: schema.githubRepositories.disconnectedReason,
+        installationStatus: schema.githubInstallations.status,
         // A left join: null when the project has no repository.
         productionBranch: optionalProductionBranchSql(),
         publishedVersionId: schema.docsSites.publishedVersionId,
         storedEnabled: schema.doxabotAutomationSettings.enabled,
         mergeTrigger: schema.doxabotAutomationSettings.mergeTrigger,
         batchQuietMinutes: schema.doxabotAutomationSettings.batchQuietMinutes,
+        allowedBotLogins: schema.doxabotAutomationSettings.allowedBotLogins,
+        pausedReason: schema.doxabotAutomationSettings.pausedReason,
         settingsUpdatedAt: schema.doxabotAutomationSettings.updatedAt,
       })
       .from(schema.projects)
       .leftJoin(
         schema.githubRepositories,
         eq(schema.projects.githubRepositoryId, schema.githubRepositories.id),
+      )
+      .leftJoin(
+        schema.githubInstallations,
+        eq(schema.githubRepositories.installationId, schema.githubInstallations.id),
       )
       .leftJoin(
         schema.docsSites,
@@ -177,6 +205,12 @@ export class DoxabotSettingsRepository
 
     if (!row) return null;
 
+    const connectionIssue = row.installationStatus
+      ? repositoryConnectionIssue({
+          installationStatus: row.installationStatus,
+          disconnectedReason: row.repositoryDisconnectedReason,
+        })
+      : null;
     return {
       projectId: row.projectId,
       ownerUserId: row.ownerUserId,
@@ -188,12 +222,15 @@ export class DoxabotSettingsRepository
               defaultBranch: row.repositoryDefaultBranch,
               productionBranch:
                 row.productionBranch ?? row.repositoryDefaultBranch,
+              connectionIssue,
             }
           : { connected: false },
       hasPublishedVersion: row.publishedVersionId !== null,
       storedEnabled: row.storedEnabled ?? false,
       mergeTrigger: row.mergeTrigger ?? DEFAULT_MERGE_SETTINGS.mergeTrigger,
       batchQuietMinutes: toBatchQuietMinutes(row.batchQuietMinutes),
+      allowedBotLogins: row.allowedBotLogins ?? [],
+      automationWarning: connectionIssue ?? row.pausedReason ?? null,
       updatedAt: row.settingsUpdatedAt,
     };
   }
@@ -213,7 +250,8 @@ export class DoxabotSettingsRepository
       }
 
       // The row also records who changed a setting last, so a branch-only
-      // update writes it too.
+      // update writes it too. A change by the owner is their decision after
+      // a pause (Decision 4), so it clears the pause.
       const [settings] = await tx
         .insert(schema.doxabotAutomationSettings)
         .values({
@@ -225,6 +263,8 @@ export class DoxabotSettingsRepository
           target: schema.doxabotAutomationSettings.projectId,
           set: {
             ...automation,
+            pausedReason: null,
+            pausedAt: null,
             updatedByUserId: input.updatedByUserId,
             updatedAt: new Date(),
           },
@@ -255,8 +295,11 @@ export class DoxabotSettingsRepository
         repositoryName: schema.githubRepositories.name,
         repositoryIsPrivate: schema.githubRepositories.isPrivate,
         productionBranch: productionBranchSql(),
+        installationStatus: schema.githubInstallations.status,
+        repositoryDisconnectedReason: schema.githubRepositories.disconnectedReason,
         storedEnabled: schema.doxabotAutomationSettings.enabled,
         mergeTrigger: schema.doxabotAutomationSettings.mergeTrigger,
+        allowedBotLogins: schema.doxabotAutomationSettings.allowedBotLogins,
         publishedVersionId: schema.docsSites.publishedVersionId,
         publishedSourceRevision: schema.docsVersions.sourceRevision,
         publishedVersionCreatedAt: schema.docsVersions.createdAt,
@@ -326,6 +369,11 @@ export class DoxabotSettingsRepository
       productionBranch: row.productionBranch,
       storedEnabled: row.storedEnabled ?? false,
       mergeTrigger: row.mergeTrigger ?? DEFAULT_MERGE_SETTINGS.mergeTrigger,
+      allowedBotLogins: row.allowedBotLogins ?? [],
+      connectionIssue: repositoryConnectionIssue({
+        installationStatus: row.installationStatus,
+        disconnectedReason: row.repositoryDisconnectedReason,
+      }),
       hasPublishedVersion: row.publishedVersionId !== null,
       publishedBaseline: toPublishedPreviewBaseline(row),
     };

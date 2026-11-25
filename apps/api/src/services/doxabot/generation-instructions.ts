@@ -1,5 +1,6 @@
 import type {
   GenerationContext,
+  GenerationExecutionContext,
   GenerationInstructions,
   GenerationRepositoryInstructionsFile,
 } from "@doxahq/contracts";
@@ -20,15 +21,19 @@ import {
 
 export interface GenerationInstructionsSources {
   getCurrent(projectId: string): Promise<ProjectInstructionVersion | null>;
-  readRepositoryFile(projectId: string): Promise<GenerationRepositoryInstructionsFile>;
+  /** `ref`: the commit to read at; absent reads the production branch tip. */
+  readRepositoryFile(projectId: string, ref?: string): Promise<GenerationRepositoryInstructionsFile>;
 }
 
 export function generationInstructionsSourcesFromEnv(env: Env): GenerationInstructionsSources {
   const service = DoxabotInstructionsService.fromEnv(env);
   return {
     getCurrent: (projectId) => service.getCurrent(projectId),
-    readRepositoryFile: async (projectId) =>
-      readRepositoryInstructionsFile(await repositoryAccessForInstructions(() => createRepositoryReadAccess(env, projectId))),
+    readRepositoryFile: async (projectId, ref) =>
+      readRepositoryInstructionsFile(
+        await repositoryAccessForInstructions(() => createRepositoryReadAccess(env, projectId)),
+        ref ? { ref } : {},
+      ),
   };
 }
 
@@ -78,12 +83,15 @@ function delay(ms: number): Promise<void> {
 export async function loadGenerationInstructions(
   sources: GenerationInstructionsSources,
   projectId: string,
+  ref?: string,
 ): Promise<GenerationInstructions | null> {
   const current = await sources.getCurrent(projectId);
   if (!current) return null;
 
   const repositoryFile = current.instructions.repositoryFile.enabled
-    ? await sources.readRepositoryFile(projectId)
+    ? await (ref === undefined
+      ? sources.readRepositoryFile(projectId)
+      : sources.readRepositoryFile(projectId, ref))
     : { status: "disabled" as const };
 
   return {
@@ -92,6 +100,22 @@ export async function loadGenerationInstructions(
     screening: current.screening,
     repositoryFile,
   };
+}
+
+/**
+ * The commit whose `.doxa/instructions.md` a run follows (risk 8): the base
+ * of the pull request for a preview, which is a commit of the production
+ * branch and never the pull request head, and the target commit for a
+ * production run. Undefined without a run: then the production branch tip.
+ */
+export function instructionsRefFor(
+  context: GenerationContext | Pick<GenerationExecutionContext, "job" | "changeProposal">,
+): string | undefined {
+  if (!("job" in context)) return undefined;
+  if (context.job.publicationMode === "preview") {
+    return context.changeProposal?.baseRevision;
+  }
+  return context.job.targetRevision ?? undefined;
 }
 
 /** Adds the project's Doxabot instructions to a generation context. */
@@ -103,6 +127,10 @@ export async function withDoxabotInstructions<T extends GenerationContext>(
   if (!context) return null;
   return {
     ...context,
-    doxabotInstructions: await loadGenerationInstructions(sources, context.project.id),
+    doxabotInstructions: await loadGenerationInstructions(
+      sources,
+      context.project.id,
+      instructionsRefFor(context),
+    ),
   };
 }

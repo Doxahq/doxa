@@ -12,6 +12,8 @@ export const STRIPE_PROVIDER = "stripe" as const;
 /** Every Doxa object carries this metadata, so the sync never touches objects it did not make. */
 export const META_MANAGED = "doxa_managed";
 export const META_ACCOUNT = "doxa_billing_account_id";
+/** The account owner's Doxa user ID on the customer: PostHog joins Stripe revenue to that person. */
+export const META_POSTHOG_PERSON = "posthog_person_distinct_id";
 export const META_PRICE_KEY = "doxa_price_key";
 export const META_PLAN = "doxa_plan";
 export const META_OFFER = "doxa_offer";

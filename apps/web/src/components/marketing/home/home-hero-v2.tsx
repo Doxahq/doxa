@@ -3,46 +3,37 @@ import { Lock } from "lucide-react"
 import { Hr } from "~/components/marketing/guides"
 import { ConnectAgentButton } from "~/components/marketing/home/connect-agent-button"
 import { SiteNav } from "~/components/marketing/site-nav"
-import {
-  HERO_V2_DOCS_SIZES,
-  HERO_V2_IMAGES,
-  HERO_V2_SCENE_SIZES,
-  type HeroImage,
-  heroSrc,
-  heroSrcSet,
-} from "~/lib/marketing/home-hero"
+import { Picture } from "~/components/ui/picture"
+import { ThemedPicture } from "~/components/ui/themed-picture"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
+import { HERO_V2_DOCS_SIZES, HERO_V2_IMAGES, HERO_V2_SCENE_SIZES, type HeroImage } from "~/lib/marketing/home-hero"
 import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
+import type { PictureFiles } from "~/lib/theme/picture-files"
 
 /** The docs page in the screenshot. The address bar opens it in a new tab. */
 const DOCS_DEMO_URL = `${DOCS_URL}/overview`
 const DOCS_DEMO_LABEL = "docs.doxa.so/overview"
 
-interface HeroPictureProps {
-  image: HeroImage
-  sizes: string
-  className?: string
-  alt?: string
-  /** The first paint needs the scene, so the browser fetches it before other images. */
-  priority?: boolean
-}
-
-function HeroPicture({ image, sizes, className, alt = "", priority = false }: HeroPictureProps) {
+/**
+ * One layer of the dune scene. It is the same in both themes, so it loads eagerly at high
+ * priority: the browser finds it in the HTML and fetches it with the stylesheets. Until
+ * it arrives, a small blurred copy in its CSS background draws the scene on the first
+ * paint (home-hero-v2.css).
+ */
+function SceneLayer({ image, className }: { image: HeroImage<PictureFiles>; className: string }) {
   return (
-    <picture>
-      <source type="image/avif" srcSet={heroSrcSet(image, "avif")} sizes={sizes} />
-      <img
-        className={className}
-        src={heroSrc(image)}
-        srcSet={heroSrcSet(image, "webp")}
-        sizes={sizes}
-        alt={alt}
-        width={image.width}
-        height={image.height}
-        decoding="async"
-        fetchPriority={priority ? "high" : "auto"}
-        aria-hidden={alt === "" ? true : undefined}
-      />
-    </picture>
+    <Picture
+      files={image.files}
+      sizes={HERO_V2_SCENE_SIZES}
+      className={className}
+      alt=""
+      width={image.width}
+      height={image.height}
+      loading="eager"
+      decoding="async"
+      fetchPriority="high"
+      aria-hidden
+    />
   )
 }
 
@@ -61,20 +52,26 @@ function DocsWindow() {
         </a>
         <span className="hv2__bar-end" aria-hidden="true" />
       </div>
-      <HeroPicture
-        image={HERO_V2_IMAGES.docs}
+      {/* Lazy, so only the copy of the theme on show loads. Until it arrives, a blurred copy
+          in its CSS background fills the window (home-hero-v2.css). */}
+      <ThemedPicture
+        files={HERO_V2_IMAGES.docs.files}
         sizes={HERO_V2_DOCS_SIZES}
         alt="The Doxa docs site: the Doxa Platform Overview page, with its sidebar and table of contents."
-        priority
+        width={HERO_V2_IMAGES.docs.width}
+        height={HERO_V2_IMAGES.docs.height}
+        decoding="async"
+        fetchPriority="high"
       />
     </figure>
   )
 }
 
 /**
- * Hero v2: centered copy over a night sky, and a window of the Doxa docs that rises
- * out of the dunes. The window stands between two layers of one photo: the big lit
- * dune behind it, and the lower dune band, whose glowing edge crosses the window.
+ * Hero v2: centered copy over a night sky (a daylight sky in the light theme), and a
+ * window of the Doxa docs that rises out of the dunes. The window stands between two
+ * layers of one photo: the big lit dune behind it, and the lower dune band, whose
+ * glowing edge crosses the window.
  * The swap with the first hero is `HOME_HERO_VERSION` in `lib/marketing/home-hero.ts`.
  */
 export function HomeHeroV2() {
@@ -87,23 +84,27 @@ export function HomeHeroV2() {
         <Link className="pill" to="/mcp">
           <b>NEW</b>DOXA MCP SERVER IS LIVE →
         </Link>
-        <h1 className="display hv2__title">Documentation that updates itself</h1>
+        <h1 className="display hv2__title">
+          Your agents
+          <br />
+          write your docs
+        </h1>
         <p className="hv2__lede">
           Open-source platform that keeps your docs in sync with your codebase. An agent writes every page, rewrites it
           on each commit, and asks you before it publishes.
         </p>
         <div className="hv2__ctas">
-          <a className="btn btn--light" href={GET_STARTED_URL}>
+          <a className="btn btn--light" href={GET_STARTED_URL} onClick={ctaClickHandler("home_hero", "get_started")}>
             Get started ›
           </a>
-          <ConnectAgentButton />
+          <ConnectAgentButton location="home_hero" />
         </div>
       </div>
 
       <div className="hv2__stage">
-        <HeroPicture image={HERO_V2_IMAGES.back} sizes={HERO_V2_SCENE_SIZES} className="hv2__back" priority />
+        <SceneLayer image={HERO_V2_IMAGES.back} className="hv2__back" />
         <DocsWindow />
-        <HeroPicture image={HERO_V2_IMAGES.front} sizes={HERO_V2_SCENE_SIZES} className="hv2__front" priority />
+        <SceneLayer image={HERO_V2_IMAGES.front} className="hv2__front" />
       </div>
       <div className="hv2__floor" aria-hidden="true" />
     </header>

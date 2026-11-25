@@ -1,13 +1,4 @@
-import {
-  memo,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentType,
-  type CSSProperties,
-} from "react";
+import { memo, useId, useMemo, type ComponentType } from "react";
 
 import { cn } from "../lib/cn";
 
@@ -16,179 +7,117 @@ export interface MermaidProps {
   className?: string;
 }
 
-/** The part of the `mermaid` package the diagram uses. */
-export interface MermaidApi {
-  initialize(config: {
-    startOnLoad: boolean;
-    theme: "neutral";
-    securityLevel: "strict";
-  }): void;
-  render(
-    id: string,
-    text: string,
-  ): Promise<{ svg: string; bindFunctions?: (element: Element) => void }>;
-}
-
-let renderQueue: Promise<unknown> = Promise.resolve();
-
-function queueMermaidRender<T>(task: () => Promise<T>): Promise<T> {
-  const next = renderQueue.then(task, task);
-  renderQueue = next.catch(() => undefined);
-  return next;
-}
-
-function normalizeId(id: string) {
-  return id.replace(/[^a-zA-Z0-9_-]/g, "");
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function estimateDiagramHeight(chart: string) {
-  const lines = chart
-    .trim()
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const normalized = chart.trim().toLowerCase();
-
-  if (normalized.startsWith("sequencediagram")) {
-    const messages = lines.filter((line) =>
-      /-{1,2}>>|-->>|->>|->|-->|-\)|-x/.test(line)
-    ).length;
-    const participants = lines.filter((line) =>
-      /^(actor|participant)\s+/i.test(line)
-    ).length;
-
-    return clamp(155 + messages * 20 + participants * 6, 305, 720);
-  }
-
-  if (normalized.startsWith("erdiagram")) {
-    const entityBlocks = (chart.match(/^\s*[A-Za-z_][\w-]*\s*\{/gm) ?? [])
-      .length;
-    const relationships = lines.filter((line) => line.includes("--")).length;
-    const fields = lines.filter((line) =>
-      /^(string|int|float|date|boolean|number)\s+/i.test(line)
-    ).length;
-
-    return clamp(
-      240 + entityBlocks * 110 + relationships * 28 + fields * 8,
-      320,
-      820
-    );
-  }
-
-  if (normalized.startsWith("graph") || normalized.startsWith("flowchart")) {
-    const edges = lines.filter((line) => /-->|---|==>/.test(line)).length;
-    return clamp(180 + edges * 18, 240, 620);
-  }
-
-  return clamp(220 + lines.length * 14, 260, 720);
-}
-
-function MermaidSkeleton() {
-  return (
-    <div
-      className="absolute inset-0 flex items-center justify-center rounded-md border border-dashed border-border bg-muted/20"
-      aria-hidden="true"
-    >
-      <div className="flex w-full max-w-[460px] flex-col gap-4 px-8">
-        <div className="mx-auto h-8 w-28 animate-pulse rounded-sm border bg-background/70" />
-        <div className="grid grid-cols-3 gap-4">
-          <div className="h-7 animate-pulse rounded-sm border bg-background/70" />
-          <div className="h-7 animate-pulse rounded-sm border bg-background/70" />
-          <div className="h-7 animate-pulse rounded-sm border bg-background/70" />
-        </div>
-        <div className="mx-auto h-px w-3/4 bg-border" />
-        <div className="grid grid-cols-2 gap-4 px-10">
-          <div className="h-7 animate-pulse rounded-sm border bg-background/70" />
-          <div className="h-7 animate-pulse rounded-sm border bg-background/70" />
-        </div>
-      </div>
-    </div>
-  );
+/** The options of Pele's `render` that the diagram sets. */
+export interface DiagramRenderOptions {
+  /** Keeps the marker and gradient ids of two diagrams on one page apart. */
+  idPrefix?: string;
 }
 
 /**
- * Builds the diagram component around the host's `mermaid` module.
+ * The part of the `pele` package the diagram uses. Pele draws Mermaid text as
+ * SVG, synchronously and with no DOM, so the server can draw the diagram.
+ * `render` throws a `PeleError` for text it cannot draw.
+ */
+export interface DiagramRenderer {
+  render(text: string, options?: DiagramRenderOptions): { svg: string };
+}
+
+type DrawResult = { svg: string; error?: undefined } | { svg?: undefined; error: string };
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Puts the prefix on every id the SVG defines. Pele 1.13 prefixes its title,
+ * markers and gradients, but not the ids of nodes and edges (`id="A"`). Those
+ * would repeat when two diagrams on a page use the same node names, and could
+ * take a heading's anchor. References inside the SVG move with the ids. Links
+ * to page anchors keep their targets, unless the SVG itself defines that id.
+ */
+export function scopeSvgIds(svg: string, prefix: string): string {
+  const ids = new Set<string>();
+  for (const match of svg.matchAll(/\sid="([^"]+)"/g)) {
+    if (!match[1].startsWith(prefix)) ids.add(match[1]);
+  }
+  if (ids.size === 0) return svg;
+  const names = [...ids].map(escapeRegExp).join("|");
+  return svg
+    .replace(new RegExp(`(\\sid=")(${names})"`, "g"), `$1${prefix}$2"`)
+    .replace(new RegExp(`url\\(#(${names})\\)`, "g"), `url(#${prefix}$1)`)
+    .replace(new RegExp(`(href=")#(${names})"`, "g"), `$1#${prefix}$2"`)
+    .replace(
+      new RegExp(`(aria-(?:labelledby|describedby)=")([^"]*)"`, "g"),
+      (_, start: string, list: string) =>
+        `${start}${list
+          .split(/\s+/)
+          .map((id) => (ids.has(id) ? prefix + id : id))
+          .join(" ")}"`,
+    );
+}
+
+function draw(renderer: DiagramRenderer, chart: string, idPrefix: string): DrawResult {
+  try {
+    return { svg: scopeSvgIds(renderer.render(chart, { idPrefix }).svg, idPrefix) };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * Builds the diagram component around the host's `pele` module.
  *
  * The module is passed in, so this package does not depend on it and each host
- * decides how it is loaded. Both hosts load it in a lazy chunk.
+ * decides how it is loaded. Both hosts load it in a lazy chunk, so it loads
+ * only on a page with a diagram.
+ *
+ * The diagram draws during render, so the server HTML holds the finished SVG
+ * and the diagram shows with the first paint. Its colors and font are CSS
+ * variables (`.doxa-mermaid` in `prose.css`), so a theme change needs no new
+ * render.
+ *
+ * Pele measures text with a canvas in the browser, and with its own font
+ * metrics on the server, so the two SVGs can differ by a few pixels. At
+ * hydration the server SVG stays: React does not patch `dangerouslySetInnerHTML`
+ * when it hydrates, and `suppressHydrationWarning` drops the dev warning. A
+ * diagram that mounts later, after a client navigation or in the editor, uses
+ * the browser's measurements.
  */
-export function createMermaid(mermaid: MermaidApi): ComponentType<MermaidProps> {
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: "neutral",
-    // Diagram text comes from site authors. Strict is the Mermaid default,
-    // set here so a library upgrade cannot loosen it.
-    securityLevel: "strict",
-  });
-
+export function createMermaid(renderer: DiagramRenderer): ComponentType<MermaidProps> {
   const Mermaid = ({ chart, className }: MermaidProps) => {
-    const ref = useRef<HTMLDivElement | null>(null);
-    const reactId = useId();
-    const [isRendered, setIsRendered] = useState(false);
-    const estimatedHeight = useMemo(() => estimateDiagramHeight(chart), [chart]);
+    const idPrefix = `doxa-mermaid-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}-`;
+    const result = useMemo(() => draw(renderer, chart, idPrefix), [chart, idPrefix]);
 
-    const memoizedClassName = useMemo(
-      () => cn("doxa-mermaid not-prose relative my-6 overflow-x-auto", className),
-      [className]
-    );
-
-    const style = useMemo(
-      () =>
-        ({
-          "--mermaid-min-height": `${estimatedHeight}px`,
-        }) as CSSProperties,
-      [estimatedHeight]
-    );
-
-    useEffect(() => {
-      const node = ref.current;
-      if (!node) return;
-
-      let cancelled = false;
-      const renderId = `doxa-mermaid-${normalizeId(reactId)}`;
-
-      setIsRendered(false);
-      node.innerHTML = "";
-
-      queueMermaidRender(() => mermaid.render(renderId, chart))
-        .then(({ svg, bindFunctions }) => {
-          if (cancelled || !ref.current) return;
-          ref.current.innerHTML = svg;
-          bindFunctions?.(ref.current);
-          setIsRendered(true);
-        })
-        .catch((error) => {
-          console.error("Mermaid diagram render error:", error);
-        });
-
-      return () => {
-        cancelled = true;
-      };
-    }, [chart, reactId]);
+    if (result.error !== undefined) {
+      return (
+        <div
+          className={cn(
+            "not-prose my-6 rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm",
+            className,
+          )}
+          data-mermaid-chart
+          data-state="error"
+          role="note"
+        >
+          <p className="font-medium text-destructive">This diagram could not be drawn.</p>
+          <pre className="mt-2 overflow-x-auto font-mono text-xs whitespace-pre-wrap text-muted-foreground">
+            {result.error}
+          </pre>
+        </div>
+      );
+    }
 
     return (
       <div
-        className={memoizedClassName}
+        className={cn(
+          "doxa-mermaid not-prose my-6 flex justify-center overflow-x-auto",
+          className,
+        )}
         data-mermaid-chart
-        data-state={isRendered ? "rendered" : "loading"}
-        style={style}
-      >
-        {!isRendered && <MermaidSkeleton />}
-        <div
-          ref={ref}
-          className={cn(
-            "min-h-[var(--mermaid-min-height)] transition-opacity duration-150",
-            isRendered ? "opacity-100" : "opacity-0"
-          )}
-        />
-        <span className="sr-only" aria-live="polite">
-          {isRendered ? "Diagram rendered" : "Rendering diagram"}
-        </span>
-      </div>
+        data-state="rendered"
+        dangerouslySetInnerHTML={{ __html: result.svg }}
+        suppressHydrationWarning
+      />
     );
   };
 

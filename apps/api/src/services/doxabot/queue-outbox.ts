@@ -4,6 +4,7 @@ import {
   JobsRepository,
   type DoxabotQueueOutboxJobsStore,
 } from "../../repositories/jobs";
+import { PREVIEW_QUIET_WINDOW_SECONDS } from "./webhook-orchestrator";
 import {
   WebhookDeliveriesRepository,
   type WebhookDeliveriesStore,
@@ -12,7 +13,7 @@ import {
 const DEFAULT_PUBLICATION_LIMIT = 25;
 
 interface QueuePublisher {
-  send(message: GenerateJobMessage): Promise<unknown>;
+  send(message: GenerateJobMessage, options?: { delaySeconds?: number }): Promise<unknown>;
 }
 
 export interface DoxabotQueueOutboxDependencies {
@@ -54,11 +55,16 @@ export class DoxabotQueueOutboxPublisher {
 
     for (const publication of pending) {
       try {
-        await this.dependencies.queue.send({
-          jobId: publication.jobId,
-          projectId: publication.projectId,
-          userId: publication.ownerUserId,
-        });
+        // The same quiet window as the webhook: a push that comes in this
+        // time still replaces the run before it starts.
+        await this.dependencies.queue.send(
+          {
+            jobId: publication.jobId,
+            projectId: publication.projectId,
+            userId: publication.ownerUserId,
+          },
+          { delaySeconds: PREVIEW_QUIET_WINDOW_SECONDS },
+        );
         const recorded =
           await this.dependencies.deliveries.markGenerationJobPublished(
             publication.jobId,

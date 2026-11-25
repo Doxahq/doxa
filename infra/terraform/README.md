@@ -142,7 +142,7 @@ never prints a value:
 ```sh
 pnpm secrets:api:ecs --tfvars <ops>/production.tfvars --list             # set or missing; changes nothing
 pnpm secrets:api:ecs --tfvars <ops>/production.tfvars                    # ask for each missing secret
-pnpm secrets:api:ecs --tfvars <ops>/production.tfvars --overwrite NAME   # replace one value
+pnpm secrets:api:ecs --tfvars <ops>/production.tfvars --overwrite NAME   # replace only NAME (repeat for more); skips the others
 ```
 
 | Secret | Where to get it |

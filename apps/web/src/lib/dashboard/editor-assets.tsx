@@ -5,6 +5,7 @@ import type { BranchRef } from "@doxahq/contracts/docs-branches"
 import { toast } from "sonner"
 
 import { uploadBranchAsset } from "~/lib/branch-assets-api"
+import { reportBillingDenial } from "~/lib/dashboard/billing-denials"
 import { getDocsBranchErrorMessage } from "~/lib/dashboard/docs-branch-errors"
 import type { ImageUploader } from "~/lib/editor/image-upload"
 import { branchAssetQueryKeys, branchAssetQueryOptions } from "~/lib/queries/branch-assets"
@@ -56,6 +57,8 @@ export function EditorAssetsProvider({
           return result
         },
         onError(error, file) {
+          // The docs storage of the plan: the plan limit flow, not a toast.
+          if (reportBillingDenial(error)) return
           toast.error(`Could not add ${file.name || "the image"}`, {
             description: getDocsBranchErrorMessage(error, "The upload failed. Try again."),
           })

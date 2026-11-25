@@ -33,7 +33,7 @@ describe("stripe catalog sync (spec 7.3)", () => {
   it("applies with tax codes, lookup keys, a metered usage price and idempotency keys; the plan is then empty", async () => {
     const kit = stripeKit();
     const result = await kit.provider.applyCatalogSync(await kit.provider.planCatalogSync(kit.catalog));
-    expect(result.applied).toBe(2 + 1 + 6 + 2);
+    expect(result.applied).toBe(2 + 1 + 8 + 2);
     expect(kit.fake.products.get("doxa_pro")).toMatchObject({ tax_code: "txcd_10103001", metadata: { doxa_plan: "pro" } });
     expect(kit.fake.products.get("doxa_ai_usage")).toMatchObject({ tax_code: "txcd_10105002" });
     const meter = [...kit.fake.meters.values()][0];
@@ -41,6 +41,7 @@ describe("stripe catalog sync (spec 7.3)", () => {
     const usage = [...kit.fake.prices.values()].find((row) => row.lookup_key === "ai_usage_yearly_v1");
     expect(usage).toMatchObject({ product: "doxa_ai_usage", unit_amount: 1, recurring: { interval: "year", usage_type: "metered", meter: meter?.id } });
     expect([...kit.fake.prices.values()].find((row) => row.lookup_key === "pro_yearly_founder_v1")).toMatchObject({ unit_amount: 154_800, product: "doxa_pro", recurring: { interval: "year", usage_type: "licensed" } });
+    expect([...kit.fake.prices.values()].find((row) => row.lookup_key === "pro_yearly_founder_v2")).toMatchObject({ unit_amount: 118_800, product: "doxa_pro", recurring: { interval: "year", usage_type: "licensed" } });
     for (const request of kit.fake.requests.filter((row) => row.method === "POST" && /^\/v1\/(products|prices|billing\/meters)$/.test(row.path))) {
       expect(request.headers["idempotency-key"]).toMatch(/^doxa-catalog-sync:/);
     }

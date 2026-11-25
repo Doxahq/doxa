@@ -7,8 +7,10 @@ import {
   Outlet,
   Scripts,
 } from "@tanstack/react-router"
+import { AnalyticsRoot } from "~/components/analytics/analytics-root"
 import { SIDEBAR_WIDTH_SCRIPT } from "~/lib/dashboard/sidebar-width"
 import { AppQueryProvider } from "~/lib/query-client"
+import { THEME_SCRIPT } from "~/lib/theme/theme"
 
 import globalsCss from "~/styles/globals.css?url"
 
@@ -68,9 +70,13 @@ function RootComponent() {
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const { queryClient } = Route.useRouteContext()
   return (
-    <html lang="en">
+    // The head script sets `data-theme` before React hydrates, so the server
+    // markup and the page can differ on that one attribute.
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* The saved color theme, applied before the first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){var l=document.createElement("link");l.rel="stylesheet";l.href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Sora:wght@400;600;700&display=swap";document.head.appendChild(l)})()`,
@@ -86,7 +92,10 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         </noscript>
       </head>
       <body>
-        <AppQueryProvider client={queryClient}>{children}</AppQueryProvider>
+        <AppQueryProvider client={queryClient}>
+          {children}
+          <AnalyticsRoot />
+        </AppQueryProvider>
         <Scripts />
       </body>
     </html>

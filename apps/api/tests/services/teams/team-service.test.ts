@@ -19,6 +19,7 @@ import { TeamService } from "../../../src/services/teams/team-service";
 import { InMemoryProjectAccess } from "../../support/in-memory-project-access";
 import { InMemoryTeamStore } from "../../support/in-memory-team-store";
 import { RecordingInviteMailer } from "../../support/recording-invite-mailer";
+import { recordingProductAnalytics, type RecordingProductAnalytics } from "../../support/recording-product-analytics";
 
 const OWNER = "owner-1";
 const ADMIN = "admin-1";
@@ -31,7 +32,7 @@ const SECRET = "test-auth-secret";
 const INVITE_ID = "aaaaaaaa-0000-4000-8000-000000000001";
 const DAY = 24 * 60 * 60 * 1000;
 
-function setup() {
+function setup(options: { analytics?: RecordingProductAnalytics } = {}) {
   let clock = new Date("2026-10-05T10:00:00Z").getTime();
   let ids = 0;
   const access = new InMemoryProjectAccess({ [PERSONAL]: { owner: ADMIN } });
@@ -44,6 +45,7 @@ function setup() {
     tokens: new HmacInviteTokens(SECRET),
     newId: () => `aaaaaaaa-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
     inviteMailer,
+    ...(options.analytics ? { analytics: options.analytics.analytics } : {}),
   });
   const advance = (ms: number) => {
     clock += ms;
@@ -496,5 +498,33 @@ describe("invites by email", () => {
       env.service.createInvite(EDITOR, teamId, { role: "viewer", email: "x@example.com" }, ORIGIN),
     ).rejects.toBeInstanceOf(TeamAccessError);
     expect(env.inviteMailer.sent).toHaveLength(0);
+  });
+});
+
+describe("team analytics", () => {
+  it("reports a new team, an invite with its role and never the email, and the accept", async () => {
+    const recording = recordingProductAnalytics();
+    const env = setup({ analytics: recording });
+    const teamId = await team(env);
+    const { invite } = await env.service.createInvite(ADMIN, teamId, { role: "editor" }, ORIGIN);
+    await env.service.acceptInvite(NEWCOMER, tokenOf(invite.url));
+    await env.service.createInvite(ADMIN, teamId, { role: "viewer", email: "new@example.com" }, ORIGIN);
+
+    const events = await recording.events();
+    expect(events.map(({ event, distinctId, properties }) => ({ event, distinctId, properties }))).toEqual([
+      { event: "team_created", distinctId: OWNER, properties: {} },
+      { event: "team_invite_sent", distinctId: ADMIN, properties: { role: "editor" } },
+      { event: "team_invite_accepted", distinctId: NEWCOMER, properties: { role: "editor" } },
+      { event: "team_invite_sent", distinctId: ADMIN, properties: { role: "viewer" } },
+    ]);
+    expect(JSON.stringify(events)).not.toContain("example.com");
+  });
+
+  it("reports no invite that the seat or email checks refuse", async () => {
+    const recording = recordingProductAnalytics();
+    const env = setup({ analytics: recording });
+    const teamId = await team(env);
+    await expect(env.service.createInvite(VIEWER, teamId, { role: "editor" }, ORIGIN)).rejects.toBeInstanceOf(TeamAccessError);
+    expect((await recording.events()).map((event) => event.event)).toEqual(["team_created"]);
   });
 });

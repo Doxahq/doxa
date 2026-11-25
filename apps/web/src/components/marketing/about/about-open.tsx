@@ -120,10 +120,10 @@ export function AboutOpen() {
             </div>
             <pre>
               <div>
-                <span className="t-p">{"$ "}</span>git clone [REPO URL]
+                <span className="t-p">{"$ "}</span>git clone https://github.com/Doxahq/doxa.git
               </div>
               <div>
-                <span className="t-p">{"$ "}</span>[SELF-HOST COMMAND]
+                <span className="t-p">{"$ "}</span>cd doxa && pnpm install && pnpm dev
               </div>
               <div>
                 <span className="t-c">{"  ✓ Doxa is running on your servers"}</span>

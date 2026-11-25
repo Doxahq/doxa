@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import type { GitHubRepositoryDto } from "@doxahq/contracts"
-import { AlertCircle, Check, Github, Link2, Search, Sparkles } from "lucide-react"
+import { AlertCircle, Check, Github, Link2, RefreshCw, Search, Sparkles } from "lucide-react"
 
 import { InstructionsOfferContent } from "~/components/dashboard/instructions-offer-dialog"
 import { RepositoryProductionBranchField } from "~/components/dashboard/new-project/repository-production-branch-field"
@@ -19,6 +19,10 @@ import {
 import { Input } from "~/components/ui/input"
 import { Skeleton } from "~/components/ui/skeleton"
 import { useGenerateFromRepository } from "~/lib/dashboard/use-generate-from-repository"
+import {
+  useRefreshGitHubRepositories,
+  type RepositoryListRefresh,
+} from "~/lib/dashboard/use-refresh-github-repositories"
 import { cn } from "~/lib/utils"
 
 const STEPS = ["Connect GitHub", "Choose a repository", "Generate"] as const
@@ -79,6 +83,7 @@ function GenerateFromRepositoryForm({
   onStartWithoutRepository: () => void
 }) {
   const { github, addInstructions, generate, pendingChoice } = useGenerateFromRepository(teamId)
+  const listRefresh = useRefreshGitHubRepositories()
   const isGenerating = pendingChoice !== null
   useEffect(() => onBusyChange(isGenerating), [isGenerating, onBusyChange])
   const [selectedId, setSelectedId] = useState("")
@@ -131,17 +136,20 @@ function GenerateFromRepositoryForm({
           <RepositoryListSkeleton />
         ) : github.isConnected ? (
           <>
-            <div className="relative">
-              <Search aria-hidden="true" className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search repositories"
-                aria-label="Search repositories"
-                autoComplete="off"
-                className="pl-8"
-              />
+            <div className="flex gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search aria-hidden="true" className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search repositories"
+                  aria-label="Search repositories"
+                  autoComplete="off"
+                  className="pl-8"
+                />
+              </div>
+              <RefreshListButton refresh={listRefresh} />
             </div>
             <div
               role="group"
@@ -149,7 +157,9 @@ function GenerateFromRepositoryForm({
               className="flex max-h-[min(30rem,45dvh)] flex-col overflow-y-auto rounded-lg border border-border scrollbar-subtle"
             >
               {repositories.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-muted-foreground">No repository matches “{query}”.</p>
+                <p className="px-4 py-8 text-center text-sm text-pretty text-muted-foreground">
+                  No repository matches “{query}”. A repository you added on GitHub a moment ago shows after a refresh.
+                </p>
               ) : (
                 repositories.map((repo, index) => (
                   <RepositoryOption
@@ -163,6 +173,17 @@ function GenerateFromRepositoryForm({
                 ))
               )}
             </div>
+            {listRefresh.notice ? (
+              <p
+                aria-live="polite"
+                className={cn(
+                  "text-[13px] leading-5",
+                  listRefresh.notice.tone === "error" ? "text-destructive" : "text-muted-foreground",
+                )}
+              >
+                {listRefresh.notice.message}
+              </p>
+            ) : null}
             {selected && !selectedProject ? (
               <RepositoryProductionBranchField
                 githubRepositoryId={selected.id}
@@ -236,6 +257,25 @@ function GenerateFromRepositoryForm({
         ) : null}
       </DialogFooter>
     </>
+  )
+}
+
+/** Reads the repository list from GitHub again. It counts down the API cooldown. */
+function RefreshListButton({ refresh }: { refresh: RepositoryListRefresh }) {
+  const waiting = refresh.secondsLeft > 0
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="lg"
+      className="shrink-0 tabular-nums"
+      disabled={refresh.isRefreshing || waiting}
+      onClick={refresh.refresh}
+      title="Read the repository list from GitHub again"
+    >
+      <RefreshCw aria-hidden="true" className={cn(refresh.isRefreshing && "animate-spin")} />
+      {waiting ? `Refresh in ${refresh.secondsLeft} s` : "Refresh"}
+    </Button>
   )
 }
 

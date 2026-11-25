@@ -28,6 +28,9 @@ monthly/yearly switch goes through the API (section 13).
 | v3.5 | 2026-11-14 | Implementation notes after the review (section 24): when billing gates, one open Checkout per account, the hourly sweep that catches up, the `memory` provider only in tests, migrations 0046–0048. |
 | v3.7 | 2026-11-15 | A pull request or merge run without a baseline (cold) is a Full generation (D21). The actions are named Full generation (cold) and Update run (warm) in the dashboard. "Start Pro now" ends the trial early (D22). |
 | v3.6 | 2026-11-14 | No free first run (D3). Trial and Pro accounts pay every run from their credits. `billing_free_runs`, `credit_reservations.free_run`, `freeFirstRunPerSite` and the 25-page cap are removed. |
+| v3.8 | 2026-11-24 | Free plan: 2 branches per site, 20 MB docs storage, 20 MCP tool calls a day. Pro allowance 10,000 credits a month (was 5,000). Storage, branch, site file and custom domain limits answer 403 `plan_limit`. |
+| v3.9 | 2026-11-24 | Founder price v2: $99 / month billed yearly ($1,188 / year) and $129 billed monthly (was $129 and $159). New keys `pro_monthly_founder_v2` and `pro_yearly_founder_v2`. The v1 founder keys stay for their customers, closed to new Checkouts. `founder_v1` keeps its 50 slots and names the v2 prices. The founder lines say "locked in forever". The standard prices do not change. |
+| v3.10 | 2026-11-25 | Free plan: 10 MCP tool calls a day (was 20). The pricing page reads the number from the catalog. |
 
 When a part ships, describe the built state in `docs/current/billing.md` and
 keep this file as the design record. Research and sources:
@@ -96,23 +99,23 @@ pricing decisions of 2026-10-29 and 2026-10-30.
 
 | | Free | Pro | Enterprise |
 |---|---|---|---|
-| Price | $0 | Founder price: $129 / month billed yearly ($1,548 / year), or $159 / month billed monthly. Yearly is the default on the pricing page. Yearly saves $360 (19%, more than 2 months). | Custom, sales-led |
+| Price | $0 | Founder price: $99 / month billed yearly ($1,188 / year), or $129 / month billed monthly. Yearly is the default on the pricing page. Yearly saves $360 (23%, more than 2 months). The founder price is locked in forever while the subscription stays active. | Custom, sales-led |
 | Founder offer | | The founder price is for the first 50 paying accounts (section 7.5) | |
-| Price after the founder offer | | $169 / month billed yearly ($2,028 / year), or $209 / month billed monthly. About 31% more. Decision D14. | |
+| Price after the founder offer | | $169 / month billed yearly ($2,028 / year), or $209 / month billed monthly. 71% more than the yearly founder price, and 62% more than the monthly founder price. Decision D14. | |
 | Trial | | 7 days, card required, 1,000 trial credits | |
-| AI credits per month | 0 | 5,000 (worth $50) | 50,000+ (per contract) |
+| AI credits per month | 0 | 10,000 (worth $100) | 50,000+ (per contract) |
 | Pay-as-you-go above the allowance | No | $0.01 for each credit. On by default for paid accounts, off during the trial. A charge each time the debt reaches $5, maximum debt $10, monthly limit $30 that the user can change (section 10.10). | Per contract |
 | Doxa Agent (generation from a repo) | No | Yes | Yes |
 | Doxabot (pull request and merge runs) | No | Yes | Yes |
 | Approval before publish | No | Yes | Yes |
 | AI chat on the docs site | No | After launch (section 10.9) | After launch |
-| Branches per site | 3 | Unlimited | Unlimited |
-| Docs storage | 100 MB | Unlimited | Unlimited |
+| Branches per site | 2 | Unlimited | Unlimited |
+| Docs storage | 20 MB | Unlimited | Unlimited |
 | Site assets (images and files) | 50 MB, 200 files | Unlimited (D20) | Unlimited |
 | Custom domains | 1 | 4 | Unlimited |
 | Remove "Powered by Doxa" | No | Yes | Yes |
 | Hosting | Shared | Dedicated | Dedicated + custom support |
-| MCP tool calls | 100 / day | Unlimited | Unlimited |
+| MCP tool calls | 20 / day | Unlimited | Unlimited |
 | Team seats | Owner only | Unlimited | Unlimited |
 | Role-based permissions | No | Yes | Yes |
 | Approval rules for agents and MCP clients | No | No | Yes |
@@ -139,9 +142,9 @@ can tune them after 2 weeks in shadow mode. With the model costs measured on
 | Generation, 50 pages | $0.72–1.00 | 50 + 216–300 = 266–350 |
 | Doxabot pull request run | $0.34–0.80 | 20 + 102–240 = 122–260 |
 
-The Pro allowance of 5,000 credits is then 14–18 generations of 50 pages, or
-19–40 Doxabot runs. At markup 3, an account that uses all 5,000 credits costs
-Doxa at most about $17 in model fees. With the old fixed price (100 credits), a Doxabot run cost
+The Pro allowance of 10,000 credits (5,000 until 2026-11-24) is then 28–37
+generations of 50 pages, or 38–81 Doxabot runs. At markup 3, an account that
+uses all 10,000 credits costs Doxa at most about $33 in model fees. With the old fixed price (100 credits), a Doxabot run cost
 Doxa up to $0.80 for $1.00 of credits.
 
 Other rules: a failed action costs 0. Monthly credits expire at the end of the
@@ -172,7 +175,7 @@ open. One check remains before the first customer:
 | Gap | Where | What billing needs |
 |---|---|---|
 | The pricing page shows old Pro prices | `PLANS` in `apps/web/src/lib/marketing/pricing.ts`: $179 monthly, $149 yearly ($1,788), "first 100 customers", toggle note "−17%". Also "10,000 AI credits / month", the old fixed credit prices ("100 credits plus 5 per page") and "Packs (pay-as-you-go coming soon)" | The page reads the founder prices from the catalog: $129 yearly (the default, already `DEFAULT_BILLING`) and $159 monthly, "−19%", "N of 50 founder spots left". It shows 5,000 credits, the metered price (base fee plus usage), and pay-as-you-go at $0.01 for each credit. |
-| Free branch limit is 10, the pricing page says 3 | `FREE_PLAN_ENTITLEMENTS` in `packages/contracts/src/entitlements.ts` | The plan sets the value. |
+| Free branch limit is 10, the pricing page says 2 | `FREE_PLAN_ENTITLEMENTS` in `packages/contracts/src/entitlements.ts` | The plan sets the value. |
 | Every site gets Typesense search | `DOXA_PROD_SEARCH_PAID_PROJECT_IDS=*` read by `apps/api/src/services/docs-search/policy.ts` | The plan sets the policy. Free sites go back to MiniSearch, which needs a re-index. |
 | Custom domain limit is a constant 1 | `apps/api/src/services/docs-domain-limit-policy.ts` | The plan sets the limit. |
 | Storage limits are always the Free values | `apps/api/src/services/free-plan-entitlements.ts` | The plan sets the limits. |
@@ -387,13 +390,13 @@ export const DOXA_CATALOG = defineCatalog({
       },
       limits: {
         "ai.credits_monthly": 0,
-        "docs.branches_per_site": 3,
-        "docs.storage_bytes": 100 * MB,
+        "docs.branches_per_site": 2,
+        "docs.storage_bytes": 20 * MB,
         "site.asset_bytes": 50 * MB,
         "site.asset_files": 200,
         "site.custom_domains": 1,
         "team.seats": 1,
-        "mcp.tool_calls_per_day": 100,
+        "mcp.tool_calls_per_day": 10,
         "docs.export_window_hours": 24,
       },
     },
@@ -403,7 +406,7 @@ export const DOXA_CATALOG = defineCatalog({
       hosting: "dedicated",
       features: { /* every feature true except agents.approval_rules */ },
       limits: {
-        "ai.credits_monthly": 5_000,
+        "ai.credits_monthly": 10_000,
         "docs.branches_per_site": UNLIMITED,
         "site.custom_domains": 4,
         "team.seats": UNLIMITED,
@@ -422,8 +425,11 @@ export const DOXA_CATALOG = defineCatalog({
   // `usage` names the usage price that goes into the same Checkout. It has the
   // same interval, because Checkout refuses mixed intervals (section 10.10).
   prices: {
-    pro_monthly_founder_v1: { plan: "pro", interval: "month", amountCents: 15_900, usage: "ai_usage_monthly_v1" },
-    pro_yearly_founder_v1: { plan: "pro", interval: "year", amountCents: 154_800, usage: "ai_usage_yearly_v1" }, // $129 x 12
+    // Founder v1 ($159 / $129 x 12): replaced by v2 on 2026-11-24, before launch.
+    pro_monthly_founder_v1: { plan: "pro", interval: "month", amountCents: 15_900, usage: "ai_usage_monthly_v1", availableForNewCustomers: false },
+    pro_yearly_founder_v1: { plan: "pro", interval: "year", amountCents: 154_800, usage: "ai_usage_yearly_v1", availableForNewCustomers: false },
+    pro_monthly_founder_v2: { plan: "pro", interval: "month", amountCents: 12_900, usage: "ai_usage_monthly_v1" },
+    pro_yearly_founder_v2: { plan: "pro", interval: "year", amountCents: 118_800, usage: "ai_usage_yearly_v1" }, // $99 x 12
     pro_monthly_v1: { plan: "pro", interval: "month", amountCents: 20_900, usage: "ai_usage_monthly_v1" }, // decision D14
     pro_yearly_v1: { plan: "pro", interval: "year", amountCents: 202_800, usage: "ai_usage_yearly_v1" }, // $169 x 12
   },
@@ -439,7 +445,7 @@ export const DOXA_CATALOG = defineCatalog({
     founder_v1: {
       label: "Founder price",
       maxAccounts: 50,
-      prices: { month: "pro_monthly_founder_v1", year: "pro_yearly_founder_v1" },
+      prices: { month: "pro_monthly_founder_v2", year: "pro_yearly_founder_v2" },
       then: { month: "pro_monthly_v1", year: "pro_yearly_v1" },
     },
   },
@@ -617,7 +623,8 @@ Rules:
    account's price key, but plan updates are off in both.
 6. `GET /billing/offers` (public, cached 60 seconds) returns the current Pro
    prices, `founder.open` and `founder.slotsLeft`. The pricing page reads it.
-   It shows "N of 50 founder spots left" while the offer is open, and the new
+   It shows "N of 50 founder spots left · price locked in forever" while the
+   offer is open, and the new
    price when it is closed. Stripe Checkout always shows the real amount.
 7. The 5-minute cron releases expired holds. A metric counts slots by state.
 
@@ -702,6 +709,7 @@ interface.
 | `site.custom_domains` | `DocsDomainLimitPolicy` | Constant 1 |
 | `hosting` | Docs host resolution (section 9.4) | Operator list |
 | `team.seats` | Team invite create and accept | None |
+| `account.projects` | Project create (`POST /projects`, `POST /projects/example`, the agent `project.create` action), `ProjectLimitPolicy` in `plan-seams.ts`. Free 1, Pro 10, Enterprise and self-hosted unlimited (decided 2026-11-23). Existing projects above the limit stay. | None |
 | `team.role_permissions` | Member role change to a role other than owner | None |
 | `ai.doxa_agent` | Production generation admission | None |
 | `ai.doxabot` | Doxabot job admission, merge triggers | None |
@@ -783,8 +791,8 @@ Billing never deletes customer content. When an account drops to a lower plan:
 ### 10.3 Monthly allowance
 
 - The allowance window is one month from the subscription's billing anchor.
-  This is also true for yearly prices: a yearly customer gets 5,000 credits
-  each month, not 60,000 at once.
+  This is also true for yearly prices: a yearly customer gets 10,000 credits
+  each month, not 120,000 at once.
 - A month without the anchor day ends on its last day, as Stripe does (anchor
   31 January, next window starts 28 or 29 February, then 31 March).
 - `ensureAllowance(account, now)` computes the window that contains `now` and
@@ -1166,7 +1174,7 @@ not tested in the sandbox.
 
 ## 11. Usage quotas
 
-The MCP limit of 100 tool calls per day on Free is a quota, not a rate limit.
+The MCP limit of 10 tool calls per day on Free is a quota, not a rate limit.
 
 - Table `billing_usage_counters (account_id, meter_key, window_start, count)`.
 - The MCP tool runner calls `quota.consume("mcp.tool_calls", accountId)`
@@ -1604,7 +1612,7 @@ after an apply.
 | D1 | Who pays | A user or a team account. A project bills to its team, else to its owner (section 8). |
 | D2 | Tax | Managed Payments (Stripe is the merchant of record) for Pro and its pay-as-you-go usage. The sandbox test of 2026-11-13 showed that usage prices and billing thresholds work with Managed Payments (section 10.10). Stripe Tax for Enterprise invoices. Before launch: check with an accountant and finish the open sandbox items. |
 | D3 | Trial, no free run | **7-day** Pro trial with a card and 1,000 trial credits. **No free first run** (changed 2026-11-14): trial and Pro accounts pay every run from their credits, and the trial credits pay the first runs. The Free plan has no AI. Onboarding sends Free users to the trial or to the starter or empty docs. |
-| D4 | Founder price | **$129 / month billed yearly ($1,548 / year), $159 billed monthly.** Yearly is the default on the pricing page and saves 19% (more than 2 months). The catalog counts founders and closes the offer at **50** paying accounts. After that, the website and Checkout show a price about 30% higher, and new customers pay it (section 7.5). |
+| D4 | Founder price | **$99 / month billed yearly ($1,188 / year), $129 billed monthly** (v2, 2026-11-24; v1 was $129 and $159). Yearly is the default on the pricing page and saves 23% (more than 2 months). A founder keeps the price while the subscription stays active: the page says "locked in forever". The catalog counts founders and closes the offer at **50** paying accounts. After that, the website and Checkout show the standard price, 62% to 71% higher, and new customers pay it (section 7.5). |
 | D5 | Past due grace | 7 days of full access, then AI pauses. |
 | D6 | Downgrade above a limit | Section 9.5: keep content, block new items, 14 days for extra domains. |
 | D7 | Price of a run after merges | A `doxabot.run` when the run has a baseline; else a `generation.run` (D21). |

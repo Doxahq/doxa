@@ -4,23 +4,31 @@ import { LEGAL_BRAND, LEGAL_ENTITY, LEGAL_LOCATION } from "~/lib/marketing/legal
 import { CONTACT_EMAIL, CONTACT_URL } from "~/lib/marketing/links"
 
 const Mail = () => <a href={CONTACT_URL}>{CONTACT_EMAIL}</a>
+const StripePrivacy = () => <a href="https://stripe.com/privacy">Stripe Privacy Policy</a>
+const LinkPrivacy = () => <a href="https://link.com/privacy">Link Privacy Policy</a>
 
 const SUBPROCESSORS: { name: string; purpose: string; location: string }[] = [
   {
     name: "Cloudflare, Inc.",
     purpose:
-      "Hosting of the dashboard, API edge, docs sites and MCP server; storage of docs content and uploads; build containers that read your repository; email delivery; request logs",
+      "Hosting of the dashboard, API edge, docs sites and MCP server; storage of docs content and uploads; build containers that read your repository; certificates for custom domains; email delivery; request logs",
     location: "United States and Cloudflare's global network",
   },
   {
     name: "Amazon Web Services, Inc.",
-    purpose: "API servers, cache, secrets and operational monitoring",
+    purpose: "API servers, cache, secrets, logs and operational monitoring",
     location: "United States",
   },
   {
     name: "PlanetScale, Inc.",
-    purpose: "Primary database (accounts, projects, teams, usage records)",
+    purpose: "Primary database (accounts, projects, teams, usage and billing records)",
     location: "United States",
+  },
+  {
+    name: "Stripe, Inc. and its affiliates",
+    purpose:
+      "Payments for paid plans. Through Stripe Managed Payments and Link, Stripe sells the plan to you as the merchant of record, charges your payment method, collects tax, and sends receipts and invoices",
+    location: "United States and other countries",
   },
   {
     name: "Anthropic, PBC",
@@ -29,8 +37,7 @@ const SUBPROCESSORS: { name: string; purpose: string; location: string }[] = [
   },
   {
     name: "OpenRouter, Inc.",
-    purpose:
-      "Routing to other AI models for some features, including the AI chat on docs sites when a site owner turns it on",
+    purpose: "Access to other AI models for some features",
     location: "United States",
   },
   {
@@ -43,12 +50,29 @@ const SUBPROCESSORS: { name: string; purpose: string; location: string }[] = [
     purpose: "Sign-in with Google, and web fonts on Doxa pages and docs sites",
     location: "United States",
   },
+  {
+    name: "Typesense, Inc.",
+    purpose:
+      "Search on the docs sites that we host. It stores the published docs text and receives the search text of visitors",
+    location: "United States",
+  },
+  {
+    name: "Context.dev",
+    purpose:
+      "Finds the logo, colors and social links of your website from its domain name, when Doxa sets up a new docs site",
+    location: "United States",
+  },
+  {
+    name: "PostHog, Inc.",
+    purpose: "Product analytics, error tracking and session replay for doxa.so",
+    location: "United States",
+  },
 ]
 
 const STORAGE: { name: string; where: string; purpose: string }[] = [
   {
     name: "Session cookies",
-    where: "doxa.so",
+    where: "doxa.so and api.doxa.so",
     purpose: "Keep you signed in. Required for the dashboard to work.",
   },
   {
@@ -62,14 +86,36 @@ const STORAGE: { name: string; where: string; purpose: string }[] = [
     purpose: "Remembers your last project, sidebar width, branch and open folders.",
   },
   {
-    name: "Theme, search and chat history",
+    name: "ph_<project key>_posthog cookie",
+    where: "doxa.so",
+    purpose: "PostHog analytics ID and session. In the EEA and the UK, set only after you allow analytics. Expires after 1 year.",
+  },
+  {
+    name: "doxa:analytics-consent local storage",
+    where: "doxa.so",
+    purpose: "Remembers your analytics choice.",
+  },
+  {
+    name: "__ph_opt_in_out_<project key> local storage",
+    where: "doxa.so",
+    purpose: "Remembers that you allowed or turned off PostHog analytics, so PostHog follows your choice.",
+  },
+  {
+    name: "PostHog session storage",
+    where: "doxa.so",
+    purpose:
+      "Keeps the analytics session of the open tab. It is removed when you close the tab. In the EEA and the UK, set only after you allow analytics.",
+  },
+  {
+    name: "Recent searches and code language",
     where: "Docs sites",
-    purpose: "Remembers light or dark mode, recent searches and AI chat history in the visitor's browser.",
+    purpose: "Remembers the visitor's recent searches and the code language that the visitor picks in API examples.",
   },
   {
     name: "API playground values",
     where: "Docs sites",
-    purpose: "Keeps the values a visitor types into an API playground for the browser session. They stay in the browser.",
+    purpose:
+      "Keeps the values and API key that a visitor types into an API playground for the browser session. They are removed when the tab closes.",
   },
 ]
 
@@ -115,8 +161,11 @@ const SECTIONS: LegalSection[] = [
           When you install the Doxa GitHub App, GitHub gives us read access to the contents and pull requests of the
           repositories that you select. We store repository names and metadata. To generate docs, we read source code
           from those repositories. We also store the content that you create or that Doxa writes for you: docs pages,
-          site settings, uploaded images, custom domain names and generation history. Pull request records include the
-          GitHub username and avatar of the pull request author, who may not be a Doxa user.
+          site settings, uploaded images, custom domain names and generation history. When Doxa sets up a new docs
+          site, we also store the logo, colors and social links that we find on your website. When Doxabot is on for a
+          project, it reads the pull requests of that repository and posts its results as checks on GitHub. Pull
+          request records include the GitHub username and avatar of the pull request author, who may not be a Doxa
+          user.
         </p>
         <h3>Teams</h3>
         <p>
@@ -132,9 +181,23 @@ const SECTIONS: LegalSection[] = [
         <h3>Usage and technical data</h3>
         <p>
           For each session, we store your IP address and browser user agent. Our hosting providers keep request logs,
-          which contain IP addresses, URLs and timestamps. We record usage of the service, such as the AI tokens and
-          cost of each generation and the page titles that it wrote. We use this data for limits, billing and
-          support.
+          which contain IP addresses, URLs and timestamps. We record usage of the service, such as the AI tokens, cost
+          and AI credits of each generation and the page titles that it wrote. We use this data for limits, billing
+          and support.
+        </p>
+        <h3>Product analytics</h3>
+        <p>
+          On doxa.so, we record how you use the website and dashboard: the pages that you open, the buttons that you
+          click, errors, page speed and masked replays of your sessions. Replays hide what you type and the text of
+          your docs and code. In the European Economic Area and the United Kingdom, until you allow analytics, we count
+          only the pages that you open, with no cookie, no browser storage and no replay.
+        </p>
+        <p>
+          Our servers also record the main steps of your account, such as sign-up, project creation, publishing, plan
+          changes and payments (the amount and the result, never card details). We link these records to your account
+          by your user ID and email address. We also add your user ID to your Stripe customer record, so that we can
+          connect plan changes to product use. We do not record your code, your docs content or your AI prompts. If you
+          turn off product analytics in Account settings, we stop these records too.
         </p>
         <h3>Email records</h3>
         <p>
@@ -145,8 +208,19 @@ const SECTIONS: LegalSection[] = [
         <p>If you write to us, we keep the message and our reply.</p>
         <h3>Payment information</h3>
         <p>
-          Doxa does not take payments today. When paid plans start, a payment processor will collect your card
-          details. We will update this policy before that happens.
+          We sell paid plans through Stripe Managed Payments. At checkout, Stripe and its Link service collect your
+          payment details, your billing address and your tax ID if you give one. We never receive your full card
+          number. For a team, the checkout uses the name and email address of the team owner.
+        </p>
+        <p>
+          Stripe shares the order details with us, such as your name, email address, country, plan, payment amounts
+          and results. Stripe also shows us the brand and last four digits of your card, so we can show them on your
+          billing page. We store your Stripe customer ID, your plan and subscription status, your invoices and
+          payments, your AI credit balance and use, and your pay-as-you-go settings.
+        </p>
+        <p>
+          Stripe handles the payment information that it collects under the <StripePrivacy /> and the{" "}
+          <LinkPrivacy />.
         </p>
       </>
     ),
@@ -161,16 +235,28 @@ const SECTIONS: LegalSection[] = [
           <li>create your account, sign you in and keep your session secure,</li>
           <li>read your repositories, generate and update documentation, and host your docs sites,</li>
           <li>run the actions that you or your connected agents request, and ask for approval when your policy requires it,</li>
-          <li>send emails about your account, such as verification, password resets, invitations and notifications,</li>
-          <li>enforce plan limits, measure cost, and bill you when paid plans exist,</li>
+          <li>
+            send emails about your account, such as verification, password resets, invitations, notifications and
+            notices about your AI credits and payments,
+          </li>
+          <li>enforce plan limits, measure the use of AI credits, and bill you for your plan and pay-as-you-go use,</li>
+          <li>process payments, prevent payment fraud, and keep tax and accounting records,</li>
           <li>find and stop abuse, fraud and security incidents,</li>
           <li>fix problems, answer support requests and improve the service,</li>
+          <li>understand which features people use and where they get stuck, so we can improve Doxa,</li>
           <li>obey the law and enforce our <Link to="/legal/terms">Terms of Service</Link>.</li>
         </ul>
         <p>
-          We do not sell your personal information. We do not share it for targeted advertising. We do not use
-          advertising or analytics trackers in the dashboard or on the docs sites that we host. We do not send
-          marketing email unless you ask for it.
+          We do not sell your personal information. We do not share it for targeted advertising. We use PostHog for
+          product analytics on doxa.so. We do not use advertising trackers anywhere, and we do not put analytics
+          trackers on the docs sites that we host. We do not send marketing email unless you ask for it.
+        </p>
+        <p>
+          In the future, we may offer optional analytics for the docs sites that we host. They will be off by default
+          and will run on a docs site only if its owner turns them on. If you turn them on, we will store that data
+          securely, use it only to provide those analytics to you, and show it to you in your dashboard so you can
+          monitor your docs sites. We will not sell this data or use it for advertising. We will update this policy
+          before we launch this feature.
         </p>
       </>
     ),
@@ -215,12 +301,24 @@ const SECTIONS: LegalSection[] = [
         </p>
         <ul>
           <li>Our hosting provider logs each request, with the IP address and user agent, for security and operations.</li>
-          <li>The site stores the theme, recent searches and chat history in the visitor's browser.</li>
+          <li>The site stores recent searches and the chosen code language in the visitor's browser.</li>
           <li>
-            If the site owner turns on AI chat, we send the visitor's questions and the relevant docs content to an AI
-            model provider to write the answer.
+            When a visitor searches, the search text goes through our search gateway to our search provider,
+            Typesense. The gateway uses the visitor's IP address only to limit request rates. We do not store the
+            search text.
           </li>
-          <li>The site loads fonts from Google Fonts, so Google receives the visitor's IP address.</li>
+          <li>
+            When a visitor sends a request from an API playground, our proxy forwards it, with the values and API key
+            that the visitor entered, to the API that the page documents. The operator of that API receives the
+            request and the visitor's country, but not the visitor's IP address. We do not store the body of the
+            request or the key. To find abuse, we record the site, the target host, the method, the result and the
+            duration.
+          </li>
+          <li>The site can load fonts from Google Fonts, so Google receives the visitor's IP address.</li>
+          <li>
+            A page can embed videos from YouTube (in its privacy-enhanced mode), Vimeo or Loom. When a video loads,
+            that provider receives the visitor's IP address under its own policy.
+          </li>
         </ul>
         <p>
           We do not put advertising or analytics trackers on hosted docs sites. If you visit a docs site and have a
@@ -235,8 +333,10 @@ const SECTIONS: LegalSection[] = [
     body: (
       <>
         <p>
-          We use only the cookies and browser storage that the service needs to work and to remember your settings. We
-          do not use advertising or analytics cookies.
+          We use the cookies and browser storage that the service needs to work and to remember your settings, and one
+          PostHog analytics cookie. In the European Economic Area and the United Kingdom, we set it only after you
+          allow it. We do not use advertising cookies. When you pay, Stripe Checkout and Link run on Stripe's own pages
+          and use their own cookies under Stripe's policies.
         </p>
         <div className="table">
           <table>
@@ -277,6 +377,11 @@ const SECTIONS: LegalSection[] = [
             that limit their use of it to the service that they provide.
           </li>
           <li>
+            <strong>Payments.</strong> When you buy a paid plan, Stripe sells it to you as the merchant of record. We
+            give Stripe the name and email address of the account owner and the Doxa user ID, and Stripe gives us the
+            order details.
+          </li>
+          <li>
             <strong>Your team.</strong> Members of a team can see the team's projects, members, invitations and
             activity.
           </li>
@@ -284,8 +389,8 @@ const SECTIONS: LegalSection[] = [
             <strong>GitHub.</strong> When Doxa reports on a pull request, GitHub shows the result in your repository.
           </li>
           <li>
-            <strong>The public.</strong> A published docs site is public. Anything that you publish on it is visible to
-            anyone.
+            <strong>The public.</strong> A published docs site is public, and so are preview links of unpublished
+            changes. Anyone who has the address can see them.
           </li>
           <li>
             <strong>Legal reasons.</strong> We disclose information when the law requires it, or to protect the rights,
@@ -337,13 +442,21 @@ const SECTIONS: LegalSection[] = [
           <li>Pull request previews: 7 days.</li>
           <li>Team invitations: 7 days, unless accepted.</li>
           <li>Agent access tokens: 1 hour. Agent refresh tokens: 30 days, or 14 days without use.</li>
+          <li>Agent API tokens: 90 days, or 30 days without use.</li>
+          <li>Request and server logs: up to 90 days.</li>
           <li>Usage records: as long as we need them for billing, accounting and tax.</li>
+          <li>
+            Billing records, such as invoices, payments and AI credit history: as long as tax and accounting laws
+            require, usually 7 years.
+          </li>
+          <li>Product analytics events: up to 2 years. Session replays: 30 days.</li>
         </ul>
         <p>
           When you delete a project, we remove its domains and data and queue its stored files for deletion. When you
           ask us to delete your account, we delete your personal information within 30 days. We can keep some records
           longer when the law requires it, to settle disputes, or to enforce our agreements. Copies in backups and logs
-          expire on their normal schedule.
+          expire on their normal schedule. Stripe keeps its own records of your purchases under its policies, and
+          deleting your Doxa account does not delete them.
         </p>
       </>
     ),
@@ -358,7 +471,8 @@ const SECTIONS: LegalSection[] = [
           <li>All traffic to Doxa uses HTTPS.</li>
           <li>GitHub access tokens are short-lived and limited to one repository per job.</li>
           <li>Build containers are temporary and isolated for each job.</li>
-          <li>We store invitation tokens and agent tool inputs only as hashes.</li>
+          <li>We store invitation tokens, agent API tokens and agent tool inputs only as hashes.</li>
+          <li>Stripe handles card details. They never reach our servers.</li>
           <li>Access to production systems is limited to the people who operate the service.</li>
         </ul>
         <p>
@@ -377,9 +491,22 @@ const SECTIONS: LegalSection[] = [
         <ul>
           <li>Edit your profile and docs content in the dashboard.</li>
           <li>Delete a project in its settings.</li>
-          <li>Turn off notification emails in settings, or with the unsubscribe link in each email.</li>
+          <li>Export the docs of a project as a ZIP file in its settings.</li>
+          <li>
+            Cancel your plan, change your payment method, update your billing details and download invoices from the
+            Plan and invoices page of the dashboard, which opens Stripe's customer portal. You can also manage a plan that you bought through Link at
+            link.com.
+          </li>
+          <li>
+            Turn off notification emails in settings, or with the unsubscribe link in each email. Service emails, such
+            as security, invitation and billing notices, always send.
+          </li>
           <li>Revoke a connected agent in Settings › Connected agents.</li>
           <li>Remove the Doxa GitHub App from your GitHub account or organization.</li>
+          <li>
+            Turn off product analytics with the Privacy choices link at the bottom of the doxa.so website and the
+            sign-in pages, or in Account settings in the dashboard.
+          </li>
         </ul>
         <p>
           Depending on where you live, you can also have the right to access, correct, export or delete your personal
@@ -393,18 +520,18 @@ const SECTIONS: LegalSection[] = [
         <ul>
           <li>to perform our contract with you, when we provide the service,</li>
           <li>
-            our legitimate interests, for security, abuse prevention and improvement of the service, when your rights
-            do not override them,
+            our legitimate interests, for security, abuse prevention and improvement of the service, and product
+            analytics that stores nothing in your browser, when your rights do not override them,
           </li>
           <li>to obey legal obligations,</li>
-          <li>your consent, when we ask for it.</li>
+          <li>your consent, when we ask for it, for analytics cookies and session replay in the EEA and the UK.</li>
         </ul>
         <p>You can complain to your local data protection authority.</p>
         <h3>California</h3>
         <p>
           In the last 12 months, we collected the categories of information in{" "}
-          <a href="#collect">Information we collect</a>: identifiers, account and team details, internet activity
-          (logs and usage), and the content that you give us. We collected them for the purposes in{" "}
+          <a href="#collect">Information we collect</a>: identifiers, account and team details, commercial information
+          (your plan and payments), internet activity (logs and usage), and the content that you give us. We collected them for the purposes in{" "}
           <a href="#use">How we use information</a> and disclosed them only as described in{" "}
           <a href="#sharing">How we share information</a>. We do not sell or share personal information as the
           California Consumer Privacy Act defines those terms. We do not use sensitive personal information for any
@@ -474,7 +601,11 @@ export function PrivacyPolicyPage() {
           <ul>
             <li>We collect what we need to run Doxa: your account, your repositories and the docs that you make.</li>
             <li>AI providers process your code only to write your docs. Nobody trains models on it.</li>
-            <li>No ads, no analytics trackers, and we never sell your data.</li>
+            <li>
+              No ads, and we never sell your data. We use PostHog to see how people use doxa.so, so we can fix problems.
+              Docs sites that we host have no trackers.
+            </li>
+            <li>Stripe processes payments for paid plans. We never see your full card number.</li>
             <li>
               You can export or delete your data. Write to <Mail />.
             </li>

@@ -7,6 +7,8 @@ import { createApiRouter } from "../http/app";
 import { withProjectAccess } from "../http/project-access";
 import { readBoundedBody, RequestBodyTooLarge } from "../http/bounded-body";
 import { error, json, validationError } from "../http/response";
+import { PlanLimitError } from "@doxahq/billing";
+import { planLimitResponse } from "../http/billing-errors";
 import {
   DocsContentError,
   getDocsContentErrorStatus,
@@ -87,6 +89,8 @@ async function run(handler: () => Promise<Response>): Promise<Response> {
       ]);
     if (cause instanceof SiteConfigValidationError)
       return validationError(cause.issues);
+    // The site file limits of the plan. The dashboard finds the account from the project.
+    if (cause instanceof PlanLimitError) return planLimitResponse(cause);
     if (cause instanceof DocsContentError)
       return error(cause.message, getDocsContentErrorStatus(cause.code));
     throw cause;

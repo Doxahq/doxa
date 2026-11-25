@@ -18,6 +18,7 @@ import {
   CommandSeparator,
 } from "~/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover"
+import { showPlanLimit } from "~/lib/dashboard/billing-denials"
 import { branchNameError } from "~/lib/dashboard/branch-name-validation"
 import { describeNamedBranch } from "~/lib/dashboard/branch-purpose"
 import { ROLE_RESTRICTED_MESSAGE } from "~/lib/dashboard/use-project-capabilities"
@@ -61,7 +62,7 @@ export function BranchSwitcher(props: BranchSwitcherProps) {
   const isMain = props.branch === "main"
   const changeCount = props.status?.changeCount ?? (isMain ? props.mainChangeCount : selected?.changeCount ?? 0)
   const atLimit = props.branches.length >= props.maxBranches
-  const limitMessage = `This plan allows ${props.maxBranches} branches. Erase a branch to create a new one.`
+  const limitMessage = `This plan allows ${props.maxBranches} branches. Erase a branch, or upgrade for more.`
   const trimmed = search.trim()
   const canCreateFromSearch =
     canWrite &&
@@ -92,6 +93,12 @@ export function BranchSwitcher(props: BranchSwitcherProps) {
   function run(action: () => void) {
     setOpen(false)
     requestAnimationFrame(action)
+  }
+
+  // At the limit, the plan limit flow opens in place of the create dialog.
+  function create(name: string) {
+    if (atLimit) showPlanLimit("docs.branches_per_site", props.maxBranches, props.branches.length)
+    else props.onCreate(name)
   }
 
   function switchTo(branch: BranchRef) {
@@ -206,8 +213,7 @@ export function BranchSwitcher(props: BranchSwitcherProps) {
                 <CommandItem
                   forceMount
                   value={`create ${trimmed}`}
-                  disabled={atLimit}
-                  onSelect={() => run(() => props.onCreate(trimmed))}
+                  onSelect={() => run(() => create(trimmed))}
                   className="gap-2.5 px-2 py-2"
                 >
                   <Plus aria-hidden="true" className="size-4 text-primary-text" />
@@ -223,8 +229,7 @@ export function BranchSwitcher(props: BranchSwitcherProps) {
               {canWrite ? (
                 <CommandItem
                   value="new branch create"
-                  disabled={atLimit}
-                  onSelect={() => run(() => props.onCreate(""))}
+                  onSelect={() => run(() => create(""))}
                   className="gap-2.5 px-2 py-1.5 text-[13px]"
                   title={atLimit ? limitMessage : undefined}
                 >

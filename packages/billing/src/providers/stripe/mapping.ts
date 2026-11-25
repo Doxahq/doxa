@@ -7,6 +7,7 @@ import type {
   InvoiceStatus,
   InvoiceSummary,
   PaymentMethodSummary,
+  PlanInvoiceRef,
   PlanSwitchPreview,
   ProviderCustomerRef,
   ProviderSubscription,
@@ -159,6 +160,16 @@ export function usageInvoiceRef(invoice: Stripe.Invoice, customerId: string): Us
     amountCents: invoice.amount_due,
     reason,
     hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+  };
+}
+
+/** A paid or failed plan invoice: the amount paid, or the amount due when the payment failed. */
+export function planInvoiceRef(invoice: Stripe.Invoice, outcome: PlanInvoiceRef["outcome"]): PlanInvoiceRef {
+  return {
+    invoiceId: invoice.id,
+    outcome,
+    amountCents: outcome === "paid" ? invoice.amount_paid : invoice.amount_due,
+    attempt: invoice.attempt_count ?? null,
   };
 }
 

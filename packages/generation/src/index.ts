@@ -41,7 +41,11 @@ export type GenerationMode = "starter-dev" | "container-inline" | "queue";
 
 export interface GenerationInternalApi {
   getGenerationContext(projectId: string): Promise<GenerationContext | null>;
-  createInstallationAccessToken(installationId: string): Promise<string>;
+  /**
+   * A token that can only read the project's repository, the same token as
+   * production runs. The API resolves the repository from the project.
+   */
+  createRepositoryReadToken(projectId: string): Promise<string>;
   markJobRunning(jobId: string): Promise<void>;
   markJobFailed(jobId: string, message: string): Promise<void>;
   markJobCancelled(jobId: string, message: string): Promise<void>;
@@ -195,18 +199,18 @@ export async function runRealGenerationJob(
     await deps.internal.addJobEvent(
       input.jobId,
       "github_token_creating",
-      "Creating short-lived GitHub installation token.",
+      "Creating a short-lived GitHub token that can read this repository.",
       undefined,
       "worker",
     );
-    const installationToken = await deps.internal.createInstallationAccessToken(
-      context.repository.installationId,
+    const installationToken = await deps.internal.createRepositoryReadToken(
+      context.project.id,
     );
     secrets.push(installationToken);
     await deps.internal.addJobEvent(
       input.jobId,
       "github_token_created",
-      "GitHub installation token created.",
+      "GitHub repository read token created.",
       undefined,
       "worker",
     );

@@ -4,7 +4,7 @@ import type { GenerationConfirmationReason } from "@doxahq/contracts"
 import { toast } from "sonner"
 
 import type { GenerationStartResultDto } from "@doxahq/contracts"
-import { PRO_REASON_GENERATION } from "~/lib/dashboard/ai-access"
+import { PRO_GATE_GENERATION } from "~/lib/dashboard/ai-access"
 import { requiresGenerationConfirmation } from "~/lib/dashboard/generation-model"
 import { useProGate } from "~/lib/dashboard/pro-trial-dialog"
 import { useProjectAiAccess } from "~/lib/dashboard/use-ai-access"
@@ -39,7 +39,7 @@ export function useGenerationStarter(
   const proGate = useProGate(useProjectAiAccess(projectId))
 
   async function startGeneration(options: GenerationStartOptions = {}) {
-    if (proGate(PRO_REASON_GENERATION)) return
+    if (proGate(PRO_GATE_GENERATION)) return
     const result = await generations.start(options)
     if (!result) return
     if (requiresGenerationConfirmation(result)) {

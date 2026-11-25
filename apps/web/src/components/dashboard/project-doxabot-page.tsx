@@ -6,7 +6,6 @@ import {
   AlertDescription,
   AlertTitle,
 } from "~/components/ui/alert"
-import { Badge } from "~/components/ui/badge"
 import {
   Card,
   CardContent,
@@ -105,15 +104,13 @@ export function DoxabotSettingsCard({ projectId }: { projectId: string }) {
           </Alert>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-3" aria-live="polite">
-          <p id="doxabot-pull-request-status" className="text-sm text-muted-foreground">
-            {showAlert ? view.statusLabel : view.description}
-          </p>
-          <Badge variant="outline" className="w-fit shrink-0">
-            <LockKeyhole aria-hidden="true" className="mr-1 size-3" />
-            Private repositories only
-          </Badge>
-        </div>
+        <p
+          id="doxabot-pull-request-status"
+          className="text-sm text-muted-foreground"
+          aria-live="polite"
+        >
+          {showAlert ? view.statusLabel : view.description}
+        </p>
       </CardContent>
     </Card>
   )

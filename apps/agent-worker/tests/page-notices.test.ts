@@ -7,7 +7,9 @@ import {
 import {
   GENERATION_PAGE_NOTICE_EVENT_TYPE,
   PAGE_NOTICE_LIMITS,
+  UNVERIFIED_EXTERNAL_LINKS_EVENT_TYPE,
   pageNoticeSchema,
+  unverifiedExternalLinksEventDataSchema,
   type PageNotice,
 } from "@doxahq/contracts/generation-reviews";
 import { describe, expect, test } from "vitest";
@@ -17,6 +19,8 @@ import {
   openIssueNotices,
   pageNoticeMessage,
   recordPageNotices,
+  recordUnverifiedExternalLinks,
+  unverifiedExternalLinkPages,
 } from "../src/page-notices";
 
 const hash = "a".repeat(64);
@@ -185,5 +189,45 @@ describe("recording page notices", () => {
       kind: "open_issues",
       issues: [{ check: "cutoffContent", message: "Content appears cut off.", instructions: false }],
     })).toBe("Page was kept with an issue that the writer could not fix: Content appears cut off.");
+  });
+});
+
+describe("unverified outside links", () => {
+  test("lists the written pages with unverified domains and records one event for the run", async () => {
+    const pages = unverifiedExternalLinkPages([
+      runtimePage("intro", { unverifiedExternalDomains: ["evil.example", "evil.example"] }),
+      runtimePage("setup"),
+      runtimePage("auth", { unverifiedExternalDomains: ["evil.example", "login.other.test"] }),
+    ]);
+    expect(pages).toEqual([
+      { pageId: "intro", title: "intro", href: "/intro", domains: ["evil.example"] },
+      { pageId: "auth", title: "auth", href: "/auth", domains: ["evil.example", "login.other.test"] },
+    ]);
+
+    const events: Array<{ type: string; message: string; data: unknown }> = [];
+    await recordUnverifiedExternalLinks({ pages, addJobEvent: async (event) => events.push(event) });
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe(UNVERIFIED_EXTERNAL_LINKS_EVENT_TYPE);
+    expect(events[0]?.message).toBe(
+      "2 pages link to 2 outside domains that the repository does not contain: evil.example, login.other.test. Check the links before you publish.",
+    );
+    expect(unverifiedExternalLinksEventDataSchema.parse(events[0]?.data)).toEqual({
+      domains: ["evil.example", "login.other.test"],
+      pages,
+    });
+  });
+
+  test("records nothing without unverified domains, and a failed event does not throw", async () => {
+    const events: unknown[] = [];
+    await recordUnverifiedExternalLinks({ pages: [], addJobEvent: async (event) => events.push(event) });
+    expect(events).toEqual([]);
+
+    const errors: unknown[] = [];
+    await recordUnverifiedExternalLinks({
+      pages: unverifiedExternalLinkPages([runtimePage("intro", { unverifiedExternalDomains: ["evil.example"] })]),
+      addJobEvent: async () => { throw new Error("api down"); },
+      onError: (error) => errors.push(error),
+    });
+    expect(errors).toHaveLength(1);
   });
 });

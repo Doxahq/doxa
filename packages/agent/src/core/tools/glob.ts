@@ -6,6 +6,7 @@ import { z } from "zod/v4";
 import { defineTool } from "../tool";
 import { scanGlob } from "../../utils/runtime";
 import { resolveProjectPath } from "./project-path";
+import { wrapUntrustedRepositoryContent } from "../untrusted-content";
 
 export function globTool(cwd: string) {
   return defineTool({
@@ -24,7 +25,8 @@ export function globTool(cwd: string) {
           return `No files found matching pattern "${pattern}" in ${searchDir}`;
         }
         matches.sort();
-        return matches.join("\n");
+        // File names come from the repository, so they are data too.
+        return wrapUntrustedRepositoryContent(matches.join("\n"), `file list of ${path ?? "."}`);
       } catch (err) {
         return `Error globbing: ${err instanceof Error ? err.message : String(err)}`;
       }

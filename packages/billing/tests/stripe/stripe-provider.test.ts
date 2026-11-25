@@ -74,6 +74,20 @@ describe("stripe provider: customers", () => {
     expect(kit.fake.customers.get(first.customerId)?.metadata).toMatchObject({ doxa_billing_account_id: "acct_1" });
     expect(kit.fake.requestsTo("POST", "/v1/customers")[0]?.headers["idempotency-key"]).toBe("customer:acct_1");
   });
+
+  it("stores the owner's Doxa user ID for the PostHog revenue join, on a new and on an older customer", async () => {
+    const kit = stripeKit();
+    const created = await kit.provider.ensureCustomer({ accountId: "acct_1", email: null, name: null, personDistinctId: "user_1", existing: null, idempotencyKey: "customer:acct_1" });
+    expect(kit.fake.customers.get(created.customerId)?.metadata).toMatchObject({ doxa_billing_account_id: "acct_1", posthog_person_distinct_id: "user_1" });
+
+    const older = await customer(kit, "acct_2");
+    await kit.provider.ensureCustomer({ accountId: "acct_2", email: null, name: null, personDistinctId: "user_2", existing: older, idempotencyKey: "customer:acct_2" });
+    expect(kit.fake.customers.get(older.customerId)?.metadata).toMatchObject({ doxa_billing_account_id: "acct_2", posthog_person_distinct_id: "user_2" });
+
+    // Already stored: no update call.
+    await kit.provider.ensureCustomer({ accountId: "acct_2", email: null, name: null, personDistinctId: "user_2", existing: older, idempotencyKey: "customer:acct_2" });
+    expect(kit.fake.requestsTo("POST", `/v1/customers/${older.customerId}`)).toHaveLength(1);
+  });
 });
 
 describe("stripe provider: customer contact", () => {
@@ -328,8 +342,8 @@ describe("stripe provider: Doxa never creates an invoice", () => {
 describe("stripe provider: webhooks", () => {
   it("verifies the signature over the raw body", async () => {
     const kit = stripeKit();
-    const raw = kit.webhook("checkout.session.expired", { id: "cs_fake0001", object: "checkout.session", mode: "subscription" });
-    expect(await kit.provider.parseWebhook(raw)).toMatchObject({ type: "checkout.expired", checkoutId: "cs_fake0001", providerType: "checkout.session.expired" });
+    const raw = kit.webhook("checkout.session.expired", { id: "cs_fake0001", object: "checkout.session", mode: "subscription", client_reference_id: "acct_9" });
+    expect(await kit.provider.parseWebhook(raw)).toMatchObject({ type: "checkout.expired", checkoutId: "cs_fake0001", providerType: "checkout.session.expired", accountId: "acct_9" });
     await expect(kit.provider.parseWebhook({ ...raw, body: `${raw.body} ` })).rejects.toBeInstanceOf(ProviderSignatureError);
     await expect(kit.provider.parseWebhook({ body: raw.body, headers: {} })).rejects.toBeInstanceOf(ProviderSignatureError);
     const wrongSecret = { body: raw.body, headers: { "stripe-signature": "t=1,v1=deadbeef" } };
@@ -375,7 +389,15 @@ describe("stripe provider: webhooks", () => {
       expect(await parse(kit, "invoice.paid", invoice(kit, "subscription_threshold", [usageLine(kit, 600)], { status: "paid" }))).toMatchObject({ type: "usage_invoice.paid", invoice: { credits: 600 } });
       expect(await parse(kit, "invoice.payment_failed", invoice(kit, "subscription_threshold", [usageLine(kit, 600)]))).toMatchObject({ type: "usage_invoice.failed" });
       expect(await parse(kit, "invoice.paid", invoice(kit, "subscription_cycle", [planLine, usageLine(kit, 40)]))).toMatchObject({ type: "usage_invoice.paid", invoice: { credits: 40, reason: "renewal" } });
-      expect(await parse(kit, "invoice.paid", invoice(kit, "subscription_create", [planLine]))).toMatchObject({ type: "customer.changed", customer: { customerId: "cus_fake0001" } });
+      expect(await parse(kit, "invoice.paid", invoice(kit, "subscription_create", [planLine], { status: "paid", amount_paid: 12_900, attempt_count: 1 }))).toMatchObject({
+        type: "customer.changed",
+        customer: { customerId: "cus_fake0001" },
+        invoice: { invoiceId: "in_fake0100", outcome: "paid", amountCents: 12_900, attempt: 1 },
+      });
+      expect(await parse(kit, "invoice.payment_failed", invoice(kit, "subscription_cycle", [planLine], { attempt_count: 2 }))).toMatchObject({
+        type: "customer.changed",
+        invoice: { outcome: "failed", amountCents: 600, attempt: 2 },
+      });
     });
 
     it("maps Checkout and subscription events", async () => {

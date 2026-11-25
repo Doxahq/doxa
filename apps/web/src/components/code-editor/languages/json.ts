@@ -373,5 +373,4 @@ const jsonEditorTheme = EditorView.theme(
       fontSize: "11px",
     },
   },
-  { dark: true },
 )

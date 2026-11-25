@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { WorkspaceAdapter } from "../adapters/types";
 import { defineTool } from "./tool";
 import type { ToolSpec } from "./types";
+import { wrapUntrustedRepositoryContent } from "./untrusted-content";
 
 export function createWorkspaceReadTools(workspace: WorkspaceAdapter): ToolSpec[] {
   return [
@@ -11,7 +12,7 @@ export function createWorkspaceReadTools(workspace: WorkspaceAdapter): ToolSpec[
       parameters: z.object({ path: z.string() }),
       execute: async ({ path }) => {
         const content = await workspace.readText(path);
-        return content === null ? `Error: File not found: ${path}` : content;
+        return content === null ? `Error: File not found: ${path}` : wrapUntrustedRepositoryContent(content, path);
       },
     }),
     defineTool({
@@ -23,7 +24,9 @@ export function createWorkspaceReadTools(workspace: WorkspaceAdapter): ToolSpec[
       }),
       execute: async (args) => {
         const files = await workspace.listFiles(args);
-        return files.length ? files.join("\n") : "No files found";
+        return files.length
+          ? wrapUntrustedRepositoryContent(files.join("\n"), `file list of ${args.prefix ?? args.glob ?? "."}`)
+          : "No files found";
       },
     }),
     defineTool({
@@ -37,7 +40,10 @@ export function createWorkspaceReadTools(workspace: WorkspaceAdapter): ToolSpec[
       execute: async ({ pattern, ...options }) => {
         const matches = await workspace.grep(pattern, options);
         return matches.length
-          ? matches.map((match) => `${match.path}:${match.line}:${match.text}`).join("\n")
+          ? wrapUntrustedRepositoryContent(
+            matches.map((match) => `${match.path}:${match.line}:${match.text}`).join("\n"),
+            `grep results in ${options.prefix ?? "."}`,
+          )
           : `No matches found for pattern "${pattern}"`;
       },
     }),

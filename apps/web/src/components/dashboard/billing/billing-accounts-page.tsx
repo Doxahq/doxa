@@ -13,6 +13,7 @@ import { offerClosedPrice } from "~/lib/dashboard/offer-closed"
 import { BillingAccountSkeleton, BillingAccountsSkeleton } from "~/components/dashboard/skeletons/billing-skeletons"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
+import { captureBrowserEvent } from "~/lib/analytics/capture-browser-event"
 import { createBillingCheckout } from "~/lib/billing-api"
 import { founderOffer } from "~/lib/dashboard/billing-model"
 import { openBillingUrl } from "~/lib/dashboard/use-billing-account"
@@ -152,7 +153,14 @@ function UpgradeRow({
   return (
     <li className="flex items-center justify-between gap-4 border-t border-divider px-5 py-4 first:border-t-0">
       <span className="truncate text-[14.5px] text-foreground">{billingAccountName(account)}</span>
-      <Button size="sm" disabled={disabled} onClick={onUpgrade}>
+      <Button
+        size="sm"
+        disabled={disabled}
+        onClick={() => {
+          captureBrowserEvent("upgrade_clicked", { location: "billing_accounts" })
+          onUpgrade()
+        }}
+      >
         {isPending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
         {isPending ? "Opening Checkout…" : "Upgrade to Pro"}
       </Button>

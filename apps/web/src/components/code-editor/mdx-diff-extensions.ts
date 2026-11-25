@@ -39,7 +39,6 @@ const diffTheme = EditorView.theme(
       fontSize: "11px",
     },
   },
-  { dark: true },
 )
 
 /** A read-only MDX editor with the dashboard theme and the diff colors. */

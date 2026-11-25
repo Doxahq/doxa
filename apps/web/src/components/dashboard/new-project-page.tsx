@@ -10,10 +10,11 @@ import { NewProjectWorkspaceButton } from "~/components/dashboard/new-project/ne
 import { StartProjectCard } from "~/components/dashboard/new-project/start-project-card"
 import { TrialStartedNotice } from "~/components/dashboard/new-project/trial-started-notice"
 import { Button } from "~/components/ui/button"
-import { AI_ACCESS_LOADING, PRO_REASON_REPOSITORY, planHasDoxaAgent } from "~/lib/dashboard/ai-access"
+import { AI_ACCESS_LOADING, PRO_GATE_REPOSITORY, planHasDoxaAgent } from "~/lib/dashboard/ai-access"
 import { NEW_PROJECT_TRIAL_RETURN_PATH, type NewProjectStart } from "~/lib/dashboard/new-project-search"
 import { useProGate } from "~/lib/dashboard/pro-trial-dialog"
 import { TEAM_ROLE_LABELS } from "~/lib/dashboard/teams-model"
+import { useDashboardPageReady } from "~/lib/dashboard/dashboard-boot"
 import { useNewProjectAiAccess } from "~/lib/dashboard/use-ai-access"
 import { useProjectsSummary } from "~/lib/dashboard/use-projects-summary"
 import { useTrialStartedNotice } from "~/lib/dashboard/use-trial-started-notice"
@@ -66,6 +67,9 @@ export function NewProjectPage() {
   const trialNotice = useTrialStartedNotice(search.checkout ?? null, aiAccess)
   // Opens once the plan is known, so a Free account never sees it flash.
   const canGenerate = aiAccess.kind === "open"
+  // A first visit opens here from `/dashboard`. Its loading screen stays until
+  // the heading and the cards are final: the project count, the role and the plan.
+  useDashboardPageReady(!isPending && creation !== "pending" && (creation === "denied" || aiAccess.kind !== "loading"))
 
   function openDialog(next: NewProjectStart | null) {
     setDialog(next)
@@ -75,7 +79,7 @@ export function NewProjectPage() {
 
   /** Free: the Pro trial dialog, and Checkout comes back here to open the repository dialog. */
   function generateFromRepository() {
-    if (proGate(PRO_REASON_REPOSITORY, NEW_PROJECT_TRIAL_RETURN_PATH)) {
+    if (proGate(PRO_GATE_REPOSITORY, NEW_PROJECT_TRIAL_RETURN_PATH)) {
       setDialog(null)
       return
     }

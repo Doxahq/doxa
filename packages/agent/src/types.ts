@@ -850,6 +850,8 @@ export interface GeneratedPageContent {
   pageInputHash: string;
   /** Issues the writer could not fix before it kept the page. */
   openIssues?: PageOpenIssue[];
+  /** Outside domains that the page links to and the repository does not contain. */
+  unverifiedExternalDomains?: string[];
 }
 
 /** Final result of documentation generation. */

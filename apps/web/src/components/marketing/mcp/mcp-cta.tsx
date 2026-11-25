@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 
 /** The closing call to action. */
 export function McpCta() {
@@ -11,7 +12,7 @@ export function McpCta() {
           <span className="mark">not the publish button</span>
         </h2>
         <div className="row">
-          <a className="btn btn--light" href="#connect">
+          <a className="btn btn--light" href="#connect" onClick={ctaClickHandler("mcp_cta", "connect_agent")}>
             Connect an agent ›
           </a>
           <Link className="btn btn--line" to="/pricing">

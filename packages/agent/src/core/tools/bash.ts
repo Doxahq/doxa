@@ -5,6 +5,7 @@
 import { z } from "zod/v4";
 import { defineTool } from "../tool";
 import { runCommand } from "../../utils/runtime";
+import { wrapUntrustedRepositoryContent } from "../untrusted-content";
 
 const DEFAULT_TIMEOUT = 30_000; // 30 seconds
 
@@ -39,7 +40,8 @@ export function bashTool(cwd: string) {
           output = output.slice(0, 10_000) + "\n... (output truncated)";
         }
 
-        return output;
+        // Command output reads the repository, so it is data, never instructions.
+        return wrapUntrustedRepositoryContent(output, "shell command output");
       } catch (err) {
         return `Error executing command: ${err instanceof Error ? err.message : String(err)}`;
       }

@@ -4,6 +4,7 @@
  * `apps/mcp` never import it.
  */
 export { BillingPayments, type BillingPaymentEvents, type BillingPaymentsDeps, type SyncResult } from "./service";
+export { NO_BILLING_LIFECYCLE_EVENTS } from "../lifecycle-events";
 export { BillingWebhooks, WEBHOOK_BODY_LIMIT_BYTES, type BillingWebhooksDeps, type WebhookResponse } from "./webhooks";
 export {
   BILLING_PROVIDERS,

@@ -1,5 +1,6 @@
 import { ClientPicker } from "~/components/marketing/mcp/client-picker"
 import { ClientSetup } from "~/components/marketing/mcp/client-setup"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 import type { CopyState } from "~/lib/mcp/copied"
 import { useMcpClientPicker } from "~/lib/mcp/use-client-picker"
@@ -30,7 +31,9 @@ export function McpConnect({ copyState }: { copyState: CopyState }) {
         <div className="cxnext">
           <p>
             <b>What happens next:</b> {active.signIn} Pick the projects this agent can use, then click Allow. Every
-            publish still waits for your approval. No account yet? <a href={GET_STARTED_URL}>Create one for free</a>.
+            publish still waits for your approval. No account yet? <a href={GET_STARTED_URL} onClick={ctaClickHandler("mcp_connect", "get_started")}>
+              Create one for free
+            </a>.
           </p>
           <a className="btn btn--line btn--sm" href={DOCS_URL}>
             Read the docs ›

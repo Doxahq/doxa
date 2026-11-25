@@ -1,87 +1,52 @@
-import { Link } from "@tanstack/react-router"
-import { ChevronRight, Github, Link2, Users } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { Github, Link2 } from "lucide-react"
 
-import {
-  FieldList,
-  FieldRow,
-  PageBody,
-  PageHeading,
-  SectionLabel,
-} from "~/components/dashboard/dashboard-header"
-import { ConnectedAgentsSection } from "~/components/dashboard/settings/connected-agents-section"
-import { EmailNotificationsSection } from "~/components/dashboard/settings/email-notifications-section"
-import { UserApprovalSettingsSection } from "~/components/dashboard/settings/user-approval-settings-section"
-import { AccountTopBar } from "~/components/dashboard/shell/top-bar"
+import { FieldList, FieldRow, SectionLabel } from "~/components/dashboard/dashboard-header"
+import { AccountPageFrame } from "~/components/dashboard/settings/account-page-frame"
+import { PrivacySettingsSection } from "~/components/dashboard/settings/privacy-settings-section"
+import { GitHubInstallationsSection } from "~/components/dashboard/settings/github-installations-section"
+import { AccountSettingsSkeleton } from "~/components/dashboard/skeletons/account-skeletons"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { useDashboardAuth } from "~/lib/auth/dashboard-auth-context"
-import { useQuery } from "@tanstack/react-query"
-import { ACCOUNT_SETTINGS_DESCRIPTION, AccountSettingsSkeleton } from "~/components/dashboard/skeletons/account-skeletons"
-import { agentGrantsQueryOptions } from "~/lib/queries/agent-access"
-import { billingAccountsQueryOptions } from "~/lib/queries/billing"
-import { userApprovalSettingsQueryOptions } from "~/lib/queries/approval-settings"
-import { emailPreferencesQueryOptions } from "~/lib/queries/email-preferences"
+import { ACCOUNT_PAGES } from "~/lib/dashboard/account-pages"
 import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
 import { useGitHub } from "~/lib/dashboard/use-github"
+import { billingAccountsQueryOptions } from "~/lib/queries/billing"
+import { githubInstallationsQueryOptions } from "~/lib/queries/dashboard"
+import { privacySettingsQueryOptions } from "~/lib/queries/privacy-settings"
 
-/** `/dashboard/settings`: Account settings. Billing has its own pages in the Account sidebar. */
+/**
+ * `/dashboard/settings`: Account settings, the profile, the GitHub connection and the product analytics switch.
+ * Notifications, agents, teams and billing have their own pages in the Account sidebar.
+ */
 export function SettingsPage() {
   const auth = useDashboardAuth()
   const { user } = auth
   const github = useGitHub()
-  // The sections read these too. The page waits for all of them, so it shows
-  // one skeleton and then every section at once. The billing accounts fill the
-  // Account sidebar's BILLING group, so it shows with the page.
+  // The page waits for all of these, so it shows one skeleton and then every section at once.
+  // The billing accounts fill the Account sidebar's BILLING group, so it shows with the page.
   const isFirstLoad = useIsFirstLoad([
     { isPending: auth.isPending },
     { isPending: github.isLoading },
-    useQuery(emailPreferencesQueryOptions()),
-    useQuery(agentGrantsQueryOptions()),
-    useQuery(userApprovalSettingsQueryOptions()),
     useQuery(billingAccountsQueryOptions()),
+    useQuery(githubInstallationsQueryOptions()),
+    useQuery(privacySettingsQueryOptions()),
   ])
 
   if (isFirstLoad) return <AccountSettingsSkeleton />
 
   return (
-    <>
-      <AccountTopBar crumbs={["Account settings"]} />
-
-      <PageBody>
-        <PageHeading label="Account" title="Account settings" description={ACCOUNT_SETTINGS_DESCRIPTION} />
-        <AccountSection name={user?.name ?? null} email={user?.email ?? null} />
-        <GitHubConnectionSection
-          isConnected={github.isConnected}
-          repositoryCount={github.repositories.length}
-          githubInstallUrl={github.githubInstallUrl}
-        />
-        <TeamsLinkSection />
-        <EmailNotificationsSection />
-        <ConnectedAgentsSection />
-        <UserApprovalSettingsSection />
-      </PageBody>
-    </>
-  )
-}
-
-/** Teams live on their own page; settings links to it. */
-function TeamsLinkSection() {
-  return (
-    <section className="flex flex-col gap-3">
-      <SectionLabel>Teams</SectionLabel>
-      <div className="surface-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2.5">
-          <Users className="size-4 text-muted-foreground" />
-          <span className="text-sm text-foreground">Share projects with your team, by role.</span>
-        </div>
-        <Button variant="outline" size="sm" className="w-fit" asChild>
-          <Link to="/dashboard/teams">
-            Manage teams
-            <ChevronRight aria-hidden="true" />
-          </Link>
-        </Button>
-      </div>
-    </section>
+    <AccountPageFrame page={ACCOUNT_PAGES.account}>
+      <AccountSection name={user?.name ?? null} email={user?.email ?? null} />
+      <GitHubConnectionSection
+        isConnected={github.isConnected}
+        repositoryCount={github.repositories.length}
+        githubInstallUrl={github.githubInstallUrl}
+      />
+      <GitHubInstallationsSection />
+      <PrivacySettingsSection />
+    </AccountPageFrame>
   )
 }
 

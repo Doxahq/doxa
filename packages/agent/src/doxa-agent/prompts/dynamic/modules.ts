@@ -7,6 +7,10 @@ import {
   formatStructureSummary,
 } from "./formatters";
 import { lineForReaders } from "./readers";
+import {
+  UNTRUSTED_REPOSITORY_CONTENT_RULE,
+  wrapUntrustedRepositoryContent,
+} from "../../../core/untrusted-content";
 import type { PromptModule, PromptStage } from "./types";
 
 function bulletList(items: string[]): string {
@@ -36,7 +40,7 @@ const repoMapModules: PromptModule[] = [
     stage: "exploration",
     priority: REPO_MAP_PRIORITY,
     render: (context) => context.repoMap
-      ? `${context.repoMap}
+      ? `${wrapUntrustedRepositoryContent(context.repoMap, "repository map")}
 
 USING THE REPOSITORY MAP
 - The map above was built from the code before this run. Start from it: it already names the areas, the most used files, and their exports and routes.
@@ -50,7 +54,7 @@ USING THE REPOSITORY MAP
     stage: "analysis",
     priority: REPO_MAP_PRIORITY,
     render: (context) => context.repoMap
-      ? `${context.repoMap}
+      ? `${wrapUntrustedRepositoryContent(context.repoMap, "repository map")}
 
 The repository map above was built from the code. Use it to check file paths, export names, and routes in the analysis. When the map and the exploration summary disagree, trust the exploration summary: it comes from reading the files.`
       : undefined,
@@ -69,6 +73,18 @@ const publicPolicyModules: PromptModule[] = PUBLIC_POLICY_STAGES.map((stage) => 
 - ${policy.contextRule}
 ${bulletList(policy.scopeRules)}`;
   },
+}));
+
+/**
+ * Every stage reads repository text: tool results, the repo map, source
+ * evidence, or summaries made from them. The rule is static text right after
+ * the policy, so it stays inside the cached system prompt prefix.
+ */
+const untrustedRepositoryContentModules: PromptModule[] = PUBLIC_POLICY_STAGES.map((stage) => ({
+  id: `untrusted-repository-content-${stage}`,
+  stage,
+  priority: 2,
+  render: () => UNTRUSTED_REPOSITORY_CONTENT_RULE,
 }));
 
 /** Next to the repo map, and as stable: the notes come from the same source tree. */
@@ -99,6 +115,7 @@ const projectInstructionsModules: PromptModule[] = PUBLIC_POLICY_STAGES.map((sta
 
 export const promptModules: PromptModule[] = [
   ...publicPolicyModules,
+  ...untrustedRepositoryContentModules,
   ...repoMapModules,
   ...repositoryAgentNotesModules,
   ...projectInstructionsModules,

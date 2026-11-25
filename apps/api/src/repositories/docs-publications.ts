@@ -130,3 +130,22 @@ export async function hasHandWrittenPublication(
 
   return Boolean(publication);
 }
+
+/**
+ * True when the site has exactly one publication from a branch or a review:
+ * the one just made. A starter, an import or a restore does not count.
+ */
+export async function isFirstBranchPublication(db: DoxaDb, siteId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.docsPublications.id })
+    .from(schema.docsPublications)
+    .where(
+      and(
+        eq(schema.docsPublications.siteId, siteId),
+        inArray(schema.docsPublications.kind, ["editor", "generation"]),
+      ),
+    )
+    .limit(2);
+
+  return rows.length === 1;
+}

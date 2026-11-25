@@ -194,6 +194,7 @@ export class PreviewChannelsRepository implements PreviewChannelsStore {
         artifactPrefix: schema.docsVersions.artifactPrefix,
         manifestPath: schema.docsVersions.manifestPath,
         hostname: schema.docsPreviewChannels.hostname,
+        previewKind: schema.docsPreviewChannels.kind,
         previewVisibility: schema.docsSites.previewVisibility,
       })
       .from(schema.docsPreviewChannels)
@@ -232,6 +233,9 @@ export class PreviewChannelsRepository implements PreviewChannelsStore {
       }),
       hostname: row.hostname,
       domainKind: "doxa_subdomain",
+      // The dispatcher shows the unreviewed pull request banner only for
+      // `source_change`.
+      previewKind: row.previewKind,
     };
   }
 }

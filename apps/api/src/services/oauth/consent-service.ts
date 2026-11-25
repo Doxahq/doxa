@@ -6,13 +6,16 @@ import {
   type ApproveAgentConsentInput,
 } from "@doxahq/contracts/agent-access";
 import type { ValidationIssue } from "@doxahq/contracts/validation";
+import type { ProductAnalytics } from "@doxahq/analytics";
 import type { Env } from "../../env";
+import { productAnalyticsOf } from "../analytics/product-analytics";
 import { dashboardActor } from "../agent-access/actor";
 import { MembershipProjectAccessPolicy } from "../agent-access/membership-project-access-policy";
 import type { ProjectAccessPolicy } from "../agent-access/project-access-policy";
 import { oauthApiFromEnv, type OAuthApi } from "./authorization-server";
 import {
   OFFLINE_ACCESS_SCOPE,
+  analyticsClientLabel,
   clientDisplayName,
   clientMetadataUrl,
   describeConsentClient,
@@ -36,6 +39,8 @@ export interface ConsentServiceDependencies {
   projects: ProjectAccessPolicy;
   now: () => Date;
   newGrantRef: () => string;
+  /** Product analytics. Absent: nothing is reported. */
+  analytics?: ProductAnalytics;
 }
 
 export type ConsentLookup =
@@ -65,6 +70,7 @@ export class ConsentService {
       projects: MembershipProjectAccessPolicy.fromEnv(env),
       now: () => new Date(),
       newGrantRef: () => crypto.randomUUID(),
+      analytics: productAnalyticsOf(env),
     });
   }
 
@@ -103,6 +109,11 @@ export class ConsentService {
     const { redirectTo } = await this.deps.oauth.completeAuthorization(
       this.authorization(consent, userId, input),
     );
+    this.deps.analytics?.capture({
+      name: "mcp_agent_connected",
+      distinctId: userId,
+      properties: { client: analyticsClientLabel(consent.client), scope_count: new Set(input.scopes).size },
+    });
     return { kind: "approved", redirectTo };
   }
 

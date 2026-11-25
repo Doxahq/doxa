@@ -58,6 +58,7 @@ export { createProseComponents, type CreateProseComponentsOptions } from "./comp
 
 export { ProseLink, type ProseLinkComponent, type ProseLinkProps } from "./components/link";
 export { Embed, type EmbedProps } from "./components/embed";
+export { ProseTable } from "./components/table";
 export { Note, type NoteProps, type NoteVariant } from "./components/note";
 export {
   Step,
@@ -88,4 +89,4 @@ export {
 } from "./components/card";
 export { createPre, type PreIcons, type PreProps } from "./components/pre";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/tabs";
-export { createMermaid, type MermaidApi, type MermaidProps } from "./components/mermaid";
+export { createMermaid, type DiagramRenderer, type MermaidProps } from "./components/mermaid";

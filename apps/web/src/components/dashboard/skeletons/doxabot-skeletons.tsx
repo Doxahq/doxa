@@ -18,6 +18,7 @@ const DOXABOT_CARDS = [
   { title: "Instructions", action: "5.5rem" },
   { title: "Production branch", action: null },
   { title: "Pull request previews", action: null },
+  { title: "Allowed bots", action: null },
   { title: "When a pull request merges", action: null },
   { title: "Generation cache", action: null },
 ] as const

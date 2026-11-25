@@ -7,8 +7,12 @@ import {
 import {
   GENERATION_PAGE_NOTICE_EVENT_TYPE,
   PAGE_NOTICE_LIMITS,
+  UNVERIFIED_EXTERNAL_LINKS_EVENT_TYPE,
+  UNVERIFIED_EXTERNAL_LINK_LIMITS,
   boundedNoticeText,
   type PageNotice,
+  type UnverifiedExternalLinkPage,
+  type UnverifiedExternalLinksEventData,
 } from "@doxahq/contracts/generation-reviews";
 import { normalizeHref } from "@doxahq/docs-engine";
 
@@ -19,6 +23,71 @@ export function openIssueNotices(pages: readonly StagedRuntimePage[]): PageNotic
       ? pageNotice({ pageId: page.id, title: page.title, route: page.route, kind: "open_issues", issues: page.openIssues })
       : []
   );
+}
+
+/**
+ * The written pages that link to outside domains the repository does not
+ * contain. The writer found them; the page keeps its links, because outside
+ * links are allowed (owner decision, 2026-10-27).
+ */
+export function unverifiedExternalLinkPages(pages: readonly StagedRuntimePage[]): UnverifiedExternalLinkPage[] {
+  return pages.flatMap((page): UnverifiedExternalLinkPage[] => {
+    const domains = [...new Set(page.unverifiedExternalDomains ?? [])]
+      .slice(0, UNVERIFIED_EXTERNAL_LINK_LIMITS.domainsPerPage);
+    const [notice] = pageNotice({ pageId: page.id, title: page.title, route: page.route, kind: "open_issues", issues: [] });
+    return notice && domains.length > 0
+      ? [{ pageId: notice.pageId, title: notice.title, href: notice.href, domains }]
+      : [];
+  }).slice(0, UNVERIFIED_EXTERNAL_LINK_LIMITS.pages);
+}
+
+/** The data of the run's outside-link event, or null when no page has an unverified domain. */
+export function unverifiedExternalLinksEventData(
+  pages: readonly UnverifiedExternalLinkPage[],
+): UnverifiedExternalLinksEventData | null {
+  if (pages.length === 0) return null;
+  const domains = [...new Set(pages.flatMap((page) => page.domains))]
+    .slice(0, UNVERIFIED_EXTERNAL_LINK_LIMITS.domains);
+  return { domains, pages: [...pages] };
+}
+
+/** The run-log line of the outside-link event. */
+export function unverifiedExternalLinksMessage(data: UnverifiedExternalLinksEventData): string {
+  const pageCount = data.pages.length === 1 ? "1 page links" : `${data.pages.length} pages link`;
+  const domainCount = data.domains.length === 1 ? "an outside domain" : `${data.domains.length} outside domains`;
+  return boundedNoticeText(
+    `${pageCount} to ${domainCount} that the repository does not contain: ${data.domains.join(", ")}. ` +
+      "Check the links before you publish.",
+    1_000,
+  );
+}
+
+/**
+ * One job event for the run, so the run log lists every unverified domain
+ * and its pages. Like a notice, a failed event is logged and skipped.
+ */
+export async function recordUnverifiedExternalLinks(input: {
+  pages: readonly UnverifiedExternalLinkPage[];
+  addJobEvent: (event: {
+    type: string;
+    message: string;
+    source: "worker";
+    data: UnverifiedExternalLinksEventData;
+  }) => Promise<unknown>;
+  onError?: (error: unknown) => void;
+}): Promise<void> {
+  const data = unverifiedExternalLinksEventData(input.pages);
+  if (!data) return;
+  try {
+    await input.addJobEvent({
+      type: UNVERIFIED_EXTERNAL_LINKS_EVENT_TYPE,
+      message: unverifiedExternalLinksMessage(data),
+      source: "worker",
+      data,
+    });
+  } catch (error) {
+    input.onError?.(error);
+  }
 }
 
 /** A page that may get a `behind_instructions` notice once the ledger says runs stopped trying it. */

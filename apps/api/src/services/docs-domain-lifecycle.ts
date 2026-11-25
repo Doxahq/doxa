@@ -20,6 +20,8 @@ import {
   type DocsDomainRoutingState,
 } from "./docs-domain-routing";
 import { toSafeErrorLog } from "../http/error-log";
+import type { ProductAnalytics } from "@doxahq/analytics";
+import { productAnalyticsOf } from "./analytics/product-analytics";
 
 export class DocsDomainProvisioningError extends Error {
   constructor(message: string, readonly status = 502) {
@@ -30,6 +32,7 @@ export class DocsDomainProvisioningError extends Error {
 interface DocsDomainLifecycleDependencies {
   domainLimitPolicy?: DocsDomainLimitPolicy;
   domainNotifier?: DomainNotifier;
+  analytics?: ProductAnalytics;
 }
 
 export class DocsDomainLifecycleService {
@@ -40,6 +43,7 @@ export class DocsDomainLifecycleService {
   private readonly routingProbe: DocsDomainRoutingProbe;
   private readonly domainLimitPolicy: DocsDomainLimitPolicy;
   private readonly domainNotifier: DomainNotifier;
+  private readonly analytics: ProductAnalytics;
   private readonly officialDocsProjectId: string | undefined;
 
   constructor(env: Env, dependencies: DocsDomainLifecycleDependencies = {}) {
@@ -52,6 +56,7 @@ export class DocsDomainLifecycleService {
     this.routingProbe = createDocsDomainRoutingProbe();
     this.domainLimitPolicy = dependencies.domainLimitPolicy ?? planSeamsFromEnv(env).docsDomainLimit;
     this.domainNotifier = dependencies.domainNotifier ?? domainNotifierFromEnv(env);
+    this.analytics = dependencies.analytics ?? productAnalyticsOf(env);
   }
 
   /** False in an environment without Cloudflare custom hostnames, such as local development. */
@@ -135,7 +140,17 @@ export class DocsDomainLifecycleService {
       routing,
     });
     await this.notifyVerificationChange(input.projectId, domain, refreshed);
+    this.reportVerified(input, domain, refreshed);
     return refreshed;
+  }
+
+  /**
+   * `custom_domain_verified` when a refresh first sees the domain verified.
+   * The DNS host is a public DNS lookup, so it is not sent here.
+   */
+  private reportVerified(input: { userId: string; projectId: string }, before: DocsDomainDto, after: DocsDomainDto): void {
+    if (after.kind !== "custom_domain" || before.verificationStatus === "verified" || after.verificationStatus !== "verified") return;
+    this.analytics.capture({ name: "custom_domain_verified", distinctId: input.userId, properties: {}, groups: { project: input.projectId } });
   }
 
   /** Emails the domain managers when verification ends: verified (live) or failed. */

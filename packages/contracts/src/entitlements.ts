@@ -29,7 +29,7 @@ export interface PlanStorageLimits {
 }
 
 export const FREE_PLAN_STORAGE_LIMITS = {
-  maxDocsStorageBytes: 100 * 1024 * 1024,
+  maxDocsStorageBytes: 20 * 1024 * 1024,
   maxSiteAssetBytes: 50 * 1024 * 1024,
   maxSiteAssetFiles: 200,
 } as const satisfies PlanStorageLimits;

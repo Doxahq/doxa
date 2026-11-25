@@ -89,7 +89,11 @@ describe("the page notice payload", () => {
     const { bucket } = memoryBucket();
     const key = pageNoticePayloadKey("checkpoints/job-1", "production");
 
-    const storedKey = await storePageNoticePayload(bucket, key, { openIssueNotices: notices, behindCandidates: [] });
+    const storedKey = await storePageNoticePayload(bucket, key, {
+      openIssueNotices: notices,
+      behindCandidates: [],
+      unverifiedExternalLinks: [],
+    });
     const stepResult: WritePhaseOutcome = {
       keys: ["checkpoints/job-1/production-pages/0.json"],
       failedPages: [],
@@ -106,7 +110,24 @@ describe("the page notice payload", () => {
     await expect(readPageNoticePayload(bucket, storedKey)).resolves.toEqual({
       openIssueNotices: notices,
       behindCandidates: [],
+      unverifiedExternalLinks: [],
     });
+  });
+
+  test("a payload with only unverified outside links is stored, and an older payload reads as none", async () => {
+    const { bucket } = memoryBucket();
+    const key = pageNoticePayloadKey("checkpoints/job-1", "production");
+    const unverifiedExternalLinks = [{ pageId: "intro", title: "Intro", href: "/intro", domains: ["evil.example"] }];
+
+    await expect(storePageNoticePayload(bucket, key, {
+      openIssueNotices: [],
+      behindCandidates: [],
+      unverifiedExternalLinks,
+    })).resolves.toBe(key);
+    await expect(readPageNoticePayload(bucket, key)).resolves.toMatchObject({ unverifiedExternalLinks });
+
+    await bucket.put(key, JSON.stringify({ openIssueNotices: [], behindCandidates: [] }));
+    await expect(readPageNoticePayload(bucket, key)).resolves.toMatchObject({ unverifiedExternalLinks: [] });
   });
 
   test("a run without notices stores nothing, and its notice step reads nothing", async () => {

@@ -26,7 +26,8 @@ export interface NamedBranchRecord {
 
 export type CreateNamedBranchResult =
   | { status: "created"; record: NamedBranchRecord }
-  | { status: "not_found" | "name_taken" | "limit_reached" };
+  | { status: "limit_reached"; used: number }
+  | { status: "not_found" | "name_taken" };
 
 export type RenameNamedBranchResult =
   | { status: "renamed"; record: NamedBranchRecord }
@@ -171,7 +172,7 @@ export async function createNamedBranch(
       );
 
     if ((branchCount?.value ?? 0) >= input.maxBranches) {
-      return { status: "limit_reached" };
+      return { status: "limit_reached", used: branchCount?.value ?? 0 };
     }
 
     if (await isBranchNameTaken(tx, site.id, input.request.name)) {

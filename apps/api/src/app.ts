@@ -6,6 +6,7 @@ import { corsPolicy, csrfProtection, securityHeaders } from "./http/middleware";
 import { requestBodyTooLarge } from "./http/body";
 import { limitRequestBody, RequestBodyTooLarge } from "./http/bounded-body";
 import { toSafeErrorLog } from "./http/error-log";
+import { reportServerError } from "./http/error-report";
 import { withRequestScope, type ScopedFetch } from "./http/request-scope";
 import { error, json, notFound } from "./http/response";
 import { createApprovalRequestLinkRoutes } from "./routes/approval-requests";
@@ -19,9 +20,12 @@ import { createEmailPreferencesRoutes, createEmailUnsubscribeRoutes } from "./ro
 import { createGitHubRoutes } from "./routes/github";
 import { createInternalRoutes } from "./routes/internal";
 import { createJobRoutes } from "./routes/jobs";
+import { createPrivacySettingsRoutes } from "./routes/privacy-settings";
 import { createProjectRoutes } from "./routes/projects";
 import { createSignInRoutes } from "./routes/sign-in";
 import { createTeamInviteRoutes, createTeamRoutes } from "./routes/teams";
+import { authAnalyticsEvents } from "./services/analytics/auth-analytics-events";
+import { productAnalyticsOf } from "./services/analytics/product-analytics";
 import { OutboxAuthMailer } from "./services/auth/outbox-auth-mailer";
 import { agentSignupDispatch } from "./services/agent-signup/agent-signup-dispatch";
 import { createReadinessProbe, readinessChecksFromEnv } from "./services/readiness";
@@ -45,6 +49,7 @@ const AUTH_BODY_MAX_BYTES = 1024 * 1024;
 async function handleAuth(context: ApiContext): Promise<Response> {
   const auth = createAuth(context.env, context.req.raw, context.executionCtx, {
     mailer: OutboxAuthMailer.fromEnv(context.env),
+    events: authAnalyticsEvents(productAnalyticsOf(context.env)),
   });
   const response = await auth.handler(limitRequestBody(context.req.raw, AUTH_BODY_MAX_BYTES));
   return withSignedInCookieSync(context.req.raw, response, context.env);
@@ -100,13 +105,15 @@ export function createApiApp() {
   app.route("/team-invites", createTeamInviteRoutes());
   app.route("/email-preferences", createEmailPreferencesRoutes());
   app.route("/email", createEmailUnsubscribeRoutes());
+  app.route("/privacy-settings", createPrivacySettingsRoutes());
   app.route("/billing", createBillingRoutes());
 
   app.notFound(() => notFound());
 
-  app.onError((err) => {
+  app.onError(async (err, context) => {
     if (err instanceof RequestBodyTooLarge) return requestBodyTooLarge();
     console.error("Unhandled request error.", toSafeErrorLog(err));
+    await reportServerError(context, err, 500);
     return error("Internal server error.", 500);
   });
 

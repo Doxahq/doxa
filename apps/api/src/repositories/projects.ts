@@ -70,6 +70,17 @@ export class ProjectsRepository {
     return result;
   }
 
+  async getDocsSiteForProject(
+    projectId: string,
+  ): Promise<{ siteId: string } | null> {
+    const [site] = await this.db
+      .select({ siteId: schema.docsSites.id })
+      .from(schema.docsSites)
+      .where(eq(schema.docsSites.projectId, projectId))
+      .limit(1);
+    return site ?? null;
+  }
+
   async getDocsSiteForUser(
     userId: string,
     projectId: string,

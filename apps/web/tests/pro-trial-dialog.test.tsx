@@ -73,6 +73,7 @@ import { NewProjectPage } from "~/components/dashboard/new-project-page"
 import { createApiError } from "~/lib/api-errors"
 import {
   AI_ACCESS_OPEN,
+  PRO_GATE_GENERATION,
   PRO_REASON_GENERATION,
   PRO_REASON_REPOSITORY,
   PRO_TRIAL_ASK_OWNER,
@@ -94,6 +95,7 @@ const REQUEST: ProTrialRequest = {
   accountId: ACCOUNT_ID,
   canManage: true,
   reason: PRO_REASON_REPOSITORY,
+  feature: "repository_generation",
   returnPath: "/dashboard/projects/new?start=repository",
 }
 
@@ -164,9 +166,9 @@ describe("the Pro trial dialog", () => {
     expect(within(dialog).getByRole("heading", { name: PRO_TRIAL_TITLE })).toBeTruthy()
     expect(PRO_TRIAL_TITLE).toBe("Try Doxa Pro free for 7 days")
     expect(within(dialog).getByText(PRO_REASON_REPOSITORY)).toBeTruthy()
-    await within(dialog).findByText("$129")
+    await within(dialog).findByText("$99")
     expect(within(dialog).getByRole("radio", { name: /Yearly/ }).getAttribute("aria-checked")).toBe("true")
-    expect(within(dialog).getByText("Billed yearly at $1,548")).toBeTruthy()
+    expect(within(dialog).getByText("Billed yearly at $1,188")).toBeTruthy()
     // The founder line names the offer only, with no spots count.
     expect(within(dialog).getByText("Founder price")).toBeTruthy()
     expect(within(dialog).queryByText(/founder spots/)).toBeNull()
@@ -174,7 +176,7 @@ describe("the Pro trial dialog", () => {
     expect(termsOf(dialog)).toEqual([
       ["Today", "$0 · card required"],
       ["In the trial", "1,000 AI credits"],
-      ["In 7 days", "$1,548 for the year"],
+      ["In 7 days", "$1,188 for the year"],
     ])
     expect(within(dialog).getByText(PRO_TRIAL_CANCEL_LINE)).toBeTruthy()
 
@@ -191,7 +193,7 @@ describe("the Pro trial dialog", () => {
     billingApi.getBillingAccount.mockResolvedValue(ENDED_TRIAL_ACCOUNT)
     const dialog = await openDialog()
     expect(await within(dialog).findByRole("heading", { name: "Upgrade to Doxa Pro" })).toBeTruthy()
-    await within(dialog).findByText("$129")
+    await within(dialog).findByText("$99")
     expect(within(dialog).getByText("/ month")).toBeTruthy()
     expect(within(dialog).queryAllByRole("term")).toHaveLength(0)
     expect(within(dialog).getByText("This account already had a trial, so Stripe charges the first payment today.")).toBeTruthy()
@@ -202,11 +204,11 @@ describe("the Pro trial dialog", () => {
 
   test("the interval choice reaches the Checkout price key", async () => {
     const dialog = await openDialog()
-    await within(dialog).findByText("$129")
+    await within(dialog).findByText("$99")
     await userEvent.click(within(dialog).getByRole("radio", { name: "Monthly" }))
-    expect(within(dialog).getByText("$159")).toBeTruthy()
+    expect(within(dialog).getByText("$129")).toBeTruthy()
     expect(within(dialog).getByText("Billed monthly")).toBeTruthy()
-    expect(termsOf(dialog)[2]).toEqual(["In 7 days", "$159 for the first month"])
+    expect(termsOf(dialog)[2]).toEqual(["In 7 days", "$129 for the first month"])
 
     await userEvent.click(within(dialog).getByRole("button", { name: "Start 7-day Pro trial" }))
     await waitFor(() => expect(billingApi.createBillingCheckout).toHaveBeenCalledOnce())
@@ -215,7 +217,7 @@ describe("the Pro trial dialog", () => {
 
   test("Not now only closes it; Escape closes it too; a new open starts on Yearly again", async () => {
     const dialog = await openDialog()
-    await within(dialog).findByText("$129")
+    await within(dialog).findByText("$99")
     await userEvent.click(within(dialog).getByRole("radio", { name: "Monthly" }))
     await userEvent.click(within(dialog).getByRole("button", { name: "Not now" }))
     expect(screen.queryByRole("dialog")).toBeNull()
@@ -262,7 +264,7 @@ describe("the Pro trial dialog", () => {
       expect(items.map((item) => item.textContent)).toEqual([...group.items])
       for (const item of items) expect(item.className).toContain("whitespace-nowrap")
     }
-    expect(within(dialog).getByText("5,000 AI credits a month")).toBeTruthy()
+    expect(within(dialog).getByText("10,000 AI credits a month")).toBeTruthy()
     expect(within(dialog).getByText("Unlimited team seats")).toBeTruthy()
     // Two columns from the sm breakpoint, one on a phone.
     const grid = within(dialog).getByRole("list", { name: "AI" }).parentElement?.parentElement
@@ -290,17 +292,22 @@ describe("the Pro trial dialog", () => {
   })
 
   test("the first charge comes from the selected price, and names no amount without one", () => {
-    expect(proOfferPriceView(FOUNDER_OFFER, "year").firstCharge).toBe("$1,548 for the year")
-    expect(proOfferPriceView(FOUNDER_OFFER, "month").firstCharge).toBe("$159 for the first month")
+    expect(proOfferPriceView(FOUNDER_OFFER, "year").firstCharge).toBe("$1,188 for the year")
+    expect(proOfferPriceView(FOUNDER_OFFER, "month").firstCharge).toBe("$129 for the first month")
     expect(proOfferPriceView(null, "year").firstCharge).not.toMatch(/\$/)
   })
 })
 
 describe("gated actions", () => {
   test("only needs_pro asks for the dialog: billing off or shadow, Pro, trial and loading run the action", () => {
-    expect(proTrialRequest(FREE, PRO_REASON_GENERATION)).toEqual({ accountId: ACCOUNT_ID, canManage: true, reason: PRO_REASON_GENERATION })
-    expect(proTrialRequest(AI_ACCESS_OPEN, PRO_REASON_GENERATION)).toBeNull()
-    expect(proTrialRequest({ kind: "loading" }, PRO_REASON_GENERATION)).toBeNull()
+    expect(proTrialRequest(FREE, PRO_GATE_GENERATION)).toEqual({
+      accountId: ACCOUNT_ID,
+      canManage: true,
+      reason: PRO_REASON_GENERATION,
+      feature: "generation",
+    })
+    expect(proTrialRequest(AI_ACCESS_OPEN, PRO_GATE_GENERATION)).toBeNull()
+    expect(proTrialRequest({ kind: "loading" }, PRO_GATE_GENERATION)).toBeNull()
   })
 
   test("new project, Free: the page shows the normal buttons and never opens the dialog by itself", async () => {
@@ -321,7 +328,7 @@ describe("gated actions", () => {
     expect(within(dialog).getByText(PRO_REASON_REPOSITORY)).toBeTruthy()
     expect(screen.queryByText("Repository dialog")).toBeNull()
 
-    await within(dialog).findByText("$129")
+    await within(dialog).findByText("$99")
     await userEvent.click(within(dialog).getByRole("button", { name: "Start 7-day Pro trial" }))
     // Checkout comes back to the new project page, which opens the repository dialog once the plan has AI.
     await waitFor(() =>

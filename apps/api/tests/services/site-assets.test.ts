@@ -211,7 +211,8 @@ describe("site asset quota", () => {
     for (const seed of [1, 2, 3]) await service.upload("owner", "site", "logo", uniquePng(seed));
 
     await expect(service.upload("owner", "site", "logo", uniquePng(4))).rejects.toMatchObject({
-      code: "storage_quota_exceeded",
+      code: "plan_limit",
+      details: { key: "site.asset_files", limit: 3, used: 3 },
     });
     expect(store.write).toHaveBeenCalledTimes(3);
   });
@@ -222,7 +223,8 @@ describe("site asset quota", () => {
     await service.upload("owner", "site", "logo", uniquePng(1, 600));
 
     await expect(service.upload("owner", "site", "logo", uniquePng(2, 401))).rejects.toMatchObject({
-      code: "storage_quota_exceeded",
+      code: "plan_limit",
+      details: { key: "site.asset_bytes" },
     });
     await expect(service.upload("owner", "site", "logo", uniquePng(3, 400))).resolves.toBeDefined();
   });
@@ -263,6 +265,36 @@ describe("site asset quota", () => {
 
     await expect(service.upload("owner", "site", "logo", png(5_000))).resolves.toBeDefined();
     expect(lockCount()).toBe(1);
+  });
+});
+
+describe("generation site assets", () => {
+  test("stores an asset for a generation without a user lookup", async () => {
+    const { service, entries } = fixture();
+    const stored = await service.uploadForGeneration("project", "site", "logo", uniquePng(1));
+    expect(stored.ref).toMatch(/^asset:[a-f0-9]{64}$/);
+    expect([...entries.keys()]).toEqual([`site/${stored.ref.slice("asset:".length)}`]);
+  });
+
+  test("counts generation assets against the same site quota", async () => {
+    const { service, store } = fixture();
+    for (const seed of [1, 2, 3]) await service.upload("owner", "site", "logo", uniquePng(seed));
+    await expect(
+      service.uploadForGeneration("project", "site", "logo", uniquePng(4)),
+    ).rejects.toMatchObject({ code: "plan_limit", details: { key: "site.asset_files" } });
+    expect(store.write).toHaveBeenCalledTimes(3);
+  });
+
+  test("cleans a generation SVG like an upload", async () => {
+    const { service, entries } = fixture();
+    await service.uploadForGeneration(
+      "project",
+      "site",
+      "logo",
+      encode(svg('<script>alert(1)</script><path d="M0 0h1"/>')),
+    );
+    const [entry] = [...entries.values()];
+    expect(new TextDecoder().decode(entry.bytes)).not.toContain("script");
   });
 });
 

@@ -119,61 +119,94 @@ describe("GitHub event parser", () => {
     expect(result.events[0]).toMatchObject({
       kind: "repository_lifecycle",
       action: "updated",
+      change: "renamed",
       repository: {
         externalId: "123456",
         installationExternalId: "789",
+        fullName: "doxahq/new-name",
+        name: "new-name",
       },
     });
   });
 
-  test("accepts pull requests from a fork by a trusted author", () => {
-    const result = parseGitHubEvent({
-      eventName: "pull_request",
-      deliveryId: "delivery-5",
-      payload: pullRequestPayload({ headRepositoryId: 654321, authorAssociation: "COLLABORATOR" }),
-    });
-
-    expect(result.outcome).toBe("normalized");
-    if (result.outcome !== "normalized") return;
-    expect(result.events[0]).toMatchObject({
-      kind: "change_proposal",
-      change: {
-        externalId: "987654",
-        number: 42,
-        author: {
-          externalId: "1",
-          handle: "octocat",
-          avatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
-        },
-        headRevision: { commitSha: headSha },
-        sourceUpdatedAt,
-      },
-      repository: { externalId: "123456" },
-    });
-  });
-
-  // SECURITY REGRESSION GUARDRAIL (SEC-026): outsiders cannot start runs from a fork.
-  test.each(["NONE", "CONTRIBUTOR", "FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR", "MANNEQUIN"])(
-    "ignores a fork pull request by a %s author",
+  // SECURITY REGRESSION GUARDRAIL (SEC-026, Decision 3): no author is trusted
+  // on a fork. The event is marked, so the orchestrator previews nothing.
+  test.each(["OWNER", "MEMBER", "COLLABORATOR", "NONE", "CONTRIBUTOR", "FIRST_TIMER"])(
+    "marks a fork pull request by a %s author as from a fork",
     (authorAssociation) => {
-      expect(
-        parseGitHubEvent({
-          eventName: "pull_request",
-          deliveryId: "delivery-fork",
-          payload: pullRequestPayload({ headRepositoryId: 654321, authorAssociation }),
-        }),
-      ).toEqual({ outcome: "irrelevant", reason: "untrusted_fork" });
+      const result = parseGitHubEvent({
+        eventName: "pull_request",
+        deliveryId: "delivery-fork",
+        payload: pullRequestPayload({ headRepositoryId: 654321, authorAssociation }),
+      });
+      expect(result.outcome).toBe("normalized");
+      if (result.outcome !== "normalized") return;
+      expect(result.events[0]).toMatchObject({
+        kind: "change_proposal",
+        change: { externalId: "987654", fromFork: true, authorIsBot: false },
+      });
     },
   );
 
-  test("ignores a pull request from a deleted fork by an untrusted author", () => {
-    expect(
-      parseGitHubEvent({
-        eventName: "pull_request",
-        deliveryId: "delivery-deleted-fork",
-        payload: pullRequestPayload({ headRepositoryId: null, authorAssociation: "NONE" }),
-      }),
-    ).toEqual({ outcome: "irrelevant", reason: "untrusted_fork" });
+  test("marks a pull request from a deleted fork as from a fork", () => {
+    const result = parseGitHubEvent({
+      eventName: "pull_request",
+      deliveryId: "delivery-deleted-fork",
+      payload: pullRequestPayload({ headRepositoryId: null, authorAssociation: "NONE" }),
+    });
+    expect(result.outcome === "normalized" && result.events[0]).toMatchObject({ change: { fromFork: true } });
+  });
+
+  test("keeps a merged fork pull request for the merge trigger", () => {
+    const result = parseGitHubEvent({
+      eventName: "pull_request",
+      deliveryId: "delivery-fork-merged",
+      payload: pullRequestPayload({ action: "closed", merged: true, headRepositoryId: 654321, authorAssociation: "NONE" }),
+    });
+    expect(result.outcome === "normalized" && result.events[0]).toMatchObject({
+      action: "closed",
+      change: { merged: true, fromFork: true },
+    });
+  });
+
+  test("reads the bot type of the author", () => {
+    const payload = pullRequestPayload();
+    const result = parseGitHubEvent({
+      eventName: "pull_request",
+      deliveryId: "delivery-bot",
+      payload: { ...payload, pull_request: { ...payload.pull_request, user: { ...payload.pull_request.user, login: "dependabot[bot]", type: "Bot" } } },
+    });
+    expect(result.outcome === "normalized" && result.events[0]).toMatchObject({
+      change: { authorIsBot: true, fromFork: false, author: { handle: "dependabot[bot]" } },
+    });
+  });
+
+  test("carries the repository size of a pull request event", () => {
+    const withSize = parseGitHubEvent({
+      eventName: "pull_request",
+      deliveryId: "delivery-size",
+      payload: pullRequestPayload({ repository: { size: 2_000_000 } }),
+    });
+    expect(withSize.outcome === "normalized" && withSize.events[0]).toMatchObject({
+      change: { repositorySizeKb: 2_000_000 },
+    });
+
+    const withoutSize = parseGitHubEvent({
+      eventName: "pull_request",
+      deliveryId: "delivery-no-size",
+      payload: pullRequestPayload(),
+    });
+    expect(withoutSize.outcome === "normalized" && withoutSize.events[0] && "change" in withoutSize.events[0]
+      ? withoutSize.events[0].change
+      : null).not.toHaveProperty("repositorySizeKb");
+
+    // A bad size is dropped; the event still parses.
+    const badSize = parseGitHubEvent({
+      eventName: "pull_request",
+      deliveryId: "delivery-bad-size",
+      payload: pullRequestPayload({ repository: { size: "big" } }),
+    });
+    expect(badSize.outcome).toBe("normalized");
   });
 
   test("accepts a same-repository pull request whatever the author association", () => {
@@ -182,7 +215,7 @@ describe("GitHub event parser", () => {
       deliveryId: "delivery-same-repo",
       payload: pullRequestPayload({ authorAssociation: "CONTRIBUTOR" }),
     });
-    expect(result.outcome).toBe("normalized");
+    expect(result.outcome === "normalized" && result.events[0]).toMatchObject({ change: { fromFork: false } });
   });
 
   test("preserves non-default pull request bases for policy filtering later", () => {
@@ -262,7 +295,8 @@ describe("GitHub event parser", () => {
 
     expect(result.outcome).toBe("normalized");
     if (result.outcome !== "normalized") return;
-    expect(result.events[0]?.repository.visibility).toBe("public");
+    const [event] = result.events;
+    expect(event?.kind === "change_proposal" ? event.repository.visibility : null).toBe("public");
   });
 
   test("turns a base change into a base_changed event and ignores every other edit", () => {
@@ -381,27 +415,75 @@ describe("GitHub event parser", () => {
           kind: "repository_lifecycle",
           deliveryId: `delivery-${action}`,
           action: lifecycleAction,
+          change: action,
           repository: {
             provider: "github",
             externalId: "1268777599",
             installationExternalId: "789",
             visibility: action === "added" ? "private" : "public",
+            fullName: "ipenywis/flagforge",
+            name: "flagforge",
           },
         }],
       });
     });
 
-    test("parses an installation with its short repository list", () => {
+    test.each([
+      ["created", "created"],
+      ["deleted", "deleted"],
+      ["suspend", "suspended"],
+      ["unsuspend", "unsuspended"],
+      ["new_permissions_accepted", "permissions_accepted"],
+    ] as const)("parses installation %s as one installation event", (action, lifecycleAction) => {
+      // A suspend lists no repositories; the event is about the installation.
+      const repositories = action === "created" ? [shortRepository(1), shortRepository(2)] : undefined;
       const result = parseGitHubEvent({
         eventName: "installation",
         deliveryId: "delivery-install",
-        payload: { action: "created", installation: { id: 789 }, repositories: [shortRepository(1), shortRepository(2)] },
+        payload: { action, installation: { id: 789 }, ...(repositories ? { repositories } : {}) },
       });
 
-      expect(result.outcome).toBe("normalized");
-      if (result.outcome !== "normalized") return;
-      expect(result.events.map((event) => event.kind === "repository_lifecycle" ? event.repository.externalId : null))
-        .toEqual(["1", "2"]);
+      expect(result).toEqual({
+        outcome: "normalized",
+        events: [{
+          kind: "installation_lifecycle",
+          deliveryId: "delivery-install",
+          provider: "github",
+          installationExternalId: "789",
+          action: lifecycleAction,
+        }],
+      });
+    });
+
+    test("keeps the sender of installation created as the installer", () => {
+      const result = parseGitHubEvent({
+        eventName: "installation",
+        deliveryId: "delivery-install",
+        payload: {
+          action: "created",
+          installation: { id: 789 },
+          sender: { id: 5150, login: "octo-admin", type: "User" },
+        },
+      });
+
+      expect(result).toEqual({
+        outcome: "normalized",
+        events: [expect.objectContaining({
+          kind: "installation_lifecycle",
+          action: "created",
+          sender: { externalId: "5150", login: "octo-admin" },
+        })],
+      });
+    });
+
+    test("drops the sender of other installation actions", () => {
+      const result = parseGitHubEvent({
+        eventName: "installation",
+        deliveryId: "delivery-install",
+        payload: { action: "deleted", installation: { id: 789 }, sender: { id: 5150, login: "octo-admin" } },
+      });
+
+      expect(result.outcome === "normalized" && result.events[0]).not.toHaveProperty("sender");
     });
   });
 });

@@ -13,6 +13,7 @@ import {
   topicSectionExcerpt,
   topicStems,
 } from "./evidence-topics";
+import { wrapUntrustedRepositoryContent } from "../core/untrusted-content";
 
 const DEFAULT_MAX_EVIDENCE_FILE_CHARS = 4_000;
 /** About 6k tokens: six files at the per-file cap. */
@@ -297,7 +298,8 @@ async function readEvidence(input: {
             : ""
         }`,
         "",
-        excerpt.text,
+        // The excerpt is repository data, never instructions to the writer.
+        wrapUntrustedRepositoryContent(excerpt.text, item.path),
       ].join("\n"));
     } catch (error) {
       if (error instanceof ProjectPathAccessError) throw error;

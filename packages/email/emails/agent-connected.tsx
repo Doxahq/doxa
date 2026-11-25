@@ -24,7 +24,7 @@ AgentConnectedEmail.PreviewProps = {
   agentName: "Claude Code",
   tokenName: "Acme docs (local)",
   permissions: ["docs:read", "docs:write"],
-  manageUrl: "https://doxa.so/dashboard/settings",
+  manageUrl: "https://doxa.so/dashboard/settings/agents",
 } satisfies AgentConnectedEmailProps;
 
 export default AgentConnectedEmail;

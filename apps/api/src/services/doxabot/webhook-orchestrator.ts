@@ -1,14 +1,19 @@
-import type {
-  CreateReviewRunInput,
-  GenerateJobMessage,
-  GenerationExecutionConfig,
-  GenerationJobDto,
-  NormalizedChangeProposalEvent,
-  NormalizedSourceControlEvent,
-  SourceControlEventParseResult,
-  SourceProvider,
+import {
+  normalizeBotLogin,
+  type GenerateJobMessage,
+  type GenerationExecutionConfig,
+  type GenerationJobDto,
+  type NormalizedChangeProposalEvent,
+  type NormalizedInstallationLifecycleEvent,
+  type NormalizedRepositoryLifecycleEvent,
+  type SourceControlEventParseResult,
+  type SourceProvider,
 } from "@doxahq/contracts";
+import type { ProductAnalytics } from "@doxahq/analytics";
 import type { Env } from "../../env";
+import { productAnalyticsOf } from "../analytics/product-analytics";
+import { captureGenerationStarted } from "../generation-analytics";
+import { fetchRepositoryDefaultBranch } from "../github-app";
 import type { MergeGenerationScheduler } from "./merge-generations";
 import {
   ChangeProposalsRepository,
@@ -21,6 +26,11 @@ import {
   type DoxabotAutomationContext,
   type DoxabotSettingsStore,
 } from "../../repositories/doxabot-settings";
+import {
+  GitHubLifecycleRepository,
+  type GitHubInstallationStatus,
+  type RepositoryLifecycleStore,
+} from "../../repositories/github-lifecycle";
 import {
   JobsRepository,
   previewConcurrencyKey,
@@ -66,6 +76,7 @@ import type { BillingRefusal } from "../billing/generation-metering";
 import { meteredActionOf, requiredFeaturesOf, runModels } from "../billing/generation-metering";
 import { generationMeteringFromEnv } from "../billing/generation-metering-env";
 import { billingPageUrlForProject } from "../billing/stopped-preview-check";
+import { checkRepositorySize, maxRepositorySizeKbFromEnv } from "../repository-size";
 import {
   cancelGenerationJob,
   finishGenerationCancellation,
@@ -80,6 +91,8 @@ export type DoxabotWebhookResult =
   | { outcome: "enqueued"; jobId: string }
   | { outcome: "replayed"; jobId: string }
   | { outcome: "enqueue_failed"; jobId: string }
+  /** A repository or installation event updated `changed` records. */
+  | { outcome: "applied"; changed: number }
   /** Billing refused the preview: the job ended `stopped_credits` and its check is `neutral` (spec 10.6). */
   | { outcome: "billing_refused"; jobId: string };
 
@@ -109,8 +122,15 @@ export interface ProcessGitHubWebhookInput {
 }
 
 export interface DoxabotJobQueue {
-  send(message: GenerateJobMessage): Promise<unknown>;
+  send(message: GenerateJobMessage, options?: { delaySeconds?: number }): Promise<unknown>;
 }
+
+/**
+ * The quiet window of a pull request preview. The queue holds the message
+ * this long before the worker starts the run. A newer push in that time
+ * replaces the queued run before it starts, so quick pushes start one run.
+ */
+export const PREVIEW_QUIET_WINDOW_SECONDS = 120;
 
 /** Cancels a preview job and closes its pull request check. */
 export interface PreviewJobCanceller {
@@ -176,6 +196,26 @@ export interface DoxabotWebhookDependencies {
   previewChannels: PreviewChannelCloser;
   /** Absent: no credit metering, as with `BILLING_ENFORCEMENT=off`. */
   previewBilling?: PreviewRunBilling;
+  /** Records of repository and installation events. */
+  lifecycle: RepositoryLifecycleStore;
+  /**
+   * The default branch of a repository that an event names without one
+   * (`installation_repositories.added`). Absent: such a repository gets no
+   * row here, and the user's refresh of the repository list adds it.
+   */
+  repositoryDefaultBranch?: (input: {
+    repositoryExternalId: string;
+    installationExternalId: string;
+  }) => Promise<string | null>;
+  /** Defaults to {@link PREVIEW_QUIET_WINDOW_SECONDS}; 0 starts at once. */
+  previewQuietSeconds?: number;
+  /**
+   * The largest repository that gets a preview, in KB (`MAX_REPOSITORY_SIZE_KB`).
+   * Absent: no size check.
+   */
+  maxRepositorySizeKb?: number;
+  /** Product analytics. Absent: nothing is reported. */
+  analytics?: ProductAnalytics;
   now(): Date;
 }
 
@@ -211,6 +251,11 @@ export class DoxabotWebhookOrchestrator {
       },
       previewChannels: new PreviewChannelClosureRepository(env),
       previewBilling: previewRunBillingFromEnv(env, jobs),
+      lifecycle: new GitHubLifecycleRepository(env),
+      repositoryDefaultBranch: (input) =>
+        fetchRepositoryDefaultBranch(env, input.installationExternalId, input.repositoryExternalId),
+      maxRepositorySizeKb: maxRepositorySizeKbFromEnv(env),
+      analytics: productAnalyticsOf(env),
       now: () => new Date(),
     });
   }
@@ -291,11 +336,22 @@ export class DoxabotWebhookOrchestrator {
       return this.ignore(identity, parsed.reason);
     }
 
+    // Lifecycle events keep the records true also while Doxabot is off:
+    // generations read the same rows.
+    const lifecycleEvents = parsed.events.filter(
+      (event) => event.kind === "repository_lifecycle" || event.kind === "installation_lifecycle",
+    );
+    if (lifecycleEvents.length === parsed.events.length) {
+      return this.applyLifecycleEvents(identity, lifecycleEvents);
+    }
     if (parsed.events.length !== 1) {
-      return this.ignore(identity, "repository_lifecycle_deferred");
+      return this.ignore(identity, "unexpected_event_batch");
     }
 
     const [event] = parsed.events;
+    if (event.kind !== "change_proposal" && event.kind !== "default_branch_push") {
+      return this.ignore(identity, "unexpected_event_batch");
+    }
     const context = await this.dependencies.settings.getAutomationContext({
       provider: event.repository.provider,
       repositoryExternalId: event.repository.externalId,
@@ -303,6 +359,13 @@ export class DoxabotWebhookOrchestrator {
     });
     if (!context) {
       return this.ignore(identity, "project_not_found");
+    }
+
+    // The app lost the repository, or the installation is suspended or
+    // uninstalled: no automation, and no GitHub call that would fail. The
+    // site stays live (Decision 4).
+    if (context.connectionIssue) {
+      return this.ignore(identity, context.connectionIssue);
     }
 
     const eligibility = evaluateDoxabotEligibility({
@@ -336,14 +399,212 @@ export class DoxabotWebhookOrchestrator {
       return this.ignore(identity, ignoredReason);
     }
 
-    switch (event.kind) {
-      case "change_proposal":
-        return this.processChangeProposal(identity, context, event);
-      case "default_branch_push":
-        return this.ignore(identity, "default_branch_push_deferred");
-      case "repository_lifecycle":
-        return this.ignore(identity, "repository_lifecycle_deferred");
+    if (event.kind === "default_branch_push") {
+      return this.ignore(identity, "default_branch_push_deferred");
     }
+
+    const skipped = skippedAuthorReason(event, context);
+    if (skipped) {
+      // No preview and no message on the pull request. A merge still feeds
+      // the merge trigger: a maintainer merged it, so its code is in the
+      // repository now. A preview made before this rule stops.
+      await runEach([
+        () => this.recordProductionMerge(context, event),
+        () => this.stopSkippedPreviews(context, event),
+      ]);
+      return this.ignore(identity, skipped);
+    }
+    return this.processChangeProposal(identity, context, event);
+  }
+
+  /**
+   * Applies repository and installation events to the records. Rows are
+   * never deleted, so the site stays live; the connection issue they record
+   * stops Doxabot and generations (Decision 4). The delivery is `processed`,
+   * so the cleanup job keeps it as the record of the change.
+   */
+  private async applyLifecycleEvents(
+    identity: WebhookDeliveryIdentity,
+    events: ReadonlyArray<NormalizedRepositoryLifecycleEvent | NormalizedInstallationLifecycleEvent>,
+  ): Promise<DoxabotWebhookResult> {
+    let changed = 0;
+    for (const event of events) {
+      changed += event.kind === "installation_lifecycle"
+        ? await this.applyInstallationEvent(event)
+        : await this.applyRepositoryEvent(event);
+    }
+    await this.dependencies.deliveries.markProcessed(identity);
+    return { outcome: "applied", changed };
+  }
+
+  private async applyInstallationEvent(
+    event: NormalizedInstallationLifecycleEvent,
+  ): Promise<number> {
+    // The install callback records a new installation. Here Doxa keeps only
+    // who installed it: the callback accepts an organization installation
+    // only from that GitHub user (Decision 6).
+    if (event.action === "created") {
+      if (!event.sender) return 0;
+      const recorded = await this.dependencies.lifecycle.recordInstaller({
+        installationExternalId: event.installationExternalId,
+        installer: { githubUserId: event.sender.externalId, login: event.sender.login },
+      });
+      return recorded ? 1 : 0;
+    }
+    const status = INSTALLATION_STATUS_FOR_ACTION[event.action];
+    if (!status) return 0;
+    return this.dependencies.lifecycle.setInstallationStatus({
+      installationExternalId: event.installationExternalId,
+      status,
+      at: this.dependencies.now(),
+    });
+  }
+
+  private async applyRepositoryEvent(
+    event: NormalizedRepositoryLifecycleEvent,
+  ): Promise<number> {
+    const { lifecycle } = this.dependencies;
+    const { repository } = event;
+    const at = this.dependencies.now();
+    switch (event.change) {
+      case "removed":
+      case "deleted": {
+        const disconnected = await lifecycle.disconnectRepository({
+          repositoryExternalId: repository.externalId,
+          installationExternalId: repository.installationExternalId,
+          reason: event.change,
+          at,
+        });
+        if (disconnected) {
+          console.warn("Doxabot stopped for a repository that GitHub took away.", {
+            repositoryExternalId: repository.externalId,
+            reason: event.change,
+          });
+        }
+        return disconnected ? 1 : 0;
+      }
+      case "added":
+      case "created":
+        return (await this.addRepository(event)) ? 1 : 0;
+      case undefined:
+        // A delivery normalized before `change` existed: nothing is certain.
+        return 0;
+      default: {
+        const updated = await lifecycle.updateRepository({
+          repositoryExternalId: repository.externalId,
+          visibility: repository.visibility,
+          ...(repository.fullName ? { fullName: repository.fullName } : {}),
+          ...(repository.owner ? { owner: repository.owner } : {}),
+          ...(repository.name ? { name: repository.name } : {}),
+          ...(repository.defaultBranch ? { defaultBranch: repository.defaultBranch } : {}),
+        });
+        if (!updated) return 0;
+        // A public repository that became private keeps its public site, but
+        // Doxabot stops updating it until the owner decides (Decision 4).
+        if (updated.previousVisibility === "public" && repository.visibility === "private") {
+          await lifecycle.pauseAutomation({
+            projectIds: updated.projectIds,
+            reason: "repository_privatized",
+            at,
+          });
+          if (updated.projectIds.length > 0) {
+            console.warn("Doxabot paused for a repository that became private.", {
+              repositoryExternalId: repository.externalId,
+              projectIds: updated.projectIds,
+            });
+          }
+        }
+        return 1;
+      }
+    }
+  }
+
+  /**
+   * A repository that the installation got: a new or forked repository of an
+   * installation on all repositories (`repository.created`), or one added to
+   * the selection (`installation_repositories.added`). A row that GitHub took
+   * away before is connected again. Else a new row needs the names and the
+   * default branch. An event without the branch costs one read of the
+   * repository, only when Doxa knows the installation and has no row yet.
+   * True when a row changed.
+   */
+  private async addRepository(event: NormalizedRepositoryLifecycleEvent): Promise<boolean> {
+    const { lifecycle } = this.dependencies;
+    const { repository } = event;
+    const identity = {
+      repositoryExternalId: repository.externalId,
+      installationExternalId: repository.installationExternalId,
+    };
+    if (await lifecycle.reconnectRepository({ ...identity, visibility: repository.visibility })) {
+      return true;
+    }
+    const names = repositoryNames(repository);
+    if (!names) return false;
+    if (!(await lifecycle.canAddRepository(identity))) return false;
+    const defaultBranch = repository.defaultBranch ?? (await this.readDefaultBranch(identity));
+    // The user's refresh of the repository list adds it later.
+    if (!defaultBranch) return false;
+    return lifecycle.addRepository({
+      ...identity,
+      ...names,
+      defaultBranch,
+      visibility: repository.visibility,
+    });
+  }
+
+  private async readDefaultBranch(identity: {
+    repositoryExternalId: string;
+    installationExternalId: string;
+  }): Promise<string | null> {
+    const read = this.dependencies.repositoryDefaultBranch;
+    if (!read) return null;
+    try {
+      return await read(identity);
+    } catch (caught) {
+      console.warn("GitHub did not give the default branch of a new repository.", {
+        repositoryExternalId: identity.repositoryExternalId,
+        error: caught instanceof Error ? caught.message : String(caught),
+      });
+      return null;
+    }
+  }
+
+  /**
+   * The cleanup of a pull request that Doxabot skips (a fork, or a bot that
+   * is not allowed): a preview recorded before the rule stops and its site
+   * goes offline. A pull request that Doxa never recorded has none.
+   */
+  private async stopSkippedPreviews(
+    context: DoxabotAutomationContext,
+    event: NormalizedChangeProposalEvent,
+  ): Promise<void> {
+    const recorded = await this.dependencies.changeProposals.getByIdentity({
+      projectId: context.projectId,
+      provider: event.repository.provider,
+      externalId: event.change.externalId,
+    });
+    if (!recorded) return;
+    const state = lifecycleStateFor(event);
+    if (state !== "open") {
+      await this.stopPreviews(context, event, state);
+      return;
+    }
+    await runEach([
+      () =>
+        this.cancelActivePreview(context, event, {
+          message: SKIPPED_PREVIEW_TEXT,
+          eventType: "doxabot_change_skipped",
+          data: { reason: event.change.fromFork ? "fork_pull_request" : "bot_author" },
+          check: { title: "Documentation preview stopped", summary: SKIPPED_PREVIEW_TEXT },
+        }),
+      () =>
+        this.dependencies.previewChannels.closeForChange({
+          projectId: context.projectId,
+          provider: event.repository.provider,
+          changeExternalId: event.change.externalId,
+          closedAt: this.dependencies.now(),
+        }),
+    ]);
   }
 
   private async processChangeProposal(
@@ -403,6 +664,23 @@ export class DoxabotWebhookOrchestrator {
     }
     if (event.change.draft || event.action === "converted_to_draft") {
       return this.ignore(identity, "draft_change");
+    }
+
+    // The same limit as production runs, checked before admission, so no job,
+    // clone or model call starts. GitHub's check needs a job, so a new head
+    // gets no check. A preview still running on an older head stops with a
+    // neutral check; the last finished preview stays online.
+    const tooLarge = this.dependencies.maxRepositorySizeKb === undefined
+      ? null
+      : checkRepositorySize(event.change.repositorySizeKb, this.dependencies.maxRepositorySizeKb);
+    if (tooLarge) {
+      await this.cancelActivePreview(context, event, {
+        message: tooLarge.message,
+        eventType: "doxabot_preview_refused",
+        data: { reason: "repository_too_large", sizeKb: tooLarge.sizeKb, limitKb: tooLarge.limitKb },
+        check: { title: "Documentation preview stopped", summary: `${tooLarge.message} Doxa stopped this preview.` },
+      });
+      return this.ignore(identity, "repository_too_large");
     }
 
     return this.enqueuePreview(identity, context, event, proposal);
@@ -615,6 +893,14 @@ export class DoxabotWebhookOrchestrator {
         return { outcome: "billing_refused", jobId: admission.job.id };
       }
     }
+    if (admission.outcome === "created" && this.dependencies.analytics) {
+      captureGenerationStarted(this.dependencies.analytics, {
+        ownerUserId: context.ownerUserId,
+        projectId: context.projectId,
+        trigger: "doxabot",
+        baselineVersionId: admissionInput.baselineVersionId,
+      });
+    }
 
     const externalReviewRunId = await this.reconcileReviewRun(
       admission.job,
@@ -623,11 +909,16 @@ export class DoxabotWebhookOrchestrator {
 
     if (!admission.queuePublished) {
       try {
-        await this.dependencies.queue.send({
-          jobId: admission.job.id,
-          projectId: context.projectId,
-          userId: context.ownerUserId,
-        });
+        const quietSeconds =
+          this.dependencies.previewQuietSeconds ?? PREVIEW_QUIET_WINDOW_SECONDS;
+        await this.dependencies.queue.send(
+          {
+            jobId: admission.job.id,
+            projectId: context.projectId,
+            userId: context.ownerUserId,
+          },
+          quietSeconds > 0 ? { delaySeconds: quietSeconds } : undefined,
+        );
         const recorded =
           await this.dependencies.deliveries.markGenerationJobPublished(
             admission.job.id,
@@ -878,6 +1169,40 @@ export function createDoxabotIdempotencyKey(input: {
   ].join(":");
 }
 
+const SKIPPED_PREVIEW_TEXT =
+  "Doxabot does not preview pull requests from forks or from bots that the project does not allow.";
+
+/** The installation status that an `installation` action sets; null: no change. */
+const INSTALLATION_STATUS_FOR_ACTION: Record<
+  NormalizedInstallationLifecycleEvent["action"],
+  GitHubInstallationStatus | null
+> = {
+  created: null,
+  permissions_accepted: null,
+  deleted: "deleted",
+  suspended: "suspended",
+  unsuspended: "active",
+};
+
+/**
+ * Why Doxabot skips the preview of a pull request, or null. Every pull
+ * request from a fork is skipped, whoever opened it (Decision 3): a fork is
+ * a separate repository. A bot is skipped unless the project allows it by
+ * login.
+ */
+export function skippedAuthorReason(
+  event: NormalizedChangeProposalEvent,
+  context: Pick<DoxabotAutomationContext, "allowedBotLogins">,
+): "fork_pull_request" | "bot_author" | null {
+  if (event.change.fromFork) return "fork_pull_request";
+  if (!event.change.authorIsBot) return null;
+  const login = event.change.author?.handle;
+  const allowed = login !== undefined && context.allowedBotLogins.some(
+    (entry) => normalizeBotLogin(entry) === normalizeBotLogin(login),
+  );
+  return allowed ? null : "bot_author";
+}
+
 function lifecycleStateFor(
   event: NormalizedChangeProposalEvent,
 ): ChangeProposalLifecycleState {
@@ -967,8 +1292,9 @@ function extractDeliveryMetadata(
   repositoryExternalId: string | null;
 } {
   const actionValue = property(payload, "action");
+  const firstEvent = parsed.outcome === "normalized" ? parsed.events[0] : undefined;
   const normalizedRepository =
-    parsed.outcome === "normalized" ? parsed.events[0]?.repository : undefined;
+    firstEvent && firstEvent.kind !== "installation_lifecycle" ? firstEvent.repository : undefined;
   const rawRepositoryId = property(property(payload, "repository"), "id");
 
   return {
@@ -986,6 +1312,25 @@ function property(value: unknown, key: string): unknown {
   return value !== null && typeof value === "object"
     ? Reflect.get(value, key)
     : undefined;
+}
+
+/**
+ * The names of a new repository row. An `installation_repositories` event
+ * gives no owner, so it comes from the full name. Null without a full name
+ * of the form `owner/name`.
+ */
+function repositoryNames(
+  repository: NormalizedRepositoryLifecycleEvent["repository"],
+): { fullName: string; owner: string; name: string } | null {
+  const { fullName } = repository;
+  if (!fullName) return null;
+  const parts = fullName.split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  return {
+    fullName,
+    owner: repository.owner ?? parts[0],
+    name: repository.name ?? parts[1],
+  };
 }
 
 function parseJson(

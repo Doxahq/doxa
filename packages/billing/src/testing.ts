@@ -16,6 +16,7 @@ import { formatUsd12 } from "./credits/usd";
 import { CreditMeter, type MeterEvents } from "./credits/meter";
 import { BillingEntitlements } from "./entitlements/service";
 import { OfferSlots } from "./offers/founder";
+import type { BillingLifecycleEvents } from "./lifecycle-events";
 import { BillingPayments } from "./payments/service";
 import { BillingWebhooks } from "./payments/webhooks";
 import { ProviderSignatureError } from "./provider/errors";
@@ -60,7 +61,7 @@ export function subscriptionFixture(overrides: Partial<SubscriptionRecord> & Pic
   return {
     provider: "memory",
     providerSubscriptionId: "sub_test",
-    priceKey: "pro_monthly_founder_v1",
+    priceKey: "pro_monthly_founder_v2",
     planKey: "pro",
     status: "active",
     billingAnchor: start,
@@ -87,6 +88,24 @@ export class MemoryProjects implements ProjectOwnershipPort {
   }
 }
 
+type LifecycleMethod = keyof BillingLifecycleEvents;
+
+/** One call of a `BillingLifecycleEvents` method, as a test reads it. */
+export type RecordedLifecycleEvent = {
+  [Method in LifecycleMethod]: { readonly method: Method; readonly event: Parameters<NonNullable<BillingLifecycleEvents[Method]>>[0] };
+}[LifecycleMethod];
+
+/** A lifecycle listener that pushes each call into `into`, in order. */
+export function recordingLifecycleEvents(into: RecordedLifecycleEvent[]): Required<BillingLifecycleEvents> {
+  return {
+    checkoutStarted: (event) => into.push({ method: "checkoutStarted", event }),
+    checkoutCompleted: (event) => into.push({ method: "checkoutCompleted", event }),
+    checkoutExpired: (event) => into.push({ method: "checkoutExpired", event }),
+    subscriptionChanged: (event) => into.push({ method: "subscriptionChanged", event }),
+    invoiceSettled: (event) => into.push({ method: "invoiceSettled", event }),
+  };
+}
+
 export interface TestBilling {
   readonly clock: FakeClock;
   readonly catalog: Catalog;
@@ -103,6 +122,8 @@ export interface TestBilling {
   readonly payments: BillingPayments;
   readonly webhooks: BillingWebhooks;
   readonly counters: { name: string; fields: Readonly<Record<string, string | number | boolean | null>> }[];
+  /** Every `BillingLifecycleEvents` call of the payments service and the webhooks, in order. */
+  readonly lifecycle: RecordedLifecycleEvent[];
   /** Writes a subscription mirror row directly, as `syncCustomer` would. */
   setSubscription(record: SubscriptionRecord): Promise<void>;
   /** Delivers every webhook in the memory provider's outbox. */
@@ -119,6 +140,8 @@ export function createTestBilling(options: { catalog?: Catalog; defaultPlan?: Pl
   const projects = new MemoryProjects();
   const counters: TestBilling["counters"] = [];
   const events: MeterEvents = { count: (name, fields) => counters.push({ name, fields }) };
+  const recorded: RecordedLifecycleEvent[] = [];
+  const lifecycle = recordingLifecycleEvents(recorded);
   const accounts = createAccountResolver({ store, catalog, clock, projects, defaultPlan });
   const entitlements = new BillingEntitlements({ store, catalog, clock, defaultPlan, accounts });
   const ledger = new CreditLedger({ store, catalog, clock });
@@ -145,8 +168,9 @@ export function createTestBilling(options: { catalog?: Catalog; defaultPlan?: Pl
     defaultPlan,
     returnBaseUrl: "https://doxa.test",
     events,
+    lifecycle,
   });
-  const webhooks = new BillingWebhooks({ store, catalog, clock, provider, payments, ledger, offers });
+  const webhooks = new BillingWebhooks({ store, catalog, clock, provider, payments, ledger, offers, lifecycle });
   return {
     clock,
     catalog,
@@ -163,6 +187,7 @@ export function createTestBilling(options: { catalog?: Catalog; defaultPlan?: Pl
     payments,
     webhooks,
     counters,
+    lifecycle: recorded,
     setSubscription: (record) => store.withAccountLock(record.accountId, clock.now(), (tx) => tx.upsertSubscription(record)),
     async deliverWebhooks() {
       const statuses: number[] = [];
@@ -349,7 +374,7 @@ export function describeBillingProviderContract(name: string, factory: () => Pro
     it("reads the card and previews an interval switch without a change, when it supports them", async () => {
       const harness = await factory();
       const customer = await newCustomer(harness, "reads");
-      const priceKey = "pro_monthly_founder_v1";
+      const priceKey = "pro_monthly_founder_v2";
       const link = await harness.provider.createCheckout(checkoutInput(harness, customer, priceKey, "reads"));
       await harness.payCheckout(link.checkoutId);
       const before = await harness.provider.fetchCustomerState(customer);
@@ -359,7 +384,7 @@ export function describeBillingProviderContract(name: string, factory: () => Pro
         expect(card.last4).toMatch(/^\d{4}$/);
         expect(card.expMonth).toBeGreaterThanOrEqual(1);
       }
-      const preview = await harness.provider.previewPlanSwitch?.({ customer, subscriptionId, priceKey: "pro_yearly_founder_v1" });
+      const preview = await harness.provider.previewPlanSwitch?.({ customer, subscriptionId, priceKey: "pro_yearly_founder_v2" });
       if (preview) {
         for (const cents of [preview.chargeTodayCents, preview.creditCents, preview.balanceAfterCents]) expect(Number.isSafeInteger(cents) && cents >= 0).toBe(true);
       }
@@ -470,12 +495,12 @@ export function describeBillingStoreContract(name: string, makeStore: () => Prom
       expect(available).toBe(settled.outcome === "settled" ? 800 : 1_000);
     });
 
-    it("lets exactly 100 of 200 parallel quota consumes through with a limit of 100", async () => {
+    it("lets exactly 10 of 200 parallel quota consumes through with a limit of 10", async () => {
       const s = await services();
       const account = await owner(s, "u");
       const view = await s.entitlements.forAccount(account.id);
       const results = await Promise.all(Array.from({ length: 200 }, () => s.quota.consume("mcp.tool_calls", account.id, view.entitlements)));
-      expect(results.filter((result) => result.allowed)).toHaveLength(100);
+      expect(results.filter((result) => result.allowed)).toHaveLength(10);
     });
 
     it("claims one export per rolling window and restores the earlier one on release", async () => {

@@ -18,7 +18,27 @@ export function resolveSelectedBranchRef(
   return branches.some(({ id }) => id === stored) ? stored : "main"
 }
 
-export function useBranchContext(projectId: string) {
+const CONTENT_EDITOR_PATH = /^\/dashboard\/projects\/[^/]+\/content(?:\/|$)/
+const SITE_SETTINGS_PATH = /^\/dashboard\/projects\/[^/]+\/site(?:\/|$)/
+
+/**
+ * True when a page change opens site settings on `main`. Only the content
+ * editor shows and switches the branch, so site settings keep the selected
+ * branch only when the user comes from the editor. From any other page, and
+ * on a page load, they open on `main`.
+ */
+export function opensSiteSettingsOnMain(previousPathname: string | null, pathname: string): boolean {
+  if (!SITE_SETTINGS_PATH.test(pathname)) return false
+  if (previousPathname === null) return true
+  return !SITE_SETTINGS_PATH.test(previousPathname) && !CONTENT_EDITOR_PATH.test(previousPathname)
+}
+
+/**
+ * The branch selection of a project. `pathname` is the page on screen: when
+ * it opens site settings from outside the content editor, the selection
+ * becomes `main` (see `opensSiteSettingsOnMain`).
+ */
+export function useBranchContext(projectId: string, pathname: string | null = null) {
   const branchQuery = useQuery(docsBranchListQueryOptions(projectId))
   const branches = useMemo(
     () => [...(branchQuery.data?.branches ?? [])]
@@ -27,22 +47,32 @@ export function useBranchContext(projectId: string) {
     [branchQuery.data?.branches],
   )
   const [storedRef, setStoredRef] = useState<BranchRef>(() => readStoredBranch(projectId))
+  const [lastPathname, setLastPathname] = useState<string | null>(null)
+  // Set during render, so site settings never load the old branch first.
+  let selectedRef = storedRef
+  if (pathname !== null && pathname !== lastPathname) {
+    setLastPathname(pathname)
+    if (storedRef !== "main" && opensSiteSettingsOnMain(lastPathname, pathname)) {
+      setStoredRef("main")
+      selectedRef = "main"
+    }
+  }
   const branchRef = branchQuery.data
-    ? resolveSelectedBranchRef(storedRef, branches)
-    : storedRef === "main"
-      ? "main"
-      : storedRef
+    ? resolveSelectedBranchRef(selectedRef, branches)
+    : selectedRef
 
   useEffect(() => {
     if (!branchQuery.data || branchRef === storedRef) return
     setStoredRef(branchRef)
-    writeStoredBranch(projectId, branchRef)
-  }, [branchQuery.data, branchRef, projectId, storedRef])
+  }, [branchQuery.data, branchRef, storedRef])
+
+  useEffect(() => {
+    writeStoredBranch(projectId, storedRef)
+  }, [projectId, storedRef])
 
   const selectBranch = useCallback((next: BranchRef) => {
     setStoredRef(next)
-    writeStoredBranch(projectId, next)
-  }, [projectId])
+  }, [])
 
   const selectedBranch = branches.find(({ id }) => id === branchRef) ?? null
 

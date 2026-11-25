@@ -18,6 +18,7 @@ import type {
   EraseNamedBranchResult,
   NamedBranchRecord,
 } from "../../repositories/docs-branch-management";
+import { PlanLimitError } from "@doxahq/billing";
 import { DocsContentError } from "../docs-content/errors";
 import type { EntitlementsService } from "../entitlements";
 import type { CollectStorageNow } from "../storage-gc/collect-now";
@@ -85,11 +86,11 @@ export class DocsBranchManagement {
           createValidationIssue("branch_name_taken", "/name"),
         ]);
       case "limit_reached":
-        throw new DocsBranchValidationError([
-          createValidationIssue("branch_limit_reached", "", {
-            max: entitlements.maxBranchesPerSite,
-          }),
-        ]);
+        throw new PlanLimitError({
+          key: "docs.branches_per_site",
+          limit: entitlements.maxBranchesPerSite,
+          used: result.used,
+        });
     }
   }
 

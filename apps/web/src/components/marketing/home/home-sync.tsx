@@ -39,7 +39,7 @@ export function HomeSync() {
             </div>
             <div className="rendered">
               <span className="sig">getUsers(limit?)</span>
-              <p style={{ color: "#a1a1a1" }}>Returns paginated users from the database.</p>
+              <p style={{ color: "var(--muted)" }}>Returns paginated users from the database.</p>
             </div>
           </div>
         </div>

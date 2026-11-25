@@ -3,6 +3,7 @@ import { Plus } from "lucide-react"
 
 import { ContentSidebarSkeleton } from "~/components/dashboard/content/content-sidebar-skeleton"
 import { AccountSidebarView } from "~/components/dashboard/shell/account-sidebar-view"
+import { ProjectSidebarSkeleton } from "~/components/dashboard/shell/project-sidebar-skeleton"
 import { ProjectSidebarView } from "~/components/dashboard/shell/project-sidebar-view"
 import { SiteSettingsButton, UserRow } from "~/components/dashboard/shell/sidebar-footer"
 import { SidebarSearchButton } from "~/components/dashboard/shell/sidebar-search-button"
@@ -11,6 +12,7 @@ import { SidebarViewFooter, SidebarViewHeader, SidebarViewStack } from "~/compon
 import { SiteSettingsSidebarView } from "~/components/dashboard/shell/site-settings-sidebar-view"
 import { WorkspaceMenu } from "~/components/dashboard/shell/workspace-menu"
 import { Sidebar, SidebarHeader } from "~/components/ui/sidebar"
+import { useDashboardBoot } from "~/lib/dashboard/dashboard-boot"
 import { useSidebarPanelSlot } from "~/lib/dashboard/sidebar-panel-context"
 import type { useSidebarWidth } from "~/lib/dashboard/sidebar-width"
 import { useContentOverviewFailed } from "~/lib/dashboard/use-content-overview-failed"
@@ -34,6 +36,9 @@ export function AppSidebar({
   sidebarWidth: ReturnType<typeof useSidebarWidth>
 }) {
   const contentPanel = useSidebarPanelSlot()
+  // A first load through `/dashboard`: the project view's skeleton until the
+  // page it opens is ready, so both change in the same frame.
+  const { booting } = useDashboardBoot()
 
   return (
     <Sidebar>
@@ -49,7 +54,9 @@ export function AppSidebar({
 
       <SidebarViewStack
         views={{
-          project: projectId ? (
+          project: booting ? (
+            <ProjectSidebarSkeleton />
+          ) : projectId ? (
             <>
               <ProjectSidebarView projectId={projectId} />
               <SidebarViewFooter>

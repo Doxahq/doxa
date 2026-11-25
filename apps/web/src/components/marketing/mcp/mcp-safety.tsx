@@ -2,7 +2,7 @@ import { Hr } from "~/components/marketing/guides"
 import { SectionHead } from "~/components/marketing/mcp/section-head"
 import { APPROVAL_DEFAULTS, APPROVAL_MODE_LABEL } from "~/lib/marketing/mcp-content"
 
-const ICE = { color: "#9cc2ff" }
+const ICE = { color: "var(--ice)" }
 
 const TOKEN_SCOPES = [
   "projects:read",

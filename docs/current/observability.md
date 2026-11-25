@@ -17,7 +17,12 @@ monitors and the page live in the OpenStatus workspace, not in this repo.
 | `GET https://api.doxa.so/health/ready` | API | `200` when Postgres and Valkey answer, else `503`. The body names each check (`ok`, `failed` or `timeout`) and never an error message |
 | `GET https://mcp.doxa.so/health` | `doxa-mcp` | Fixed `200`. It reaches no dependency |
 | `GET https://docs.doxa.so/.well-known/doxa-health` | Docs renderer | `204` with `x-doxa-renderer-health: ok` |
-| `GET https://lexis.doxa.so/v1/search?q=…` with `Origin: https://docs.doxa.so` | Search gateway | `200` with `results`. A real search on the official docs |
+| `GET https://docs.doxa.so/api/search?q=install&limit=1` | Docs renderer search | `200` with at least one result. Every reader can use this search |
+
+The search monitor does not call the gateway (`lexis.doxa.so`). The gateway
+answers `404 not_available` for a site whose plan has no remote search, and
+the page then falls back to the renderer's search. A gateway check therefore
+shows the plan of the account that owns `docs.doxa.so`, not an outage.
 
 `/health/ready` reuses one report for 10 seconds in each process, and each
 check has a 3-second timeout. Many monitor calls therefore cost at most one

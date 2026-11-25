@@ -85,7 +85,7 @@ export function switchBalanceNote(preview: BillingPlanIntervalPreview): string {
 
 export const START_PRO_NOW_TITLE = "Start Pro now?"
 
-/** "Ends your trial today. Stripe charges $1,548 for the year now. You get 5,000 AI credits each month." */
+/** "Ends your trial today. Stripe charges $1,188 for the year now. You get 10,000 AI credits each month." */
 export function startProNowSentence(preview: BillingStartProNowPreview | null): string {
   const charge = preview
     ? `Stripe charges ${formatUsd(preview.amountCents)} for the ${PERIOD_NOUN[preview.intervalLabel]} now.`

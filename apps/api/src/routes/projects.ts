@@ -1,6 +1,5 @@
 import {
   ACTIVE_GENERATION_MESSAGE,
-  REPOSITORY_REQUIRED_MESSAGE,
   connectProjectRepositoryInputSchema,
   createExampleProjectInputSchema,
   createProjectInputSchema,
@@ -17,7 +16,9 @@ import { streamEvents } from "../http/progress-stream";
 import { forbidden, withProjectAccess } from "../http/project-access";
 import { parseValidatedJson } from "../http/validation";
 import { error, json, notFound } from "../http/response";
-import { billingErrorResponse } from "../http/billing-errors";
+import { PlanLimitError } from "@doxahq/billing";
+import { billingErrorResponse, planLimitResponse } from "../http/billing-errors";
+import { reportPlanLimitHit } from "../services/billing/plan-limit-analytics";
 import type { Env } from "../env";
 import { billingConfigFor } from "../services/billing/config";
 import type { BillingRefusal } from "../services/billing/generation-metering";
@@ -47,6 +48,7 @@ import {
   GenerationStartService,
   type GenerationStartOutcome,
 } from "../services/generation-start";
+import { repositoryRequiredMessage } from "../services/repository-required-message";
 import { GenerationRerunService } from "../services/generation-rerun";
 import { GenerationResumeService } from "../services/generation-resume";
 import {
@@ -142,6 +144,7 @@ export function createProjectRoutes(): ApiApp {
           userId,
           ...projectInput,
           team: owner.team,
+          via: "web",
         });
 
         return json(
@@ -151,6 +154,10 @@ export function createProjectRoutes(): ApiApp {
       } catch (err) {
         if (err instanceof CreateProjectError) {
           return error(err.message, getCreateProjectStatus(err));
+        }
+        if (err instanceof PlanLimitError) {
+          reportPlanLimitHit(context.env, userId, err);
+          return planLimitResponse(err, { returnBaseUrl: billingConfigFor(context.env).returnBaseUrl });
         }
 
         throw err;
@@ -175,6 +182,7 @@ export function createProjectRoutes(): ApiApp {
           userId,
           ...projectInput,
           team: owner.team,
+          via: "web",
         });
         return json(
           { project: withDocsUrl(project, context.env) },
@@ -183,6 +191,10 @@ export function createProjectRoutes(): ApiApp {
       } catch (err) {
         if (err instanceof CreateProjectError) {
           return error(err.message, getCreateProjectStatus(err));
+        }
+        if (err instanceof PlanLimitError) {
+          reportPlanLimitHit(context.env, userId, err);
+          return planLimitResponse(err, { returnBaseUrl: billingConfigFor(context.env).returnBaseUrl });
         }
 
         throw err;
@@ -232,7 +244,9 @@ export function createProjectRoutes(): ApiApp {
         projectId: access.projectId,
         force: new URL(context.req.url).searchParams.get("force") === "true",
         seed: new URL(context.req.url).searchParams.get("seed") === "true",
+        startedBy: { userId: access.actorUserId, via: "web" },
       });
+      if (outcome.outcome === "billing_refused") reportPlanLimitHit(context.env, access.actorUserId, outcome.error, access.projectId);
       return generationStartOutcomeResponse(outcome, context.env);
     }),
   );
@@ -386,7 +400,9 @@ export function createProjectRoutes(): ApiApp {
         jobId: context.req.param("generationId"),
         force: new URL(context.req.url).searchParams.get("force") === "true",
         seed: new URL(context.req.url).searchParams.get("seed") === "true",
+        startedBy: { userId: access.actorUserId, via: "web" },
       });
+      if (outcome.outcome === "billing_refused") reportPlanLimitHit(context.env, access.actorUserId, outcome.error, access.projectId);
       if (outcome.outcome === "blocked") {
         return error(RERUN_BLOCKED_MESSAGES[outcome.reason] ?? RERUN_BLOCKED_FALLBACK, 409, {
           code: outcome.reason,
@@ -410,7 +426,10 @@ export function createProjectRoutes(): ApiApp {
           code: outcome.reason,
         });
       }
-      if (outcome.outcome === "billing_refused") return billingRefusalResponse(outcome.error, context.env);
+      if (outcome.outcome === "billing_refused") {
+        reportPlanLimitHit(context.env, access.actorUserId, outcome.error, access.projectId);
+        return billingRefusalResponse(outcome.error, context.env);
+      }
       const generation = await new JobsRepository(context.env).getDetailForProject({
         userId: access.ownerUserId,
         projectId: access.projectId,
@@ -640,6 +659,7 @@ const RERUN_BLOCKED_MESSAGES: Partial<Record<GenerationActionBlockedReason, stri
   change_not_open: "The pull request is closed, merged, or a draft.",
   base_not_production: BASE_NOT_PRODUCTION_MESSAGE,
   previews_unavailable: "Pull request previews are not available for this project.",
+  repository_too_large: "The repository is larger than the size limit for generations.",
 };
 
 function generationStartOutcomeResponse(
@@ -650,8 +670,9 @@ function generationStartOutcomeResponse(
     case "not_found":
       return notFound();
     case "repository_required":
-      return error(REPOSITORY_REQUIRED_MESSAGE, 409, {
+      return error(repositoryRequiredMessage(outcome.reason), 409, {
         code: "repository_required",
+        ...(outcome.reason ? { reason: outcome.reason } : {}),
       });
     case "paused":
       return error("Generation is currently paused by an administrator.", 409);
@@ -668,6 +689,12 @@ function generationStartOutcomeResponse(
       return error(outcome.message, 500);
     case "billing_refused":
       return billingRefusalResponse(outcome.error, env);
+    case "repository_too_large":
+      return error(outcome.message, 422, {
+        code: "repository_too_large",
+        sizeKb: outcome.sizeKb,
+        limitKb: outcome.limitKb,
+      });
   }
 }
 

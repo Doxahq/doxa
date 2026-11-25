@@ -167,7 +167,7 @@ export function hasAiCredits(detail: BillingAccountDetail): boolean {
   return features["ai.doxa_agent"] === true || features["ai.doxabot"] === true
 }
 
-/** "0 of 5,000 monthly credits left · pay-as-you-go on, $9.20 of $30 used this month". */
+/** "0 of 10,000 monthly credits left · pay-as-you-go on, $9.20 of $30 used this month". */
 export function creditsSummaryLine(detail: BillingAccountDetail): string {
   const meter = creditMeterView(detail)
   const trialing = detail.subscription?.status === "trialing"

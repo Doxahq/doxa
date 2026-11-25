@@ -48,6 +48,7 @@
     "./storage-lifecycle": "./src/storage-lifecycle.ts",
     "./retention-policy": "./src/retention-policy.ts",
     "./email-preferences": "./src/email-preferences.ts",
+    "./privacy-settings": "./src/privacy-settings.ts",
     "./email-deliveries": "./src/email-deliveries.ts",
     "./spec-reader": "./src/spec-reader.ts"
   },

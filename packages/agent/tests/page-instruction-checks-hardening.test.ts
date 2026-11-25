@@ -29,10 +29,28 @@ function codes(body: string, rules: PageInstructionRules): string[] {
   return checkPageInstructions(body, rules).map((issue) => issue.check);
 }
 
+/**
+ * The time limits below hold on a developer machine. A shared CI runner is
+ * slower and noisier, so CI gets three times each limit. A pattern that is
+ * quadratic in the line length takes seconds on these lines, so the tests
+ * still catch it there.
+ */
+const TIME_LIMIT_FACTOR = process.env.CI === "true" ? 3 : 1;
+
+/** The time limit for this machine, in ms. */
+function limitMs(localMs: number): number {
+  return localMs * TIME_LIMIT_FACTOR;
+}
+
+/** The fastest of three runs, in ms, so that one run on a busy machine does not count. */
 function timed(run: () => void): number {
-  const started = performance.now();
-  run();
-  return performance.now() - started;
+  let fastest = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const started = performance.now();
+    run();
+    fastest = Math.min(fastest, performance.now() - started);
+  }
+  return fastest;
 }
 
 describe("the checks stay linear in the line length", () => {
@@ -43,13 +61,13 @@ describe("the checks stay linear in the line length", () => {
     ["href={", "value={"],
   ])("a 100 KB line of %s finishes fast", (unit) => {
     const line = unit.repeat(Math.ceil(100_000 / unit.length));
-    expect(timed(() => checkPageInstructions(line, allChecks))).toBeLessThan(200);
+    expect(timed(() => checkPageInstructions(line, allChecks))).toBeLessThan(limitMs(200));
   });
 
   test.each(["a.", "](", "x/*", "value={"])("many lines just under the limit of %s finish fast", (unit) => {
     const line = unit.repeat(Math.floor((MAX_CHECKED_LINE_LENGTH - 1) / unit.length));
     const body = Array.from({ length: 12 }, () => line).join("\n\n");
-    expect(timed(() => checkPageInstructions(body, allChecks))).toBeLessThan(400);
+    expect(timed(() => checkPageInstructions(body, allChecks))).toBeLessThan(limitMs(400));
   });
 
   test("a normal line over the limit is not read, a line under it is", () => {
@@ -188,7 +206,7 @@ describe("import and shell path checks stay bounded on long lines", () => {
   ])("20 long %s lines", (language, line) => {
     const body = Array.from({ length: 20 }, () => ["```" + language, line, "```"].join("\n")).join("\n\n");
 
-    expect(timed(() => checkPageInstructions(body, rules))).toBeLessThan(400);
+    expect(timed(() => checkPageInstructions(body, rules))).toBeLessThan(limitMs(400));
   });
 });
 
@@ -205,13 +223,13 @@ describe("adversarial import and heading lines stay linear", () => {
   ])("20 lines of %s finish in under 200 ms", (_name, language, line) => {
     const body = fenced(language, line);
 
-    expect(timed(() => checkPageInstructions(body, rules))).toBeLessThan(200);
+    expect(timed(() => checkPageInstructions(body, rules))).toBeLessThan(limitMs(200));
   });
 
   test("20 headings with a long run of inner spaces finish in under 200 ms", () => {
     const body = Array.from({ length: 20 }, () => line8k("## a" + " ".repeat(7_990) + "b")).join("\n\n");
 
-    expect(timed(() => checkPageInstructions(body, rules))).toBeLessThan(200);
+    expect(timed(() => checkPageInstructions(body, rules))).toBeLessThan(limitMs(200));
   });
 
   test("the from import and heading checks still find what they did", () => {

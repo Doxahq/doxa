@@ -85,8 +85,9 @@ export function sectionFromPath(pathname: string): SiteSettingsSection {
 
 /**
  * The site settings area. Every section shares one settings state, so moving
- * between sections keeps unsaved edits. The state reads the branch that is
- * open in the editor, the same as the settings dialog did.
+ * between sections keeps unsaved edits. The state reads the selected branch:
+ * the branch open in the editor when the user comes from the editor, else
+ * `main` (see `opensSiteSettingsOnMain`).
  */
 export function SiteSettingsLayout({ projectId }: { projectId: string }) {
   const branch = useProjectBranch()

@@ -118,6 +118,9 @@ module "monitoring" {
   monthly_budget_usd = var.monthly_budget_usd
   daily_pause        = var.daily_pause
 
+  # Null leaves the module default in place.
+  budget_notifications = var.budget_notifications
+
   valkey = {
     cache_name          = module.valkey.cache_name
     max_data_storage_gb = module.valkey.max_data_storage_gb

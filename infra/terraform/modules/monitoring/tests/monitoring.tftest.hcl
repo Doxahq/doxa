@@ -104,3 +104,45 @@ run "alerts_at_80_percent_of_the_valkey_limits" {
     error_message = "The throttle alarm must watch the cache by its clusterId."
   }
 }
+
+run "sends_budget_notices_at_80_percent_actual_and_100_percent_forecast_by_default" {
+  command = plan
+
+  assert {
+    condition     = toset([for notice in aws_budgets_budget.monthly.notification : "${notice.notification_type}:${notice.threshold}"]) == toset(["ACTUAL:80", "FORECASTED:100"])
+    error_message = "Without budget_notifications the budget must notify at 80% actual and 100% forecast."
+  }
+}
+
+run "sends_each_listed_budget_notice_to_every_alert_email" {
+  command = plan
+
+  variables {
+    alert_emails = ["alerts@example.com", "billing@example.com"]
+    budget_notifications = [
+      { type = "ACTUAL", threshold_percent = 20 },
+      { type = "ACTUAL", threshold_percent = 80 },
+      { type = "FORECASTED", threshold_percent = 100 },
+    ]
+  }
+
+  assert {
+    condition     = toset([for notice in aws_budgets_budget.monthly.notification : "${notice.notification_type}:${notice.threshold}"]) == toset(["ACTUAL:20", "ACTUAL:80", "FORECASTED:100"])
+    error_message = "The budget must hold one notice per listed level."
+  }
+
+  assert {
+    condition     = alltrue([for notice in aws_budgets_budget.monthly.notification : toset(notice.subscriber_email_addresses) == toset(["alerts@example.com", "billing@example.com"])])
+    error_message = "Every budget notice must go to every alert email."
+  }
+}
+
+run "rejects_a_budget_notice_of_an_unknown_type" {
+  command = plan
+
+  variables {
+    budget_notifications = [{ type = "MONTHLY", threshold_percent = 80 }]
+  }
+
+  expect_failures = [var.budget_notifications]
+}

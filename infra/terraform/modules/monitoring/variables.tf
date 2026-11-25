@@ -41,9 +41,28 @@ variable "memory_alarm_percent" {
 }
 
 variable "monthly_budget_usd" {
-  description = "Monthly AWS cost limit of the account, in USD. Notices go out at 80% actual and 100% forecast."
+  description = "Monthly AWS cost limit of the account, in USD. Notices go out at the levels of budget_notifications."
   type        = number
   default     = 100
+}
+
+variable "budget_notifications" {
+  description = "Budget notices to alert_emails: the cost they compare (ACTUAL or FORECASTED) and the share of monthly_budget_usd, in percent, that sends one."
+  type = list(object({
+    type              = string
+    threshold_percent = number
+  }))
+  default = [
+    { type = "ACTUAL", threshold_percent = 80 },
+    { type = "FORECASTED", threshold_percent = 100 },
+  ]
+  # A null input (the production stack's default) takes the default above.
+  nullable = false
+
+  validation {
+    condition     = length(var.budget_notifications) > 0 && alltrue([for notice in var.budget_notifications : contains(["ACTUAL", "FORECASTED"], notice.type) && notice.threshold_percent > 0])
+    error_message = "budget_notifications must hold at least one notice, each with type ACTUAL or FORECASTED and a threshold_percent above 0."
+  }
 }
 
 variable "daily_pause" {

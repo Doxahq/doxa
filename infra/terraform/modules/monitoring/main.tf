@@ -147,20 +147,16 @@ resource "aws_budgets_budget" "monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
-  notification {
-    notification_type          = "ACTUAL"
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 80
-    threshold_type             = "PERCENTAGE"
-    subscriber_email_addresses = var.alert_emails
-  }
+  dynamic "notification" {
+    for_each = var.budget_notifications
 
-  notification {
-    notification_type          = "FORECASTED"
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 100
-    threshold_type             = "PERCENTAGE"
-    subscriber_email_addresses = var.alert_emails
+    content {
+      notification_type          = notification.value.type
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = notification.value.threshold_percent
+      threshold_type             = "PERCENTAGE"
+      subscriber_email_addresses = var.alert_emails
+    }
   }
 }
 

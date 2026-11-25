@@ -17,6 +17,12 @@ max_task_count = 1
 
 alert_emails       = ["<you@example.com>"]
 monthly_budget_usd = 120
+# Budget notices (default: 80% actual and 100% forecast), for example an early one:
+# budget_notifications = [
+#   { type = "ACTUAL", threshold_percent = 20 },
+#   { type = "ACTUAL", threshold_percent = 80 },
+#   { type = "FORECASTED", threshold_percent = 100 },
+# ]
 
 # Repositories whose deploy workflows may take the AWS deploy role.
 # Newer repos send owner@<owner-id>/<name>@<repo-id> in the OIDC subject: use that form for them.

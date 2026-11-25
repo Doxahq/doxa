@@ -42,8 +42,12 @@ export function useNewProjectAiAccess(
     ...billingAccountsQueryOptions(),
     refetchInterval: awaitingPlan && !sync.isPending ? CHECKOUT_PLAN_POLL_MS : false,
   })
+  // Only the first load counts as loading. A failed read with no data goes back
+  // to `pending` when it runs again (the workspace menu enables the same query
+  // once the page settles), and the card must not turn back into its skeleton.
+  const isFirstLoad = query.isPending && query.errorUpdatedAt === 0
   const access = workspace
-    ? newProjectAiAccess({ isPending: query.isPending, data: query.data }, workspace.teamId)
+    ? newProjectAiAccess({ isPending: isFirstLoad, data: query.data }, workspace.teamId)
     : AI_ACCESS_LOADING
   const isOpen = access.kind === "open"
 

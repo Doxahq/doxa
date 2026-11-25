@@ -153,11 +153,14 @@ export function FieldListSkeleton({ rows }: { rows: readonly FieldRowSkeleton[] 
   )
 }
 
-/** A bar shaped like a `Badge`: 22px tall with rounded ends. */
+/**
+ * A bar shaped like a `Badge`. The box has the badge's height (1.3rem: 10px
+ * text, `py-0.5` and a 1px border), so the next line starts where it will.
+ */
 export function BadgeBar({ width = "5rem" }: { width?: string }) {
   return (
-    <span className="flex items-center" style={{ height: "1.375rem" }}>
-      <Bar width={width} height="1.25rem" className="rounded-md" />
+    <span className="flex items-center" style={{ height: "1.3rem" }}>
+      <Bar width={width} height="1.2rem" className="rounded-md" />
     </span>
   )
 }

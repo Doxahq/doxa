@@ -31,13 +31,19 @@ export function ProjectOverviewSkeleton() {
             <TextBar width="12rem" className="text-xl font-semibold" />
             <TextBar width="18rem" className="text-sm" />
           </div>
+          {/* One row of facts and the "Open site" button. The column stays lower
+              than the preview art (224px), as the real card's does with up to two
+              facts, so the art sets the card height in both. */}
           <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-            {["9rem", "3.5rem", "4.5rem", "10rem"].map((width) => (
+            {["9rem", "4.5rem"].map((width) => (
               <div key={width} className="flex flex-col gap-1">
                 <TextBar width="6rem" className={FIELD_LABEL_CLASS} />
                 <TextBar width={width} className="font-mono text-[13px]" />
               </div>
             ))}
+          </div>
+          <div className="mt-auto">
+            <Bar width="5.5rem" height="2rem" className="rounded-md" />
           </div>
         </div>
       </section>

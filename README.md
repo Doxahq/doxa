@@ -23,7 +23,6 @@
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-1F6FEB?style=flat-square"></a>
   <a href="https://github.com/Doxahq/doxa/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Doxahq/doxa/ci.yml?branch=main&style=flat-square&label=CI"></a>
   <a href="https://doxa.so/mcp"><img alt="MCP: mcp.doxa.so" src="https://img.shields.io/badge/MCP-mcp.doxa.so-6AA6FF?style=flat-square"></a>
-  <a href="https://github.com/Doxahq/doxa/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Doxahq/doxa?style=flat-square"></a>
 </p>
 
 ---
@@ -142,73 +141,9 @@ Then ask your agent, for example: *"Create a Doxa project for this repository an
 
 Sign in at [doxa.so](https://doxa.so), connect a GitHub repository, and let Doxabot generate the first version of your docs.
 
-## Features
-
-**Doxabot, the docs agent**
-- Writes the docs for a GitHub repository from its source code.
-- Opens a docs preview on each pull request and updates the affected pages after a merge.
-- Follows your custom instructions for tone, scope and structure.
-
-**Agent access through MCP**
-- Tools for projects, branches, pages, assets, previews, publications, domains and search.
-- OAuth sign-in and per-project consent.
-- An approval policy: a person approves risky actions in the dashboard.
-- Live agent activity in the dashboard, so that you can watch an agent work.
-
-**The docs site**
-- Fast, prerendered pages with full-text search and AI chat.
-- API reference pages and an API playground.
-- Branches, previews and publish history with restore.
-- Custom domains, site settings and themes.
-- `llms.txt` and `llms-full.txt` for each site, so that other agents can read your docs.
-
-**The editor**
-- A visual editor for writers and a source view for MDX.
-- Image upload with immutable URLs.
-
 ## Self-hosting
 
 Doxa is the same code that runs [doxa.so](https://doxa.so). This repository holds no secrets, no account IDs and no production state. Doxa's own production deploys from a private ops repository, with the same scripts that you can use. The [self-hosting guide](docs/current/self-hosting.md) has every step.
-
-<details>
-<summary><b>Run it on your computer</b></summary>
-
-<br>
-
-You need Node.js 24, pnpm 10 and Docker.
-
-```sh
-git clone https://github.com/Doxahq/doxa.git
-cd doxa
-pnpm install
-
-cp apps/api/.dev.vars.example apps/api/.dev.vars
-cp apps/web/.env.local.example apps/web/.env.local
-
-pnpm db:local:up
-pnpm db:local:migrate
-pnpm dev
-```
-
-`pnpm dev` starts Postgres, the API, the generation workers, the docs renderer, the agent container and the web app. Fill your OAuth and model provider keys in `apps/api/.dev.vars` before you generate real docs. Read [docs/development.md](docs/development.md) for the flags, the local tunnel and the full generation path.
-
-</details>
-
-<details>
-<summary><b>Run it in production</b></summary>
-
-<br>
-
-The production stack runs on Cloudflare (Workers, R2, Queues, Containers, KV and Hyperdrive), a Node API origin on AWS ECS, and Postgres.
-
-1. Create a private ops repository for your Cloudflare IDs, Terraform variables and deploy workflows.
-2. Apply the Terraform root module in `infra/terraform/production`.
-3. Write the API secrets to AWS SSM.
-4. Deploy one commit of this repository with `scripts/deploy-production.mjs`.
-
-Read the [self-hosting guide](docs/current/self-hosting.md) for each step.
-
-</details>
 
 ## Contributing
 

@@ -30,6 +30,7 @@ monthly/yearly switch goes through the API (section 13).
 | v3.6 | 2026-11-14 | No free first run (D3). Trial and Pro accounts pay every run from their credits. `billing_free_runs`, `credit_reservations.free_run`, `freeFirstRunPerSite` and the 25-page cap are removed. |
 | v3.8 | 2026-11-24 | Free plan: 2 branches per site, 20 MB docs storage, 20 MCP tool calls a day. Pro allowance 10,000 credits a month (was 5,000). Storage, branch, site file and custom domain limits answer 403 `plan_limit`. |
 | v3.9 | 2026-11-24 | Founder price v2: $99 / month billed yearly ($1,188 / year) and $129 billed monthly (was $129 and $159). New keys `pro_monthly_founder_v2` and `pro_yearly_founder_v2`. The v1 founder keys stay for their customers, closed to new Checkouts. `founder_v1` keeps its 50 slots and names the v2 prices. The founder lines say "locked in forever". The standard prices do not change. |
+| v3.10 | 2026-11-25 | Free plan: 10 MCP tool calls a day (was 20). The pricing page reads the number from the catalog. |
 
 When a part ships, describe the built state in `docs/current/billing.md` and
 keep this file as the design record. Research and sources:
@@ -395,7 +396,7 @@ export const DOXA_CATALOG = defineCatalog({
         "site.asset_files": 200,
         "site.custom_domains": 1,
         "team.seats": 1,
-        "mcp.tool_calls_per_day": 20,
+        "mcp.tool_calls_per_day": 10,
         "docs.export_window_hours": 24,
       },
     },
@@ -1173,7 +1174,7 @@ not tested in the sandbox.
 
 ## 11. Usage quotas
 
-The MCP limit of 20 tool calls per day on Free is a quota, not a rate limit.
+The MCP limit of 10 tool calls per day on Free is a quota, not a rate limit.
 
 - Table `billing_usage_counters (account_id, meter_key, window_start, count)`.
 - The MCP tool runner calls `quota.consume("mcp.tool_calls", accountId)`

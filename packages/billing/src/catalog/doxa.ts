@@ -37,7 +37,7 @@ export const DOXA_CATALOG = defineCatalog({
         "team.seats": 1,
         // Decided 2026-11-23 (cost limits): the pricing page offers "a docs site" on Free.
         "account.projects": 1,
-        "mcp.tool_calls_per_day": 20,
+        "mcp.tool_calls_per_day": 10,
         "docs.export_window_hours": 24,
       },
     },

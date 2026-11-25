@@ -495,12 +495,12 @@ export function describeBillingStoreContract(name: string, makeStore: () => Prom
       expect(available).toBe(settled.outcome === "settled" ? 800 : 1_000);
     });
 
-    it("lets exactly 20 of 200 parallel quota consumes through with a limit of 20", async () => {
+    it("lets exactly 10 of 200 parallel quota consumes through with a limit of 10", async () => {
       const s = await services();
       const account = await owner(s, "u");
       const view = await s.entitlements.forAccount(account.id);
       const results = await Promise.all(Array.from({ length: 200 }, () => s.quota.consume("mcp.tool_calls", account.id, view.entitlements)));
-      expect(results.filter((result) => result.allowed)).toHaveLength(20);
+      expect(results.filter((result) => result.allowed)).toHaveLength(10);
     });
 
     it("claims one export per rolling window and restores the earlier one on release", async () => {

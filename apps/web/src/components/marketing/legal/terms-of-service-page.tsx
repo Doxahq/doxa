@@ -5,6 +5,7 @@ import { CONTACT_EMAIL, CONTACT_URL } from "~/lib/marketing/links"
 
 const Mail = () => <a href={CONTACT_URL}>{CONTACT_EMAIL}</a>
 const Privacy = () => <Link to="/legal/privacy">Privacy Policy</Link>
+const LinkTerms = () => <a href="https://link.com/terms">Link terms</a>
 
 const SECTIONS: LegalSection[] = [
   {
@@ -137,7 +138,34 @@ const SECTIONS: LegalSection[] = [
           the repositories that you select. You can change the selected repositories or remove the app at any time in
           GitHub.
         </p>
+        <p>
+          When Doxabot is on for a project, it reads the pull requests of that repository and posts its results as
+          checks on GitHub. You can turn Doxabot off on the Doxabot page of the project.
+        </p>
       </>
+    ),
+  },
+  {
+    id: "docs-sites",
+    title: "Docs sites and their visitors",
+    body: (
+      <ul>
+        <li>
+          Published docs sites are public. Preview links of unpublished changes are also public to anyone who has the
+          link. Do not put secrets or private information in docs, previews or branches that you do not want others to
+          see.
+        </li>
+        <li>
+          You are responsible for the content of your docs site, and for telling your visitors how their information
+          is handled where the law requires it. We process the information of your visitors for you, as the{" "}
+          <Privacy /> describes. If you need a data processing agreement, write to <Mail />.
+        </li>
+        <li>
+          If a page has an API playground, the requests of visitors go through our proxy to the API address that you
+          set. You must have the right to send requests to that API from your docs site. We can block a target, or
+          turn off the proxy for a site, to stop abuse.
+        </li>
+      </ul>
     ),
   },
   {
@@ -187,6 +215,10 @@ const SECTIONS: LegalSection[] = [
           </li>
           <li>overload or disrupt the Service, or send traffic that is not from real use,</li>
           <li>
+            use an API playground or our proxy to send requests to a system that you have no permission to use, or to
+            attack or overload any system,
+          </li>
+          <li>
             use prompts or content to make the Doxa agent act against its instructions, or to extract data that is not
             yours,
           </li>
@@ -215,22 +247,107 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "plans",
-    title: "Plans, fees and limits",
+    title: "Plans, payments and limits",
     body: (
       <>
         <p>
-          The Free plan is available at no cost, with the limits shown on our <Link to="/pricing">pricing page</Link>{" "}
-          and in the dashboard. We can change the limits of the Free plan.
+          The Free plan costs nothing. It has the features and limits shown on our{" "}
+          <Link to="/pricing">pricing page</Link> and in the dashboard. We can change the limits of the Free plan.
+          Enterprise plans use a separate written agreement.
         </p>
-        <p>When paid plans are available, these rules apply to them:</p>
+        <h3>Who sells paid plans</h3>
+        <p>
+          We sell paid plans through Stripe Managed Payments. Stripe, through its Link service, is the merchant of
+          record. It sells the subscription to you, charges your payment method, collects the taxes that apply, and
+          sends your receipts and invoices. Charges show on your statement with Link.com in the name. At checkout, you
+          also accept the <LinkTerms />. These Terms still control your use of the Service.
+        </p>
+        <h3>Subscriptions and automatic renewal</h3>
+        <p>
+          <strong>
+            Pro is a subscription that renews automatically. At the start of each billing period, monthly or yearly,
+            Stripe charges your payment method the price of your subscription, plus tax, until you cancel.
+          </strong>{" "}
+          You can cancel at any time on the Plan and invoices page of the dashboard, or at link.com. Cancellation
+          takes effect at the end of the
+          period that you paid for, and you keep Pro until then.
+        </p>
         <ul>
-          <li>The price and limits are the ones shown when you subscribe.</li>
-          <li>Fees are charged in advance for each billing period and renew until you cancel.</li>
-          <li>You can cancel at any time. The plan stays active until the end of the period that you paid for.</li>
-          <li>Fees are not refundable, except where the law requires a refund or we agree to one.</li>
-          <li>Prices do not include taxes. You pay the taxes that apply, other than taxes on our income.</li>
-          <li>We will tell you at least 30 days before a price change takes effect for your plan.</li>
+          <li>
+            The price and limits are the ones shown when you subscribe. Prices are in US dollars and do not include
+            tax.
+          </li>
+          <li>
+            When you switch between monthly and yearly billing, the change takes effect at once. The unused part of
+            your current period becomes a credit on your next invoices. We do not pay it back as money.
+          </li>
+          <li>
+            We will tell you at least 30 days before a price change applies to your subscription. The new price starts
+            at your next renewal after that notice. If you do not accept it, cancel before then.
+          </li>
         </ul>
+        <h3>Free trial</h3>
+        <p>
+          A Pro trial lasts 7 days and needs a payment method. It includes 1,000 AI credits, and pay-as-you-go is off
+          during the trial.{" "}
+          <strong>
+            If you do not cancel before the trial ends, your subscription starts and Stripe charges the price that you
+            chose.
+          </strong>{" "}
+          If you start Pro before the trial ends, Stripe charges you at once and the unused trial credits end. Each
+          account can have one trial.
+        </p>
+        <h3>Founder price</h3>
+        <p>
+          The founder price is for the first 50 paying accounts. It stays the same for as long as your subscription
+          stays active, also when you switch between monthly and yearly billing. If your subscription ends, the founder
+          price ends with it, and a new subscription pays the price of that day.
+        </p>
+        <h3>AI credits</h3>
+        <ul>
+          <li>
+            AI features, such as docs generation and Doxabot runs, use AI credits. The dashboard shows how each run
+            uses credits.
+          </li>
+          <li>
+            Pro includes a monthly allowance of AI credits, also on yearly billing. Credits that you do not use expire
+            at the end of each monthly period. They do not carry over.
+          </li>
+          <li>Credits have no cash value. You cannot transfer them, sell them or exchange them for money.</li>
+          <li>
+            To protect your account from unexpected cost, we can stop a run or pause AI features when use passes our
+            safety limits.
+          </li>
+        </ul>
+        <h3>Pay-as-you-go</h3>
+        <p>
+          Pay-as-you-go is on by default for paid plans. When your monthly credits run out, AI features keep working,
+          and we bill the extra use at US$0.01 per credit. Stripe charges your payment method automatically when the
+          amount reaches US$5, and once a month for a smaller amount. You set a monthly limit for this use on the AI
+          credits page of the dashboard. When you reach it, AI features pause until the next period or until you raise the limit. You can
+          turn pay-as-you-go off at any time.
+        </p>
+        <h3>Failed payments and disputes</h3>
+        <p>
+          If a payment fails, Stripe tries again. Your account keeps full access for 7 days. After that, AI features
+          pause and some limits fall to those of the Free plan until you pay. If the last retry fails, your
+          subscription ends. If a pay-as-you-go charge fails, pay-as-you-go turns off until you pay that charge. If you
+          dispute a charge with your bank, we can turn off pay-as-you-go and limit your account while the dispute is
+          open.
+        </p>
+        <h3>When a paid plan ends</h3>
+        <p>
+          Your account moves to the Free plan. We do not delete your content, but you cannot create new items above
+          the Free limits, and paid features stop, such as AI features and the removal of the "Powered by Doxa" badge.
+          If you have more custom domains than the Free plan allows, we can disconnect the newest ones after 14 days.
+        </p>
+        <h3>Refunds</h3>
+        <p>
+          Payments are not refundable, except when the law requires a refund or we agree to one. As the merchant of
+          record, Stripe can also refund a payment under its own policies. To ask for a refund, write to <Mail /> or
+          contact Link support. If you are a consumer, the cancellation and refund rights that the law of your country
+          gives you still apply.
+        </p>
       </>
     ),
   },
@@ -256,14 +373,19 @@ const SECTIONS: LegalSection[] = [
     body: (
       <>
         <p>
-          You can stop using Doxa at any time. To close your account, write to <Mail />.
+          You can stop using Doxa at any time. To close your account, write to <Mail />. When we close your account at
+          your request, we cancel your subscription. We do not refund the current period, except as the Refunds part of{" "}
+          <a href="#plans">Plans, payments and limits</a> describes.
         </p>
         <p>We can suspend or close your account, or a docs site, if:</p>
         <ul>
           <li>you break these Terms,</li>
           <li>we must do so to protect the Service, our users or the public,</li>
           <li>the law requires it, or</li>
-          <li>we stop the Service, in which case we will give you at least 30 days' notice.</li>
+          <li>
+            we stop the Service. In that case, we will give you at least 30 days' notice, and we will refund the fees
+            that you paid in advance for the time after the Service stops.
+          </li>
         </ul>
         <p>
           When we can, we will tell you before we act and give you time to export Your Content. After your account
@@ -402,6 +524,7 @@ export function TermsOfServicePage() {
             <li>You own your code, your docs and the output that Doxa writes for you.</li>
             <li>We use your content only to run the service. We do not train AI models on it.</li>
             <li>AI output can be wrong. Review it before you publish.</li>
+            <li>Pro renews automatically until you cancel. Stripe sells it to you as the merchant of record.</li>
             <li>Use Doxa for documentation, legally, and without harm to others or to the service.</li>
           </ul>
         </div>

@@ -108,6 +108,7 @@ export const PRO_HIGHLIGHTS = {
 } as const
 
 const proLimits = DOXA_CATALOG.plans.pro.limits
+const freeMcpCallsPerDay = DOXA_CATALOG.plans.free.limits["mcp.tool_calls_per_day"]
 
 /** "Unlimited team seats", or "4 team seats" when Pro has a number for the limit. */
 function proLimitLine(key: LimitKey, noun: string): string {
@@ -177,10 +178,10 @@ export const PLANS: Plan[] = [
     sub: "No card needed",
     includes: "Included in Free:",
     checks: [
-      ["Docs site with search and llms.txt"],
+      ["Docs site with browser search and llms.txt"],
       ["2 branches per site with previews"],
       ["20 MB docs storage, 1 custom domain"],
-      ["MCP server, 20 tool calls / day"],
+      [`MCP server, ${fmt(freeMcpCallsPerDay)} tool calls / day`],
     ],
     hosts: [{ label: "SHARED HOSTING" }, { label: "\"POWERED BY DOXA\" BADGE" }],
     cta: { label: "Start free ›", className: "btn btn--line", action: "start" },
@@ -202,6 +203,7 @@ export const PLANS: Plan[] = [
       ["Invite your team, unlimited seats"],
       ["Role-based permissions for every member"],
       ["Remove the \"Powered by Doxa\" badge"],
+      ["Browser search or instant cloud search"],
       ["Unlimited branches per site with previews"],
       ["Unlimited docs storage"],
       ["4 custom domains"],

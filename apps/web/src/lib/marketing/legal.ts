@@ -27,7 +27,7 @@ export const LEGAL_DOCS: Record<LegalDocId, LegalDocMeta> = {
     path: "/legal/privacy",
     summary:
       "What Doxa collects, why we collect it, who processes it for us, and how you can see, export or delete it.",
-    updated: "November 4, 2026",
+    updated: "November 25, 2026",
     effective: "October 28, 2026",
   },
   terms: {
@@ -36,8 +36,8 @@ export const LEGAL_DOCS: Record<LegalDocId, LegalDocMeta> = {
     label: "Terms",
     path: "/legal/terms",
     summary:
-      "The agreement between you and CoderOne LLC for the hosted Doxa service: your content, AI output, acceptable use, plans and liability.",
-    updated: "November 4, 2026",
+      "The agreement between you and CoderOne LLC for the hosted Doxa service: your content, AI output, acceptable use, plans, payments and liability.",
+    updated: "November 25, 2026",
     effective: "October 28, 2026",
   },
 }

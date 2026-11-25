@@ -220,10 +220,8 @@ Do not open a public issue for a security problem. Send an email to [security@do
 
 ## License
 
-Doxa is open source under the [Apache License 2.0](LICENSE). You can use, change, self-host and redistribute it, also for commercial work.
-
-The license does not give rights to the Doxa name or logo. If you publish a changed copy, give it a different name.
+Doxa is open source under the [Apache License 2.0](LICENSE).
 
 <p align="center">
-  <sub>Built by <a href="https://doxa.so/about">CoderOne Labs</a>. Copyright © 2026 CoderOne LLC.</sub>
+  <sub>Built by <a href="https://doxa.so/about">CoderOne Labs</a>. Copyright © 2026.
 </p>

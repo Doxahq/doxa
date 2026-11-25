@@ -7,6 +7,7 @@ import {
   SkeletonRegion,
   TextBar,
 } from "~/components/dashboard/skeletons/skeleton-kit"
+import { SHOW_AI_ASSISTANT_SETTINGS } from "~/lib/dashboard/site-settings-flags"
 
 type Section = "appearance" | "navigation" | "domains" | "seo" | "features" | "advanced"
 
@@ -41,7 +42,10 @@ const SECTIONS: Record<Section, { title: string; description: string; cards: Car
   features: {
     title: "Features",
     description: "Turn site features on or off.",
-    cards: [{ title: "Page layout", rows: 4 }, { title: "AI assistant", rows: 2 }],
+    cards: [
+      { title: "Page layout", rows: 4 },
+      SHOW_AI_ASSISTANT_SETTINGS ? { title: "AI assistant", rows: 2 } : { title: "Search", rows: 1 },
+    ],
   },
   advanced: {
     title: "Advanced (JSON)",

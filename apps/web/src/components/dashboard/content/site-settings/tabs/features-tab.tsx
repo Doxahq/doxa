@@ -4,6 +4,7 @@ import { Select, SettingsSection, SwitchRow, TextInput } from "~/components/dash
 import { EntitlementBadge } from "~/components/dashboard/content/site-settings/fields/entitlement-gate"
 import { ValidatedField } from "~/components/dashboard/content/site-settings/fields/validated-field"
 import { useSiteSettingsContext } from "~/components/dashboard/content/site-settings/site-settings-context"
+import { SHOW_AI_ASSISTANT_SETTINGS } from "~/lib/dashboard/site-settings-flags"
 import { fieldIdForPointer } from "~/lib/dashboard/site-settings-issues"
 
 type Features = EditableSiteConfig["features"]
@@ -94,33 +95,35 @@ export function FeaturesTab() {
         </ValidatedField>
       </SettingsSection>
 
-      <SettingsSection title="AI assistant">
-        <div className="divide-y divide-border">
-          <SwitchRow
-            id={fieldIdForPointer("/features/ai/chat")}
-            title="Chat with the docs"
-            description="An assistant that answers questions from this documentation."
-            checked={features.ai.chat}
-            onCheckedChange={(chat) => setAi({ chat })}
-          />
-          <SwitchRow
-            id={fieldIdForPointer("/features/ai/chatWithPage")}
-            title="Ask about this page"
-            description={features.ai.chat ? "A page action that starts a chat about the current page." : "Needs 'Chat with the docs'."}
-            checked={features.ai.chatWithPage}
-            disabled={!features.ai.chat}
-            onCheckedChange={(chatWithPage) => setAi({ chatWithPage })}
-          />
-          <SwitchRow
-            id={fieldIdForPointer("/features/ai/floatingInput")}
-            title="Floating question bar"
-            description={features.ai.chat ? "A question input that stays at the bottom of the page." : "Needs 'Chat with the docs'."}
-            checked={features.ai.floatingInput}
-            disabled={!features.ai.chat}
-            onCheckedChange={(floatingInput) => setAi({ floatingInput })}
-          />
-        </div>
-      </SettingsSection>
+      {SHOW_AI_ASSISTANT_SETTINGS && (
+        <SettingsSection title="AI assistant">
+          <div className="divide-y divide-border">
+            <SwitchRow
+              id={fieldIdForPointer("/features/ai/chat")}
+              title="Chat with the docs"
+              description="An assistant that answers questions from this documentation."
+              checked={features.ai.chat}
+              onCheckedChange={(chat) => setAi({ chat })}
+            />
+            <SwitchRow
+              id={fieldIdForPointer("/features/ai/chatWithPage")}
+              title="Ask about this page"
+              description={features.ai.chat ? "A page action that starts a chat about the current page." : "Needs 'Chat with the docs'."}
+              checked={features.ai.chatWithPage}
+              disabled={!features.ai.chat}
+              onCheckedChange={(chatWithPage) => setAi({ chatWithPage })}
+            />
+            <SwitchRow
+              id={fieldIdForPointer("/features/ai/floatingInput")}
+              title="Floating question bar"
+              description={features.ai.chat ? "A question input that stays at the bottom of the page." : "Needs 'Chat with the docs'."}
+              checked={features.ai.floatingInput}
+              disabled={!features.ai.chat}
+              onCheckedChange={(floatingInput) => setAi({ floatingInput })}
+            />
+          </div>
+        </SettingsSection>
+      )}
 
       <SettingsSection title="Copy page">
         <div className="divide-y divide-border">

@@ -19,6 +19,14 @@ describe("shared strict validation", () => {
     expect(config.version).toBe(1);
     expect(config.theme.tokens.light.background).toBe("oklch(1 0 0)");
   });
+
+  // The dashboard hides the AI assistant settings until chat follows billing
+  // and the plan, so no site may get them on without asking for them.
+  it("keeps the AI assistant off by default", () => {
+    const off = { chat: false, chatWithPage: false, floatingInput: false };
+    expect(resolveSiteConfig(createDefaultSiteConfig({ projectName: "Project" })).features.ai).toEqual(off);
+    expect(resolveSiteConfig({}).features.ai).toEqual(off);
+  });
   it("collects all issues with stable codes and escaped pointers", () => {
     const result = parseSiteConfigStrict({
       name: "a".repeat(81),

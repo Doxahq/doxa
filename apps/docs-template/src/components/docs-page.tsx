@@ -20,10 +20,10 @@ import { isChatAvailable } from "@/src/lib/chat-availability";
 import type { ChatPageContext } from "@/src/lib/chat-page-context";
 import { components, elements } from "@/src/lib/components";
 import { cn } from "@/src/lib/utils";
+import { ArticleEnd } from "@/src/components/article/article-end";
 import { ArticleTitle } from "@/src/components/article/article-title";
 import { ChatWithPage } from "@/src/components/article/chat-with-page";
 import { CopyPage } from "@/src/components/article/copy-page";
-import { Pagination } from "@/src/components/article/pagination";
 import { useChatContext } from "@/src/components/chat/chat-context";
 import { Footer } from "@/src/components/navigation/footer";
 import {
@@ -218,7 +218,7 @@ export function DocsPage({ data }: DocsPageProps) {
                     />
                   </div>
                 )}
-                <Pagination
+                <ArticleEnd
                   pathname={slug}
                   previous={data.previous}
                   next={data.next}

@@ -63,7 +63,7 @@ export function Pagination({
   return (
     <nav
       aria-label="Previous and next page"
-      className="not-prose mt-12 grid grid-cols-2 gap-4"
+      className="not-prose grid grid-cols-2 gap-4"
     >
       {pages.prev && (
         <PageLinkCard

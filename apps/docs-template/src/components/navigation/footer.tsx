@@ -5,7 +5,6 @@ import type { ClientSiteConfig } from "@doxahq/site-config";
 import { FaGithub } from "react-icons/fa6";
 
 import { Logo } from "@/src/components/navigation/logo";
-import { PoweredByDoxa } from "@/src/components/navigation/powered-by-doxa";
 import { SocialLinks } from "@/src/components/navigation/social-links";
 
 type FooterGroup = ClientSiteConfig["footer"]["groups"][number];
@@ -14,18 +13,14 @@ const openSourceRepoUrl = import.meta.env.VITE_OPENSOURCE_REPO_URL;
 
 /**
  * The end of a docs page, in the article column under the page links: the
- * "Powered by Doxa" credit, then the site's brand, socials, link groups and
- * copyright. All of it comes from the site config.
+ * site's brand, socials, link groups and copyright. All of it comes from the
+ * site config. The "Powered by Doxa" credit sits above the page links
+ * (`ArticleEnd`).
  */
 export function Footer() {
-  const { branding, footer } = useSiteConfig();
+  const { footer } = useSiteConfig();
   return (
     <footer className="not-prose">
-      {branding.poweredBy && (
-        <div className="mt-13 -mb-7 flex justify-center">
-          <PoweredByDoxa />
-        </div>
-      )}
       <div className="mt-18 flex flex-col gap-7 border-t pt-7 pb-12">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <Logo size={18} className="text-[15px]" />

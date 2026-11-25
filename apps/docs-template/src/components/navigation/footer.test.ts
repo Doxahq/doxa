@@ -33,18 +33,8 @@ const ALL_SOCIALS = {
 };
 
 describe("docs footer", () => {
-  it("shows the Powered by Doxa credit when the config does not set it", () => {
-    const html = renderFooter();
-
-    expect(html).toContain("Powered by");
-    expect(html).toContain('href="https://doxa.so"');
-  });
-
-  it("hides the credit when the site turns it off", () => {
-    const html = renderFooter({ branding: { poweredBy: false } });
-
-    expect(html).not.toContain("Powered by");
-    expect(html).not.toContain("https://doxa.so");
+  it("leaves the Powered by Doxa credit to the page links above it", () => {
+    expect(renderFooter()).not.toContain("Powered by");
   });
 
   it("renders the site name, its link groups and an icon for each social", () => {

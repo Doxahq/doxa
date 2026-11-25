@@ -31,6 +31,11 @@ export function toServiceEnv(env: McpEnv): Env {
     DOCS_BASE_DOMAIN: env.DOCS_BASE_DOMAIN,
     DOCS_RENDERER_BASE_URL: env.DOCS_RENDERER_BASE_URL,
     DOCS_CUSTOM_DOMAIN_CNAME_TARGET: env.DOCS_CUSTOM_DOMAIN_CNAME_TARGET,
+    // Without these, `planSeamsFromEnv` falls back to enforcement `off` and
+    // every project gets the free plan stubs, whatever its real plan.
+    BILLING_PROVIDER: env.BILLING_PROVIDER,
+    BILLING_ENFORCEMENT: env.BILLING_ENFORCEMENT,
+    BILLING_DEFAULT_PLAN: env.BILLING_DEFAULT_PLAN,
   };
 }
 

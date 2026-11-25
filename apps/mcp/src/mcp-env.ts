@@ -37,4 +37,15 @@ export interface McpEnv extends AnalyticsEnv {
   AGENT_LIVE_ACTIVITY_ENABLED?: string;
   /** Local development only. The production config must never set it. */
   MCP_DEV_AUTH_BYPASS?: string;
+  /**
+   * Billing settings for the plan checks that the API services run in this
+   * Worker: entitlements, limits, and the daily tool-call quota. They read the
+   * billing tables only, so this Worker needs no payment provider: production
+   * sets `BILLING_PROVIDER=none` and names the default plan, which must match
+   * the API's. Unset, enforcement is `off` and every project gets the free
+   * plan stubs.
+   */
+  BILLING_PROVIDER?: string;
+  BILLING_ENFORCEMENT?: string;
+  BILLING_DEFAULT_PLAN?: string;
 }

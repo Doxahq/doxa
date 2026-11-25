@@ -51,6 +51,8 @@ export function validateMcpProductionConfig({ mcp, api }) {
     throw new Error("apps/mcp/wrangler.json env.production must bind HYPERDRIVE.");
   }
 
+  validateBillingVars(vars);
+
   // Tokens carry the issuer and the resource: both Workers must agree.
   const apiProduction = api?.env?.production ?? {};
   const apiVars = apiProduction.vars ?? {};
@@ -63,6 +65,38 @@ export function validateMcpProductionConfig({ mcp, api }) {
   }
   if (!(apiProduction.kv_namespaces ?? []).some((binding) => binding.binding === "OAUTH_KV")) {
     throw new Error("apps/api/wrangler.json env.production must bind OAUTH_KV for the MCP sign-in.");
+  }
+}
+
+const OPS_PLACEHOLDER = /^\$\{OPS_[A-Z0-9_]+\}$/;
+const ENFORCEMENT_MODES = ["off", "shadow", "on"];
+
+/**
+ * The API services in this Worker run the plan checks (entitlements, limits,
+ * the daily tool-call quota). Without the billing vars they fall back to
+ * enforcement `off`, and every project gets the free plan stubs, also a paid
+ * one. They read only the billing tables, so the provider is `none`: `stripe`
+ * needs Stripe secrets that this Worker does not hold. With `none`, the
+ * default plan is `self_hosted` unless set, so it must be set to the API's.
+ * A `${OPS_*}` value is the repository form, filled before a deploy.
+ */
+function validateBillingVars(vars) {
+  if (vars.BILLING_PROVIDER !== "none") {
+    throw new Error(
+      'apps/mcp/wrangler.json env.production.vars.BILLING_PROVIDER must be "none": the MCP Worker holds no payment provider secrets.',
+    );
+  }
+  const enforcement = vars.BILLING_ENFORCEMENT;
+  if (typeof enforcement !== "string" || !(OPS_PLACEHOLDER.test(enforcement) || ENFORCEMENT_MODES.includes(enforcement))) {
+    throw new Error(
+      `apps/mcp/wrangler.json env.production.vars.BILLING_ENFORCEMENT must be one of ${ENFORCEMENT_MODES.join(", ")}, the same as the API's. Without it, every project gets the free plan.`,
+    );
+  }
+  const plan = vars.BILLING_DEFAULT_PLAN;
+  if (typeof plan !== "string" || !(OPS_PLACEHOLDER.test(plan) || /^[a-z][a-z0-9_]*$/.test(plan))) {
+    throw new Error(
+      "apps/mcp/wrangler.json env.production.vars.BILLING_DEFAULT_PLAN must name the API's default plan, such as free.",
+    );
   }
 }
 

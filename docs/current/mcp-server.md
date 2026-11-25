@@ -531,6 +531,15 @@ URLs. Rate limits count per Cloudflare location.
   pool, because the opt-out check reads `user_privacy_settings`. Without
   `POSTHOG_KEY` analytics is off. Production reads the key from
   `${OPS_POSTHOG_PROJECT_KEY}`.
+- Plan checks: the API services in this Worker run the plan checks
+  (entitlements, branch and storage limits, the daily tool-call quota) against
+  the billing tables. `toServiceEnv` passes `BILLING_PROVIDER`,
+  `BILLING_ENFORCEMENT` and `BILLING_DEFAULT_PLAN` to them. Production sets the
+  provider to `none` (this Worker takes no payments) and reads the other two
+  from `${OPS_BILLING_ENFORCEMENT}` and `${OPS_BILLING_DEFAULT_PLAN}`, which
+  must match the API. Without them, enforcement is `off` and every project gets
+  the free plan stubs. `scripts/lib/mcp-production-config.mjs` refuses a
+  production config without them.
 
 ## Local development
 

@@ -14,6 +14,7 @@ vi.mock("@doxahq/db", async (importOriginal) => ({
 
 const { openProductionContext } = await import("../src/production-context");
 const { agentActor } = await import("@doxahq/api/services/agent-access/actor");
+const { mcpBillingFromEnv } = await import("@doxahq/api/services/billing/mcp-billing");
 
 const actor = agentActor({
   userId: "user-1",
@@ -67,5 +68,30 @@ describe("production request context", () => {
     vi.unstubAllGlobals();
 
     expect(order).toEqual(["analytics sent", "scope closed"]);
+  });
+
+  // PRODUCTION INCIDENT REGRESSION GUARDRAIL (2026-11-25): the service env
+  // dropped the billing vars, so every plan check in this Worker used the free
+  // plan stubs, also for a Pro project.
+  test("the API services get the Worker's billing settings", async () => {
+    scopes.envs.length = 0;
+    const billing = { BILLING_PROVIDER: "none", BILLING_ENFORCEMENT: "on", BILLING_DEFAULT_PLAN: "free" };
+    const opened = openProductionContext(mcpEnv(billing), actor, () => {});
+    await opened.close();
+
+    const serviceEnv = scopes.envs[0];
+    if (!serviceEnv) throw new Error("expected a service env");
+    expect(serviceEnv).toMatchObject(billing);
+    expect(mcpBillingFromEnv(serviceEnv).mode).toBe("on");
+  });
+
+  test("without billing settings, enforcement stays off, as on a self-hosted Worker", async () => {
+    scopes.envs.length = 0;
+    const opened = openProductionContext(mcpEnv(), actor, () => {});
+    await opened.close();
+
+    const serviceEnv = scopes.envs[0];
+    if (!serviceEnv) throw new Error("expected a service env");
+    expect(mcpBillingFromEnv(serviceEnv).mode).toBe("off");
   });
 });

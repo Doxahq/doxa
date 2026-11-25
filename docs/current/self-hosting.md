@@ -44,6 +44,19 @@ variables from the configs in your deploy checkout. The API Node origin reads
 `POSTHOG_KEY` from its own environment (Terraform `api_environment`), never
 from a Wrangler config.
 
+The MCP Worker runs the API's plan checks itself (entitlements, limits, the
+daily tool-call quota), so it needs the API's billing mode:
+
+| Placeholder | Config | Value |
+|---|---|---|
+| `OPS_BILLING_ENFORCEMENT` | `apps/mcp/wrangler.json` (`BILLING_ENFORCEMENT`) | The same value as `BILLING_ENFORCEMENT` in the API's `api_environment`: `off`, `shadow`, or `on`. |
+| `OPS_BILLING_DEFAULT_PLAN` | `apps/mcp/wrangler.json` (`BILLING_DEFAULT_PLAN`) | The API's default plan: `free` when the API uses `BILLING_PROVIDER=stripe`, `self_hosted` when it uses `none`. |
+
+The MCP Worker reads only the billing tables, so its `BILLING_PROVIDER` is
+always `none` and it holds no Stripe secrets. Change both Workers' values
+together: if the MCP Worker runs with `off` while the API runs with `on`,
+every project gets the free plan through MCP.
+
 ## Deploy
 
 In a fresh checkout of this repo at the commit to deploy:

@@ -30,6 +30,55 @@ test("keeps the local sign-in bypass off in production", () => {
   }
 });
 
+// PRODUCTION INCIDENT REGRESSION GUARDRAIL (2026-11-25): doxa-mcp ran without
+// billing vars, so its plan checks used the free plan stubs for every project.
+// A Pro project that hides "Powered by Doxa" could not build a preview through
+// MCP ("entitlement_required" on /branding/poweredBy).
+test("sets the billing vars in production, from the ops values", () => {
+  const { mcp } = configs();
+  const vars = mcp.env.production.vars;
+  assert.equal(vars.BILLING_PROVIDER, "none");
+  assert.equal(vars.BILLING_ENFORCEMENT, "${OPS_BILLING_ENFORCEMENT}");
+  assert.equal(vars.BILLING_DEFAULT_PLAN, "${OPS_BILLING_DEFAULT_PLAN}");
+});
+
+test("accepts the filled billing values of a deploy checkout", () => {
+  const { mcp, api } = configs();
+  Object.assign(mcp.env.production.vars, { BILLING_ENFORCEMENT: "on", BILLING_DEFAULT_PLAN: "free" });
+
+  assert.doesNotThrow(() => validateMcpProductionConfig({ mcp, api }));
+});
+
+test("rejects a production config without billing enforcement", () => {
+  for (const value of [undefined, "", "enabled"]) {
+    const { mcp, api } = configs();
+    if (value === undefined) delete mcp.env.production.vars.BILLING_ENFORCEMENT;
+    else mcp.env.production.vars.BILLING_ENFORCEMENT = value;
+
+    assert.throws(() => validateMcpProductionConfig({ mcp, api }), /BILLING_ENFORCEMENT/, String(value));
+  }
+});
+
+test("rejects a payment provider in the MCP Worker", () => {
+  for (const value of [undefined, "stripe"]) {
+    const { mcp, api } = configs();
+    if (value === undefined) delete mcp.env.production.vars.BILLING_PROVIDER;
+    else mcp.env.production.vars.BILLING_PROVIDER = value;
+
+    assert.throws(() => validateMcpProductionConfig({ mcp, api }), /BILLING_PROVIDER/, String(value));
+  }
+});
+
+test("requires the default plan, so provider none does not default to self_hosted", () => {
+  for (const value of [undefined, ""]) {
+    const { mcp, api } = configs();
+    if (value === undefined) delete mcp.env.production.vars.BILLING_DEFAULT_PLAN;
+    else mcp.env.production.vars.BILLING_DEFAULT_PLAN = value;
+
+    assert.throws(() => validateMcpProductionConfig({ mcp, api }), /BILLING_DEFAULT_PLAN/, String(value));
+  }
+});
+
 test("rejects localhost URLs in production", () => {
   const { mcp, api } = configs();
   mcp.env.production.vars.WEB_ORIGIN = "http://localhost:3001";

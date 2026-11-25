@@ -3,8 +3,18 @@ import { themedPictureFiles } from "~/lib/theme/picture-files"
 /**
  * The antenna art of the MCP page, in two widths and two formats. The night files
  * come from `public/marketing/mcp-dish.webp` (2400 × 1000), the master copy. The
- * daylight files come from `public/marketing/mcp-dish-light.webp`: a Seedream 4
- * relight of the night master, with the same pixel band at the foot.
+ * daylight files come from `public/marketing/mcp-dish-light.webp`, which a script
+ * made from the night master, with no AI step:
+ * - The antenna's matte comes from the red channel. The sky, the blue glows and the
+ *   blue squares have little red. Parts under 40 px (the stars) are dropped.
+ * - The two glows are subtracted ring by ring before the cut, so their white cores
+ *   do not stay as blobs.
+ * - The sky amount comes from the blue channel: black is the page (#fafafa), the
+ *   navy sky is #cfdcf6, and the bright squares go on to #8fabf0. The stars are
+ *   filled from the sky around them, and the sky above the pixel band is smoothed.
+ * - The antenna is drawn in ink: bright metal maps to #132046, dim metal to #5d7fd6.
+ * The cut edges are those of the night photo, and the pixel band and the feed point
+ * stay where they are.
  */
 export const MCP_ART = {
   files: themedPictureFiles("/marketing/mcp-dish", [1200, 2400], 1200),
@@ -20,6 +30,6 @@ export const MCP_ART = {
   placeholder: {
     dark: "data:image/webp;base64,UklGRogAAABXRUJQVlA4IHwAAADwAwCdASoYAAoAPrVWoUsnJSMhsAgA4BaJQApgAPRAQqDLdZKV353AAP74TYjsJ6BFJ7BMYus7NjR1K4efk47eb9HhEi3x9yPQb4bT2K06Ubmf/ZUFXTs4NoWesur6A+EMoWDzZtaW2hfiSWHtzFnDKhPHSNho/eNIeAAA",
     light:
-      "data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAADQAwCdASoYAAoAPrVKoUmnJCOhMAgA4BaJZQABHuxb1OqzGYZyTfAA/v7svaE31z28PB+jtN9qSZnaFQ3sewzafN4j+4BYST+VyWa5ob7X6QdX3LqT/s0g8vmLOrlefxzGXrGCwAAAAA==",
+      "data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAACwAwCdASoYAAoALoVarVaipycnBwCESygAHxFg3+J6ibX9HdOmAAD+/BMZiakYrIRxnAV6j580w6cKdWOeZO7Z9d2eF4DXvnazy42n/bYdvfHN+KgwT+CWKtEu+Qh7S17zpNRcDPwYAA==",
   },
 } as const

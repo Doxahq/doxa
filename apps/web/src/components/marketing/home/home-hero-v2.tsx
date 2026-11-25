@@ -57,7 +57,7 @@ function DocsWindow() {
       <ThemedPicture
         files={HERO_V2_IMAGES.docs.files}
         sizes={HERO_V2_DOCS_SIZES}
-        alt="The Doxa docs site: the Doxa Platform Overview page, with its sidebar and table of contents."
+        alt="The Doxa docs site: the Overview page, with its sidebar and table of contents."
         width={HERO_V2_IMAGES.docs.width}
         height={HERO_V2_IMAGES.docs.height}
         decoding="async"

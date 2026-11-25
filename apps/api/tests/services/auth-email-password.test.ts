@@ -89,9 +89,10 @@ describe("email and password sign-in", () => {
       expect(createUser).not.toHaveBeenCalled();
       expect(verification).toHaveLength(0);
       expect(context.socialProviders.map((provider) => provider.options?.disableSignUp)).toEqual([true, true]);
-      await expect(
-        context.options.databaseHooks?.user?.create?.before?.(storedUser(false) as never, null),
-      ).rejects.toThrow("New sign-ups are closed.");
+      // The closed-sign-up hook ignores its arguments, so its type takes none.
+      await expect(context.options.databaseHooks?.user?.create?.before?.()).rejects.toThrow(
+        "New sign-ups are closed.",
+      );
     }
   });
 

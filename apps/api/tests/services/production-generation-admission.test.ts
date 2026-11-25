@@ -9,6 +9,7 @@ import {
   ProductionGenerationAdmissionService,
   type ProductionGenerationBaseline,
 } from "../../src/services/production-generation-admission";
+import { recordingProductAnalytics } from "../support/recording-product-analytics";
 
 const executionConfig: GenerationExecutionConfig = {
   plannerModel: "x-ai/grok-4.5:nitro",
@@ -426,6 +427,49 @@ describe("production generation admission", () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ baselineVersionId: null, seedVersionId: null }),
     );
+  });
+});
+
+describe("production generation admission analytics", () => {
+  function analyticsService(options: { baseline: ProductionGenerationBaseline | null; created?: "created" | "already_active" }) {
+    const recording = recordingProductAnalytics();
+    const service = new ProductionGenerationAdmissionService({
+      source: { resolveTarget: async () => ({ revision: "b".repeat(40), treeHash: "c".repeat(40) }) },
+      baselines: { findCompatiblePublished: async () => options.baseline, handWrittenVersion: noHandWrittenVersion },
+      jobs: { create: async () => ({ outcome: options.created ?? ("created" as const), job: queuedJob() }) },
+      instructions: instructionsUnchanged(),
+      executionConfig,
+      analytics: recording.analytics,
+    });
+    return { service, recording };
+  }
+
+  test("reports generation_started for the person who started the run, warm when a baseline exists", async () => {
+    const { service, recording } = analyticsService({
+      baseline: { versionId: "11111111-1111-4111-8111-111111111111", sourceRevision: "a".repeat(40), sourceTreeHash: "d".repeat(40), generatorFingerprint: "old", ...baselineState },
+    });
+    await service.admit({ projectId: "project-1", userId: "owner-1", startedBy: { userId: "member-1", via: "web" } });
+    expect(await recording.events()).toEqual([
+      {
+        kind: "event",
+        event: "generation_started",
+        distinctId: "member-1",
+        properties: { trigger: "manual", run: "warm", via: "web" },
+        groups: { project: "project-1" },
+      },
+    ]);
+  });
+
+  test("a merge run counts for the owner, cold without a baseline", async () => {
+    const { service, recording } = analyticsService({ baseline: null });
+    await service.admit({ projectId: "project-1", userId: "owner-1", trigger: "merge" });
+    expect((await recording.events())[0]).toMatchObject({ distinctId: "owner-1", properties: { trigger: "merge", run: "cold" } });
+  });
+
+  test("reports nothing when another run is already active", async () => {
+    const { service, recording } = analyticsService({ baseline: null, created: "already_active" });
+    await service.admit({ projectId: "project-1", userId: "owner-1" });
+    expect(await recording.events()).toEqual([]);
   });
 });
 

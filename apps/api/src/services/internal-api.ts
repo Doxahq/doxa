@@ -41,7 +41,8 @@ import { createRepositoryReadAccess } from "./repository-read-access";
 import { GenerationReviewService } from "./generation-reviews/review-service";
 import { PendingMergesRepository } from "../repositories/pending-merges";
 import { generationMeteringFromEnv } from "./billing/generation-metering-env";
-import type { GenerationMetering, RunOutcome } from "./billing/generation-metering";
+import type { RunOutcome } from "./billing/generation-metering";
+import { reportGenerationFinishedInBackground, type GenerationEndDetails } from "./generation-analytics";
 import { closeStoppedPreviewCheck } from "./billing/stopped-preview-check";
 import {
   assertSafeArtifactKey,
@@ -281,13 +282,17 @@ async function markJobRunning(env: Env, jobId: string): Promise<void> {
 
 async function markJobFailed(env: Env, jobId: string, message: string): Promise<void> {
   const failed = await new JobsRepository(env).markFailed(jobId, message);
-  if (failed) await settleRun(env, jobId, "failed");
+  if (failed) await endRun(env, jobId, "failed");
   if (failed) await generationNotifierFromEnv(env).finished(jobId, "failed", message);
 }
 
-/** Billing spec 10.5 step 5. The meter never throws here: the job has ended either way. */
-function settleRun(env: Env, jobId: string, outcome?: RunOutcome, metering?: GenerationMetering): Promise<void> {
-  return (metering ?? generationMeteringFromEnv(env)).settle(jobId, outcome);
+/**
+ * Billing spec 10.5 step 5, then `generation_finished` in the background.
+ * The meter never throws here: the job has ended either way.
+ */
+async function endRun(env: Env, jobId: string, outcome?: RunOutcome, details?: GenerationEndDetails): Promise<void> {
+  await generationMeteringFromEnv(env).settle(jobId, outcome);
+  reportGenerationFinishedInBackground(env, jobId, details);
 }
 
 /** Billing spec 10.5 step 2: the usage record first, then the meter, keyed by the call ID. */
@@ -309,7 +314,7 @@ async function markJobStopped(env: Env, jobId: string, rawInput: MarkJobStoppedI
   const input = markJobStoppedInputSchema.parse(rawInput);
   const jobs = new JobsRepository(env);
   if (!(await jobs.markStoppedCredits(jobId, input))) return;
-  await settleRun(env, jobId, "stopped");
+  await endRun(env, jobId, "stopped", { stopReason: input.reason, ...pagesWritten(input.finishedPageCount) });
   await closeStoppedPreviewCheck(env, jobs, ReviewRunsService.fromEnv(env), { jobId, reason: input.reason });
 }
 
@@ -321,7 +326,7 @@ async function markJobCancelled(env: Env, jobId: string, message: string): Promi
   const jobs = new JobsRepository(env);
   const check = { title: CANCELLED_PREVIEW_CHECK.title, summary: message };
   if (!(await jobs.markCancelled(jobId, message, "generation_cancelled", undefined, check))) return;
-  await settleRun(env, jobId, "cancelled");
+  await endRun(env, jobId, "cancelled");
   await closePreviewCheck(jobs, ReviewRunsService.fromEnv(env), { jobId, message, check });
 }
 
@@ -338,7 +343,7 @@ async function markJobSuperseded(
     undefined,
     SUPERSEDED_PREVIEW_CHECK,
   );
-  if (superseded) await settleRun(env, jobId, "superseded");
+  if (superseded) await endRun(env, jobId, "superseded");
 }
 
 /**
@@ -401,7 +406,7 @@ async function publishJobOutput(env: Env, jobId: string, input: PublishJobInput)
     artifactPrefix: input.artifactPrefix,
     manifestPath: input.manifestPath,
   });
-  await settleRun(env, jobId, "succeeded");
+  await endRun(env, jobId, "succeeded");
   await generationNotifierFromEnv(env).finished(jobId, "succeeded");
 
   return { versionId: version.id };
@@ -427,9 +432,13 @@ async function completeJobOutput(
     await new PendingMergesRepository(env).clearCoveredByJob(jobId);
   }
   // Decision D12: a Doxabot run that changed no page pays the usage only.
-  await settleRun(env, jobId, input.regeneratedPageCount === 0 ? "no_change" : "pages_changed");
+  await endRun(env, jobId, input.regeneratedPageCount === 0 ? "no_change" : "pages_changed", pagesWritten(input.regeneratedPageCount));
   await generationNotifierFromEnv(env).finished(jobId, "succeeded");
   return completed;
+}
+
+function pagesWritten(count: number | undefined): GenerationEndDetails {
+  return count === undefined ? {} : { pagesWritten: count };
 }
 
 function createReviewRun(

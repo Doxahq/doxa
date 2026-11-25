@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
 import { Label } from "~/components/ui/label"
+import { PrivacyChoicesButton } from "~/components/analytics/privacy-choices"
 import { cn } from "~/lib/utils"
 
 /** A labeled input of an auth form. */
@@ -62,12 +63,15 @@ export function AuthFooterLink({ children }: { children: ReactNode }) {
   )
 }
 
-/** The note at the bottom of the login and signup pages that links to the legal pages. */
+/** The note at the bottom of the login and signup pages that links to the legal pages and to Privacy choices. */
 export function AuthLegalNote() {
   return (
-    <p className="max-w-[18rem] text-center text-xs leading-5 text-muted-foreground [&_a]:text-foreground [&_a]:underline-offset-4 [&_a:hover]:underline">
-      By continuing you agree to the <Link to="/legal/terms">Terms of Service</Link> and the{" "}
-      <Link to="/legal/privacy">Privacy Policy</Link>.
-    </p>
+    <div className="flex flex-col items-center gap-1.5">
+      <p className="max-w-[18rem] text-center text-xs leading-5 text-muted-foreground [&_a]:text-foreground [&_a]:underline-offset-4 [&_a:hover]:underline">
+        By continuing you agree to the <Link to="/legal/terms">Terms of Service</Link> and the{" "}
+        <Link to="/legal/privacy">Privacy Policy</Link>.
+      </p>
+      <PrivacyChoicesButton className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />
+    </div>
   )
 }

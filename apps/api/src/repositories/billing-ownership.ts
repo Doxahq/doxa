@@ -24,6 +24,8 @@ export interface BillingRunHistory {
 }
 
 export interface BillingContact {
+  /** The owner's Doxa user ID: product analytics counts billing facts for this person. */
+  userId: string;
   email: string | null;
   name: string | null;
 }
@@ -81,20 +83,20 @@ export class BillingOwnershipRepository implements ProjectOwnershipPort, Billing
     if (!owner.ownerId) return null;
     if (owner.ownerKind === "user") {
       const [row] = await this.db
-        .select({ email: user.email, name: user.name })
+        .select({ userId: user.id, email: user.email, name: user.name })
         .from(user)
         .where(eq(user.id, owner.ownerId))
         .limit(1);
-      return row ? { email: row.email ?? null, name: row.name ?? null } : null;
+      return row ? { userId: row.userId, email: row.email ?? null, name: row.name ?? null } : null;
     }
     const [row] = await this.db
-      .select({ email: user.email })
+      .select({ userId: user.id, email: user.email })
       .from(teamMembers)
       .innerJoin(user, eq(user.id, teamMembers.userId))
       .where(and(eq(teamMembers.teamId, owner.ownerId), eq(teamMembers.role, "owner")))
       .orderBy(asc(teamMembers.createdAt), asc(teamMembers.userId))
       .limit(1);
-    return row ? { email: row.email ?? null, name: null } : null;
+    return row ? { userId: row.userId, email: row.email ?? null, name: null } : null;
   }
 
   async recentJobIds(projectId: string, limit: number): Promise<string[]> {

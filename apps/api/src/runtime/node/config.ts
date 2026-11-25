@@ -15,7 +15,8 @@ export type BindingName =
   | "MODEL_TOKEN_BROKER"
   | "HYPERDRIVE"
   | "HYPERDRIVE_CACHE_DISABLED"
-  | "BILLING_PAYMENTS";
+  | "BILLING_PAYMENTS"
+  | "PRODUCT_ANALYTICS";
 
 /** The string variables of the API, as the Worker gets them from wrangler.json and secrets. */
 export type ApiVars = Omit<Env, BindingName>;

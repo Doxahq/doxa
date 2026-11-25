@@ -1,8 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
 import { DrizzleQueryError } from "drizzle-orm/errors";
+import { createTestProductAnalytics } from "@doxahq/analytics/testing";
 
 const mocks = vi.hoisted(() => ({
   createAuth: vi.fn(),
+  getSessionUser: vi.fn(),
 }));
 
 vi.mock("cloudflare:workers", () => ({
@@ -11,7 +13,7 @@ vi.mock("cloudflare:workers", () => ({
 
 vi.mock("@doxahq/auth", () => ({
   createAuth: mocks.createAuth,
-  getSessionUser: vi.fn(),
+  getSessionUser: mocks.getSessionUser,
   getTrustedOrigins: (env: { WEB_ORIGIN?: string }) => [env.WEB_ORIGIN].filter(Boolean),
 }));
 
@@ -62,6 +64,10 @@ describe("app middleware", () => {
     expect(response.headers.get("access-control-allow-credentials")).toBe("true");
     expect(response.headers.get("access-control-allow-methods")).toContain("POST");
     expect(response.headers.get("access-control-allow-headers")).toContain("x-doxa-user-id");
+    // posthog-js `tracing_headers` adds these to every dashboard call.
+    expect(response.headers.get("access-control-allow-headers")).toContain("x-posthog-distinct-id");
+    expect(response.headers.get("access-control-allow-headers")).toContain("x-posthog-session-id");
+    expect(response.headers.get("access-control-allow-headers")).toContain("x-posthog-window-id");
   });
 
   test("does not allow credentialed CORS for untrusted origins", async () => {
@@ -149,6 +155,103 @@ describe("app middleware", () => {
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain("sensitive-value");
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain("select * from projects");
     consoleError.mockRestore();
+  });
+});
+
+describe("API error reports", () => {
+  test("reports an unexpected 500 with the route pattern and without query text", async () => {
+    const { analytics, sink } = createTestProductAnalytics();
+    mocks.createAuth.mockReturnValueOnce({
+      handler: async () => {
+        throw new Error("Failed query: select * from projects", {
+          cause: new DrizzleQueryError("select * from projects where id = $1", ["sensitive-value"], new Error("driver")),
+        });
+      },
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const response = await worker.fetch(
+      new Request("https://api.doxa.so/api/auth/callback/github?code=secret-code", {
+        headers: { "x-posthog-session-id": "session-1" },
+      }),
+      createEnv({ PRODUCT_ANALYTICS: { forEnv: () => analytics } }),
+      createExecutionContext(),
+    );
+    await analytics.flush();
+
+    expect(response.status).toBe(500);
+    const [report] = sink.recordsOf("exception");
+    expect(report).toMatchObject({
+      distinctId: null,
+      // No user, so no session: the replay link needs a person.
+      sessionId: null,
+      properties: { route: "/api/auth/*", method: "GET", status: 500 },
+    });
+    expect(JSON.stringify(report)).not.toContain("secret-code");
+    expect(report?.error).toBeInstanceOf(Error);
+    expect(report?.error).toMatchObject({
+      message: "Error",
+      stack: expect.not.stringContaining("select * from projects"),
+    });
+    consoleError.mockRestore();
+  });
+
+  test("reports the error name and stack frames, never the message", async () => {
+    const { analytics, sink } = createTestProductAnalytics();
+    mocks.createAuth.mockReturnValueOnce({
+      handler: async () => {
+        throw new TypeError("Repository acme/secret-plans has no file docs/billing.mdx");
+      },
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await worker.fetch(
+      new Request("https://api.doxa.so/api/auth/callback"),
+      createEnv({ PRODUCT_ANALYTICS: { forEnv: () => analytics } }),
+      createExecutionContext(),
+    );
+    await analytics.flush();
+
+    const [report] = sink.recordsOf("exception");
+    expect(report?.error).toMatchObject({ name: "TypeError", message: "TypeError" });
+    expect(JSON.stringify(report)).not.toContain("secret-plans");
+    expect(String(report?.error instanceof Error ? report.error.stack : "")).not.toContain("secret-plans");
+    consoleError.mockRestore();
+  });
+
+  test("names the session user that the request already read, and its browser session", async () => {
+    const { analytics, sink } = createTestProductAnalytics();
+    mocks.getSessionUser.mockResolvedValueOnce({ id: "user-1", emailVerified: true });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    // No database in this env, so the route fails after the session lookup.
+    const response = await worker.fetch(
+      new Request("https://api.doxa.so/privacy-settings", { headers: { "x-posthog-session-id": "session-1" } }),
+      createEnv({ PRODUCT_ANALYTICS: { forEnv: () => analytics } }),
+      createExecutionContext(),
+    );
+    await analytics.flush();
+
+    expect(response.status).toBe(500);
+    expect(mocks.getSessionUser).toHaveBeenCalledTimes(1);
+    expect(sink.recordsOf("exception")).toMatchObject([
+      { distinctId: "user-1", sessionId: "session-1", properties: { route: "/privacy-settings", method: "GET", status: 500 } },
+    ]);
+    consoleError.mockRestore();
+  });
+
+  test("reports nothing for an answer that is not a 5xx", async () => {
+    const { analytics, sink } = createTestProductAnalytics();
+
+    const response = await worker.fetch(
+      new Request("https://api.doxa.so/no-such-route"),
+      createEnv({ PRODUCT_ANALYTICS: { forEnv: () => analytics } }),
+      createExecutionContext(),
+    );
+    await analytics.flush();
+
+    expect(response.status).toBe(404);
+    expect(sink.records).toEqual([]);
   });
 });
 

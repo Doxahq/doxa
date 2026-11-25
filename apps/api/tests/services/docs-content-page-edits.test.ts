@@ -1,11 +1,14 @@
 import { describe, expect, test, vi } from "vitest";
 import { buildArtifactPrefix } from "@doxahq/docs-engine";
-import { siteIdSchema, versionIdSchema } from "@doxahq/contracts/docs-branches";
+import { branchRefSchema, siteIdSchema, versionIdSchema } from "@doxahq/contracts/docs-branches";
 import { docsContentEditSchema } from "@doxahq/contracts";
 import { InMemoryDocsBranchStore } from "../support/in-memory-docs-branches";
 import { DocsContentService } from "../../src/services/docs-content/service";
 import { freePlanEntitlements } from "../../src/services/free-plan-entitlements";
 import { createInMemoryDocsContentStore } from "../support/in-memory-docs-content-store";
+import { recordingProductAnalytics } from "../support/recording-product-analytics";
+import { branchKindOf } from "../../src/services/docs-content/page-save-analytics";
+import type { ProductAnalytics } from "@doxahq/analytics";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const projectId = "22222222-2222-4222-8222-222222222222";
@@ -14,7 +17,7 @@ const versionId = "44444444-4444-4444-8444-444444444444";
 const prefix = buildArtifactPrefix(siteId, versionId);
 const actor = { userId, origin: "editor" } as const;
 
-function fixture() {
+function fixture(options: { analytics?: ProductAnalytics } = {}) {
   const objects = new Map<string, string>([
     [
       `${prefix}/manifest.json`,
@@ -59,6 +62,7 @@ function fixture() {
     branches,
     entitlements: freePlanEntitlements,
     assets: { head: async () => null },
+    ...(options.analytics ? { analytics: options.analytics } : {}),
   });
   return { service, objects, branches };
 }
@@ -175,5 +179,34 @@ describe("the page icon edit contract", () => {
 
   test.each(["", "Rocket", "rocket-ship", "<svg>", "a".repeat(41)])("refuses %j", (icon) => {
     expect(docsContentEditSchema.safeParse({ type: "set_page_icon", href: "/guide", icon }).success).toBe(false);
+  });
+});
+
+describe("docs_page_saved", () => {
+  test("reports a page save on main with its surface, and not a navigation edit or a dry run", async () => {
+    const recording = recordingProductAnalytics();
+    const { service } = fixture({ analytics: recording.analytics });
+
+    await service.applyEdits({ userId, origin: "mcp" }, projectId, [
+      { type: "rename_page", href: "/guide", title: "Guide", slug: "setup" },
+    ]);
+    await service.applyEdits(actor, projectId, [{ type: "rename_page", href: "/setup", title: "Guide", slug: "install" }], "main", { dryRun: true });
+    await service.applyEdits(actor, projectId, [{ type: "create_section", slug: "reference", label: "Reference" }]);
+
+    expect(await recording.events()).toEqual([
+      {
+        kind: "event",
+        event: "docs_page_saved",
+        distinctId: userId,
+        properties: { via: "mcp", branch_kind: "main" },
+        groups: { project: projectId },
+      },
+    ]);
+  });
+
+  test("names a generation review and any other branch", () => {
+    const branchRef = branchRefSchema.parse("55555555-5555-4555-8555-555555555555");
+    expect(branchKindOf({ branchRef, branch: { purpose: "generation_review" } })).toBe("review");
+    expect(branchKindOf({ branchRef, branch: { purpose: "user" } })).toBe("feature");
   });
 });

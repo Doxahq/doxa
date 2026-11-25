@@ -7,6 +7,7 @@ import type {
 } from "@doxahq/contracts";
 import type { Env } from "../env";
 import type { BillingRefusal } from "./billing/generation-metering";
+import type { GenerationStartedBy } from "./generation-analytics";
 import {
   findProjectRepositoryIssue,
   type RepositoryConnectionIssue,
@@ -36,6 +37,8 @@ export interface GenerationStartInput {
   seed?: boolean;
   /** Who starts the run: a person, or Doxabot after merges. */
   trigger?: ProductionGenerationTrigger;
+  /** The person and the surface that started the run (product analytics). Absent for a merge run. */
+  startedBy?: GenerationStartedBy;
 }
 
 export type GenerationStartOutcome =

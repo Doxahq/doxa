@@ -1,13 +1,15 @@
 import type { AuthorizationServerBinding } from "@cloudflare/workers-oauth-provider";
+import type { AnalyticsEnv } from "@doxahq/analytics";
 import type { AgentGrantProps } from "@doxahq/contracts/agent-access";
 import type { HyperdriveBinding } from "@doxahq/db";
 import type { AgentActionsRpc } from "@doxahq/api/services/agent-actions/rpc-contract";
 
 /**
  * Bindings of the `doxa-mcp` Worker. It holds no secrets (spec 5.2): no queue
- * producer, no cache invalidator, no Cloudflare or GitHub credentials.
+ * producer, no cache invalidator, no Cloudflare or GitHub credentials. The
+ * PostHog project key (`POSTHOG_KEY`) is public by design: it can only send.
  */
-export interface McpEnv {
+export interface McpEnv extends AnalyticsEnv {
   AUTH_SERVER: AuthorizationServerBinding<AgentGrantProps>;
   /** The `AgentActionsApi` entrypoint of doxa-api: every consequential action runs there. */
   PLATFORM_ACTIONS?: AgentActionsRpc;

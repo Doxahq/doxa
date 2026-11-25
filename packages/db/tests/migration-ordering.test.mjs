@@ -350,3 +350,18 @@ test("0046 creates only billing objects, and billing rows outlive their owners",
     );
   }
 });
+
+test("0052 adds only the privacy settings table, and a missing row keeps analytics on", async () => {
+  const sql = await readMigration("0052_user_privacy_settings.sql");
+
+  assert.ok(!/\bDROP\b|DELETE\s+FROM|UPDATE\s+"/i.test(sql), "the migration changes no existing row");
+  for (const match of sql.matchAll(/ALTER TABLE "([a-z_]+)"/g)) {
+    assert.equal(match[1], "user_privacy_settings", `the migration must not alter ${match[1]}`);
+  }
+  assert.match(sql, /"product_analytics" boolean DEFAULT true NOT NULL/, "analytics is on until the person turns it off");
+  assert.match(
+    sql,
+    /REFERENCES "public"\."user"\("id"\) ON DELETE cascade/,
+    "a deleted user takes their settings with them",
+  );
+});

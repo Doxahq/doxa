@@ -326,7 +326,7 @@ describe("project routes docs URLs", () => {
     expect(response.status).toBe(201);
     expect(mocks.createExampleProject).toHaveBeenCalledWith(
       expect.anything(),
-      { userId: "user-1", name: "My Docs", team: null },
+      { userId: "user-1", name: "My Docs", team: null, via: "web" },
     );
     expect(mocks.projectsRepository.createForRepository).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({
@@ -353,7 +353,7 @@ describe("project routes docs URLs", () => {
     expect(response.status).toBe(201);
     expect(mocks.createExampleProject).toHaveBeenCalledWith(
       expect.anything(),
-      { userId: "user-1", name: "My Docs", template: "empty", team: null },
+      { userId: "user-1", name: "My Docs", template: "empty", team: null, via: "web" },
     );
   });
 
@@ -375,7 +375,7 @@ describe("project routes docs URLs", () => {
     expect(mocks.authorizeProjectCreation).toHaveBeenCalledWith("user-1", team.id);
     expect(mocks.createExampleProject).toHaveBeenCalledWith(
       expect.anything(),
-      { userId: "user-1", name: "Team Docs", team },
+      { userId: "user-1", name: "Team Docs", team, via: "web" },
     );
     await expect(response.json()).resolves.toMatchObject({ project: { team } });
   });
@@ -560,6 +560,7 @@ describe("project routes docs URLs", () => {
       userId: "user-1",
       force: false,
       seed: false,
+      startedBy: { userId: "user-1", via: "web" },
     });
     expect(send).toHaveBeenCalledWith({
       jobId: "job-1",
@@ -620,6 +621,7 @@ describe("project routes docs URLs", () => {
       userId: "user-1",
       force: true,
       seed: false,
+      startedBy: { userId: "user-1", via: "web" },
     });
     expect(send).toHaveBeenCalledOnce();
   });
@@ -644,6 +646,7 @@ describe("project routes docs URLs", () => {
       userId: "user-1",
       force: true,
       seed: true,
+      startedBy: { userId: "user-1", via: "web" },
     });
   });
 

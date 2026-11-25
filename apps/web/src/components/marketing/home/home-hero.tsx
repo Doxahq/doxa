@@ -4,6 +4,7 @@ import { Hr } from "~/components/marketing/guides"
 import { ConnectAgentButton } from "~/components/marketing/home/connect-agent-button"
 import { HeroSolve } from "~/components/marketing/home/hero-solve"
 import { SiteNav } from "~/components/marketing/site-nav"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { GET_STARTED_URL } from "~/lib/marketing/links"
 
 export function HomeHero() {
@@ -34,10 +35,10 @@ export function HomeHero() {
               </p>
             </div>
             <div className="hero__row hero__ctas">
-              <a className="btn btn--light" href={GET_STARTED_URL}>
+              <a className="btn btn--light" href={GET_STARTED_URL} onClick={ctaClickHandler("home_hero", "get_started")}>
                 Get started ›
               </a>
-              <ConnectAgentButton />
+              <ConnectAgentButton location="home_hero" />
             </div>
           </div>
           <HeroSolve />

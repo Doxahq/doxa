@@ -9,7 +9,10 @@ import {
   type SourceControlEventParseResult,
   type SourceProvider,
 } from "@doxahq/contracts";
+import type { ProductAnalytics } from "@doxahq/analytics";
 import type { Env } from "../../env";
+import { productAnalyticsOf } from "../analytics/product-analytics";
+import { captureGenerationStarted } from "../generation-analytics";
 import { fetchRepositoryDefaultBranch } from "../github-app";
 import type { MergeGenerationScheduler } from "./merge-generations";
 import {
@@ -211,6 +214,8 @@ export interface DoxabotWebhookDependencies {
    * Absent: no size check.
    */
   maxRepositorySizeKb?: number;
+  /** Product analytics. Absent: nothing is reported. */
+  analytics?: ProductAnalytics;
   now(): Date;
 }
 
@@ -250,6 +255,7 @@ export class DoxabotWebhookOrchestrator {
       repositoryDefaultBranch: (input) =>
         fetchRepositoryDefaultBranch(env, input.installationExternalId, input.repositoryExternalId),
       maxRepositorySizeKb: maxRepositorySizeKbFromEnv(env),
+      analytics: productAnalyticsOf(env),
       now: () => new Date(),
     });
   }
@@ -886,6 +892,14 @@ export class DoxabotWebhookOrchestrator {
         await this.dependencies.deliveries.markProcessed(identity);
         return { outcome: "billing_refused", jobId: admission.job.id };
       }
+    }
+    if (admission.outcome === "created" && this.dependencies.analytics) {
+      captureGenerationStarted(this.dependencies.analytics, {
+        ownerUserId: context.ownerUserId,
+        projectId: context.projectId,
+        trigger: "doxabot",
+        baselineVersionId: admissionInput.baselineVersionId,
+      });
     }
 
     const externalReviewRunId = await this.reconcileReviewRun(

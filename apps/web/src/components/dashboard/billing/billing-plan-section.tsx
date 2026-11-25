@@ -8,6 +8,7 @@ import { BillingStatusBadge } from "~/components/dashboard/billing/billing-statu
 import { StartProNowDialog } from "~/components/dashboard/billing/start-pro-now-dialog"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
+import { captureBrowserEvent } from "~/lib/analytics/capture-browser-event"
 import { isFounderPrice, switchTargetPrice } from "~/lib/dashboard/billing-model"
 import { planCardView, type PlanCardView } from "~/lib/dashboard/billing-plan-view"
 
@@ -41,7 +42,10 @@ export function BillingPlanSection({ detail, actions }: { detail: BillingAccount
       switchLabel={target?.interval === "year" ? "Switch to yearly" : "Switch to monthly"}
       canSwitch={canSwitch}
       actions={actions}
-      onStartPro={() => setDialog("start")}
+      onStartPro={() => {
+        captureBrowserEvent("upgrade_clicked", { location: "billing_plan_start_pro_now" })
+        setDialog("start")
+      }}
       onSwitch={() => setDialog("switch")}
     />
   ) : null

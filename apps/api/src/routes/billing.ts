@@ -178,7 +178,7 @@ export function createBillingRoutes(services: BillingRouteFactory = billingServi
   );
 
   app.post("/accounts/:accountId/checkout", (context) =>
-    withAccount(context, services, "billing.manage", async (billing, { account }) => {
+    withAccount(context, services, "billing.manage", async (billing, { account, userId }) => {
       const input = await parseValidatedJson(context, billingCheckoutInputSchema, "Invalid checkout.");
       if (!input.ok) return input.response;
       const payments = requirePayments(billing);
@@ -192,6 +192,8 @@ export function createBillingRoutes(services: BillingRouteFactory = billingServi
         requestId: requestIdOf(context),
         email: contact?.email ?? null,
         name: contact?.name ?? null,
+        personDistinctId: contact?.userId ?? null,
+        actorUserId: userId,
         // A dashboard path only; the payments service checks it again against the dashboard origin.
         returnPath: input.data.returnPath ?? null,
       });

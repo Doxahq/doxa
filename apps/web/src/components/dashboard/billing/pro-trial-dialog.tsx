@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog"
+import { captureBrowserEvent } from "~/lib/analytics/capture-browser-event"
 import { PRO_TRIAL_ACTION, PRO_TRIAL_ASK_OWNER } from "~/lib/dashboard/ai-access"
 import { founderOffer } from "~/lib/dashboard/billing-model"
 import { ProTrialDialogContext, type ProTrialDialogApi, type ProTrialRequest } from "~/lib/dashboard/pro-trial-dialog"
@@ -43,7 +44,12 @@ export function ProTrialDialogProvider({ children }: { children: ReactNode }) {
   // A new key for each open: the dialog starts on Yearly again, with its own Checkout state.
   const [current, setCurrent] = useState<{ key: number; request: ProTrialRequest } | null>(null)
   const api = useMemo<ProTrialDialogApi>(
-    () => ({ open: (request) => setCurrent((previous) => ({ key: (previous?.key ?? 0) + 1, request })) }),
+    () => ({
+      open: (request) => {
+        captureBrowserEvent("pro_trial_dialog_opened", { feature: request.feature })
+        setCurrent((previous) => ({ key: (previous?.key ?? 0) + 1, request }))
+      },
+    }),
     [],
   )
   return (
@@ -132,7 +138,14 @@ export function ProTrialDialog({ request, onClose }: { request: ProTrialRequest;
               Not now
             </Button>
             {request.canManage ? (
-              <Button type="button" disabled={trial.isPending || pricePending} onClick={trial.start}>
+              <Button
+                type="button"
+                disabled={trial.isPending || pricePending}
+                onClick={() => {
+                  captureBrowserEvent("upgrade_clicked", { location: "pro_trial_dialog", interval })
+                  trial.start()
+                }}
+              >
                 {trial.isPending ? (
                   <Loader2 aria-hidden="true" className="animate-spin" />
                 ) : (

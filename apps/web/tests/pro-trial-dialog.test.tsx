@@ -73,6 +73,7 @@ import { NewProjectPage } from "~/components/dashboard/new-project-page"
 import { createApiError } from "~/lib/api-errors"
 import {
   AI_ACCESS_OPEN,
+  PRO_GATE_GENERATION,
   PRO_REASON_GENERATION,
   PRO_REASON_REPOSITORY,
   PRO_TRIAL_ASK_OWNER,
@@ -94,6 +95,7 @@ const REQUEST: ProTrialRequest = {
   accountId: ACCOUNT_ID,
   canManage: true,
   reason: PRO_REASON_REPOSITORY,
+  feature: "repository_generation",
   returnPath: "/dashboard/projects/new?start=repository",
 }
 
@@ -298,9 +300,14 @@ describe("the Pro trial dialog", () => {
 
 describe("gated actions", () => {
   test("only needs_pro asks for the dialog: billing off or shadow, Pro, trial and loading run the action", () => {
-    expect(proTrialRequest(FREE, PRO_REASON_GENERATION)).toEqual({ accountId: ACCOUNT_ID, canManage: true, reason: PRO_REASON_GENERATION })
-    expect(proTrialRequest(AI_ACCESS_OPEN, PRO_REASON_GENERATION)).toBeNull()
-    expect(proTrialRequest({ kind: "loading" }, PRO_REASON_GENERATION)).toBeNull()
+    expect(proTrialRequest(FREE, PRO_GATE_GENERATION)).toEqual({
+      accountId: ACCOUNT_ID,
+      canManage: true,
+      reason: PRO_REASON_GENERATION,
+      feature: "generation",
+    })
+    expect(proTrialRequest(AI_ACCESS_OPEN, PRO_GATE_GENERATION)).toBeNull()
+    expect(proTrialRequest({ kind: "loading" }, PRO_GATE_GENERATION)).toBeNull()
   })
 
   test("new project, Free: the page shows the normal buttons and never opens the dialog by itself", async () => {

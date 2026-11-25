@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { DEMO_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 import {
   DEFAULT_BILLING,
@@ -148,7 +149,11 @@ function PlanCard({ plan }: { plan: Plan }) {
             </span>
           ))}
         </div>
-        <a className={plan.cta.className} href={actionUrl(plan.cta.action, billing, offer.paymentsOpen)}>
+        <a
+          className={plan.cta.className}
+          href={actionUrl(plan.cta.action, billing, offer.paymentsOpen)}
+          onClick={ctaClickHandler("pricing_plans", plan.cta.action, plan.id)}
+        >
           {plan.cta.label}
         </a>
       </div>

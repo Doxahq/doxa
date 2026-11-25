@@ -1,3 +1,4 @@
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { AGENT_DIAGRAM } from "~/lib/marketing/home"
 import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 
@@ -18,7 +19,7 @@ export function HomeAgentFeature() {
             page that mentions it and rewrites them on a preview branch.
           </p>
           <div className="row">
-            <a className="btn btn--light" href={GET_STARTED_URL}>
+            <a className="btn btn--light" href={GET_STARTED_URL} onClick={ctaClickHandler("home_agent_feature", "get_started")}>
               Start free ›
             </a>
             <a className="btn btn--line" href={DOCS_URL}>

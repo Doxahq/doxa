@@ -21,6 +21,7 @@ import { Route as MarketingAboutRouteImport } from './routes/_marketing/about'
 import { Route as MarketingAgentRouteImport } from './routes/_marketing/agent'
 import { Route as MarketingMcpRouteImport } from './routes/_marketing/mcp'
 import { Route as MarketingPricingRouteImport } from './routes/_marketing/pricing'
+import { Route as ApiAnalyticsConfigRouteImport } from './routes/api/analytics-config'
 import { Route as ApproveRequestIdRouteImport } from './routes/approve/$requestId'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
 import { Route as EmailUnsubscribeRouteImport } from './routes/email/unsubscribe'
@@ -125,6 +126,11 @@ const MarketingPricingRoute = MarketingPricingRouteImport.update({
   id: '/pricing',
   path: '/pricing',
   getParentRoute: () => MarketingRouteRoute,
+} as any)
+const ApiAnalyticsConfigRoute = ApiAnalyticsConfigRouteImport.update({
+  id: '/api/analytics-config',
+  path: '/api/analytics-config',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApproveRequestIdRoute = ApproveRequestIdRouteImport.update({
   id: '/approve/$requestId',
@@ -391,6 +397,7 @@ export interface FileRoutesByFullPath {
   '/agent': typeof MarketingAgentRoute
   '/mcp': typeof MarketingMcpRoute
   '/pricing': typeof MarketingPricingRoute
+  '/api/analytics-config': typeof ApiAnalyticsConfigRoute
   '/approve/$requestId': typeof ApproveRequestIdRoute
   '/email/unsubscribe': typeof EmailUnsubscribeRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -447,6 +454,7 @@ export interface FileRoutesByTo {
   '/agent': typeof MarketingAgentRoute
   '/mcp': typeof MarketingMcpRoute
   '/pricing': typeof MarketingPricingRoute
+  '/api/analytics-config': typeof ApiAnalyticsConfigRoute
   '/approve/$requestId': typeof ApproveRequestIdRoute
   '/email/unsubscribe': typeof EmailUnsubscribeRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -505,6 +513,7 @@ export interface FileRoutesById {
   '/_marketing/agent': typeof MarketingAgentRoute
   '/_marketing/mcp': typeof MarketingMcpRoute
   '/_marketing/pricing': typeof MarketingPricingRoute
+  '/api/analytics-config': typeof ApiAnalyticsConfigRoute
   '/approve/$requestId': typeof ApproveRequestIdRoute
   '/email/unsubscribe': typeof EmailUnsubscribeRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -566,6 +575,7 @@ export interface FileRouteTypes {
     | '/agent'
     | '/mcp'
     | '/pricing'
+    | '/api/analytics-config'
     | '/approve/$requestId'
     | '/email/unsubscribe'
     | '/invite/$token'
@@ -622,6 +632,7 @@ export interface FileRouteTypes {
     | '/agent'
     | '/mcp'
     | '/pricing'
+    | '/api/analytics-config'
     | '/approve/$requestId'
     | '/email/unsubscribe'
     | '/invite/$token'
@@ -679,6 +690,7 @@ export interface FileRouteTypes {
     | '/_marketing/agent'
     | '/_marketing/mcp'
     | '/_marketing/pricing'
+    | '/api/analytics-config'
     | '/approve/$requestId'
     | '/email/unsubscribe'
     | '/invite/$token'
@@ -735,6 +747,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  ApiAnalyticsConfigRoute: typeof ApiAnalyticsConfigRoute
   ApproveRequestIdRoute: typeof ApproveRequestIdRoute
   EmailUnsubscribeRoute: typeof EmailUnsubscribeRoute
   InviteTokenRoute: typeof InviteTokenRoute
@@ -827,6 +840,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/pricing'
       preLoaderRoute: typeof MarketingPricingRouteImport
       parentRoute: typeof MarketingRouteRoute
+    }
+    '/api/analytics-config': {
+      id: '/api/analytics-config'
+      path: '/api/analytics-config'
+      fullPath: '/api/analytics-config'
+      preLoaderRoute: typeof ApiAnalyticsConfigRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/approve/$requestId': {
       id: '/approve/$requestId'
@@ -1310,6 +1330,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  ApiAnalyticsConfigRoute: ApiAnalyticsConfigRoute,
   ApproveRequestIdRoute: ApproveRequestIdRoute,
   EmailUnsubscribeRoute: EmailUnsubscribeRoute,
   InviteTokenRoute: InviteTokenRoute,

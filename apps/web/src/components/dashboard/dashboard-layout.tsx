@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react"
-import { Outlet, useParams } from "@tanstack/react-router"
+import { Outlet, useParams, useRouterState } from "@tanstack/react-router"
 
+import { AnalyticsAccountSync } from "~/components/analytics/analytics-account-sync"
 import { AppSidebar } from "~/components/dashboard/app-sidebar"
 import { BillingDenialDialogHost } from "~/components/dashboard/billing/billing-denial-dialog"
 import { ProTrialDialogProvider } from "~/components/dashboard/billing/pro-trial-dialog"
@@ -12,6 +13,7 @@ import { StatusBar } from "~/components/dashboard/status-bar"
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar"
 import { Toaster } from "~/components/ui/sonner"
 import { DashboardAuthProvider } from "~/lib/auth/dashboard-auth-context"
+import { DashboardBootProvider } from "~/lib/dashboard/dashboard-boot"
 import { ProjectBranchProvider } from "~/lib/dashboard/project-branch-context"
 import { ShellProvider } from "~/lib/dashboard/shell-context"
 import { useSidebarWidth } from "~/lib/dashboard/sidebar-width"
@@ -35,18 +37,28 @@ registerDashboardPendingViews(DASHBOARD_PENDING_VIEWS)
 
 export function DashboardLayout() {
   const { dashboardEntry } = DashboardRoute.useLoaderData()
+  // Read on the first render only: a page load of `/dashboard` starts the
+  // first-load state (`lib/dashboard/dashboard-boot`), a later navigation to it does not.
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
 
   return (
     <DashboardAuthProvider devSession={dashboardEntry.devSession} identityHint={dashboardEntry.identityHint}>
-      <ProTrialDialogProvider>
-        <SidebarPanelProvider>
-          <DashboardShell />
-        </SidebarPanelProvider>
-        <Toaster />
-        <BillingDenialDialogHost />
-      </ProTrialDialogProvider>
+      <DashboardBootProvider active={isDashboardLanding(pathname)}>
+        <AnalyticsAccountSync />
+        <ProTrialDialogProvider>
+          <SidebarPanelProvider>
+            <DashboardShell />
+          </SidebarPanelProvider>
+          <Toaster />
+          <BillingDenialDialogHost />
+        </ProTrialDialogProvider>
+      </DashboardBootProvider>
     </DashboardAuthProvider>
   )
+}
+
+function isDashboardLanding(pathname: string): boolean {
+  return pathname.replace(/\/+$/, "") === "/dashboard"
 }
 
 /**

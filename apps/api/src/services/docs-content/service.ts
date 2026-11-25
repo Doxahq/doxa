@@ -44,6 +44,8 @@ import { readPublishedSiteConfig } from "./site-config";
 import { withRequestReadCache, type DocsContentStore } from "./store";
 import { unmeasured, type MeasureStep } from "../request-timing";
 import { describePageChanges, type DocsPageChange } from "./page-changes";
+import { capturePageSaved } from "./page-save-analytics";
+import type { ProductAnalytics } from "@doxahq/analytics";
 
 export {
   DocsContentError,
@@ -93,6 +95,8 @@ export interface DocsContentServiceDeps {
   assets: Pick<SiteAssetStore, "head">;
   /** Measures database and storage steps for Server-Timing. */
   measure?: MeasureStep;
+  /** Product analytics. Absent: nothing is reported. */
+  analytics?: ProductAnalytics;
 }
 
 export interface DocsContentRequestOptions {
@@ -360,6 +364,7 @@ export class DocsContentService {
         throw new SiteConfigValidationError([createValidationIssue(result)]);
       }
 
+      if (this.deps.analytics) capturePageSaved(this.deps.analytics, { actor, projectId, context, edits });
       if (options.onPagesChanged) {
         options.onPagesChanged(await describePageChanges(tree, writes, hrefMoves));
       }

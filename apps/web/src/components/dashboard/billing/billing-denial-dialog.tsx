@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog"
+import { captureBrowserEvent } from "~/lib/analytics/capture-browser-event"
 import { createBillingPortal, updateBillingPayg } from "~/lib/billing-api"
 import {
   CREDITS_EXHAUSTED_COPY,
@@ -125,7 +126,9 @@ export function PlanLimitContent({ details, onClose }: { details: PlanLimitError
           sentence={planLimitSentence(details)}
           action={
             <Button size="sm" asChild>
-              <a href={href}>Upgrade</a>
+              <a href={href} onClick={() => captureBrowserEvent("upgrade_clicked", { location: "plan_limit_dialog" })}>
+                Upgrade
+              </a>
             </Button>
           }
         />
@@ -200,7 +203,14 @@ export function BillingDenialDialogHost() {
             run={denial.run ?? null}
             isPending={action.isPending}
             error={action.error ? getErrorMessage(action.error, "Something went wrong.") : null}
-            onAction={(next) => (next === "start_pro_now" ? setStartingPro(true) : action.mutate(next))}
+            onAction={(next) => {
+              if (next !== "start_pro_now") {
+                action.mutate(next)
+                return
+              }
+              captureBrowserEvent("upgrade_clicked", { location: "credits_dialog_start_pro_now" })
+              setStartingPro(true)
+            }}
             onClose={close}
           />
         ) : denial?.kind === "plan_limit" && showPlanLimit ? (

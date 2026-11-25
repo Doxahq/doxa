@@ -43,6 +43,7 @@ import {
 } from "../services/repository-branches";
 import { DoxabotWebhookOrchestrator } from "../services/doxabot/webhook-orchestrator";
 import { MergeGenerationScheduler } from "../services/doxabot/merge-generations";
+import { productAnalyticsOf } from "../services/analytics/product-analytics";
 
 export function createGitHubRoutes(): ApiApp {
   const app = createApiRouter();
@@ -281,6 +282,9 @@ export function createGitHubRoutes(): ApiApp {
         );
       }
 
+      // The count only: repository names never leave Doxa.
+      const repoCount = listed.repositories.length;
+      productAnalyticsOf(context.env).capture({ name: "github_app_installed", distinctId: userId, properties: { repo_count: repoCount } });
       return withSetCookies(redirectToDashboard(context, "connected"), [clearNonce]);
     }),
   );

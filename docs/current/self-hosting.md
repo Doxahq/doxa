@@ -32,6 +32,18 @@ emails, are `${OPS_*}` placeholders. A test,
 `scripts/apply-production-ids.test.mjs`, fails if a config gets a real ID or
 a personal email address.
 
+Provider account values are `${OPS_*}` placeholders too:
+
+| Placeholder | Config | Value |
+|---|---|---|
+| `OPS_POSTHOG_PROJECT_KEY` | `apps/mcp/wrangler.json` (`POSTHOG_KEY`), `apps/web/wrangler.json` (`POSTHOG_KEY`) | Your PostHog project key (`phc_…`). The MCP Worker sends its server events to PostHog US Cloud; the web Worker hands the key to the browser. |
+| `OPS_POSTHOG_INGEST_HOSTNAME` | `apps/web/wrangler.json` (`POSTHOG_INGEST_HOSTNAME`) | A bare hostname, without `https://`: your PostHog managed reverse proxy, or `us.i.posthog.com`. The browser sends its events there. |
+
+The fill step refuses an empty value. To run without analytics, remove these
+variables from the configs in your deploy checkout. The API Node origin reads
+`POSTHOG_KEY` from its own environment (Terraform `api_environment`), never
+from a Wrangler config.
+
 ## Deploy
 
 In a fresh checkout of this repo at the commit to deploy:

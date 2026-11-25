@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { DocsDomainDto } from "@doxahq/contracts";
 import type { DocsDomainProvisioningState } from "../../src/repositories/docs-domains";
 import type { DocsDomainRoutingState } from "../../src/services/docs-domain-routing";
+import { recordingProductAnalytics } from "../support/recording-product-analytics";
 
 const mocks = vi.hoisted(() => ({
   repository: {
@@ -342,6 +343,28 @@ describe("DocsDomainLifecycleService", () => {
     expect(domainNotifier.statusChanged).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: "project-1", hostname: "docs.example.com", status: "active" }),
     );
+  });
+
+  test("reports custom_domain_verified once, when a refresh first sees the domain verified", async () => {
+    mocks.createCloudflareCustomHostnamesClient.mockReturnValue(mocks.customHostnames);
+    const verified = createDomain({ status: "active", provider: "cloudflare", providerHostnameId: "hostname-1", verificationStatus: "verified" });
+    mocks.repository.getForProject.mockResolvedValueOnce(
+      createDomain({ provider: "cloudflare", providerHostnameId: "hostname-1", verificationStatus: "pending" }),
+    );
+    mocks.repository.getForProject.mockResolvedValueOnce(verified);
+    mocks.repository.applyProvisioning.mockResolvedValue(verified);
+    const recording = recordingProductAnalytics();
+    const service = new DocsDomainLifecycleService(createEnv(), {
+      domainNotifier: { statusChanged: vi.fn(async () => undefined) },
+      analytics: recording.analytics,
+    });
+
+    await service.refreshForProject({ userId: "user-1", projectId: "project-1", domainId: "domain-1" });
+    await service.refreshForProject({ userId: "user-1", projectId: "project-1", domainId: "domain-1" });
+
+    expect(await recording.events()).toEqual([
+      { kind: "event", event: "custom_domain_verified", distinctId: "user-1", properties: {}, groups: { project: "project-1" } },
+    ]);
   });
 
   test("sends nothing when the verification status does not change", async () => {

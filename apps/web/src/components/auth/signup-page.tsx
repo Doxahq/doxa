@@ -6,6 +6,7 @@ import { AuthCard, AuthCardHeading } from "~/components/auth/auth-card"
 import { AuthDivider, AuthField, AuthFooterLink, AuthLegalNote, AuthMessage, AuthSubmit } from "~/components/auth/auth-form"
 import { ProviderButtons } from "~/components/auth/provider-buttons"
 import { LogoMark } from "~/components/navigation/logo"
+import { captureBrowserEvent } from "~/lib/analytics/capture-browser-event"
 import {
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
@@ -27,6 +28,7 @@ export function SignupPage({ redirectPath }: { redirectPath: string }) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const email = String(form.get("email") ?? "").trim()
+    captureBrowserEvent("signup_form_submitted", { method: "email" })
     setPending(true)
     setError(null)
     const result = await signUpWithEmail({
@@ -68,7 +70,10 @@ export function SignupPage({ redirectPath }: { redirectPath: string }) {
         </AuthMessage>
       ) : (
         <div className="flex w-full flex-col gap-5">
-          <ProviderButtons redirectPath={redirectPath} />
+          <ProviderButtons
+            redirectPath={redirectPath}
+            onStart={(provider) => captureBrowserEvent("signup_form_submitted", { method: provider })}
+          />
           <AuthDivider />
 
           <form className="flex w-full flex-col gap-4" onSubmit={onSubmit}>

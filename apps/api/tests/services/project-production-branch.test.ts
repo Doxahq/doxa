@@ -40,6 +40,7 @@ import {
   createRepositoryProject,
 } from "../../src/services/project-production-branch";
 import { RepositoryBranchesUnavailableError } from "../../src/services/repository-branches";
+import { recordingProductAnalytics } from "../support/recording-product-analytics";
 
 // Every dependency that reads the environment is mocked.
 const env = {} as Env;
@@ -63,14 +64,14 @@ describe("project production branch", () => {
 
   test("checks the plan's project limit for the new project's owner first", async () => {
     const team = { id: "22222222-2222-4222-8222-222222222222", name: "Acme Docs" };
-    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, team });
+    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, team, via: "web" });
     expect(mocks.assertProjectLimit).toHaveBeenCalledWith(env, expect.objectContaining({ userId: "user-1", team }));
 
     const { PlanLimitError } = await import("@doxahq/billing");
     mocks.createForRepository.mockClear();
     mocks.assertProjectLimit.mockRejectedValueOnce(new PlanLimitError({ key: "account.projects", limit: 1, used: 1 }));
     await expect(
-      createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, productionBranch: "dev", team: null }),
+      createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, productionBranch: "dev", team: null, via: "web" }),
     ).rejects.toBeInstanceOf(PlanLimitError);
     expect(mocks.getBranchTargetForUser).not.toHaveBeenCalled();
     expect(mocks.createForRepository).not.toHaveBeenCalled();
@@ -82,21 +83,41 @@ describe("project production branch", () => {
   });
 
   test("creates a project that follows the default branch without asking GitHub", async () => {
-    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, team: null });
+    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, team: null, via: "web" });
 
     expect(mocks.getBranchTargetForUser).not.toHaveBeenCalled();
     expect(mocks.createForRepository).toHaveBeenCalledWith({ userId: "user-1", githubRepositoryId: repositoryId, team: null });
   });
 
+  test("reports project_created for the user, with the surface that created it", async () => {
+    const recording = recordingProductAnalytics();
+    await createRepositoryProject({ PRODUCT_ANALYTICS: recording.binding } as Env, {
+      userId: "user-1",
+      githubRepositoryId: repositoryId,
+      team: null,
+      via: "mcp",
+    });
+
+    expect(await recording.events()).toEqual([
+      {
+        kind: "event",
+        event: "project_created",
+        distinctId: "user-1",
+        properties: { source: "repo", via: "mcp" },
+        groups: { project: "project-1" },
+      },
+    ]);
+  });
+
   test("passes the authorized team to the new project", async () => {
     const team = { id: "22222222-2222-4222-8222-222222222222", name: "Acme Docs" };
-    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, team });
+    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, team, via: "web" });
 
     expect(mocks.createForRepository).toHaveBeenCalledWith(expect.objectContaining({ team }));
   });
 
   test("does not ask GitHub about the repository's default branch", async () => {
-    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, productionBranch: "main", team: null });
+    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, productionBranch: "main", team: null, via: "web" });
 
     expect(mocks.exists).not.toHaveBeenCalled();
     expect(mocks.createForRepository).toHaveBeenCalledWith(expect.objectContaining({ productionBranch: "main" }));
@@ -105,7 +126,7 @@ describe("project production branch", () => {
   test("stores another branch after GitHub confirms it", async () => {
     mocks.exists.mockResolvedValue(true);
 
-    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, productionBranch: "release", team: null });
+    await createRepositoryProject(env, { userId: "user-1", githubRepositoryId: repositoryId, productionBranch: "release", team: null, via: "web" });
 
     expect(mocks.getBranchTargetForUser).toHaveBeenCalledWith("user-1", repositoryId);
     expect(mocks.exists).toHaveBeenCalledWith(target, "release");
@@ -120,6 +141,7 @@ describe("project production branch", () => {
       team: null,
       githubRepositoryId: repositoryId,
       productionBranch: "gone",
+      via: "web",
     });
 
     await expect(created).rejects.toBeInstanceOf(CreateProjectError);

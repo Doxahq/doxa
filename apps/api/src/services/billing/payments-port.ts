@@ -18,6 +18,10 @@ export interface BillingPaymentsRuntime {
     requestId: string;
     email?: string | null;
     name?: string | null;
+    /** The account owner's Doxa user ID, stored on the provider customer for the analytics revenue join. */
+    personDistinctId?: string | null;
+    /** The Doxa user who opens the Checkout (product analytics). */
+    actorUserId?: string | null;
     /** A dashboard path to return to in place of the billing page; refused with `BillingInputError` (400) otherwise. */
     returnPath?: string | null;
   }): Promise<CheckoutLink>;

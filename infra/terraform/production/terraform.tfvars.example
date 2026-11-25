@@ -86,6 +86,9 @@ api_environment = {
   PAGE_BATCH_TIMEOUT_MS               = "1800000"
   FINALIZATION_TIMEOUT_MS             = "600000"
 
+  # Optional product analytics. Unset, the API sends no analytics.
+  # POSTHOG_KEY = "<posthog-project-key>"
+
   # R2 over the S3 API.
   R2_ENDPOINT = "https://<cloudflare-account-id>.r2.cloudflarestorage.com"
   R2_BUCKET   = "doxa-docs-artifacts-enam"

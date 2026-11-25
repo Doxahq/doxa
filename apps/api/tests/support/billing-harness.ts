@@ -1,4 +1,4 @@
-import { readBillingConfig, type BillingEnforcement, type OwnerKind } from "@doxahq/billing";
+import { readBillingConfig, type BillingEnforcement, type BillingLifecycleEvents, type OwnerKind } from "@doxahq/billing";
 import { createTestBilling, type TestBilling } from "@doxahq/billing/testing";
 import type { TeamRole } from "@doxahq/contracts/teams";
 import type { BillingContactDirectory, BillingRunHistory } from "../../src/repositories/billing-ownership";
@@ -68,7 +68,9 @@ export interface BillingHarness {
 }
 
 /** The API billing composition over the memory store and the memory provider. */
-export function createBillingHarness(options: { provider?: "memory" | "none"; enforcement?: BillingEnforcement } = {}): BillingHarness {
+export function createBillingHarness(
+  options: { provider?: "memory" | "none"; enforcement?: BillingEnforcement; lifecycle?: () => BillingLifecycleEvents } = {},
+): BillingHarness {
   const billing = createTestBilling();
   const config = readBillingConfig(
     { BILLING_PROVIDER: options.provider ?? "memory", BILLING_ENFORCEMENT: options.enforcement ?? "on" },
@@ -91,13 +93,20 @@ export function createBillingHarness(options: { provider?: "memory" | "none"; en
     provider: billing.provider,
     core: () => core,
     log: (event, fields) => logs.push({ event, fields }),
+    ...(options.lifecycle ? { lifecycle: options.lifecycle } : {}),
   });
   // `none` (self-hosted): the routes see only the provider name. Tests do not
   // import `@doxahq/billing/payments` (spec 6.2), so the none provider stays out.
   const payments: BillingPaymentsRuntime = options.provider === "none" ? { ...memoryPayments, providerName: "none" } : memoryPayments;
   const contacts: BillingContactDirectory = {
     billingContactOf: async ({ ownerKind, ownerId }) =>
-      ownerId ? { email: `${ownerKind}-owner-${ownerId}@example.com`, name: ownerKind === "user" ? ownerId : null } : null,
+      ownerId
+        ? {
+            userId: ownerKind === "user" ? ownerId : `owner-of-${ownerId}`,
+            email: `${ownerKind}-owner-${ownerId}@example.com`,
+            name: ownerKind === "user" ? ownerId : null,
+          }
+        : null,
   };
   const jobIds = new Map<string, string[]>();
   const history: BillingRunHistory = { recentJobIds: async (projectId, limit) => (jobIds.get(projectId) ?? []).slice(0, limit) };

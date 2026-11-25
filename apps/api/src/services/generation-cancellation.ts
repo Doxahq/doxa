@@ -4,6 +4,7 @@ import type { CancelledReviewRunPresentation } from "../repositories/cancelled-r
 import type { JobCancellation } from "../repositories/jobs";
 import type { ReviewRunCanceller } from "./doxabot/review-runs";
 import { generationMeteringFromEnv } from "./billing/generation-metering-env";
+import { reportGenerationFinishedInBackground } from "./generation-analytics";
 
 interface CancellationJobs {
   markCancelled(
@@ -90,6 +91,7 @@ export async function finishGenerationCancellation(
   // Billing spec 10.5 step 5: a cancel charges base + usage, a newer push
   // usage only. The outcome comes from the job's cancel event. Never throws.
   await generationMeteringFromEnv(env).settle(input.jobId);
+  reportGenerationFinishedInBackground(env, input.jobId);
   await closePreviewCheck(jobs, previewChecks, input);
 
   // The job is already cancelled in the database. A failure to reach the

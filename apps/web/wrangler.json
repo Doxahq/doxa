@@ -13,6 +13,10 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "vars": {
+    "POSTHOG_KEY": "${OPS_POSTHOG_PROJECT_KEY}",
+    "POSTHOG_INGEST_HOSTNAME": "${OPS_POSTHOG_INGEST_HOSTNAME}"
+  },
   "assets": {
     "directory": "dist/client",
     "binding": "ASSETS",

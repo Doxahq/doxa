@@ -1,6 +1,7 @@
 import { Hr, Ticks } from "~/components/marketing/guides"
 import { CopyIcon } from "~/components/marketing/mcp/copy-icon"
 import { SiteNav } from "~/components/marketing/site-nav"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { DOCS_URL, MCP_SERVER_URL } from "~/lib/marketing/links"
 import type { CopyState } from "~/lib/mcp/copied"
 
@@ -11,7 +12,7 @@ export function McpHero({ copyState }: { copyState: CopyState }) {
       <div className="hero__glow" aria-hidden="true" />
       <Ticks side="l" ticks={[{ top: 140 }, { top: 232, left: "38%" }, { top: 330 }, { top: 448, left: "22%" }]} />
       <Ticks side="r" ticks={[{ top: 120 }, { top: 214, right: "30%" }, { top: 306 }, { top: 430, right: "50%" }]} />
-      <SiteNav current="mcp" cta={{ label: "Connect an agent ›", href: "#connect" }} />
+      <SiteNav current="mcp" cta={{ id: "connect_agent", label: "Connect an agent ›", href: "#connect" }} />
       <Hr />
       <div className="col">
         <div className="hero__inner">
@@ -28,7 +29,7 @@ export function McpHero({ copyState }: { copyState: CopyState }) {
             approval.
           </p>
           <div className="row">
-            <a className="btn btn--light" href="#connect">
+            <a className="btn btn--light" href="#connect" onClick={ctaClickHandler("mcp_hero", "connect_agent")}>
               Connect an agent ›
             </a>
             <a className="btn btn--line" href={DOCS_URL}>

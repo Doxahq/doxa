@@ -2,7 +2,7 @@ import { Loader2, Play } from "lucide-react"
 
 import { GenerationStartConfirmationDialog } from "~/components/dashboard/generation-start-confirmation-dialog"
 import { Button } from "~/components/ui/button"
-import { PRO_REASON_GENERATION } from "~/lib/dashboard/ai-access"
+import { PRO_GATE_GENERATION } from "~/lib/dashboard/ai-access"
 import { useProGate } from "~/lib/dashboard/pro-trial-dialog"
 import { useProjectAiAccess } from "~/lib/dashboard/use-ai-access"
 import { useDoxabotInstructions } from "~/lib/dashboard/use-doxabot-instructions"
@@ -45,7 +45,7 @@ export function SaveAndStartBar({
   const proGate = useProGate(useProjectAiAccess(projectId))
 
   async function saveAndStart(): Promise<void> {
-    if (proGate(PRO_REASON_GENERATION)) return
+    if (proGate(PRO_GATE_GENERATION)) return
     if (editor.isDirty && !(await editor.save())) return
     await startGeneration()
   }

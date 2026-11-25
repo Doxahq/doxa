@@ -138,6 +138,7 @@ describe("branch synchronization and publish", () => {
       review: null,
     }));
     const collectStorage = vi.fn(async (_entryIds: readonly string[]) => {});
+    const reportPublished = vi.fn();
     const publisher = new DocsBranchPublish({
       branches,
       store,
@@ -146,6 +147,7 @@ describe("branch synchronization and publish", () => {
       publish,
       collectStorage,
       enqueueOrphanVersion: vi.fn(async () => undefined),
+      reportPublished,
     });
     const rejectedStages: string[] = [];
     await expect(
@@ -191,6 +193,7 @@ describe("branch synchronization and publish", () => {
       }),
     ).rejects.toMatchObject({ code: "conflict" });
     expect(publish).not.toHaveBeenCalled();
+    expect(reportPublished).not.toHaveBeenCalled();
     const stages: string[] = [];
     const result = await publisher.publish({
       userId,
@@ -209,6 +212,8 @@ describe("branch synchronization and publish", () => {
     expect(publish).toHaveBeenCalledOnce();
     expect(publish.mock.calls[0]?.[0].expectedRevision).toBe(reviewedRevision);
     expect(collectStorage).toHaveBeenCalledWith(["gc-preview-1"]);
+    // A person's branch publish, once it is live.
+    expect(reportPublished.mock.calls).toEqual([[{ userId, projectId, siteId, via: "web" }]]);
     const input = publish.mock.calls[0]?.[0];
     expect(input?.summary).toMatchObject({ changedPageCount: 1 });
     // M45: the publisher's pool and the edited page order the warm job.

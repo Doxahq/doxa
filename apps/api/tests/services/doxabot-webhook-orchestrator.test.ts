@@ -32,6 +32,8 @@ import { CreditsExhaustedError, PlanLimitError } from "@doxahq/billing";
 import type { ChangeProposalSnapshot } from "../../src/services/doxabot/change-proposal-state";
 import type { GenerationCancellationInput } from "../../src/services/generation-cancellation";
 import { describe, expect, test, vi } from "vitest";
+import type { ProductAnalytics } from "@doxahq/analytics";
+import { recordingProductAnalytics } from "../support/recording-product-analytics";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const baselineVersionId = "22222222-2222-4222-8222-222222222222";
@@ -134,7 +136,7 @@ function createHarness(
     sourceRevision: string;
   } | null = null,
   previewBilling?: PreviewRunBilling,
-  options: { publicRepositoriesEnabled?: boolean; maxRepositorySizeKb?: number } = {},
+  options: { publicRepositoriesEnabled?: boolean; maxRepositorySizeKb?: number; analytics?: ProductAnalytics } = {},
 ) {
   const claimedDeliveries = new Set<string>();
   const normalizedEvents = new Map<
@@ -381,6 +383,7 @@ function createHarness(
     lifecycle,
     repositoryDefaultBranch,
     ...(options.maxRepositorySizeKb !== undefined ? { maxRepositorySizeKb: options.maxRepositorySizeKb } : {}),
+    ...(options.analytics ? { analytics: options.analytics } : {}),
     now: () => new Date(closedAt),
   } satisfies DoxabotWebhookDependencies;
 
@@ -630,6 +633,23 @@ describe("Doxabot webhook orchestrator", () => {
     }));
 
     expect(harness.mergeTriggers.recordMerge).toHaveBeenCalledOnce();
+  });
+
+  test("reports a new preview run as a cold Doxabot generation for the project owner", async () => {
+    const recording = recordingProductAnalytics();
+    const harness = createHarness(createAutomationContext({ publishedBaseline: null }), null, undefined, { analytics: recording.analytics });
+
+    await harness.orchestrator.process(pullRequestDelivery({ deliveryId: "delivery-analytics" }));
+
+    expect(await recording.events()).toEqual([
+      {
+        kind: "event",
+        event: "generation_started",
+        distinctId: "owner-user",
+        properties: { trigger: "doxabot", run: "cold" },
+        groups: { project: expect.any(String) },
+      },
+    ]);
   });
 
   test("keeps previews on after the generation cache was cleared, and starts them without a baseline", async () => {

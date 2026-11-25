@@ -3,6 +3,7 @@ import { Github, Link2 } from "lucide-react"
 
 import { FieldList, FieldRow, SectionLabel } from "~/components/dashboard/dashboard-header"
 import { AccountPageFrame } from "~/components/dashboard/settings/account-page-frame"
+import { PrivacySettingsSection } from "~/components/dashboard/settings/privacy-settings-section"
 import { GitHubInstallationsSection } from "~/components/dashboard/settings/github-installations-section"
 import { AccountSettingsSkeleton } from "~/components/dashboard/skeletons/account-skeletons"
 import { Badge } from "~/components/ui/badge"
@@ -13,9 +14,10 @@ import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
 import { useGitHub } from "~/lib/dashboard/use-github"
 import { billingAccountsQueryOptions } from "~/lib/queries/billing"
 import { githubInstallationsQueryOptions } from "~/lib/queries/dashboard"
+import { privacySettingsQueryOptions } from "~/lib/queries/privacy-settings"
 
 /**
- * `/dashboard/settings`: Account settings, the profile and the GitHub connection.
+ * `/dashboard/settings`: Account settings, the profile, the GitHub connection and the product analytics switch.
  * Notifications, agents, teams and billing have their own pages in the Account sidebar.
  */
 export function SettingsPage() {
@@ -29,6 +31,7 @@ export function SettingsPage() {
     { isPending: github.isLoading },
     useQuery(billingAccountsQueryOptions()),
     useQuery(githubInstallationsQueryOptions()),
+    useQuery(privacySettingsQueryOptions()),
   ])
 
   if (isFirstLoad) return <AccountSettingsSkeleton />
@@ -42,6 +45,7 @@ export function SettingsPage() {
         githubInstallUrl={github.githubInstallUrl}
       />
       <GitHubInstallationsSection />
+      <PrivacySettingsSection />
     </AccountPageFrame>
   )
 }

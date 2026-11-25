@@ -21,6 +21,9 @@ import {
   JobsRepository,
 } from "../repositories/jobs";
 import type { Env } from "../env";
+import type { ProductAnalytics } from "@doxahq/analytics";
+import { productAnalyticsOf } from "./analytics/product-analytics";
+import { captureGenerationStarted, type GenerationStartedBy } from "./generation-analytics";
 import {
   instructionsChangeCheckFromEnv,
   type InstructionsChangeCheck,
@@ -83,6 +86,8 @@ export interface ProductionGenerationAdmissionDependencies {
   runModels?: (config: GenerationExecutionConfig) => string[];
   /** The largest repository a run accepts, in KB. Absent: no size limit. */
   maxRepositorySizeKb?: number;
+  /** Product analytics. Absent: nothing is reported. */
+  analytics?: ProductAnalytics;
 }
 
 export class ProductionGenerationAdmissionService {
@@ -106,6 +111,7 @@ export class ProductionGenerationAdmissionService {
       metering: generationMeteringFromEnv(env),
       runModels: (config) => runModels(env, config),
       maxRepositorySizeKb: maxRepositorySizeKbFromEnv(env),
+      analytics: productAnalyticsOf(env),
     });
   }
 
@@ -116,6 +122,7 @@ export class ProductionGenerationAdmissionService {
     /** Use the hand-written pages as the start of a first generation. */
     seed?: boolean;
     trigger?: ProductionGenerationTrigger;
+    startedBy?: GenerationStartedBy;
   }): Promise<ProductionGenerationAdmission> {
     const target =
       await this.dependencies.source.resolveTarget(
@@ -186,7 +193,7 @@ export class ProductionGenerationAdmissionService {
     };
     const { metering } = this.dependencies;
     if (!metering || metering.mode === "off") {
-      return this.dependencies.jobs.create(jobInput);
+      return this.reportStarted(await this.dependencies.jobs.create(jobInput), jobInput, input.startedBy);
     }
 
     // Billing spec 10.5 step 1: hold the first credits before the job exists,
@@ -215,6 +222,24 @@ export class ProductionGenerationAdmissionService {
       throw error;
     }
     if (created.outcome !== "created") await metering.abandon(jobId, admission);
+    return this.reportStarted(created, jobInput, input.startedBy);
+  }
+
+  /** `generation_started` for a new job; another outcome passes through unreported. */
+  private reportStarted(
+    created: ProductionGenerationJobAdmission,
+    job: CreateProductionGenerationJobInput,
+    startedBy: GenerationStartedBy | undefined,
+  ): ProductionGenerationJobAdmission {
+    if (created.outcome === "created" && this.dependencies.analytics) {
+      captureGenerationStarted(this.dependencies.analytics, {
+        ownerUserId: job.userId,
+        projectId: job.projectId,
+        trigger: job.trigger,
+        baselineVersionId: job.baselineVersionId,
+        startedBy,
+      });
+    }
     return created;
   }
 }

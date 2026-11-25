@@ -4,6 +4,7 @@ import type { Env } from "../env";
 import { GitHubRepository } from "../repositories/github";
 import { CreateProjectError, ProjectsRepository } from "../repositories/projects";
 import { assertProjectLimit } from "./project-limit";
+import { captureProjectCreated, type ProjectCreationVia } from "./project-analytics";
 import {
   RepositoryBranchesService,
   RepositoryBranchesUnavailableError,
@@ -56,11 +57,15 @@ export async function createRepositoryProject(
     productionBranch?: string;
     /** Authorized by the caller; null makes a personal project. */
     team: ProjectTeam | null;
+    via: ProjectCreationVia;
   },
 ): Promise<ProjectDto> {
-  await assertProjectLimit(env, input);
-  await assertProductionBranchExists(env, input);
-  return new ProjectsRepository(env).createForRepository(input);
+  const { via, ...projectInput } = input;
+  await assertProjectLimit(env, projectInput);
+  await assertProductionBranchExists(env, projectInput);
+  const project = await new ProjectsRepository(env).createForRepository(projectInput);
+  captureProjectCreated(env, { userId: input.userId, projectId: project.id, source: "repo", via });
+  return project;
 }
 
 /** Links a repository to a project that has none. */

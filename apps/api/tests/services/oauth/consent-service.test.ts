@@ -21,6 +21,8 @@ const {
 } = await import("./fixtures");
 const { agentGrantMetadataSchema } = await import("../../../src/services/oauth/grant-metadata");
 const { membershipPolicy } = await import("../../support/in-memory-project-access");
+const { recordingProductAnalytics } = await import("../../support/recording-product-analytics");
+const { analyticsClientLabel } = await import("../../../src/services/oauth/consent-request");
 
 let store: InstanceType<typeof MemoryConsentStore>;
 let oauth: ReturnType<typeof fakeOAuthApi>;
@@ -285,5 +287,38 @@ describe("ConsentService.deny", () => {
 
   it("returns not_found for a used consent", async () => {
     expect(await consentService(store, oauth).deny(CONSENT_ID)).toEqual({ kind: "not_found" });
+  });
+});
+
+describe("mcp_agent_connected", () => {
+  it("reports the approval with the client label and the number of approved scopes", async () => {
+    await store.save(CONSENT_ID, pendingConsent());
+    const recording = recordingProductAnalytics();
+
+    await consentService(store, oauth, () => NOW, undefined, recording.analytics).approve(CONSENT_ID, OWNER, {
+      scopes: ["docs:read", "docs:write", "docs:read"],
+      projectScope: { kind: "all" },
+    });
+
+    expect(await recording.events()).toEqual([
+      { kind: "event", event: "mcp_agent_connected", distinctId: OWNER, properties: { client: "Claude Code", scope_count: 2 }, groups: {} },
+    ]);
+  });
+
+  it("reports nothing for a denied or a rejected consent", async () => {
+    await store.save(CONSENT_ID, pendingConsent());
+    const recording = recordingProductAnalytics();
+    const service = consentService(store, oauth, () => NOW, undefined, recording.analytics);
+
+    await service.approve(CONSENT_ID, OWNER, { scopes: ["docs:read", "publish"], projectScope: { kind: "all" } });
+    await service.deny(CONSENT_ID);
+
+    expect(await recording.events()).toEqual([]);
+  });
+
+  it("makes a label from any client name, and from a metadata document's host", () => {
+    expect(analyticsClientLabel({ clientId: "c", clientName: "Cursor <script>/v2" })).toBe("Cursor script v2");
+    expect(analyticsClientLabel({ clientId: "https://agent.example.com/client.json", clientName: null })).toBe("agent.example.com");
+    expect(analyticsClientLabel({ clientName: "🙂" })).toBe("unnamed client");
   });
 });

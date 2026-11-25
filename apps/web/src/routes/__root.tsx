@@ -7,6 +7,7 @@ import {
   Outlet,
   Scripts,
 } from "@tanstack/react-router"
+import { AnalyticsRoot } from "~/components/analytics/analytics-root"
 import { SIDEBAR_WIDTH_SCRIPT } from "~/lib/dashboard/sidebar-width"
 import { AppQueryProvider } from "~/lib/query-client"
 import { THEME_SCRIPT } from "~/lib/theme/theme"
@@ -91,7 +92,10 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         </noscript>
       </head>
       <body>
-        <AppQueryProvider client={queryClient}>{children}</AppQueryProvider>
+        <AppQueryProvider client={queryClient}>
+          {children}
+          <AnalyticsRoot />
+        </AppQueryProvider>
         <Scripts />
       </body>
     </html>

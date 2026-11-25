@@ -50,6 +50,9 @@ export function AccountSettingsSkeleton() {
           </div>
         </div>
       </SectionSkeleton>
+      <SectionSkeleton title="Privacy">
+        <SwitchRowsSkeleton widths={["8.5rem"]} />
+      </SectionSkeleton>
     </AccountPageSkeleton>
   )
 }

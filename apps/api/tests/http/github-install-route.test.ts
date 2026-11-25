@@ -59,6 +59,7 @@ vi.mock("../../src/services/github-app", async (original) => ({
 
 import { createGitHubRoutes } from "../../src/routes/github";
 import { GitHubAuthorizationError } from "../../src/services/github-app";
+import { recordingProductAnalytics } from "../support/recording-product-analytics";
 
 const app = createGitHubRoutes();
 
@@ -178,6 +179,22 @@ describe("GitHub install routes", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://doxa.so/dashboard?github=requested");
+  });
+
+  test("authorize reports the install with the repository count, never the names", async () => {
+    const recording = recordingProductAnalytics();
+    mocks.userId = "user-1";
+    const { state, nonce } = await startAuthorization("4242");
+    const response = await request(
+      `/install/authorize?code=code-1&state=${encodeURIComponent(state)}`,
+      { headers: { cookie: `doxa_github_install=${nonce}` } },
+      { PRODUCT_ANALYTICS: recording.binding },
+    );
+
+    expect(response.headers.get("location")).toBe("https://doxa.so/dashboard?github=connected");
+    expect(await recording.events()).toEqual([
+      { kind: "event", event: "github_app_installed", distinctId: "user-1", properties: { repo_count: 1 }, groups: {} },
+    ]);
   });
 
   test("authorize links the installation that GitHub confirms for the user", async () => {

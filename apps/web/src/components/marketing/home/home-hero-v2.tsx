@@ -5,6 +5,7 @@ import { ConnectAgentButton } from "~/components/marketing/home/connect-agent-bu
 import { SiteNav } from "~/components/marketing/site-nav"
 import { Picture } from "~/components/ui/picture"
 import { ThemedPicture } from "~/components/ui/themed-picture"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { HERO_V2_DOCS_SIZES, HERO_V2_IMAGES, HERO_V2_SCENE_SIZES, type HeroImage } from "~/lib/marketing/home-hero"
 import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 import type { PictureFiles } from "~/lib/theme/picture-files"
@@ -93,10 +94,10 @@ export function HomeHeroV2() {
           on each commit, and asks you before it publishes.
         </p>
         <div className="hv2__ctas">
-          <a className="btn btn--light" href={GET_STARTED_URL}>
+          <a className="btn btn--light" href={GET_STARTED_URL} onClick={ctaClickHandler("home_hero", "get_started")}>
             Get started ›
           </a>
-          <ConnectAgentButton />
+          <ConnectAgentButton location="home_hero" />
         </div>
       </div>
 

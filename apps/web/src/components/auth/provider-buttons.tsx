@@ -11,9 +11,21 @@ import { cn } from "~/lib/utils"
  * a plain link to the API, so a click works before the page hydrates. After
  * hydration a click also shows a spinner while the browser leaves for the
  * provider. A provider sign-in creates the account when it does not exist.
+ * `onStart` hears each click that leaves for a provider.
  */
-export function ProviderButtons({ redirectPath }: { redirectPath: string }) {
+export function ProviderButtons({
+  redirectPath,
+  onStart,
+}: {
+  redirectPath: string
+  onStart?: (provider: SignInProvider) => void
+}) {
   const [pendingProvider, setPendingProvider] = useState<SignInProvider | null>(null)
+
+  function start(provider: SignInProvider) {
+    onStart?.(provider)
+    setPendingProvider(provider)
+  }
 
   // Back from the provider, the browser can restore this page from its cache
   // with the spinner still on.
@@ -31,7 +43,7 @@ export function ProviderButtons({ redirectPath }: { redirectPath: string }) {
         provider="github"
         redirectPath={redirectPath}
         pendingProvider={pendingProvider}
-        onStart={setPendingProvider}
+        onStart={start}
         icon={<GithubIcon />}
       >
         Continue with GitHub
@@ -41,7 +53,7 @@ export function ProviderButtons({ redirectPath }: { redirectPath: string }) {
         provider="google"
         redirectPath={redirectPath}
         pendingProvider={pendingProvider}
-        onStart={setPendingProvider}
+        onStart={start}
         icon={<GoogleIcon />}
       >
         Continue with Google

@@ -5,7 +5,9 @@ import type {
 } from "@doxahq/contracts/agent-access";
 import type { ValidationIssue } from "@doxahq/contracts/validation";
 import { secretsMatch } from "@doxahq/api-bridge";
+import type { ProductAnalytics } from "@doxahq/analytics";
 import type { Env } from "../../env";
+import { productAnalyticsOf } from "../analytics/product-analytics";
 import {
   AccountEmailRepository,
   AgentClaimRepository,
@@ -17,7 +19,7 @@ import { AgentTokenRepository, type AgentTokenStore } from "../../repositories/a
 import { dashboardActor } from "../agent-access/actor";
 import { MembershipProjectAccessPolicy } from "../agent-access/membership-project-access-policy";
 import type { ProjectAccessPolicy } from "../agent-access/project-access-policy";
-import { offeredScopes } from "../oauth/consent-request";
+import { analyticsClientLabel, offeredScopes } from "../oauth/consent-request";
 import { projectScopeIssues, scopeIssues } from "../oauth/consent-validation";
 import {
   APPROVED_CLAIM_REDEEM_SECONDS,
@@ -33,6 +35,8 @@ export interface AgentClaimConsentDependencies {
   accounts: AccountEmailReader;
   projects: ProjectAccessPolicy;
   now: () => Date;
+  /** Product analytics. Absent: nothing is reported. */
+  analytics?: ProductAnalytics;
 }
 
 export type AgentClaimLookup =
@@ -61,6 +65,7 @@ export class AgentClaimConsentService {
       accounts: new AccountEmailRepository(env),
       projects: MembershipProjectAccessPolicy.fromEnv(env),
       now: () => new Date(),
+      analytics: productAnalyticsOf(env),
     });
   }
 
@@ -112,17 +117,25 @@ export class AgentClaimConsentService {
     if ((await this.deps.tokens.countActive(userId, now)) >= MAX_ACTIVE_AGENT_TOKENS_PER_USER) {
       return { kind: "token_limit" };
     }
+    const scopes = [...new Set(input.scopes)];
     const approved = await this.deps.claims.approve(
       claim.id,
       {
         userId,
-        scopes: [...new Set(input.scopes)],
+        scopes,
         projectScope: input.projectScope,
         expiresAt: new Date(now.getTime() + APPROVED_CLAIM_REDEEM_SECONDS * 1000),
       },
       now,
     );
-    return approved ? { kind: "approved" } : NOT_FOUND;
+    if (!approved) return NOT_FOUND;
+    // The approval grants the agent its token: the same fact as an OAuth consent.
+    this.deps.analytics?.capture({
+      name: "mcp_agent_connected",
+      distinctId: userId,
+      properties: { client: analyticsClientLabel({ clientName: claim.clientName }), scope_count: scopes.length },
+    });
+    return { kind: "approved" };
   }
 
   async deny(attemptToken: string, userId: string): Promise<boolean> {

@@ -9,6 +9,7 @@ import { parseValidatedJson } from "../http/validation";
 import { error, json, notFound } from "../http/response";
 import { PlanLimitError } from "@doxahq/billing";
 import { planLimitResponse } from "../http/billing-errors";
+import { reportPlanLimitHit } from "../services/billing/plan-limit-analytics";
 import { billingConfigFor } from "../services/billing/config";
 import { CreateCustomDocsDomainError } from "../repositories/docs-domains";
 import { DocsDomainDnsHostService } from "../services/docs-domain-dns-host";
@@ -49,6 +50,7 @@ export function createDocsDomainRoutes(): ApiApp {
         return json({ domain }, { status: 201 });
       } catch (err) {
         if (err instanceof PlanLimitError) {
+          reportPlanLimitHit(context.env, userId, err, context.req.param("projectId"));
           return planLimitResponse(err, { returnBaseUrl: billingConfigFor(context.env).returnBaseUrl });
         }
         if (err instanceof CreateCustomDocsDomainError) {

@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import type { ReactNode } from "react"
+import { PrivacyChoicesButton } from "~/components/analytics/privacy-choices"
 import { DoxaMark } from "~/components/marketing/doxa-mark"
 import { Hr } from "~/components/marketing/guides"
 import { FooterMark } from "~/components/marketing/footer-mark"
@@ -106,6 +107,7 @@ export function SiteFooter() {
               {col.links.map((link) => (
                 <FooterAnchor link={link} key={link.label} />
               ))}
+              {col.title === "Legal" ? <PrivacyChoicesButton className="foot__choices" /> : null}
             </nav>
           ))}
         </div>

@@ -2,6 +2,7 @@ import { getRouteApi, Link } from "@tanstack/react-router"
 import { ChevronDown } from "lucide-react"
 import { DoxaMark } from "~/components/marketing/doxa-mark"
 import { GithubIcon } from "~/components/marketing/github-icon"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import {
   DASHBOARD_URL,
   DOCS_URL,
@@ -37,9 +38,10 @@ const RESOURCES: { title: string; items: NavItem[] }[] = [
   },
 ]
 
-type Cta = { label: string; href: string }
+/** `id` is the machine code of the `cta_clicked` event. */
+type Cta = { id: string; label: string; href: string }
 
-const DEFAULT_CTA: Cta = { label: "Get started ›", href: GET_STARTED_URL }
+const DEFAULT_CTA: Cta = { id: "get_started", label: "Get started ›", href: GET_STARTED_URL }
 
 /**
  * Stay static for every visitor, so they show only the light button. The sign-up
@@ -91,7 +93,7 @@ export function SiteNav({ current, cta = DEFAULT_CTA }: { current: MarketingPage
             <GithubIcon size={18} />
           </a>
           {STATIC_PAGES.has(current) ? (
-            <a className="btn btn--light btn--sm" href={cta.href}>
+            <a className="btn btn--light btn--sm" href={cta.href} onClick={ctaClickHandler("nav", cta.id)}>
               {cta.label}
             </a>
           ) : signedIn ? (
@@ -103,7 +105,7 @@ export function SiteNav({ current, cta = DEFAULT_CTA }: { current: MarketingPage
               <a className="btn btn--line btn--sm" href={SIGN_IN_URL}>
                 Sign in
               </a>
-              <a className="btn btn--light btn--sm" href={cta.href}>
+              <a className="btn btn--light btn--sm" href={cta.href} onClick={ctaClickHandler("nav", cta.id)}>
                 {cta.label}
               </a>
             </>

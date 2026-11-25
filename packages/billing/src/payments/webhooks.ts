@@ -6,10 +6,11 @@ import type { CreditLedger } from "../credits/ledger";
 import { BillingUnknownCustomerError } from "../errors";
 import type { OfferSlots } from "../offers/founder";
 import { ProviderSignatureError, ProviderUnavailableError } from "../provider/errors";
-import type { BillingProvider, ProviderCustomerRef, ProviderEvent, RawWebhook, UsageInvoiceRef } from "../provider/provider";
+import type { BillingProvider, PlanInvoiceRef, ProviderCustomerRef, ProviderEvent, RawWebhook, UsageInvoiceRef } from "../provider/provider";
 import type { AccountTx, BillingStore } from "../store/store";
 import type { BillingAccount, PaygInvoice, PaygInvoiceReason, PaygInvoiceStatus } from "../store/types";
-import type { BillingPayments } from "./service";
+import { NO_BILLING_LIFECYCLE_EVENTS, notifyLifecycle, priceFacts, type BillingLifecycleEvents } from "../lifecycle-events";
+import type { BillingPayments, SyncResult } from "./service";
 
 /** The raw body limit of the webhook route (spec 14.1 step 1). */
 export const WEBHOOK_BODY_LIMIT_BYTES = 1024 * 1024;
@@ -30,6 +31,8 @@ export interface BillingWebhooksDeps {
   readonly ledger: CreditLedger;
   readonly offers: OfferSlots;
   readonly log?: (event: { name: string; fields: Readonly<Record<string, string | number | boolean | null>> }) => void;
+  /** Product analytics facts: Checkout and invoice outcomes. Default: none. */
+  readonly lifecycle?: BillingLifecycleEvents;
 }
 
 /**
@@ -45,6 +48,10 @@ export interface BillingWebhooksDeps {
  */
 export class BillingWebhooks {
   constructor(private readonly deps: BillingWebhooksDeps) {}
+
+  private get lifecycle(): BillingLifecycleEvents {
+    return this.deps.lifecycle ?? NO_BILLING_LIFECYCLE_EVENTS;
+  }
 
   async handle(raw: RawWebhook): Promise<WebhookResponse> {
     if (new TextEncoder().encode(raw.body).byteLength > WEBHOOK_BODY_LIMIT_BYTES) {
@@ -107,16 +114,24 @@ export class BillingWebhooks {
 
   private async dispatch(event: ProviderEvent): Promise<void> {
     switch (event.type) {
-      case "customer.changed":
-        await this.syncKnownCustomer(event.customer);
+      case "customer.changed": {
+        const synced = await this.syncKnownCustomer(event.customer);
+        if (synced && event.invoice) this.planInvoiceSettled(synced.accountId, event.invoice);
         return;
-      case "checkout.completed":
-        if (event.customer) await this.deps.payments.syncCustomer(event.customer, event.accountId);
-        else await this.deps.payments.syncCheckout(event.checkoutId);
+      }
+      case "checkout.completed": {
+        const synced = event.customer
+          ? await this.deps.payments.syncCustomer(event.customer, event.accountId)
+          : await this.deps.payments.syncCheckout(event.checkoutId);
+        if (synced) await this.checkoutCompleted(synced);
         return;
-      case "checkout.expired":
+      }
+      case "checkout.expired": {
         await this.deps.offers.releaseByCheckout(event.checkoutId);
+        const accountId = event.accountId;
+        if (accountId) notifyLifecycle(() => this.lifecycle.checkoutExpired?.({ accountId }));
         return;
+      }
       case "usage_invoice.created":
         await this.onUsageInvoiceCreated(event.invoice);
         return;
@@ -154,18 +169,45 @@ export class BillingWebhooks {
    * fail on every retry, so it is processed as ignored. A Doxa customer whose
    * account is gone still fails: that is a fault in Doxa's own data.
    */
-  private async syncKnownCustomer(customer: ProviderCustomerRef): Promise<void> {
+  private async syncKnownCustomer(customer: ProviderCustomerRef): Promise<SyncResult | null> {
     try {
-      await this.deps.payments.syncCustomer(customer);
+      return await this.deps.payments.syncCustomer(customer);
     } catch (error) {
       if (!(error instanceof BillingUnknownCustomerError)) throw error;
       this.log("billing.webhook", { type: "customer.changed", outcome: "unknown_customer", customerId: customer.customerId });
+      return null;
     }
+  }
+
+  /** The price comes from the mirror that the sync just wrote, read only when a listener wants it. */
+  private async checkoutCompleted(synced: SyncResult): Promise<void> {
+    const listener = this.lifecycle.checkoutCompleted?.bind(this.lifecycle);
+    if (!listener) return;
+    const subscription = await this.deps.store.getSubscription(synced.accountId);
+    const priceKey = subscription?.priceKey ?? null;
+    const interval = priceKey ? (priceFacts(this.deps.catalog, priceKey)?.interval ?? null) : null;
+    notifyLifecycle(() => listener({ accountId: synced.accountId, priceKey, interval }));
+  }
+
+  /** A trial's $0 invoice is not a payment, so it is not reported. */
+  private planInvoiceSettled(accountId: string, invoice: PlanInvoiceRef): void {
+    if (invoice.amountCents <= 0) return;
+    notifyLifecycle(() =>
+      this.lifecycle.invoiceSettled?.({ accountId, outcome: invoice.outcome, kind: "plan", amountCents: invoice.amountCents, attempt: invoice.attempt }),
+    );
+  }
+
+  /** Once for each invoice and outcome: a replayed or late event finds the stored status. */
+  private usageInvoiceSettled(accountId: string, invoice: UsageInvoiceRef, outcome: "paid" | "failed", previous: PaygInvoiceStatus | null): void {
+    if (previous === "paid" || previous === outcome) return;
+    notifyLifecycle(() =>
+      this.lifecycle.invoiceSettled?.({ accountId, outcome, kind: "usage", amountCents: invoice.amountCents, attempt: null }),
+    );
   }
 
   private async onUsageInvoiceCreated(invoice: UsageInvoiceRef): Promise<void> {
     const account = await this.accountOf(invoice.customer.customerId);
-    const stored = await this.upsertInvoice(account, invoice, "draft");
+    const { row: stored } = await this.upsertInvoice(account, invoice, "draft");
     if (stored.status === "paid") return;
     const collect = this.deps.provider.collectThresholdInvoice?.bind(this.deps.provider);
     if (invoice.reason !== "threshold" || !collect) return;
@@ -177,7 +219,8 @@ export class BillingWebhooks {
   private async onUsageInvoicePaid(invoice: UsageInvoiceRef): Promise<void> {
     const account = await this.accountOf(invoice.customer.customerId);
     await this.deps.ledger.recordDebtPaid({ accountId: account.id, invoiceId: invoice.invoiceId, credits: invoice.credits });
-    const stored = await this.upsertInvoice(account, invoice, "paid");
+    const { row: stored, previous } = await this.upsertInvoice(account, invoice, "paid");
+    this.usageInvoiceSettled(account.id, invoice, "paid", previous);
     // A sweep lowered the threshold; set it back to the charge amount (spec
     // 10.10 step 6). On a replay too: if the reset failed, the provider sends
     // the event again, and the debt is already paid by then. The reset sets
@@ -191,7 +234,8 @@ export class BillingWebhooks {
     const account = await this.accountOf(invoice.customer.customerId);
     // The pause follows from the stored invoices (`upsertInvoice`): a late
     // failure of an invoice that is paid changes nothing.
-    await this.upsertInvoice(account, invoice, "failed");
+    const { previous } = await this.upsertInvoice(account, invoice, "failed");
+    this.usageInvoiceSettled(account.id, invoice, "failed", previous);
   }
 
   /**
@@ -224,7 +268,12 @@ export class BillingWebhooks {
     if (!anyFailed && tx.account.aiPausedReason === "payment_failed") await tx.updateAccount({ aiPausedReason: null });
   }
 
-  private async upsertInvoice(account: BillingAccount, invoice: UsageInvoiceRef, status: PaygInvoiceStatus): Promise<PaygInvoice> {
+  /** The stored invoice, and its status before this event (null for a new one). */
+  private async upsertInvoice(
+    account: BillingAccount,
+    invoice: UsageInvoiceRef,
+    status: PaygInvoiceStatus,
+  ): Promise<{ row: PaygInvoice; previous: PaygInvoiceStatus | null }> {
     const now = this.deps.clock.now();
     return this.deps.store.withAccountLock(account.id, now, async (tx) => {
       const existing = await tx.getPaygInvoice(invoice.invoiceId);
@@ -242,7 +291,7 @@ export class BillingWebhooks {
       };
       await tx.upsertPaygInvoice(row);
       await this.applyPaymentPause(tx, status);
-      return row;
+      return { row, previous: existing?.status ?? null };
     });
   }
 

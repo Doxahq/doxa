@@ -11,6 +11,7 @@ import { AgentTrust } from "~/components/marketing/agent/agent-trust"
 import { Band } from "~/components/marketing/band"
 import { MarketingPage } from "~/components/marketing/marketing-page"
 import { SiteFooter } from "~/components/marketing/site-footer"
+import { ctaClickHandler } from "~/lib/analytics/capture-browser-event"
 import { BANDS } from "~/lib/marketing/bands"
 import { DOCS_URL, GET_STARTED_URL } from "~/lib/marketing/links"
 
@@ -37,7 +38,7 @@ export function AgentPage() {
             <span className="mark">The docs follow.</span>
           </h2>
           <div className="row">
-            <a className="btn btn--light" href={GET_STARTED_URL}>
+            <a className="btn btn--light" href={GET_STARTED_URL} onClick={ctaClickHandler("agent_cta", "get_started")}>
               Get started ›
             </a>
             <a className="btn btn--line" href={DOCS_URL}>

@@ -163,6 +163,8 @@ export class FakeStripe {
       case "POST customers/:id": {
         const customer = this.customers.get(b!) ?? this.missing("customer", b!);
         Object.assign(customer, { ...(p.email === undefined ? {} : { email: p.email }), ...(p.name === undefined ? {} : { name: p.name }) });
+        // Like Stripe: metadata keys merge into the stored ones.
+        if (p.metadata) customer.metadata = { ...(customer.metadata as Json), ...(p.metadata as Json) };
         return customer;
       }
       case "GET customers/:id": {

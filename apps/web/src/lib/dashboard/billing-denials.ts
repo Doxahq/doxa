@@ -108,5 +108,10 @@ export function accountIdFromBillingUrl(url: string | null): string | null {
 export function planLimitProTrialRequest(details: PlanLimitErrorDetails, target: PlanLimitTarget): ProTrialRequest | null {
   const plan = details.plan ?? target.plan
   if (!target.accountId || !proTrialUnlocks(plan, details.key) || !plan) return null
-  return { accountId: target.accountId, canManage: target.canManage, reason: proTrialLimitReason(details, plan) }
+  return {
+    accountId: target.accountId,
+    canManage: target.canManage,
+    reason: proTrialLimitReason(details, plan),
+    feature: details.key,
+  }
 }

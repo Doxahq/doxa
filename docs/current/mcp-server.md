@@ -524,6 +524,13 @@ URLs. Rate limits count per Cloudflare location.
   `agent_activity`.
 - A successful call of a tool with `describeActivity` also adds rows to
   `agent_live_events`. See `docs/current/agent-live-activity.md`.
+- Product analytics: each request builds a PostHog client
+  (`createWorkerProductAnalytics` in `apps/api/src/services/analytics`) that
+  sends each record at once. The request flushes it in `waitUntil` after the
+  response body ends, also an SSE stream, and only then closes its database
+  pool, because the opt-out check reads `user_privacy_settings`. Without
+  `POSTHOG_KEY` analytics is off. Production reads the key from
+  `${OPS_POSTHOG_PROJECT_KEY}`.
 
 ## Local development
 

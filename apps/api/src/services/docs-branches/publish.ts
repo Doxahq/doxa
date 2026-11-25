@@ -41,6 +41,7 @@ import {
 import { BranchResolver } from "./branch-resolver";
 import { materializeBranchArtifacts } from "./materialize-branch";
 import { publishedPageChanges } from "./page-moves";
+import { publishViaOf, reportDocsPublishedInBackground, type DocsPublishedFacts } from "./publish-analytics";
 
 export interface BranchPublishRequest {
   userId: string;
@@ -73,6 +74,8 @@ export class DocsBranchPublish {
         siteId: string;
         versionId: string;
       }): Promise<unknown>;
+      /** Product analytics of a publish that went live. Absent: nothing is reported. */
+      reportPublished?: (facts: DocsPublishedFacts) => void;
     },
   ) {
     this.resolver = new BranchResolver(deps.branches);
@@ -92,6 +95,7 @@ export class DocsBranchPublish {
       collectStorage: createCollectStorageNow(env),
       enqueueOrphanVersion: (input) =>
         gcEntries.enqueueOrphanVersionPrefix(input),
+      reportPublished: (facts) => reportDocsPublishedInBackground(env, facts),
     });
   }
 
@@ -186,6 +190,12 @@ export class DocsBranchPublish {
       ...(warm ? { warm } : {}),
     });
     await this.deps.collectStorage(published.collectEntryIds);
+    this.deps.reportPublished?.({
+      userId: input.userId,
+      projectId: input.projectId,
+      siteId: context.main.siteId,
+      via: publishViaOf({ attribution: input.attribution, review: published.review }),
+    });
 
     return { result: published.result, review: published.review };
   }

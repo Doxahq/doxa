@@ -77,6 +77,9 @@
 .pg .foot__col { display: flex; flex-direction: column; gap: 12px; }
 .pg .foot__col .label { margin-bottom: 6px; }
 .pg .foot__col a { font-size: 14px; color: var(--body); width: fit-content; }
+/* "Privacy choices" is a button that opens a dialog, drawn as one of the column links. */
+.pg .foot__choices { appearance: none; padding: 0; border: 0; background: none; font: inherit; font-size: 14px; color: var(--body); text-align: left; width: fit-content; cursor: pointer; }
+.pg .foot__choices:hover { color: var(--hi); }
 .pg .foot__base { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 22px 32px 26px; }
 .pg .foot__credit a:hover { color: var(--text); }
 .pg .status { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border: 1px solid rgb(var(--ok-rgb) / 0.5); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ok); }

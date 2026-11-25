@@ -16,6 +16,7 @@ import { formatUsd12 } from "./credits/usd";
 import { CreditMeter, type MeterEvents } from "./credits/meter";
 import { BillingEntitlements } from "./entitlements/service";
 import { OfferSlots } from "./offers/founder";
+import type { BillingLifecycleEvents } from "./lifecycle-events";
 import { BillingPayments } from "./payments/service";
 import { BillingWebhooks } from "./payments/webhooks";
 import { ProviderSignatureError } from "./provider/errors";
@@ -87,6 +88,24 @@ export class MemoryProjects implements ProjectOwnershipPort {
   }
 }
 
+type LifecycleMethod = keyof BillingLifecycleEvents;
+
+/** One call of a `BillingLifecycleEvents` method, as a test reads it. */
+export type RecordedLifecycleEvent = {
+  [Method in LifecycleMethod]: { readonly method: Method; readonly event: Parameters<NonNullable<BillingLifecycleEvents[Method]>>[0] };
+}[LifecycleMethod];
+
+/** A lifecycle listener that pushes each call into `into`, in order. */
+export function recordingLifecycleEvents(into: RecordedLifecycleEvent[]): Required<BillingLifecycleEvents> {
+  return {
+    checkoutStarted: (event) => into.push({ method: "checkoutStarted", event }),
+    checkoutCompleted: (event) => into.push({ method: "checkoutCompleted", event }),
+    checkoutExpired: (event) => into.push({ method: "checkoutExpired", event }),
+    subscriptionChanged: (event) => into.push({ method: "subscriptionChanged", event }),
+    invoiceSettled: (event) => into.push({ method: "invoiceSettled", event }),
+  };
+}
+
 export interface TestBilling {
   readonly clock: FakeClock;
   readonly catalog: Catalog;
@@ -103,6 +122,8 @@ export interface TestBilling {
   readonly payments: BillingPayments;
   readonly webhooks: BillingWebhooks;
   readonly counters: { name: string; fields: Readonly<Record<string, string | number | boolean | null>> }[];
+  /** Every `BillingLifecycleEvents` call of the payments service and the webhooks, in order. */
+  readonly lifecycle: RecordedLifecycleEvent[];
   /** Writes a subscription mirror row directly, as `syncCustomer` would. */
   setSubscription(record: SubscriptionRecord): Promise<void>;
   /** Delivers every webhook in the memory provider's outbox. */
@@ -119,6 +140,8 @@ export function createTestBilling(options: { catalog?: Catalog; defaultPlan?: Pl
   const projects = new MemoryProjects();
   const counters: TestBilling["counters"] = [];
   const events: MeterEvents = { count: (name, fields) => counters.push({ name, fields }) };
+  const recorded: RecordedLifecycleEvent[] = [];
+  const lifecycle = recordingLifecycleEvents(recorded);
   const accounts = createAccountResolver({ store, catalog, clock, projects, defaultPlan });
   const entitlements = new BillingEntitlements({ store, catalog, clock, defaultPlan, accounts });
   const ledger = new CreditLedger({ store, catalog, clock });
@@ -145,8 +168,9 @@ export function createTestBilling(options: { catalog?: Catalog; defaultPlan?: Pl
     defaultPlan,
     returnBaseUrl: "https://doxa.test",
     events,
+    lifecycle,
   });
-  const webhooks = new BillingWebhooks({ store, catalog, clock, provider, payments, ledger, offers });
+  const webhooks = new BillingWebhooks({ store, catalog, clock, provider, payments, ledger, offers, lifecycle });
   return {
     clock,
     catalog,
@@ -163,6 +187,7 @@ export function createTestBilling(options: { catalog?: Catalog; defaultPlan?: Pl
     payments,
     webhooks,
     counters,
+    lifecycle: recorded,
     setSubscription: (record) => store.withAccountLock(record.accountId, clock.now(), (tx) => tx.upsertSubscription(record)),
     async deliverWebhooks() {
       const statuses: number[] = [];

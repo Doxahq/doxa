@@ -18,6 +18,7 @@ import { parseValidatedJson } from "../http/validation";
 import { error, json, notFound } from "../http/response";
 import { PlanLimitError } from "@doxahq/billing";
 import { billingErrorResponse, planLimitResponse } from "../http/billing-errors";
+import { reportPlanLimitHit } from "../services/billing/plan-limit-analytics";
 import type { Env } from "../env";
 import { billingConfigFor } from "../services/billing/config";
 import type { BillingRefusal } from "../services/billing/generation-metering";
@@ -143,6 +144,7 @@ export function createProjectRoutes(): ApiApp {
           userId,
           ...projectInput,
           team: owner.team,
+          via: "web",
         });
 
         return json(
@@ -154,6 +156,7 @@ export function createProjectRoutes(): ApiApp {
           return error(err.message, getCreateProjectStatus(err));
         }
         if (err instanceof PlanLimitError) {
+          reportPlanLimitHit(context.env, userId, err);
           return planLimitResponse(err, { returnBaseUrl: billingConfigFor(context.env).returnBaseUrl });
         }
 
@@ -179,6 +182,7 @@ export function createProjectRoutes(): ApiApp {
           userId,
           ...projectInput,
           team: owner.team,
+          via: "web",
         });
         return json(
           { project: withDocsUrl(project, context.env) },
@@ -189,6 +193,7 @@ export function createProjectRoutes(): ApiApp {
           return error(err.message, getCreateProjectStatus(err));
         }
         if (err instanceof PlanLimitError) {
+          reportPlanLimitHit(context.env, userId, err);
           return planLimitResponse(err, { returnBaseUrl: billingConfigFor(context.env).returnBaseUrl });
         }
 
@@ -239,7 +244,9 @@ export function createProjectRoutes(): ApiApp {
         projectId: access.projectId,
         force: new URL(context.req.url).searchParams.get("force") === "true",
         seed: new URL(context.req.url).searchParams.get("seed") === "true",
+        startedBy: { userId: access.actorUserId, via: "web" },
       });
+      if (outcome.outcome === "billing_refused") reportPlanLimitHit(context.env, access.actorUserId, outcome.error, access.projectId);
       return generationStartOutcomeResponse(outcome, context.env);
     }),
   );
@@ -393,7 +400,9 @@ export function createProjectRoutes(): ApiApp {
         jobId: context.req.param("generationId"),
         force: new URL(context.req.url).searchParams.get("force") === "true",
         seed: new URL(context.req.url).searchParams.get("seed") === "true",
+        startedBy: { userId: access.actorUserId, via: "web" },
       });
+      if (outcome.outcome === "billing_refused") reportPlanLimitHit(context.env, access.actorUserId, outcome.error, access.projectId);
       if (outcome.outcome === "blocked") {
         return error(RERUN_BLOCKED_MESSAGES[outcome.reason] ?? RERUN_BLOCKED_FALLBACK, 409, {
           code: outcome.reason,
@@ -417,7 +426,10 @@ export function createProjectRoutes(): ApiApp {
           code: outcome.reason,
         });
       }
-      if (outcome.outcome === "billing_refused") return billingRefusalResponse(outcome.error, context.env);
+      if (outcome.outcome === "billing_refused") {
+        reportPlanLimitHit(context.env, access.actorUserId, outcome.error, access.projectId);
+        return billingRefusalResponse(outcome.error, context.env);
+      }
       const generation = await new JobsRepository(context.env).getDetailForProject({
         userId: access.ownerUserId,
         projectId: access.projectId,

@@ -92,7 +92,7 @@ export class MemoryBillingProvider implements BillingProvider {
   readonly name = MEMORY_PROVIDER;
   readonly capabilities: ProviderCapabilities = { checkout: true, portal: true, invoices: true, refunds: true, usageReporting: true };
 
-  private readonly customers = new Map<string, { accountId: string; email: string | null; name: string | null }>();
+  private readonly customers = new Map<string, { accountId: string; email: string | null; name: string | null; personDistinctId: string | null }>();
   private readonly customerKeys = new Map<string, string>();
   private readonly checkouts = new Map<string, CheckoutRow>();
   private readonly checkoutKeys = new Map<string, string>();
@@ -225,7 +225,7 @@ export class MemoryBillingProvider implements BillingProvider {
     const row = this.checkouts.get(checkoutId);
     if (!row || row.status !== "open") return;
     row.status = "expired";
-    this.emit({ type: "checkout.expired", providerType: "checkout.session.expired", checkoutId });
+    this.emit({ type: "checkout.expired", providerType: "checkout.session.expired", checkoutId, accountId: row.accountId });
   }
 
   /** Ends the trial: the first paid invoice, or `past_due` when the card fails. */
@@ -297,6 +297,11 @@ export class MemoryBillingProvider implements BillingProvider {
     return row ? { email: row.email, name: row.name } : null;
   }
 
+  /** The owner's Doxa user ID that the customer holds (Stripe: `metadata.posthog_person_distinct_id`). */
+  customerPersonDistinctId(customerId: string): string | null {
+    return this.customers.get(customerId)?.personDistinctId ?? null;
+  }
+
   checkoutRow(checkoutId: string): Readonly<CheckoutRow> | null {
     return this.checkouts.get(checkoutId) ?? null;
   }
@@ -361,11 +366,12 @@ export class MemoryBillingProvider implements BillingProvider {
     const row = known ? this.customers.get(known) : undefined;
     if (known && row) {
       const changes = contactChanges(row, input);
-      if (changes) this.customers.set(known, { ...row, ...changes });
+      const personDistinctId = input.personDistinctId ?? row.personDistinctId;
+      if (changes || personDistinctId !== row.personDistinctId) this.customers.set(known, { ...row, ...changes, personDistinctId });
       return { provider: MEMORY_PROVIDER, customerId: known };
     }
     const customerId = this.id("cus");
-    this.customers.set(customerId, { accountId: input.accountId, email: input.email, name: input.name });
+    this.customers.set(customerId, { accountId: input.accountId, email: input.email, name: input.name, personDistinctId: input.personDistinctId ?? null });
     this.customerKeys.set(input.idempotencyKey, customerId);
     return { provider: MEMORY_PROVIDER, customerId };
   }
@@ -629,8 +635,14 @@ const usageInvoiceSchema = z.object({
   reason: z.enum(["threshold", "renewal", "final", "other"]),
   hostedInvoiceUrl: z.string().nullable(),
 });
+const planInvoiceSchema = z.object({
+  invoiceId: z.string(),
+  outcome: z.enum(["paid", "failed"]),
+  amountCents: z.number().int(),
+  attempt: z.number().int().nullable(),
+});
 const providerEventSchema: z.ZodType<ProviderEvent> = z.discriminatedUnion("type", [
-  z.object({ ...base, type: z.literal("customer.changed"), customer: customerRefSchema }),
+  z.object({ ...base, type: z.literal("customer.changed"), customer: customerRefSchema, invoice: planInvoiceSchema.optional() }),
   z.object({
     ...base,
     type: z.literal("checkout.completed"),
@@ -638,7 +650,7 @@ const providerEventSchema: z.ZodType<ProviderEvent> = z.discriminatedUnion("type
     customer: customerRefSchema.nullable(),
     accountId: z.string().nullable(),
   }),
-  z.object({ ...base, type: z.literal("checkout.expired"), checkoutId: z.string() }),
+  z.object({ ...base, type: z.literal("checkout.expired"), checkoutId: z.string(), accountId: z.string().nullable().optional() }),
   z.object({ ...base, type: z.literal("usage_invoice.created"), invoice: usageInvoiceSchema }),
   z.object({ ...base, type: z.literal("usage_invoice.paid"), invoice: usageInvoiceSchema }),
   z.object({ ...base, type: z.literal("usage_invoice.failed"), invoice: usageInvoiceSchema }),

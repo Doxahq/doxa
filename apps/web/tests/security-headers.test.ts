@@ -7,7 +7,9 @@ import { SECURITY_HEADERS, withSecurityHeaders } from "../config/security-header
 describe("doxa.so security headers", () => {
   test("public/_headers sends the same headers to static files", () => {
     const file = readFileSync(new URL("../public/_headers", import.meta.url), "utf8")
-    const lines = file
+    // The headers of the `/*` rule, up to the next rule. The other rules set caching only.
+    const rule = file.split("\n/").find((block) => block.startsWith("*\n")) ?? ""
+    const lines = rule
       .split("\n")
       .filter((line) => line.startsWith("  "))
       .map((line) => line.trim())

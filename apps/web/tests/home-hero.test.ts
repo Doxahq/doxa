@@ -29,9 +29,9 @@ describe("home hero", () => {
     )
   })
 
-  it("shows the night dunes in both themes", () => {
-    expect(HERO_V2_IMAGES.back.files.light).toEqual(HERO_V2_IMAGES.back.files.dark)
-    expect(HERO_V2_IMAGES.front.files.light).toEqual(HERO_V2_IMAGES.front.files.dark)
+  it("shows the night dunes in both themes, from one set of files", () => {
+    expect(HERO_V2_IMAGES.back.files.avif).toContain("/marketing/hero/dunes-back-4096.avif 4096w")
+    expect(HERO_V2_IMAGES.front.files.avif).toContain("/marketing/hero/dunes-front-4096.avif 4096w")
   })
 
   it("names the light docs shot with a -light suffix in the same widths", () => {
@@ -41,14 +41,19 @@ describe("home hero", () => {
   })
 
   it("falls back to the first WebP that covers a 1440px screen", () => {
-    expect(HERO_V2_IMAGES.back.files.dark.fallback).toBe("/marketing/hero/dunes-back-1440.webp")
+    expect(HERO_V2_IMAGES.back.files.fallback).toBe("/marketing/hero/dunes-back-1440.webp")
     expect(HERO_V2_IMAGES.docs.files.dark.fallback).toBe("/marketing/hero/docs-shot-2080.webp")
     expect(HERO_V2_IMAGES.docs.files.light.fallback).toBe("/marketing/hero/docs-shot-light-2080.webp")
   })
 
   it("has a file in public/ for every size, format and theme", () => {
-    const pictures = [...Object.values(HERO_V2_IMAGES).map((image) => image.files), MCP_ART.files]
-    for (const path of pictures.flatMap(themedPicturePaths)) {
+    const paths = [
+      ...picturePaths(HERO_V2_IMAGES.back.files),
+      ...picturePaths(HERO_V2_IMAGES.front.files),
+      ...themedPicturePaths(HERO_V2_IMAGES.docs.files),
+      ...themedPicturePaths(MCP_ART.files),
+    ]
+    for (const path of paths) {
       expect(existsSync(join(PUBLIC_DIR, path)), path).toBe(true)
     }
   })

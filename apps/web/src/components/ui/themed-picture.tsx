@@ -1,11 +1,8 @@
-import type { ImgHTMLAttributes } from "react"
-
+import { Picture, type PictureImageProps } from "~/components/ui/picture"
 import type { PictureFiles } from "~/lib/theme/picture-files"
 import { THEMES, type Themed } from "~/lib/theme/theme"
 
-type ImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "srcSet" | "sizes" | "loading">
-
-interface ThemedPictureProps extends ImageProps {
+interface ThemedPictureProps extends Omit<PictureImageProps, "loading"> {
   files: Themed<PictureFiles>
   sizes: string
 }
@@ -20,13 +17,7 @@ interface ThemedPictureProps extends ImageProps {
  * For the same reason, a route must not preload a themed photo.
  */
 export function ThemedPicture({ files, sizes, ...image }: ThemedPictureProps) {
-  return THEMES.map((theme) => {
-    const { avif, webp, fallback } = files[theme]
-    return (
-      <picture key={theme} data-theme-only={theme}>
-        {avif ? <source type="image/avif" srcSet={avif} sizes={sizes} /> : null}
-        <img loading="lazy" {...image} src={fallback} srcSet={webp} sizes={sizes} />
-      </picture>
-    )
-  })
+  return THEMES.map((theme) => (
+    <Picture key={theme} theme={theme} files={files[theme]} sizes={sizes} loading="lazy" {...image} />
+  ))
 }

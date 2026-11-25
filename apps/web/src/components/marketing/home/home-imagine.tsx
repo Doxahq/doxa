@@ -20,11 +20,13 @@ export function HomeImagine() {
             <b>⊡</b>
           </div>
           <div className="frame__art">
-            <img src="/marketing/launch-sky.png" alt="A dithered night sky with a large glowing cloud" />
+            {/* Lazy, so React does not preload it in the head, where it would race the hero. */}
+            <img loading="lazy" src="/marketing/launch-sky.png" alt="A dithered night sky with a large glowing cloud" />
           </div>
         </figure>
         <div className="launch">
           <img
+            loading="lazy"
             src="/marketing/launch-rocket.webp"
             alt="A white Saturn V rocket lifts off through the clouds and out of the top of the frame. Its launch cloud breaks into pixels."
           />

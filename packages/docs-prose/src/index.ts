@@ -89,4 +89,4 @@ export {
 } from "./components/card";
 export { createPre, type PreIcons, type PreProps } from "./components/pre";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/tabs";
-export { createMermaid, type MermaidApi, type MermaidProps } from "./components/mermaid";
+export { createMermaid, type DiagramRenderer, type MermaidProps } from "./components/mermaid";

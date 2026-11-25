@@ -14,16 +14,16 @@ export interface StepItemProps {
 export interface StepFrameProps {
   /** The number drawn in the circle, from 1. */
   number: number;
-  /** The last step has no space below it. */
+  /** The last step has no padding below it. The list's margin spaces it from the next block. */
   last: boolean;
   /** Extra attributes for the numbered circle. The editor marks it read-only. */
   markerProps?: HTMLAttributes<HTMLDivElement>;
   children?: ReactNode;
 }
 
-/** The column that holds the steps. */
+/** The column that holds the steps, with the same space around it as a code block. */
 export function StepList({ children }: { children?: ReactNode }) {
-  return <div className="flex flex-col">{children}</div>;
+  return <div className="my-5 flex flex-col">{children}</div>;
 }
 
 /**
@@ -33,8 +33,11 @@ export function StepList({ children }: { children?: ReactNode }) {
  */
 export function StepFrame({ number, last, markerProps, children }: StepFrameProps) {
   return (
+    // A flow root keeps the margins of the step's text inside the frame. Without
+    // it, the last paragraph's margin of the last step leaks out below the list:
+    // the line stops at the text and the next block sits too close.
     <div
-      className={cn("relative border-l pl-9", {
+      className={cn("relative flow-root border-l pl-9", {
         "pb-5": !last,
       })}
     >

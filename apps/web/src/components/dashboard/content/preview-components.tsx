@@ -21,7 +21,7 @@ import { useImageSource } from "~/lib/dashboard/editor-assets"
  *
  * Notes, cards, steps, tabs, the file tree, the code fence and the diagram come
  * from `@doxahq/docs-prose`, the same code the published renderer uses. The
- * dashboard supplies only the icons and the lazy `mermaid` loader. The API
+ * dashboard supplies only the icons and the lazy `pele` loader. The API
  * reference blocks stay simplified here, because the published ones need the
  * renderer's reference layout.
  */
@@ -31,13 +31,12 @@ type PreviewProps = { children?: ReactNode }
 /** The docs code fence, drawn with the dashboard's copy of the same Lucide glyphs. */
 const PreviewPre = createPre({ copy: Copy, copied: Check })
 
-// `mermaid` is large, so it loads only when a page has a diagram, the same as
-// on the published site.
-const MermaidDiagram = lazy(() => import("mermaid").then(({ default: mermaid }) => ({ default: createMermaid(mermaid) })))
+// `pele` loads only when a page has a diagram, the same as on the published site.
+const MermaidDiagram = lazy(() => import("pele").then(({ render }) => ({ default: createMermaid({ render }) })))
 
 export function Mermaid(props: MermaidProps) {
   return (
-    <Suspense fallback={<div className="text-sm text-muted-foreground">Loading diagram…</div>}>
+    <Suspense fallback={null}>
       <MermaidDiagram {...props} />
     </Suspense>
   )

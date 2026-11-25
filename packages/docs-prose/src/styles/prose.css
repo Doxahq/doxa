@@ -182,3 +182,22 @@
 .prose-content .highlight-comp > code {
   background-color: transparent !important;
 }
+
+/*
+ * Diagrams (Pele). The SVG reads its colors and fonts from these variables, so
+ * it follows the site theme, light and dark, with no new render. Edge labels
+ * sit on the page color, so they hide the line under them.
+ */
+.doxa-mermaid {
+  --pele-bg: var(--background);
+  --pele-fg: var(--foreground);
+  --pele-muted: var(--muted-foreground);
+  --pele-line: var(--muted-foreground);
+  --pele-surface: var(--muted);
+  --pele-surface-alt: var(--accent);
+  --pele-border: color-mix(in oklab, var(--foreground) 28%, var(--background));
+  --pele-accent: var(--primary);
+  --pele-font: var(--font-body, ui-sans-serif, system-ui, sans-serif);
+  --pele-font-mono: var(--font-code, ui-monospace, monospace);
+  --pele-radius: min(var(--radius, 4px), 6px);
+}

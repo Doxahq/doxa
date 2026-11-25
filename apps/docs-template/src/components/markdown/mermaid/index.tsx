@@ -1,4 +1,3 @@
-import { createIsomorphicFn } from "@tanstack/react-start";
 import { lazy, Suspense } from "react";
 
 interface MermaidProps {
@@ -6,20 +5,16 @@ interface MermaidProps {
   className?: string;
 }
 
-/** The compiler keeps one branch per build, so each bundle has only its own import. */
-const loadMermaid = createIsomorphicFn()
-  .server(() => import("@/src/components/markdown/mermaid/component.server"))
-  .client(() => import("@/src/components/markdown/mermaid/component"));
-
-const MermaidLazy = lazy(loadMermaid);
+/**
+ * On the server the chunk is already in the Worker bundle, so the diagram is in
+ * the first HTML. In the browser, hydration keeps the server SVG until the
+ * chunk arrives, so the fallback shows only on a client navigation.
+ */
+const MermaidLazy = lazy(() => import("@/src/components/markdown/mermaid/component"));
 
 export default function Mermaid(props: MermaidProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="text-sm text-muted-foreground">Loading diagram…</div>
-      }
-    >
+    <Suspense fallback={null}>
       <MermaidLazy {...props} />
     </Suspense>
   );

@@ -22,8 +22,10 @@ const VARIANT_CLASS: Record<NoteVariant, string> = {
 export function Note({ children, title = "Note", type = "note" }: NoteProps) {
   return (
     <div
+      // The outer margin spaces the note from the blocks around it, and from
+      // the next note in a row of notes.
       className={cn(
-        "rounded-md border px-3 py-0.5 text-sm tracking-wide sm:px-3.5",
+        "my-5 rounded-md border px-3 py-0.5 text-sm tracking-wide sm:px-3.5",
         VARIANT_CLASS[type] ?? VARIANT_CLASS.note,
       )}
     >

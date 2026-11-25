@@ -52,7 +52,7 @@ describe("pricing page numbers come from the catalog", () => {
   })
 
   test("Upgrade to Pro opens sign-in, then the dashboard Checkout at the interval", () => {
-    expect(upgradeUrl("yearly")).toBe(`/login?redirect=${encodeURIComponent("/dashboard/billing?upgrade=year")}`)
+    expect(upgradeUrl("yearly")).toBe(`/signup?redirect=${encodeURIComponent("/dashboard/billing?upgrade=year")}`)
     expect(upgradeUrl("monthly")).toContain(encodeURIComponent("upgrade=month"))
   })
 })
@@ -78,7 +78,7 @@ describe("pricing plans with GET /billing/offers", () => {
     expect(within(card).getByText("$99")).toBeTruthy()
     await userEvent.click(within(card).getByRole("radio", { name: "Monthly" }))
     expect(within(card).getByText("$129")).toBeTruthy()
-    expect(within(card).getByRole("link", { name: /Upgrade to Pro/ }).getAttribute("href")).toBe(upgradeUrl("monthly"))
+    expect(within(card).getByRole("link", { name: /Start trial/ }).getAttribute("href")).toBe(upgradeUrl("monthly"))
   })
 
   test("shows the new price, and no founder line, once the offer is full", () => {
@@ -106,6 +106,24 @@ describe("pricing plans with GET /billing/offers", () => {
     await vi.waitFor(() => expect(queryClient.getQueryState(billingQueryKeys.offers())?.status).toBe("error"))
     const card = screen.getByText("PRO").closest(".plan") as HTMLElement
     expect(within(card).getByText("$99")).toBeTruthy()
-    expect(within(card).getByRole("link", { name: /Upgrade to Pro/ }).getAttribute("href")).toBe(GET_STARTED_URL)
+    expect(within(card).getByRole("link", { name: /Start trial/ }).getAttribute("href")).toBe(GET_STARTED_URL)
+  })
+
+  test("keeps the trial in the link while the offers load, and when the call fails (network, CORS)", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    let fail: (error: Error) => void = () => undefined
+    vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise<Response>((_, reject) => (fail = reject)))
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PricingPlans />
+      </QueryClientProvider>,
+    )
+    const card = screen.getByText("PRO").closest(".plan") as HTMLElement
+    const link = () => within(card).getByRole("link", { name: /Start trial/ }).getAttribute("href")
+    expect(link()).toBe(upgradeUrl("yearly"))
+    fail(new TypeError("Failed to fetch"))
+    // The offers query retries a network error once, after about a second.
+    await vi.waitFor(() => expect(queryClient.getQueryState(billingQueryKeys.offers())?.status).toBe("error"), { timeout: 3_000 })
+    expect(link()).toBe(upgradeUrl("yearly"))
   })
 })

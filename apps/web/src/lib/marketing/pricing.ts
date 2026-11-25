@@ -69,12 +69,13 @@ export function founderOfferLine(offer: { open: boolean; slotsLeft: number; maxA
 }
 
 /**
- * "Upgrade to Pro": sign-in first, then the dashboard opens Checkout at this
- * interval (`/dashboard/billing?upgrade=`). A signed-in visitor goes on at once.
+ * "Upgrade to Pro": sign-up first (its "Sign in" link keeps the redirect), then
+ * the dashboard opens Checkout at this interval (`/dashboard/billing?upgrade=`).
+ * A signed-in visitor goes on at once.
  */
-export function upgradeUrl(period: BillingPeriod, signInUrl = "/login"): string {
+export function upgradeUrl(period: BillingPeriod, signUpUrl = "/signup"): string {
   const next = `/dashboard/billing?upgrade=${PERIOD_INTERVAL[period]}`
-  return `${signInUrl}?redirect=${encodeURIComponent(next)}`
+  return `${signUpUrl}?redirect=${encodeURIComponent(next)}`
 }
 
 /** "Founder price for the first 50 paying customers, locked in forever": the static note of the hero and the CTA bands. */

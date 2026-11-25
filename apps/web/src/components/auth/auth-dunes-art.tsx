@@ -16,7 +16,26 @@ interface DunesPhoto {
   edgeFadeClass: string
   /** Which part of the photo stays in view when the panel crops it. */
   positionClass: string
+  /**
+   * For a wide photo: fit it to the panel's width, not its height, so it keeps its
+   * zoom. Its top and bottom edges fade into the fill.
+   */
+  scene?: DunesScene
 }
+
+interface DunesScene {
+  /** The photo's width, in % of the panel's width. */
+  widthPercent: number
+  /** How far the photo starts left of the panel, in % of the panel's width. */
+  leftPercent: number
+  /** The photo's top, as CSS (`cqw` is 1% of the panel's width). */
+  top: string
+  /** The rendered width, for `sizes`. */
+  sizes: string
+}
+
+/** Fades the top fifth and the bottom quarter of a scene photo. */
+const SCENE_EDGE_MASK = "linear-gradient(to bottom, transparent, black 20%, black 75%, transparent)"
 
 /** The first three photos have no AVIF files and no daylight copy. */
 function nightOnly(base: string): Themed<PictureFiles> {
@@ -64,10 +83,25 @@ const DUNES_PHOTOS = {
     edgeFadeClass: "w-1/4",
     positionClass: "object-[55%_50%]",
   },
+  /**
+   * The back layer of the home hero (`HERO_V2_IMAGES.back`): the walker on the lit
+   * blue dune. It is almost square (4096 x 3776), so it is a scene: 120% of the panel's
+   * width, with the walker (at 62.5% of the photo's width from its top) at 58% of the
+   * panel's height, as in the other photos. The fill is the color of its bottom row.
+   */
+  hero: {
+    files: sameInBothThemes(pictureFiles("/marketing/hero/dunes-back", [960, 1440, 2160, 3072, 4096], 1440)),
+    fill: "bg-[#0d151c]",
+    imageClass: "brightness-[0.9]",
+    skyFadeClass: "h-[20%]",
+    edgeFadeClass: "w-1/4",
+    positionClass: "",
+    scene: { widthPercent: 120, leftPercent: -10, top: "calc(58% - 75cqw)", sizes: "40vw" },
+  },
 } as const satisfies Record<string, DunesPhoto>
 
-/** The photo on show: "dusk", "night", "meadow" or "meadowBlue". */
-const DUNES_PHOTO: keyof typeof DUNES_PHOTOS = "meadowBlue"
+/** The photo on show: "dusk", "night", "meadow", "meadowBlue" or "hero". */
+const DUNES_PHOTO: keyof typeof DUNES_PHOTOS = "hero"
 
 /** The panel is a third of the window and hidden below `md`. */
 const PANEL_SIZES = "33vw"
@@ -83,17 +117,35 @@ const PANEL_SIZES = "33vw"
  */
 export function AuthDunesArt({ className }: { className?: string }) {
   const photo: DunesPhoto = DUNES_PHOTOS[DUNES_PHOTO]
+  const scene = photo.scene
   return (
-    <div className={cn(photo.fill, className)} aria-hidden="true">
-      <ThemedPicture
-        files={photo.files}
-        sizes={PANEL_SIZES}
-        alt=""
-        width={1280}
-        height={2280}
-        decoding="async"
-        className={cn("size-full object-cover", photo.positionClass, photo.imageClass)}
-      />
+    <div className={cn(photo.fill, className)} style={scene ? { containerType: "inline-size" } : undefined} aria-hidden="true">
+      {scene ? (
+        <ThemedPicture
+          files={photo.files}
+          sizes={scene.sizes}
+          alt=""
+          decoding="async"
+          className={cn("absolute h-auto max-w-none", photo.imageClass)}
+          style={{
+            width: `${scene.widthPercent}%`,
+            left: `${scene.leftPercent}%`,
+            top: scene.top,
+            maskImage: SCENE_EDGE_MASK,
+            WebkitMaskImage: SCENE_EDGE_MASK,
+          }}
+        />
+      ) : (
+        <ThemedPicture
+          files={photo.files}
+          sizes={PANEL_SIZES}
+          alt=""
+          width={1280}
+          height={2280}
+          decoding="async"
+          className={cn("size-full object-cover", photo.positionClass, photo.imageClass)}
+        />
+      )}
       <div className={cn("absolute inset-x-0 top-0 bg-linear-to-b from-background via-background/60 to-transparent", photo.skyFadeClass)} />
       <div className={cn("absolute inset-y-0 left-0 bg-linear-to-r from-background via-background/50 to-transparent", photo.edgeFadeClass)} />
       <div className="absolute inset-x-0 bottom-0 h-1/4 bg-linear-to-t from-background to-transparent" />

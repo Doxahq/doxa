@@ -1,5 +1,6 @@
 import {
   DOXA_CATALOG,
+  FREE_TEAMS_PER_OWNER_KEY,
   findOfferOfPrice,
   formatUsd,
   monthlyEquivalentCents,
@@ -641,8 +642,18 @@ function formatExportWindow(hours: number): string {
   return `Once every ${hours} hours`
 }
 
+/** "one Free team" or "2 Free teams": the limit of `FREE_TEAMS_PER_OWNER_KEY`. */
+function freeTeamsLimitPhrase(limit: PlanLimitErrorDetails["limit"]): string {
+  const count = typeof limit === "number" ? limit : DOXA_CATALOG.teams.freeTeamsPerOwner
+  return count === 1 ? "one Free team" : `${count} Free teams`
+}
+
 /** "You use 1 of 1 custom domains on Free." or "Doxabot needs Pro." */
 export function planLimitSentence(details: PlanLimitErrorDetails): string {
+  // Not a plan limit: no plan of the user changes it, only a team upgrade.
+  if (details.key === FREE_TEAMS_PER_OWNER_KEY) {
+    return `Each person can own ${freeTeamsLimitPhrase(details.limit)}. Upgrade a Free team that you own to create more teams.`
+  }
   const plan = details.plan ? planName(details.plan) : null
   if (typeof details.limit === "boolean") {
     return `${FEATURE_LABELS[details.key] ?? "This feature"} needs a paid plan${plan ? `. You are on ${plan}` : ""}.`
@@ -676,6 +687,8 @@ export function proTrialUnlocks(plan: string | null, key: string): boolean {
   const free = catalogPlan("free")
   const pro = catalogPlan("pro")
   if (!free || !pro || !DOXA_CATALOG.plans.pro.trial) return false
+  // Pro on the Free team that the refusal names frees a Free team slot.
+  if (key === FREE_TEAMS_PER_OWNER_KEY) return true
   const features = pro.features as Readonly<Record<string, boolean>>
   const freeFeatures = free.features as Readonly<Record<string, boolean>>
   if (key in features) return features[key] === true && freeFeatures[key] !== true
@@ -689,8 +702,15 @@ export function proTrialUnlocks(plan: string | null, key: string): boolean {
  * The reason line of the Pro trial dialog for a 403 `plan_limit` that Pro
  * unlocks: "Doxabot needs Pro.", or the limit sentence and what Pro has
  * ("You use 1 of 1 custom domains on Free. Pro has 4.", or "Pro has no limit.").
+ * `accountName` is the team name of the refused account, when the dashboard knows it.
  */
-export function proTrialLimitReason(details: PlanLimitErrorDetails, plan: string): string {
+export function proTrialLimitReason(details: PlanLimitErrorDetails, plan: string, accountName?: string | null): string {
+  if (details.key === FREE_TEAMS_PER_OWNER_KEY) {
+    const limit = freeTeamsLimitPhrase(details.limit)
+    return accountName
+      ? `Each person can own ${limit}, and you own "${accountName}". Upgrade "${accountName}" to Pro to create more teams.`
+      : `Each person can own ${limit}. Upgrade your Free team to Pro to create more teams.`
+  }
   if (typeof details.limit === "boolean") {
     if (details.key === "ai.doxa_agent") return "Generating docs needs Pro."
     return `${FEATURE_LABELS[details.key] ?? "This feature"} needs Pro.`

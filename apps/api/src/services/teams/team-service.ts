@@ -23,7 +23,7 @@ import { productAnalyticsOf } from "../analytics/product-analytics";
 import { TeamsRepository } from "../../repositories/teams";
 import { dashboardActor } from "../agent-access/actor";
 import { MembershipProjectAccessPolicy } from "../agent-access/membership-project-access-policy";
-import { planSeamsFromEnv, type TeamSeatPolicy } from "../billing/plan-seams";
+import { planSeamsFromEnv, type TeamCreationPolicy, type TeamSeatPolicy } from "../billing/plan-seams";
 import type { ProjectAccessPolicy } from "../agent-access/project-access-policy";
 import { OutboxTeamInviteMailer, type TeamInviteMailer } from "./invite-mailer";
 import { HmacInviteTokens, hashInviteToken, isInviteToken, type InviteTokens } from "./invite-token";
@@ -42,8 +42,16 @@ export interface TeamServiceDeps {
   readonly inviteMailer: TeamInviteMailer;
   /** Billing spec 9.3 `team.seats`, at invite create and accept. Absent: no seat limit. */
   readonly seats?: TeamSeatPolicy;
+  /** At team create: one user owns at most `teams.freeTeamsPerOwner` Free teams, unless they pay. Absent: no such limit. */
+  readonly teamCreation?: TeamCreationPolicy;
   /** Product analytics: team facts never carry a name or an email. Absent: nothing is reported. */
   readonly analytics?: ProductAnalytics;
+}
+
+/** One seam set for both team checks, so a request builds billing once. */
+function teamPlanPolicies(env: Env): Pick<TeamServiceDeps, "seats" | "teamCreation"> {
+  const seams = planSeamsFromEnv(env);
+  return { seats: seams.teamSeats, teamCreation: seams.teamCreation };
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -69,7 +77,7 @@ export class TeamService {
       tokens: new HmacInviteTokens(env.BETTER_AUTH_SECRET),
       newId: () => crypto.randomUUID(),
       inviteMailer: OutboxTeamInviteMailer.fromEnv(env),
-      seats: planSeamsFromEnv(env).teamSeats,
+      ...teamPlanPolicies(env),
       analytics: productAnalyticsOf(env),
     });
   }
@@ -86,14 +94,21 @@ export class TeamService {
     }));
   }
 
-  /** The creator becomes the first owner. */
+  /**
+   * The creator becomes the first owner. A user who already owns the Free
+   * teams the catalog allows, and pays for no account, gets `PlanLimitError`
+   * (`FREE_TEAMS_PER_OWNER_KEY`).
+   */
   async create(userId: string, name: string): Promise<TeamSummary> {
-    // A soft limit (SEC-015): two requests at the same moment can both pass.
+    // Soft limits (SEC-015): two requests at the same moment can both pass.
     if ((await this.deps.store.countOwnedTeams(userId)) >= MAX_OWNED_TEAMS) {
       throw new TeamConflictError(
         "team_limit",
         `You own ${MAX_OWNED_TEAMS} teams. Delete a team or leave its ownership before you create another.`,
       );
+    }
+    if (this.deps.teamCreation?.active) {
+      await this.deps.teamCreation.assertTeamCreationAllowed({ userId, ownedTeamIds: await this.ownedTeamIds(userId) });
     }
     const team = await this.deps.store.create({ name, ownerUserId: userId, now: this.deps.now() });
     this.deps.analytics?.capture({ name: "team_created", distinctId: userId, properties: {} });
@@ -388,6 +403,15 @@ export class TeamService {
     const token = await this.deps.tokens.tokenFor(invite.id);
     if ((await hashInviteToken(token)) !== invite.tokenHash) return null;
     return `${webOrigin}/invite/${token}`;
+  }
+
+  /** The teams that the user owns, oldest first. */
+  private async ownedTeamIds(userId: string): Promise<string[]> {
+    const teams = await this.deps.store.listForUser(userId);
+    return teams
+      .filter((team) => team.role === "owner")
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((team) => team.id);
   }
 
   private async roleOrNotFound(userId: string, teamId: string): Promise<TeamRole> {

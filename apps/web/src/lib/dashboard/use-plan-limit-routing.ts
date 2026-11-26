@@ -36,7 +36,7 @@ async function resolvePlanLimitTarget(
     (route.teamId ? (accounts.find((account) => account.ownerKind === "team" && account.ownerId === route.teamId)?.id ?? null) : null)
   const account = accountId ? accounts.find((candidate) => candidate.id === accountId) : undefined
   const plan = account?.plan ?? (projectBilling && projectBilling.accountId === accountId ? projectBilling.plan : null)
-  return { accountId, plan, canManage: account?.canManage ?? false }
+  return { accountId, plan, canManage: account?.canManage ?? false, name: account?.name ?? null }
 }
 
 /**

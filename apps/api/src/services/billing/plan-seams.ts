@@ -1,4 +1,5 @@
 import {
+  FREE_TEAMS_PER_OWNER_KEY,
   PlanLimitError,
   UNLIMITED_NUMBER,
   createEntitlementAdapters,
@@ -39,6 +40,21 @@ export interface ProjectLimitPolicy {
   assertProjectAvailable(owner: { userId: string; teamId: string | null }): Promise<void>;
 }
 
+/**
+ * Team creation (decided 2026-11-26): every team is a billing account with its
+ * own Free allowance, so one user can own only `teams.freeTeamsPerOwner` teams
+ * on Free. Past it, a create gets HTTP 403 `plan_limit` with
+ * `FREE_TEAMS_PER_OWNER_KEY` and the account of the user's oldest Free team,
+ * which the dashboard offers to upgrade. A paying customer has no such limit:
+ * a user who owns a paid team or has a paid personal account (`isPayingCustomer`).
+ */
+export interface TeamCreationPolicy {
+  /** False with `BILLING_ENFORCEMENT=off`: the caller skips the team list, as before billing. */
+  readonly active: boolean;
+  /** `ownedTeamIds`: the teams that the user owns now, oldest first. */
+  assertTeamCreationAllowed(input: { userId: string; ownedTeamIds: readonly string[] }): Promise<void>;
+}
+
 /** Every plan limit check of the API (billing spec 9.3), behind its existing interface. */
 export interface PlanSeams {
   readonly mode: BillingEnforcement;
@@ -48,6 +64,7 @@ export interface PlanSeams {
   readonly docsDomainLimit: DocsDomainLimitPolicy;
   readonly teamSeats: TeamSeatPolicy;
   readonly projectLimit: ProjectLimitPolicy;
+  readonly teamCreation: TeamCreationPolicy;
 }
 
 /** Today's free-plan stubs: the exact behavior of `BILLING_ENFORCEMENT=off`. */
@@ -74,6 +91,15 @@ export function legacySeamsFromEnv(env: Env): LegacySeams {
     searchPolicy: createSearchPolicyService(env),
     docsDomainLimit: createDocsDomainLimitPolicy(),
   };
+}
+
+/**
+ * True for an account that pays today: a plan other than Free from a
+ * subscription that is not a trial, or from an override (an Enterprise
+ * contract). A past-due subscription still counts. A trial has not paid yet.
+ */
+function isPayingCustomer(view: AccountBillingView): boolean {
+  return view.entitlements.plan !== "free" && view.entitlements.subscriptionStatus !== "trialing";
 }
 
 /** The seams of one env (billing spec 9.3 and 6.3 `BILLING_ENFORCEMENT`). */
@@ -112,6 +138,7 @@ export function createPlanSeams(deps: PlanSeamDeps): PlanSeams {
       docsDomainLimit: legacy.docsDomainLimit,
       teamSeats: { active: false, assertSeatAvailable: async () => undefined },
       projectLimit: { active: false, assertProjectAvailable: async () => undefined },
+      teamCreation: { active: false, assertTeamCreationAllowed: async () => undefined },
     };
   }
 
@@ -245,8 +272,10 @@ export function createPlanSeams(deps: PlanSeamDeps): PlanSeams {
         if (withinLimit(view.entitlements, "team.seats", used)) return;
         const raw = view.entitlements.limits["team.seats"];
         const limit = isUnlimited(raw) ? "unlimited" : raw;
-        log({ key: "team.seats", mode, kind: "denied", plan: view.entitlements.plan, accountId: view.account.id, limit, used });
-        if (mode === "on") throw new PlanLimitError({ key: "team.seats", limit, used });
+        const plan = view.entitlements.plan;
+        log({ key: "team.seats", mode, kind: "denied", plan, accountId: view.account.id, limit, used });
+        // The team's account, so the upgrade link and dialog are for this team.
+        if (mode === "on") throw new PlanLimitError({ key: "team.seats", limit, used, accountId: view.account.id, plan });
       },
     },
     projectLimit: {
@@ -274,6 +303,38 @@ export function createPlanSeams(deps: PlanSeamDeps): PlanSeams {
         log({ key: "account.projects", mode, kind: "denied", plan, accountId: view.account.id, limit, used });
         if (mode === "on") {
           throw new PlanLimitError({ key: "account.projects", limit, used, accountId: view.account.id, plan });
+        }
+      },
+    },
+    teamCreation: {
+      active: true,
+      async assertTeamCreationAllowed({ userId, ownedTeamIds }) {
+        // No owned team: nothing to count, and billing is not built.
+        if (ownedTeamIds.length === 0) return;
+        const viewOf = async (ownerKind: "user" | "team", ownerId: string) =>
+          billing().entitlements.forAccount((await billing().accounts.accountForOwner(ownerKind, ownerId)).id);
+        let limit: number;
+        let freeTeams: AccountBillingView[];
+        try {
+          limit = billing().catalog.teams.freeTeamsPerOwner;
+          const teams = await Promise.all(ownedTeamIds.map((teamId) => viewOf("team", teamId)));
+          if (teams.some(isPayingCustomer)) return;
+          freeTeams = teams.filter((view) => view.entitlements.plan === "free");
+          if (freeTeams.length < limit) return;
+          // Read last: most users who reach this line have no paid personal account either.
+          if (isPayingCustomer(await viewOf("user", userId))) return;
+        } catch (cause) {
+          if (mode === "on") throw cause;
+          logShadowFailure(userId, cause);
+          return;
+        }
+        const [oldestFree] = freeTeams;
+        if (!oldestFree) return;
+        const used = freeTeams.length;
+        const accountId = oldestFree.account.id;
+        log({ key: FREE_TEAMS_PER_OWNER_KEY, mode, kind: "denied", plan: "free", accountId, limit, used });
+        if (mode === "on") {
+          throw new PlanLimitError({ key: FREE_TEAMS_PER_OWNER_KEY, limit, used, accountId, plan: "free" });
         }
       },
     },

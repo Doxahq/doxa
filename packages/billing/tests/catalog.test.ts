@@ -138,6 +138,12 @@ describe("defineCatalog refuses", () => {
     }, /needs perSiteDailyCapCredits/);
   });
 
+  it("no Free team for a team owner (a new team starts on Free)", () => {
+    refuses((catalog) => {
+      (catalog.teams as { freeTeamsPerOwner: number }).freeTeamsPerOwner = 0;
+    }, /teams\.freeTeamsPerOwner must be a positive integer/);
+  });
+
   it("a missing limit key", () => {
     refuses((catalog) => {
       delete (catalog.plans.free.limits as Record<string, unknown>)["team.seats"];

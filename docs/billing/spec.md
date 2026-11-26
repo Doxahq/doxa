@@ -504,6 +504,8 @@ export const DOXA_CATALOG = defineCatalog({
   safety: {
     maxDailyModelCostUsdPerAccount: 75, // internal stop, see section 19
   },
+
+  teams: { freeTeamsPerOwner: 1 }, // section 8.1
 });
 ```
 
@@ -647,6 +649,16 @@ Effects:
 
 - A team on Free has `team.seats = 1`, so it cannot invite. To invite, the
   team buys Pro.
+- Every team account has its own Free allowance (projects, MCP calls, custom
+  domains, storage). So one user can own only `teams.freeTeamsPerOwner` (1)
+  teams on Free (decided 2026-11-26). Past the limit, `POST /teams` answers
+  403 `plan_limit` with the key `team.free_teams_per_owner` and the account of
+  the user's oldest Free team. Teams that exist stay.
+- A paying customer has no limit on teams: a user who owns a team on a paid
+  plan, or whose personal account is on one. "Paid" means a plan other than
+  Free from an override or from a subscription that is not `trialing`
+  (`past_due` counts). A team in its Pro trial is not Free, so it does not use
+  the Free slot, but it does not remove the limit either.
 - A user on a Pro team who also has personal projects pays nothing for them,
   and they stay on Free.
 - A project that moves into a team (`PUT /projects/:projectId/team`) changes
@@ -709,6 +721,7 @@ interface.
 | `site.custom_domains` | `DocsDomainLimitPolicy` | Constant 1 |
 | `hosting` | Docs host resolution (section 9.4) | Operator list |
 | `team.seats` | Team invite create and accept | None |
+| `team.free_teams_per_owner` (catalog `teams.freeTeamsPerOwner`, not a plan limit) | Team create (`POST /teams`), `TeamCreationPolicy` in `plan-seams.ts`. Counts the teams that the user owns whose effective plan is Free (section 8.1, decided 2026-11-26). No limit for a user who owns a paid team or has a paid personal account. The refusal names the oldest Free team, and the dashboard opens the Pro trial dialog for that team. | Up to 10 owned teams (`MAX_OWNED_TEAMS`) |
 | `account.projects` | Project create (`POST /projects`, `POST /projects/example`, the agent `project.create` action), `ProjectLimitPolicy` in `plan-seams.ts`. Free 1, Pro 10, Enterprise and self-hosted unlimited (decided 2026-11-23). Existing projects above the limit stay. | None |
 | `team.role_permissions` | Member role change to a role other than owner | None |
 | `ai.doxa_agent` | Production generation admission | None |

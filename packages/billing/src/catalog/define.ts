@@ -156,6 +156,14 @@ export interface Catalog {
   };
   readonly actions: Readonly<Record<ActionKey, ActionDefinition>>;
   readonly safety: { readonly maxDailyModelCostUsdPerAccount: number };
+  readonly teams: {
+    /**
+     * Teams on the Free plan that one user can own. A team create past it is
+     * refused with `FREE_TEAMS_PER_OWNER_KEY`. A user who owns a paid team or
+     * has a paid personal account has no limit. Teams that exist stay.
+     */
+    readonly freeTeamsPerOwner: number;
+  };
 }
 
 export class CatalogError extends Error {
@@ -263,6 +271,8 @@ export function findCatalogProblems(catalog: Catalog): string[] {
     problem("usage.markup must have at most 2 decimals");
   }
   if (!isPositiveInt(catalog.usage.extendStepCredits)) problem("usage.extendStepCredits must be a positive integer");
+  // A new team starts on Free, so 0 would refuse every team with nothing to upgrade.
+  if (!isPositiveInt(catalog.teams.freeTeamsPerOwner)) problem("teams.freeTeamsPerOwner must be a positive integer");
   if (!isNonNegativeInt(catalog.subscriptions.pastDueGraceDays)) problem("subscriptions.pastDueGraceDays must be a non-negative integer");
   for (const [key, value] of Object.entries(catalog.subscriptions.pastDueLimits ?? {})) {
     if (!(LIMIT_KEYS as readonly string[]).includes(key)) problem(`subscriptions.pastDueLimits has an unknown limit ${key}`);

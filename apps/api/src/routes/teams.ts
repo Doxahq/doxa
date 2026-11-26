@@ -18,6 +18,7 @@ import {
   TeamInviteError,
   TeamNotFoundError,
 } from "../services/teams/errors";
+import { reportPlanLimitHit } from "../services/billing/plan-limit-analytics";
 import { TeamService } from "../services/teams/team-service";
 
 export type TeamServiceFactory = (context: ApiContext) => TeamService;
@@ -142,7 +143,11 @@ function withTeamUser(context: ApiContext, handler: (userId: string) => Promise<
       return await handler(userId);
     } catch (cause) {
       const response = teamErrorResponse(cause) ?? billingErrorResponse(cause, { returnBaseUrl: webOriginOf(context) });
-      if (response) return response;
+      if (response) {
+        // A plan refusal (`team.create`, `team.seats`) is a `plan_limit_hit` event.
+        reportPlanLimitHit(context.env, userId, cause);
+        return response;
+      }
       throw cause;
     }
   });

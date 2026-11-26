@@ -84,6 +84,8 @@ export interface PlanLimitTarget {
   accountId: string | null
   plan: string | null
   canManage: boolean
+  /** The team name of the account, or null for a personal account or an unknown one. */
+  name?: string | null
 }
 
 /**
@@ -111,7 +113,7 @@ export function planLimitProTrialRequest(details: PlanLimitErrorDetails, target:
   return {
     accountId: target.accountId,
     canManage: target.canManage,
-    reason: proTrialLimitReason(details, plan),
+    reason: proTrialLimitReason(details, plan, target.name),
     feature: details.key,
   }
 }

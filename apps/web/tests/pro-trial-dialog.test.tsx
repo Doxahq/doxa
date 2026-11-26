@@ -79,7 +79,8 @@ import {
   PRO_TRIAL_ASK_OWNER,
   type AiGenerationAccess,
 } from "~/lib/dashboard/ai-access"
-import { proTrialLimitReason, proTrialUnlocks } from "~/lib/dashboard/billing-model"
+import { FREE_TEAMS_PER_OWNER_KEY } from "@doxahq/billing/catalog"
+import { planLimitSentence, proTrialLimitReason, proTrialUnlocks } from "~/lib/dashboard/billing-model"
 import { accountIdFromBillingUrl, planLimitProTrialRequest, reportBillingDenial, showBillingDenial } from "~/lib/dashboard/billing-denials"
 import { proTrialRequest, useProTrialDialog, type ProTrialRequest } from "~/lib/dashboard/pro-trial-dialog"
 import { PRO_TRIAL_CANCEL_LINE, PRO_TRIAL_TITLE, proOfferPriceView } from "~/lib/dashboard/pro-trial-offer"
@@ -495,5 +496,32 @@ describe("API refusals", () => {
     expect(planLimitProTrialRequest(domains, { accountId: null, plan: "free", canManage: true })).toBeNull()
     expect(accountIdFromBillingUrl(`https://doxa.test/dashboard/billing/${ACCOUNT_ID}`)).toBe(ACCOUNT_ID)
     expect(accountIdFromBillingUrl("https://doxa.test/pricing")).toBeNull()
+  })
+
+  test("a user who owns a Free team gets the Pro trial dialog for that team at the next team create", () => {
+    const freeTeams: PlanLimitErrorDetails = {
+      code: "plan_limit",
+      key: FREE_TEAMS_PER_OWNER_KEY,
+      limit: 1,
+      used: 1,
+      plan: "free",
+      resetsAt: null,
+      upgradeUrl: `https://doxa.test/dashboard/billing/${ACCOUNT_ID}`,
+    }
+    expect(proTrialUnlocks("free", FREE_TEAMS_PER_OWNER_KEY)).toBe(true)
+    expect(proTrialUnlocks("pro", FREE_TEAMS_PER_OWNER_KEY)).toBe(false)
+    expect(proTrialLimitReason(freeTeams, "free")).toBe(
+      "Each person can own one Free team. Upgrade your Free team to Pro to create more teams.",
+    )
+    expect(planLimitSentence(freeTeams)).toBe(
+      "Each person can own one Free team. Upgrade a Free team that you own to create more teams.",
+    )
+    // The teams page has no project or team in its route: the account comes from the billing link.
+    const accountId = accountIdFromBillingUrl(freeTeams.upgradeUrl)
+    expect(planLimitProTrialRequest(freeTeams, { accountId, plan: "free", canManage: true, name: "Acme Docs" })).toMatchObject({
+      accountId: ACCOUNT_ID,
+      feature: FREE_TEAMS_PER_OWNER_KEY,
+      reason: 'Each person can own one Free team, and you own "Acme Docs". Upgrade "Acme Docs" to Pro to create more teams.',
+    })
   })
 })

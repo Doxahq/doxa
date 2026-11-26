@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { CreateTeamInviteInput, TeamDetail, TeamRole } from "@doxahq/contracts/teams"
 
+import { planLimitDetails } from "~/lib/dashboard/billing-model"
 import { teamErrorMessage, withPendingInvite, withoutPendingInvite } from "~/lib/dashboard/teams-model"
 import { getErrorMessage } from "~/lib/errors"
 import { approvalSettingsQueryKeys } from "~/lib/queries/approval-settings"
@@ -32,7 +33,11 @@ export function useTeams() {
     loadError: query.error ? getErrorMessage(query.error, "Your teams could not be loaded.") : null,
     create: (name: string) => create.mutateAsync(name),
     isCreating: create.isPending,
-    createError: create.error ? teamErrorMessage(create.error, "The team could not be created.") : null,
+    // A plan refusal opens the upgrade dialog (`billing-denials.ts`), so the form shows no line for it.
+    createError:
+      create.error && !planLimitDetails(create.error)
+        ? teamErrorMessage(create.error, "The team could not be created.")
+        : null,
   }
 }
 

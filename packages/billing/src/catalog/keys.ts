@@ -22,6 +22,14 @@ export const FEATURE_KEYS = [
 ] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
+/**
+ * The `plan_limit` key of a refused team create (decided 2026-11-26): the
+ * user already owns `teams.freeTeamsPerOwner` teams on Free and pays for no
+ * account. It is not a plan limit of one account. A paid team that the user
+ * owns, or a paid personal account, removes the limit.
+ */
+export const FREE_TEAMS_PER_OWNER_KEY = "team.free_teams_per_owner";
+
 export const LIMIT_KEYS = [
   "ai.credits_monthly",
   "docs.branches_per_site",

@@ -200,6 +200,11 @@ export const DOXA_CATALOG = defineCatalog({
   safety: {
     maxDailyModelCostUsdPerAccount: 75, // internal stop, see section 19
   },
+
+  // Section 8.1. Every team is a billing account with its own Free allowance,
+  // so one person can own only this many teams on Free (decided 2026-11-26).
+  // A paying customer (a paid team or personal account) has no limit.
+  teams: { freeTeamsPerOwner: 1 },
 });
 
 export type DoxaCatalog = typeof DOXA_CATALOG;

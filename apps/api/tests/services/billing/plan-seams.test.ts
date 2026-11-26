@@ -1,4 +1,4 @@
-import { PlanLimitError, type BillingEnforcement } from "@doxahq/billing";
+import { FREE_TEAMS_PER_OWNER_KEY, PlanLimitError, type BillingEnforcement } from "@doxahq/billing";
 import { subscriptionFixture } from "@doxahq/billing/testing";
 import {
   FREE_PLAN_ENTITLEMENTS,
@@ -145,7 +145,8 @@ describe("BILLING_ENFORCEMENT=on", () => {
     const { harness, seams, denials } = setup("on");
     const refused = seams.teamSeats.assertSeatAvailable({ teamId: TEAM, used: 1 });
     await expect(refused).rejects.toBeInstanceOf(PlanLimitError);
-    await expect(refused).rejects.toMatchObject({ details: { key: "team.seats", limit: 1, used: 1 } });
+    const teamAccount = await harness.core.accounts.accountForOwner("team", TEAM);
+    await expect(refused).rejects.toMatchObject({ details: { key: "team.seats", limit: 1, used: 1, accountId: teamAccount.id, plan: "free" } });
     expect(denials).toEqual([expect.objectContaining({ key: "team.seats", mode: "on", kind: "denied" })]);
 
     await subscribePro(harness, "team", TEAM);
@@ -223,5 +224,108 @@ describe("account.projects at project create", () => {
     const { seams, denials } = setup("shadow");
     await expect(seams.projectLimit.assertProjectAvailable({ userId: OWNER, teamId: null })).resolves.toBeUndefined();
     expect(denials).toEqual([expect.objectContaining({ key: "account.projects", mode: "shadow", kind: "denied", used: 2 })]);
+  });
+});
+
+describe("one Free team per owner at team create (decided 2026-11-26)", () => {
+  const FREE_TEAM = "team-free";
+  const PRO_TEAM = "team-pro";
+
+  test("off: no check, and billing is never built", async () => {
+    const { seams, builds } = setup("off");
+    expect(seams.teamCreation.active).toBe(false);
+    await expect(seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [FREE_TEAM] })).resolves.toBeUndefined();
+    expect(builds()).toBe(0);
+  });
+
+  test("on: a user who owns no team may create one, without a billing read", async () => {
+    const { seams, denials, builds } = setup("on");
+    await expect(seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [] })).resolves.toBeUndefined();
+    expect(builds()).toBe(0);
+    expect(denials).toEqual([]);
+  });
+
+  test("on: a user who owns a Free team is refused with that team's account", async () => {
+    const { harness, seams, denials } = setup("on");
+    const freeTeam = await harness.core.accounts.accountForOwner("team", FREE_TEAM);
+    const refused = seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [FREE_TEAM] });
+    await expect(refused).rejects.toBeInstanceOf(PlanLimitError);
+    await expect(refused).rejects.toMatchObject({
+      details: { key: FREE_TEAMS_PER_OWNER_KEY, limit: 1, used: 1, accountId: freeTeam.id, plan: "free" },
+    });
+    expect(denials).toEqual([
+      expect.objectContaining({ key: FREE_TEAMS_PER_OWNER_KEY, mode: "on", kind: "denied", plan: "free", accountId: freeTeam.id, limit: 1, used: 1 }),
+    ]);
+  });
+
+  test("on: the owner of only Pro teams may create a team", async () => {
+    const { harness, seams, denials } = setup("on");
+    await subscribePro(harness, "team", PRO_TEAM);
+    await expect(seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [PRO_TEAM] })).resolves.toBeUndefined();
+    expect(denials).toEqual([]);
+  });
+
+  test("on: the owner of a paid team has no limit, with any number of Free teams", async () => {
+    const { harness, seams, denials } = setup("on");
+    await subscribePro(harness, "team", PRO_TEAM);
+    await expect(
+      seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [FREE_TEAM, PRO_TEAM, "team-free-2"] }),
+    ).resolves.toBeUndefined();
+    expect(denials).toEqual([]);
+  });
+
+  test("on: a paid personal account has no limit", async () => {
+    const { harness, seams } = setup("on");
+    await subscribePro(harness, "user", OWNER);
+    await expect(seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [FREE_TEAM, "team-free-2"] })).resolves.toBeUndefined();
+  });
+
+  test("on: a past-due team still counts as a paying customer", async () => {
+    const { harness, seams } = setup("on");
+    const account = await harness.core.accounts.accountForOwner("team", PRO_TEAM);
+    await harness.billing.setSubscription(subscriptionFixture({ accountId: account.id, status: "past_due" }));
+    await expect(seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [FREE_TEAM, PRO_TEAM] })).resolves.toBeUndefined();
+  });
+
+  test("on: a trial is not paid, so it keeps the limit; the refusal names the oldest Free team", async () => {
+    const { harness, seams } = setup("on");
+    const trialTeam = await harness.core.accounts.accountForOwner("team", "team-trial");
+    await harness.billing.setSubscription(subscriptionFixture({ accountId: trialTeam.id, status: "trialing" }));
+    const personal = await harness.core.accounts.accountForOwner("user", OWNER);
+    await harness.billing.setSubscription(subscriptionFixture({ accountId: personal.id, status: "trialing" }));
+    const oldestFree = await harness.core.accounts.accountForOwner("team", FREE_TEAM);
+    await expect(
+      seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: ["team-trial", FREE_TEAM, "team-free-2"] }),
+    ).rejects.toMatchObject({ details: { key: FREE_TEAMS_PER_OWNER_KEY, used: 2, accountId: oldestFree.id } });
+    // The team in its trial is not Free, so it uses no Free slot.
+    await expect(seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: ["team-trial"] })).resolves.toBeUndefined();
+  });
+
+  test("on: a cancelled subscription is not paid", async () => {
+    const { harness, seams } = setup("on");
+    const personal = await harness.core.accounts.accountForOwner("user", OWNER);
+    await harness.billing.setSubscription(subscriptionFixture({ accountId: personal.id, status: "canceled" }));
+    await expect(seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [FREE_TEAM] })).rejects.toMatchObject({
+      details: { key: FREE_TEAMS_PER_OWNER_KEY },
+    });
+  });
+
+  test("shadow: logs the denial and allows the team", async () => {
+    const { seams, denials } = setup("shadow");
+    await expect(seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [FREE_TEAM] })).resolves.toBeUndefined();
+    expect(denials).toEqual([expect.objectContaining({ key: FREE_TEAMS_PER_OWNER_KEY, mode: "shadow", kind: "denied", plan: "free" })]);
+  });
+
+  test("shadow: a billing failure is logged and never fails the request", async () => {
+    const { seams, denials } = setup("shadow", { billingFails: true });
+    await expect(seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [FREE_TEAM] })).resolves.toBeUndefined();
+    expect(denials).toEqual([]);
+  });
+
+  test("on: a billing failure fails the request", async () => {
+    const { seams } = setup("on", { billingFails: true });
+    await expect(seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [FREE_TEAM] })).rejects.toThrow(
+      "billing store down",
+    );
   });
 });

@@ -1,5 +1,6 @@
 import {
   DOXA_CATALOG,
+  FREE_ACCOUNTS_MOVE_KEY,
   FREE_TEAMS_PER_OWNER_KEY,
   findOfferOfPrice,
   formatUsd,
@@ -10,12 +11,14 @@ import {
   creditsExhaustedErrorDetailsSchema,
   planLimitErrorDetailsSchema,
   type BillingAccountDetail,
+  type BillingAccountList,
   type BillingInvoice,
   type BillingLedgerEntry,
   type BillingOffer,
   type CreditEstimate,
   type CreditsExhaustedErrorDetails,
   type PlanLimitErrorDetails,
+  type ProjectBilling,
 } from "@doxahq/contracts/billing"
 
 import { ApiRequestError } from "~/lib/api-errors"
@@ -654,6 +657,9 @@ export function planLimitSentence(details: PlanLimitErrorDetails): string {
   if (details.key === FREE_TEAMS_PER_OWNER_KEY) {
     return `Each person can own ${freeTeamsLimitPhrase(details.limit)}. Upgrade a Free team that you own to create more teams.`
   }
+  if (details.key === FREE_ACCOUNTS_MOVE_KEY) {
+    return "Moving a project between two Free workspaces is not possible. Upgrade one of them to Pro first."
+  }
   const plan = details.plan ? planName(details.plan) : null
   if (typeof details.limit === "boolean") {
     return `${FEATURE_LABELS[details.key] ?? "This feature"} needs a paid plan${plan ? `. You are on ${plan}` : ""}.`
@@ -663,6 +669,43 @@ export function planLimitSentence(details: PlanLimitErrorDetails): string {
   const used = details.used === null ? null : formatLimitNumber(details.key, details.used)
   const suffix = plan ? ` on ${plan}` : ""
   return used === null ? `The limit is ${limit} ${label}${suffix}.` : `You use ${used} of ${limit} ${label}${suffix}.`
+}
+
+/**
+ * The line of a refused project move (`FREE_ACCOUNTS_MOVE_KEY`). `accountName`
+ * is the team name of the account to upgrade: null for the personal account,
+ * undefined when the dashboard does not know the account.
+ */
+export function freeAccountsMoveMessage(accountName: string | null | undefined): string {
+  const target =
+    accountName === undefined ? "one of them" : accountName === null ? "your personal workspace" : `"${accountName}"`
+  return `Moving a project between two Free workspaces is not possible. Upgrade ${target} to Pro first.`
+}
+
+/** The account that a refused project move asks to upgrade. */
+export interface FreeAccountsMoveTarget {
+  accountId: string
+  /** The team name, or null for the personal account. */
+  name: string | null
+}
+
+/**
+ * The account to upgrade when a project move into `teamId` goes between two
+ * accounts on Free, else null. The check runs only when billing enforcement is
+ * `on`. An unknown account or plan gives null: the API decides.
+ * `source` is the project's account now (`ProjectDetail.billing`).
+ */
+export function freeAccountsMoveTarget(input: {
+  list: BillingAccountList | null | undefined
+  source: ProjectBilling | null | undefined
+  teamId: string | null
+}): FreeAccountsMoveTarget | null {
+  const { list, source, teamId } = input
+  if (!list || list.enforcement !== "on" || !source || teamId === null) return null
+  const destination = list.accounts.find((account) => account.ownerKind === "team" && account.ownerId === teamId)
+  if (!destination || destination.id === source.accountId) return null
+  if (source.plan !== "free" || destination.plan !== "free") return null
+  return { accountId: destination.id, name: destination.name }
 }
 
 type CatalogPlan = (typeof DOXA_CATALOG.plans)[keyof typeof DOXA_CATALOG.plans]

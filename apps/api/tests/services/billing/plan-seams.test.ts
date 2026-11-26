@@ -1,4 +1,4 @@
-import { FREE_TEAMS_PER_OWNER_KEY, PlanLimitError, type BillingEnforcement } from "@doxahq/billing";
+import { FREE_ACCOUNTS_MOVE_KEY, FREE_TEAMS_PER_OWNER_KEY, PlanLimitError, type BillingEnforcement } from "@doxahq/billing";
 import { subscriptionFixture } from "@doxahq/billing/testing";
 import {
   FREE_PLAN_ENTITLEMENTS,
@@ -325,6 +325,102 @@ describe("one Free team per owner at team create (decided 2026-11-26)", () => {
   test("on: a billing failure fails the request", async () => {
     const { seams } = setup("on", { billingFails: true });
     await expect(seams.teamCreation.assertTeamCreationAllowed({ userId: OWNER, ownedTeamIds: [FREE_TEAM] })).rejects.toThrow(
+      "billing store down",
+    );
+  });
+});
+
+describe("no project move between two Free accounts (decided 2026-11-26)", () => {
+  const FREE_TEAM = "team-free";
+  const OTHER_FREE_TEAM = "team-free-2";
+  const TEAM_PROJECT = "project-team";
+  const toTeam = (teamId: string) => ({ ownerKind: "team" as const, ownerId: teamId });
+  const toPersonal = { ownerKind: "user" as const, ownerId: OWNER };
+
+  function setupMove(mode: BillingEnforcement, options: { billingFails?: boolean } = {}) {
+    const context = setup(mode, options);
+    context.harness.billing.projects.set(TEAM_PROJECT, { userId: OWNER, teamId: FREE_TEAM });
+    return context;
+  }
+
+  test("off: no check, and billing is never built", async () => {
+    const { seams, builds } = setupMove("off");
+    expect(seams.projectMove.active).toBe(false);
+    await expect(seams.projectMove.assertMoveAllowed({ projectId: PROJECT, destination: toTeam(FREE_TEAM) })).resolves.toBeUndefined();
+    expect(builds()).toBe(0);
+  });
+
+  test("on: personal Free to a Free team is refused with the team's account", async () => {
+    const { harness, seams, denials } = setupMove("on");
+    const team = await harness.core.accounts.accountForOwner("team", FREE_TEAM);
+    const refused = seams.projectMove.assertMoveAllowed({ projectId: PROJECT, destination: toTeam(FREE_TEAM) });
+    await expect(refused).rejects.toBeInstanceOf(PlanLimitError);
+    await expect(refused).rejects.toMatchObject({
+      details: { key: FREE_ACCOUNTS_MOVE_KEY, limit: false, used: null, accountId: team.id, plan: "free" },
+    });
+    expect(denials).toEqual([
+      expect.objectContaining({ key: FREE_ACCOUNTS_MOVE_KEY, mode: "on", kind: "denied", plan: "free", projectId: PROJECT, accountId: team.id }),
+    ]);
+  });
+
+  test("on: a Free team to personal Free is refused with the source team's account", async () => {
+    const { harness, seams } = setupMove("on");
+    const team = await harness.core.accounts.accountForOwner("team", FREE_TEAM);
+    await expect(seams.projectMove.assertMoveAllowed({ projectId: TEAM_PROJECT, destination: toPersonal })).rejects.toMatchObject({
+      details: { key: FREE_ACCOUNTS_MOVE_KEY, accountId: team.id },
+    });
+  });
+
+  test("on: a Free team to another Free team is refused with the destination team's account", async () => {
+    const { harness, seams } = setupMove("on");
+    const destination = await harness.core.accounts.accountForOwner("team", OTHER_FREE_TEAM);
+    await expect(
+      seams.projectMove.assertMoveAllowed({ projectId: TEAM_PROJECT, destination: toTeam(OTHER_FREE_TEAM) }),
+    ).rejects.toMatchObject({ details: { key: FREE_ACCOUNTS_MOVE_KEY, accountId: destination.id } });
+  });
+
+  test("on: a Pro source allows the move", async () => {
+    const { harness, seams, denials } = setupMove("on");
+    await subscribePro(harness, "user", OWNER);
+    await expect(seams.projectMove.assertMoveAllowed({ projectId: PROJECT, destination: toTeam(FREE_TEAM) })).resolves.toBeUndefined();
+    expect(denials).toEqual([]);
+  });
+
+  test("on: a Pro destination allows the move", async () => {
+    const { harness, seams } = setupMove("on");
+    await subscribePro(harness, "team", FREE_TEAM);
+    await expect(seams.projectMove.assertMoveAllowed({ projectId: PROJECT, destination: toTeam(FREE_TEAM) })).resolves.toBeUndefined();
+  });
+
+  test("on: a Pro trial counts as Pro", async () => {
+    const { harness, seams } = setupMove("on");
+    const team = await harness.core.accounts.accountForOwner("team", FREE_TEAM);
+    await harness.billing.setSubscription(subscriptionFixture({ accountId: team.id, status: "trialing" }));
+    await expect(seams.projectMove.assertMoveAllowed({ projectId: PROJECT, destination: toTeam(FREE_TEAM) })).resolves.toBeUndefined();
+  });
+
+  test("on: a move that keeps the account needs no check", async () => {
+    const { seams, denials } = setupMove("on");
+    await expect(seams.projectMove.assertMoveAllowed({ projectId: TEAM_PROJECT, destination: toTeam(FREE_TEAM) })).resolves.toBeUndefined();
+    await expect(seams.projectMove.assertMoveAllowed({ projectId: PROJECT, destination: toPersonal })).resolves.toBeUndefined();
+    expect(denials).toEqual([]);
+  });
+
+  test("shadow: logs the denial and allows the move", async () => {
+    const { seams, denials } = setupMove("shadow");
+    await expect(seams.projectMove.assertMoveAllowed({ projectId: PROJECT, destination: toTeam(FREE_TEAM) })).resolves.toBeUndefined();
+    expect(denials).toEqual([expect.objectContaining({ key: FREE_ACCOUNTS_MOVE_KEY, mode: "shadow", kind: "denied", plan: "free" })]);
+  });
+
+  test("shadow: a billing failure is logged and never fails the request", async () => {
+    const { seams, denials } = setupMove("shadow", { billingFails: true });
+    await expect(seams.projectMove.assertMoveAllowed({ projectId: PROJECT, destination: toTeam(FREE_TEAM) })).resolves.toBeUndefined();
+    expect(denials).toEqual([]);
+  });
+
+  test("on: a billing failure fails the request", async () => {
+    const { seams } = setupMove("on", { billingFails: true });
+    await expect(seams.projectMove.assertMoveAllowed({ projectId: PROJECT, destination: toTeam(FREE_TEAM) })).rejects.toThrow(
       "billing store down",
     );
   });

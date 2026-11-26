@@ -659,6 +659,16 @@ Effects:
   Free from an override or from a subscription that is not `trialing`
   (`past_due` counts). A team in its Pro trial is not Free, so it does not use
   the Free slot, but it does not remove the limit either.
+- A project move changes the billing account of the project, so moves between
+  Free accounts collect Free allowances. A move between two accounts that are
+  both on Free is refused (decided 2026-11-26): `PUT /projects/:projectId/team`
+  answers 403 `plan_limit` with the key `team.move_between_free_accounts`.
+  The source or the destination account must be on a plan other than Free (a
+  Pro trial, Enterprise and an override count). The refusal names the
+  destination account when it is a team, else the source team. The dashboard
+  shows the reason in the move form, not in the billing dialog. Today the API
+  only moves a personal project into a team; the rule covers every pair of
+  accounts.
 - A user on a Pro team who also has personal projects pays nothing for them,
   and they stay on Free.
 - A project that moves into a team (`PUT /projects/:projectId/team`) changes
@@ -722,6 +732,7 @@ interface.
 | `hosting` | Docs host resolution (section 9.4) | Operator list |
 | `team.seats` | Team invite create and accept | None |
 | `team.free_teams_per_owner` (catalog `teams.freeTeamsPerOwner`, not a plan limit) | Team create (`POST /teams`), `TeamCreationPolicy` in `plan-seams.ts`. Counts the teams that the user owns whose effective plan is Free (section 8.1, decided 2026-11-26). No limit for a user who owns a paid team or has a paid personal account. The refusal names the oldest Free team, and the dashboard opens the Pro trial dialog for that team. | Up to 10 owned teams (`MAX_OWNED_TEAMS`) |
+| `team.move_between_free_accounts` (not a plan limit) | Project move (`PUT /projects/:projectId/team`), `ProjectMovePolicy` in `plan-seams.ts`. Refuses a move that changes the billing account when the source and the destination accounts are both on Free by effective plan (section 8.1, decided 2026-11-26). A trial counts as Pro. A move that keeps the account is not checked. | None |
 | `account.projects` | Project create (`POST /projects`, `POST /projects/example`, the agent `project.create` action), `ProjectLimitPolicy` in `plan-seams.ts`. Free 1, Pro 10, Enterprise and self-hosted unlimited (decided 2026-11-23). Existing projects above the limit stay. | None |
 | `team.role_permissions` | Member role change to a role other than owner | None |
 | `ai.doxa_agent` | Production generation admission | None |

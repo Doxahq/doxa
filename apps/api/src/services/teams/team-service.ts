@@ -23,7 +23,12 @@ import { productAnalyticsOf } from "../analytics/product-analytics";
 import { TeamsRepository } from "../../repositories/teams";
 import { dashboardActor } from "../agent-access/actor";
 import { MembershipProjectAccessPolicy } from "../agent-access/membership-project-access-policy";
-import { planSeamsFromEnv, type TeamCreationPolicy, type TeamSeatPolicy } from "../billing/plan-seams";
+import {
+  planSeamsFromEnv,
+  type ProjectMovePolicy,
+  type TeamCreationPolicy,
+  type TeamSeatPolicy,
+} from "../billing/plan-seams";
 import type { ProjectAccessPolicy } from "../agent-access/project-access-policy";
 import { OutboxTeamInviteMailer, type TeamInviteMailer } from "./invite-mailer";
 import { HmacInviteTokens, hashInviteToken, isInviteToken, type InviteTokens } from "./invite-token";
@@ -44,14 +49,16 @@ export interface TeamServiceDeps {
   readonly seats?: TeamSeatPolicy;
   /** At team create: one user owns at most `teams.freeTeamsPerOwner` Free teams, unless they pay. Absent: no such limit. */
   readonly teamCreation?: TeamCreationPolicy;
+  /** At project move: no move between two accounts that are both on Free. Absent: no such check. */
+  readonly projectMove?: ProjectMovePolicy;
   /** Product analytics: team facts never carry a name or an email. Absent: nothing is reported. */
   readonly analytics?: ProductAnalytics;
 }
 
-/** One seam set for both team checks, so a request builds billing once. */
-function teamPlanPolicies(env: Env): Pick<TeamServiceDeps, "seats" | "teamCreation"> {
+/** One seam set for all team checks, so a request builds billing once. */
+function teamPlanPolicies(env: Env): Pick<TeamServiceDeps, "seats" | "teamCreation" | "projectMove"> {
   const seams = planSeamsFromEnv(env);
-  return { seats: seams.teamSeats, teamCreation: seams.teamCreation };
+  return { seats: seams.teamSeats, teamCreation: seams.teamCreation, projectMove: seams.projectMove };
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -352,11 +359,6 @@ export class TeamService {
   }
 
   /**
-   * Spec §5: the owner of a personal project moves it into a team they
-   * manage. The project keeps its owner (storage, billing, GitHub), so the
-   * owner's agent grants keep working through the owner's team role.
-   */
-  /**
    * The team of a project that the user is about to create in it. Throws
    * "not found" for a team the user is not in, and "forbidden" for a role
    * without `project.create` (editor, viewer).
@@ -368,6 +370,13 @@ export class TeamService {
     return { id: team.id, name: team.name };
   }
 
+  /**
+   * Spec §5: the owner of a personal project moves it into a team they
+   * manage. The project keeps its owner (storage, GitHub), so the owner's
+   * agent grants keep working through the owner's team role. The project
+   * bills to the team after the move (billing spec 8.1). A move between two
+   * accounts on Free gets `PlanLimitError` (`FREE_ACCOUNTS_MOVE_KEY`).
+   */
   async moveProject(userId: string, projectId: string, teamId: string): Promise<void> {
     const decision = await this.deps.projects.authorize(dashboardActor(userId), projectId, "project.delete");
     if (!decision.allowed) {
@@ -376,6 +385,13 @@ export class TeamService {
     }
     if (decision.project.ownerUserId !== userId) throw new TeamAccessError();
     await this.authorize(userId, teamId, "team.manage");
+    // A move changes the billing account: none between two Free accounts.
+    if (this.deps.projectMove?.active) {
+      await this.deps.projectMove.assertMoveAllowed({
+        projectId: decision.project.projectId,
+        destination: { ownerKind: "team", ownerId: teamId },
+      });
+    }
     const result = await this.deps.store.moveProject(decision.project.projectId, teamId, this.deps.now());
     if (result.outcome === "not_found") throw new TeamNotFoundError();
     if (result.outcome === "already_in_team") {

@@ -144,7 +144,7 @@ function withTeamUser(context: ApiContext, handler: (userId: string) => Promise<
     } catch (cause) {
       const response = teamErrorResponse(cause) ?? billingErrorResponse(cause, { returnBaseUrl: webOriginOf(context) });
       if (response) {
-        // A plan refusal (`team.create`, `team.seats`) is a `plan_limit_hit` event.
+        // A plan refusal (`team.seats`, `team.free_teams_per_owner`, `team.move_between_free_accounts`) is a `plan_limit_hit` event.
         reportPlanLimitHit(context.env, userId, cause);
         return response;
       }

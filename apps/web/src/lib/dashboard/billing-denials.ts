@@ -51,14 +51,32 @@ export function showPlanLimit(key: string, limit: number, used: number): void {
   })
 }
 
-/** Reports `error` when it is a billing denial. Returns true when it was one. */
-export function reportBillingDenial(error: unknown): boolean {
+/**
+ * The mutation `meta` field that names the plan limit keys a mutation shows
+ * itself, next to its own form. A 403 `plan_limit` with one of these keys
+ * does not open the dashboard's billing dialog.
+ */
+export const INLINE_PLAN_LIMIT_KEYS_META = "inlinePlanLimitKeys"
+
+/** The `INLINE_PLAN_LIMIT_KEYS_META` keys of a mutation `meta`, or none. */
+export function inlinePlanLimitKeysOf(meta: Record<string, unknown> | undefined): readonly string[] {
+  const keys = meta?.[INLINE_PLAN_LIMIT_KEYS_META]
+  if (!Array.isArray(keys)) return []
+  return keys.filter((key): key is string => typeof key === "string")
+}
+
+/**
+ * Reports `error` when it is a billing denial. Returns true when it was one.
+ * A plan limit in `inlinePlanLimitKeys` is not reported: its caller shows it.
+ */
+export function reportBillingDenial(error: unknown, options: { inlinePlanLimitKeys?: readonly string[] } = {}): boolean {
   const credits = creditsExhaustedDetails(error)
   if (credits) {
     showBillingDenial({ kind: "credits", details: credits })
     return true
   }
   const limit = planLimitDetails(error)
+  if (limit && options.inlinePlanLimitKeys?.includes(limit.key)) return false
   if (limit) {
     showBillingDenial({ kind: "plan_limit", details: limit })
     return true

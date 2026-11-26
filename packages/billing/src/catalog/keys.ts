@@ -30,6 +30,15 @@ export type FeatureKey = (typeof FEATURE_KEYS)[number];
  */
 export const FREE_TEAMS_PER_OWNER_KEY = "team.free_teams_per_owner";
 
+/**
+ * The `plan_limit` key of a refused project move (decided 2026-11-26): the
+ * move changes the project's billing account, and both the source and the
+ * destination accounts are on Free. Each account has its own Free allowance,
+ * so such moves collect Free allowances. It is not a plan limit of one
+ * account. A plan other than Free on either side (a trial too) allows it.
+ */
+export const FREE_ACCOUNTS_MOVE_KEY = "team.move_between_free_accounts";
+
 export const LIMIT_KEYS = [
   "ai.credits_monthly",
   "docs.branches_per_site",

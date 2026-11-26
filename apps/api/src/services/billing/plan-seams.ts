@@ -1,4 +1,5 @@
 import {
+  FREE_ACCOUNTS_MOVE_KEY,
   FREE_TEAMS_PER_OWNER_KEY,
   PlanLimitError,
   UNLIMITED_NUMBER,
@@ -55,6 +56,21 @@ export interface TeamCreationPolicy {
   assertTeamCreationAllowed(input: { userId: string; ownedTeamIds: readonly string[] }): Promise<void>;
 }
 
+/**
+ * Project moves (decided 2026-11-26): a move changes the project's billing
+ * account (billing spec 8.1), and each account has its own Free allowance. A
+ * move between two accounts that are both on Free gets HTTP 403 `plan_limit`
+ * with `FREE_ACCOUNTS_MOVE_KEY`. A plan other than Free on either side allows
+ * it: a trial, an Enterprise contract and an override count too. A move that
+ * keeps the account needs no check.
+ */
+export interface ProjectMovePolicy {
+  /** False with `BILLING_ENFORCEMENT=off`: no check, as before billing. */
+  readonly active: boolean;
+  /** `destination`: the owner of the account that the project bills to after the move. */
+  assertMoveAllowed(input: { projectId: string; destination: { ownerKind: "user" | "team"; ownerId: string } }): Promise<void>;
+}
+
 /** Every plan limit check of the API (billing spec 9.3), behind its existing interface. */
 export interface PlanSeams {
   readonly mode: BillingEnforcement;
@@ -65,6 +81,7 @@ export interface PlanSeams {
   readonly teamSeats: TeamSeatPolicy;
   readonly projectLimit: ProjectLimitPolicy;
   readonly teamCreation: TeamCreationPolicy;
+  readonly projectMove: ProjectMovePolicy;
 }
 
 /** Today's free-plan stubs: the exact behavior of `BILLING_ENFORCEMENT=off`. */
@@ -139,6 +156,7 @@ export function createPlanSeams(deps: PlanSeamDeps): PlanSeams {
       teamSeats: { active: false, assertSeatAvailable: async () => undefined },
       projectLimit: { active: false, assertProjectAvailable: async () => undefined },
       teamCreation: { active: false, assertTeamCreationAllowed: async () => undefined },
+      projectMove: { active: false, assertMoveAllowed: async () => undefined },
     };
   }
 
@@ -335,6 +353,34 @@ export function createPlanSeams(deps: PlanSeamDeps): PlanSeams {
         log({ key: FREE_TEAMS_PER_OWNER_KEY, mode, kind: "denied", plan: "free", accountId, limit, used });
         if (mode === "on") {
           throw new PlanLimitError({ key: FREE_TEAMS_PER_OWNER_KEY, limit, used, accountId, plan: "free" });
+        }
+      },
+    },
+    projectMove: {
+      active: true,
+      async assertMoveAllowed({ projectId, destination }) {
+        let source: AccountBillingView;
+        let target: AccountBillingView;
+        try {
+          // The source: the project's team account, else its owner's personal account.
+          const sourceAccount = await billing().accounts.resolveBillingAccount(projectId);
+          const targetAccount = await billing().accounts.accountForOwner(destination.ownerKind, destination.ownerId);
+          if (sourceAccount.id === targetAccount.id) return;
+          [source, target] = await Promise.all([
+            billing().entitlements.forAccount(sourceAccount.id),
+            billing().entitlements.forAccount(targetAccount.id),
+          ]);
+        } catch (cause) {
+          if (mode === "on") throw cause;
+          logShadowFailure(projectId, cause);
+          return;
+        }
+        if (source.entitlements.plan !== "free" || target.entitlements.plan !== "free") return;
+        // A team account, so the upgrade link points at the team: the destination when it is one.
+        const accountId = target.account.ownerKind === "team" ? target.account.id : source.account.id;
+        log({ key: FREE_ACCOUNTS_MOVE_KEY, mode, kind: "denied", plan: "free", projectId, accountId, limit: false, used: null });
+        if (mode === "on") {
+          throw new PlanLimitError({ key: FREE_ACCOUNTS_MOVE_KEY, limit: false, used: null, accountId, plan: "free" });
         }
       },
     },

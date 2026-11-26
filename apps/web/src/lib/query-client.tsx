@@ -6,13 +6,17 @@ import {
   environmentManager,
 } from "@tanstack/react-query"
 
-import { reportBillingDenial } from "~/lib/dashboard/billing-denials"
+import { inlinePlanLimitKeysOf, reportBillingDenial } from "~/lib/dashboard/billing-denials"
 
 function makeQueryClient() {
   return new QueryClient({
     // A billing denial (402 credits, 403 plan limit) of any mutation opens the
     // dashboard's billing dialog. The mutation's own error handling still runs.
-    mutationCache: new MutationCache({ onError: (error) => void reportBillingDenial(error) }),
+    // A mutation names the plan limits that it shows itself in its `meta`.
+    mutationCache: new MutationCache({
+      onError: (error, _variables, _result, mutation) =>
+        void reportBillingDenial(error, { inlinePlanLimitKeys: inlinePlanLimitKeysOf(mutation.meta) }),
+    }),
     defaultOptions: {
       queries: {
         retry: 1,

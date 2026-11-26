@@ -1,11 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { FREE_ACCOUNTS_MOVE_KEY } from "@doxahq/billing/catalog"
 import type { CreateTeamInviteInput, TeamDetail, TeamRole } from "@doxahq/contracts/teams"
 
-import { planLimitDetails } from "~/lib/dashboard/billing-model"
+import { INLINE_PLAN_LIMIT_KEYS_META, accountIdFromBillingUrl } from "~/lib/dashboard/billing-denials"
+import {
+  freeAccountsMoveMessage,
+  freeAccountsMoveTarget,
+  planLimitDetails,
+} from "~/lib/dashboard/billing-model"
 import { teamErrorMessage, withPendingInvite, withoutPendingInvite } from "~/lib/dashboard/teams-model"
 import { getErrorMessage } from "~/lib/errors"
 import { approvalSettingsQueryKeys } from "~/lib/queries/approval-settings"
-import { dashboardQueryKeys } from "~/lib/queries/dashboard"
+import { billingAccountsQueryOptions } from "~/lib/queries/billing"
+import { dashboardQueryKeys, projectDetailQueryOptions } from "~/lib/queries/dashboard"
 import { teamDetailQueryOptions, teamInviteQueryOptions, teamQueryKeys, teamsQueryOptions } from "~/lib/queries/teams"
 import {
   acceptTeamInvite,
@@ -163,11 +170,26 @@ export function useTeamInvite(token: string) {
   }
 }
 
-/** Project settings → Move to team. */
-export function useMoveProjectToTeam(projectId: string) {
+/** Why a project cannot move between two Free accounts, with the account to upgrade. */
+export interface FreeAccountsMoveRefusal {
+  message: string
+  /** The billing page to link, or null when the dashboard does not know the account. */
+  accountId: string | null
+}
+
+/**
+ * Project settings → Move to team. `teamId` is the chosen team. A move between
+ * two accounts on Free is refused before the click when the dashboard knows
+ * both plans (`blocked`), and the API refuses it too (403 `plan_limit` with
+ * `FREE_ACCOUNTS_MOVE_KEY`): that answer shows here, not in the billing dialog.
+ */
+export function useMoveProjectToTeam(projectId: string, teamId: string | null) {
   const queryClient = useQueryClient()
+  const source = useQuery(projectDetailQueryOptions(projectId)).data?.billing
+  const accounts = useQuery(billingAccountsQueryOptions()).data
   const move = useMutation({
-    mutationFn: (teamId: string) => moveProjectToTeam(projectId, teamId),
+    mutationFn: (target: string) => moveProjectToTeam(projectId, target),
+    meta: { [INLINE_PLAN_LIMIT_KEYS_META]: [FREE_ACCOUNTS_MOVE_KEY] },
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.project(projectId) }),
@@ -175,10 +197,27 @@ export function useMoveProjectToTeam(projectId: string) {
         queryClient.invalidateQueries({ queryKey: teamQueryKeys.all }),
       ]),
   })
+
+  const before = freeAccountsMoveTarget({ list: accounts, source, teamId })
+  const blocked: FreeAccountsMoveRefusal | null = before
+    ? { message: freeAccountsMoveMessage(before.name), accountId: before.accountId }
+    : null
+  const limit = planLimitDetails(move.error)
+  let refused: FreeAccountsMoveRefusal | null = null
+  if (limit?.key === FREE_ACCOUNTS_MOVE_KEY) {
+    const accountId = accountIdFromBillingUrl(limit.upgradeUrl)
+    const account = accounts?.accounts.find((candidate) => candidate.id === accountId)
+    refused = { message: freeAccountsMoveMessage(account ? account.name : undefined), accountId }
+  }
+
   return {
-    move: (teamId: string) => move.mutateAsync(teamId),
+    move: (target: string) => move.mutateAsync(target),
     isMoving: move.isPending,
-    error: move.error ? teamErrorMessage(move.error, "The project could not be moved.") : null,
+    /** Known before the click: both accounts are on Free. */
+    blocked,
+    /** The API's refusal of a move between two Free accounts. */
+    refused,
+    error: move.error && !refused ? teamErrorMessage(move.error, "The project could not be moved.") : null,
     reset: () => move.reset(),
   }
 }

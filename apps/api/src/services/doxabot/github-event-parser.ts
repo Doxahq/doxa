@@ -9,6 +9,10 @@ import type {
   SourceRepository,
 } from "@doxahq/contracts";
 import { z } from "zod";
+import {
+  DOXA_DOCUMENTATION_PREVIEW_CHECK,
+  RETRY_PREVIEW_ACTION_ID,
+} from "./preview-check-identity";
 
 const githubIdSchema = z.number().int().positive();
 const gitObjectIdSchema = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
@@ -155,6 +159,30 @@ const installationPayloadSchema = z.object({
   sender: z.object({ id: githubIdSchema, login: z.string().min(1) }).optional(),
 });
 
+/**
+ * A person asked for a check run again. GitHub sends these two actions to
+ * the app that created the check, without a subscription.
+ */
+const checkRunActionSchema = z.enum(["rerequested", "requested_action"]);
+
+const checkRunEnvelopeSchema = z.object({
+  action: z.string(),
+});
+
+const checkRunPayloadSchema = z.object({
+  action: checkRunActionSchema,
+  installation: githubInstallationSchema,
+  repository: githubRepositorySchema,
+  /** The person who pressed the button. */
+  sender: z.object({ id: githubIdSchema, login: z.string().min(1) }),
+  check_run: z.object({
+    id: githubIdSchema,
+    name: z.string(),
+    external_id: z.string().nullable().optional(),
+  }),
+  requested_action: z.object({ identifier: z.string() }).optional(),
+});
+
 const repositoryActionMap: Record<
   z.infer<typeof repositoryActionSchema>,
   RepositoryLifecycleAction
@@ -203,6 +231,8 @@ export function parseGitHubEvent(
       return parseInstallationRepositories(input);
     case "installation":
       return parseInstallation(input);
+    case "check_run":
+      return parseCheckRun(input);
     default:
       return irrelevant("unsupported_event");
   }
@@ -374,6 +404,45 @@ function parseInstallation(
     ...(parsed.data.action === "created" && sender
       ? { sender: { externalId: String(sender.id), login: sender.login } }
       : {}),
+  });
+}
+
+/**
+ * "Re-run" or "Retry preview" on a Doxa preview check. The check's external
+ * ID is the generation job; the orchestrator checks it against the record.
+ */
+function parseCheckRun(input: ParseGitHubEventInput): SourceControlEventParseResult {
+  const envelope = checkRunEnvelopeSchema.safeParse(input.payload);
+  if (!envelope.success) return malformed();
+  if (!checkRunActionSchema.safeParse(envelope.data.action).success) {
+    return irrelevant("unsupported_action");
+  }
+
+  const parsed = checkRunPayloadSchema.safeParse(input.payload);
+  if (!parsed.success) return malformed();
+  const payload = parsed.data;
+  const jobId = z.uuid().safeParse(payload.check_run.external_id);
+  if (payload.check_run.name !== DOXA_DOCUMENTATION_PREVIEW_CHECK || !jobId.success) {
+    return irrelevant("foreign_check");
+  }
+  if (
+    payload.action === "requested_action" &&
+    payload.requested_action?.identifier !== RETRY_PREVIEW_ACTION_ID
+  ) {
+    return irrelevant("unsupported_action");
+  }
+
+  return normalized({
+    kind: "review_run_retry",
+    deliveryId: input.deliveryId,
+    repository: toSourceRepository(payload.repository, payload.installation.id),
+    externalRunId: String(payload.check_run.id),
+    jobId: jobId.data,
+    trigger: payload.action === "rerequested" ? "rerun" : "retry_action",
+    requestedBy: {
+      externalId: String(payload.sender.id),
+      login: payload.sender.login,
+    },
   });
 }
 

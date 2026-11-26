@@ -47,7 +47,9 @@ import {
 import { gitObjectIdSchema, sourceProviderSchema } from "./source-control";
 import type {
   CreateReviewRunInput,
+  FailedJobCheck,
   ReviewRunResult,
+  TimedOutJobStatus,
   UpdateReviewRunInput,
 } from "./review-runs";
 
@@ -1450,8 +1452,17 @@ export interface InternalApiRpc {
    */
   createModelAccessToken(): Promise<ModelAccessToken | null>;
   markJobRunning(jobId: string): Promise<void>;
-  markJobFailed(jobId: string, message: string): Promise<void>;
+  /**
+   * Fails the job. A preview's check finishes too: by default as `failure`
+   * with the message, a link to the run and a "Retry preview" button.
+   */
+  markJobFailed(jobId: string, message: string, check?: FailedJobCheck): Promise<void>;
   markJobCancelled(jobId: string, message: string): Promise<void>;
+  /**
+   * Ends a job that the watchdog found stale: a queued job is cancelled, a
+   * running job fails. A preview's check reads "timed out" and offers a retry.
+   */
+  markJobTimedOut(jobId: string, status: TimedOutJobStatus, message: string): Promise<void>;
   markJobSuperseded(jobId: string, message: string): Promise<void>;
   isJobActive(jobId: string): Promise<boolean>;
   /**

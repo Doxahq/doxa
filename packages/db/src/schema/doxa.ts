@@ -1375,6 +1375,12 @@ export const generationJobs = pgTable(
     idempotencyKey: text("idempotency_key").notNull(),
     concurrencyKey: text("concurrency_key").notNull(),
     externalReviewRunId: text("external_review_run_id"),
+    /**
+     * When the pull request check reached `completed` on the provider. Null
+     * while the check is open, so the cron can close the check of a job that
+     * ended without it (`listOpenReviewRunsOfEndedJobs`).
+     */
+    reviewRunCompletedAt: timestamp("review_run_completed_at", { withTimezone: true }),
     supersededByJobId: uuid("superseded_by_job_id").references(
       (): AnyPgColumn => generationJobs.id,
       { onDelete: "set null" },
@@ -1408,6 +1414,11 @@ export const generationJobs = pgTable(
     index("generation_jobs_superseded_by_job_id_idx").on(
       table.supersededByJobId,
     ),
+    index("generation_jobs_open_review_run_idx")
+      .on(table.updatedAt)
+      .where(
+        sql`${table.externalReviewRunId} is not null and ${table.reviewRunCompletedAt} is null`,
+      ),
   ],
 );
 

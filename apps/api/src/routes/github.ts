@@ -43,6 +43,7 @@ import {
 } from "../services/repository-branches";
 import { DoxabotWebhookOrchestrator } from "../services/doxabot/webhook-orchestrator";
 import { MergeGenerationScheduler } from "../services/doxabot/merge-generations";
+import { PreviewCheckRetryService } from "../services/doxabot/preview-check-retry";
 import { productAnalyticsOf } from "../services/analytics/product-analytics";
 
 export function createGitHubRoutes(): ApiApp {
@@ -66,13 +67,15 @@ export function createGitHubRoutes(): ApiApp {
     const valid = await verifyGitHubWebhook(context.req.raw, context.env, body);
     if (!valid) return error("Invalid GitHub webhook signature.", 401);
 
-    // Built on the first merge only: most deliveries record no merge.
+    const defer = (promise: Promise<unknown>) => context.executionCtx.waitUntil(promise);
+    // Each is built on its first use only: most deliveries need neither.
     const orchestrator = DoxabotWebhookOrchestrator.fromEnv(context.env, {
       mergeTriggers: {
         recordMerge: (merge) =>
-          MergeGenerationScheduler.fromEnv(context.env, (promise) =>
-            context.executionCtx.waitUntil(promise),
-          ).recordMerge(merge),
+          MergeGenerationScheduler.fromEnv(context.env, defer).recordMerge(merge),
+      },
+      previewRetries: {
+        retry: (event) => PreviewCheckRetryService.fromEnv(context.env, { defer }).retry(event),
       },
     });
     const ingress = await orchestrator.ingest({

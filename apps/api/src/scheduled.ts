@@ -6,6 +6,7 @@ import { DocsHostnameMapReconciler } from "./services/docs-hostname-map";
 import { DocsPrerenderTaskMaintenance } from "./services/docs-prerender-tasks";
 import { runDocsSearchMaintenance } from "./services/docs-search/maintenance";
 import { MergeGenerationScheduler } from "./services/doxabot/merge-generations";
+import { PreviewCheckSweeper } from "./services/doxabot/preview-check-sweep";
 import { DoxabotQueueOutboxPublisher } from "./services/doxabot/queue-outbox";
 import { cleanUpWebhookDeliveriesFromEnv } from "./services/doxabot/webhook-delivery-cleanup";
 import { EmailDeliverySweeper } from "./services/email/email-delivery-sweeper";
@@ -30,6 +31,7 @@ export function runScheduledJobs(scheduledTime: number, env: Env, context: Execu
     context.waitUntil(job);
   };
   run(DoxabotQueueOutboxPublisher.fromEnv(env).publishPending());
+  run(runPreviewCheckSweep(env));
   run(DocsCacheInvalidationMaintenance.fromEnv(env).run());
   run(runHostnameMapReconcile(scheduledTime, env));
   run(DocsPrerenderTaskMaintenance.fromEnv(env).run());
@@ -72,6 +74,11 @@ async function runHostnameMapReconcile(scheduledTime: number, env: Env): Promise
 /** Async, so a failed setup rejects this job only and the other jobs still run. */
 async function runDomainStatusChecks(env: Env): Promise<unknown> {
   return DocsDomainStatusChecks.fromEnv(env)?.run();
+}
+
+/** Async, so a failed setup rejects this job only and the other jobs still run. */
+async function runPreviewCheckSweep(env: Env): Promise<unknown> {
+  return PreviewCheckSweeper.fromEnv(env).run();
 }
 
 /** Async, so a failed setup rejects this job only and the other jobs still run. */

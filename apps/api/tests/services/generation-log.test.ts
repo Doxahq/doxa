@@ -422,3 +422,23 @@ describe("generation log lines for AI credits (billing spec 10.5, 10.6)", () => 
     });
   });
 });
+
+describe("retries from the pull request check", () => {
+  test("names the person who asked, and why nothing started", () => {
+    expect(
+      lines([
+        event("doxabot_retry_requested", "@maintainer asked to run this preview again.", { login: "maintainer", trigger: "rerun" }, "api"),
+        event("doxabot_retry_refused", "Doxabot did not run this preview again.", { login: "maintainer", reason: "not_permitted" }, "api"),
+      ]),
+    ).toEqual([
+      "run info @maintainer asked on the pull request to run this preview again.",
+      "run warning Doxabot did not run this preview again: only people who can push to the repository can start it.",
+    ]);
+  });
+
+  test("an unknown refusal code shows the plain refusal, never the code", () => {
+    expect(
+      lines([event("doxabot_retry_refused", "Doxabot did not run this preview again.", { reason: "dispatch_failed" }, "api")]),
+    ).toEqual(["run warning Doxabot did not run this preview again."]);
+  });
+});

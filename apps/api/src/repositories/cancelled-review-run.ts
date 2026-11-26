@@ -4,12 +4,15 @@ import { z } from "zod";
 export interface CancelledReviewRunPresentation {
   title: string;
   summary: string;
+  /** Shows the "Retry preview" button, for example on a preview that timed out. */
+  retryable?: boolean;
 }
 
 const cancelEventDataSchema = z.object({
   check: z.object({
     title: z.string().trim().min(1).max(255),
     summary: z.string().trim().min(1).max(60_000),
+    retryable: z.boolean().optional(),
   }),
 });
 
@@ -30,5 +33,7 @@ export function cancelledCheckFromEventData(
   data: unknown,
 ): CancelledReviewRunPresentation | null {
   const parsed = cancelEventDataSchema.safeParse(data);
-  return parsed.success ? parsed.data.check : null;
+  if (!parsed.success) return null;
+  const { title, summary, retryable } = parsed.data.check;
+  return retryable === undefined ? { title, summary } : { title, summary, retryable };
 }

@@ -4,6 +4,7 @@ import {
   type GenerationExecutionConfig,
   type GenerationJobDto,
   type NormalizedChangeProposalEvent,
+  type NormalizedReviewRunRetryEvent,
   type NormalizedInstallationLifecycleEvent,
   type NormalizedRepositoryLifecycleEvent,
   type SourceControlEventParseResult,
@@ -60,6 +61,7 @@ import {
   type DoxabotDeploymentPolicy,
 } from "./eligibility";
 import { parseGitHubEvent } from "./github-event-parser";
+import type { PreviewCheckRetryService } from "./preview-check-retry";
 import { GitHubPullRequestStateResolver } from "./github-pull-requests";
 import {
   mapDoxabotReviewRunState,
@@ -216,16 +218,21 @@ export interface DoxabotWebhookDependencies {
   maxRepositorySizeKb?: number;
   /** Product analytics. Absent: nothing is reported. */
   analytics?: ProductAnalytics;
+  /** Runs a preview again from its pull request check. Absent: such events are ignored. */
+  previewRetries?: Pick<PreviewCheckRetryService, "retry">;
   now(): Date;
 }
 
 export class DoxabotWebhookOrchestrator {
   constructor(private readonly dependencies: DoxabotWebhookDependencies) {}
 
-  /** The caller builds the merge trigger, which needs its request context. */
+  /**
+   * The caller builds the merge trigger and the preview retries, which need
+   * its request context.
+   */
   static fromEnv(
     env: Env,
-    options: Pick<DoxabotWebhookDependencies, "mergeTriggers">,
+    options: Pick<DoxabotWebhookDependencies, "mergeTriggers" | "previewRetries">,
   ): DoxabotWebhookOrchestrator {
     const jobs = new JobsRepository(env);
     const reviewRuns = ReviewRunsService.fromEnv(env);
@@ -256,6 +263,7 @@ export class DoxabotWebhookOrchestrator {
         fetchRepositoryDefaultBranch(env, input.installationExternalId, input.repositoryExternalId),
       maxRepositorySizeKb: maxRepositorySizeKbFromEnv(env),
       analytics: productAnalyticsOf(env),
+      previewRetries: options.previewRetries,
       now: () => new Date(),
     });
   }
@@ -349,6 +357,9 @@ export class DoxabotWebhookOrchestrator {
     }
 
     const [event] = parsed.events;
+    if (event.kind === "review_run_retry") {
+      return this.retryPreview(identity, event);
+    }
     if (event.kind !== "change_proposal" && event.kind !== "default_branch_push") {
       return this.ignore(identity, "unexpected_event_batch");
     }
@@ -1119,6 +1130,26 @@ export class DoxabotWebhookOrchestrator {
     if (active) {
       await this.dependencies.previewJobs.cancel({ ...cancellation, jobId: active.id });
     }
+  }
+
+  /**
+   * "Re-run" or "Retry preview" on a preview check. The retry service checks
+   * the person and the check; Doxabot's own setting does not stop it, as with
+   * the dashboard's re-run.
+   */
+  private async retryPreview(
+    identity: WebhookDeliveryIdentity,
+    event: NormalizedReviewRunRetryEvent,
+  ): Promise<DoxabotWebhookResult> {
+    const retries = this.dependencies.previewRetries;
+    if (!retries) return this.ignore(identity, "preview_retry_unavailable");
+
+    const result = await retries.retry(event);
+    if (result.outcome === "refused") {
+      return this.ignore(identity, `preview_retry_${result.reason}`);
+    }
+    await this.dependencies.deliveries.markProcessed(identity);
+    return { outcome: "enqueued", jobId: result.jobId };
   }
 
   private async ignore(

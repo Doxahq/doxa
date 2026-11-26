@@ -487,3 +487,81 @@ describe("GitHub event parser", () => {
     });
   });
 });
+
+describe("check_run events from a Doxa preview check", () => {
+  const jobId = "11111111-1111-4111-8111-111111111111";
+
+  function checkRunPayload(overrides: {
+    action?: string;
+    name?: string;
+    externalId?: string | null;
+    identifier?: string;
+  } = {}) {
+    return {
+      action: overrides.action ?? "rerequested",
+      installation: { id: 789 },
+      repository: repository(),
+      sender: { id: 7, login: "maintainer" },
+      check_run: {
+        id: 139388875497,
+        name: overrides.name ?? "Doxa documentation preview",
+        external_id: overrides.externalId === undefined ? jobId : overrides.externalId,
+        head_sha: headSha,
+      },
+      ...(overrides.identifier === undefined ? {} : { requested_action: { identifier: overrides.identifier } }),
+    };
+  }
+
+  const parse = (payload: unknown) =>
+    parseGitHubEvent({ eventName: "check_run", deliveryId: "delivery-1", payload });
+
+  test.each([
+    ["rerequested", undefined, "rerun"],
+    ["requested_action", "retry_preview", "retry_action"],
+  ] as const)("normalizes %s into a retry of the check's job", (action, identifier, trigger) => {
+    expect(parse(checkRunPayload({ action, identifier }))).toEqual({
+      outcome: "normalized",
+      events: [
+        {
+          kind: "review_run_retry",
+          deliveryId: "delivery-1",
+          repository: {
+            provider: "github",
+            externalId: "123456",
+            installationExternalId: "789",
+            visibility: "private",
+            defaultBranch: "main",
+          },
+          externalRunId: "139388875497",
+          jobId,
+          trigger,
+          requestedBy: { externalId: "7", login: "maintainer" },
+        },
+      ],
+    });
+  });
+
+  test.each(["created", "completed"])("ignores the %s action", (action) => {
+    expect(parse(checkRunPayload({ action }))).toEqual({ outcome: "irrelevant", reason: "unsupported_action" });
+  });
+
+  test("ignores a button that is not Retry preview", () => {
+    expect(parse(checkRunPayload({ action: "requested_action", identifier: "something_else" }))).toEqual({
+      outcome: "irrelevant",
+      reason: "unsupported_action",
+    });
+  });
+
+  test.each([
+    ["another check name", { name: "CI" }],
+    ["no external ID", { externalId: null }],
+    ["an external ID that is not a job ID", { externalId: "build-42" }],
+  ])("ignores a check with %s", (_name, overrides) => {
+    expect(parse(checkRunPayload(overrides))).toEqual({ outcome: "irrelevant", reason: "foreign_check" });
+  });
+
+  test("returns malformed when the sender is missing", () => {
+    const { sender: _sender, ...payload } = checkRunPayload();
+    expect(parse(payload)).toEqual({ outcome: "malformed", reason: "invalid_payload" });
+  });
+});

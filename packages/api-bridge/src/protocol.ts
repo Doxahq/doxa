@@ -73,6 +73,7 @@ export const API_ENTRYPOINT_METHODS = {
     "markJobRunning",
     "markJobFailed",
     "markJobCancelled",
+    "markJobTimedOut",
     "markJobSuperseded",
     "isJobActive",
     "getJobStopReason",

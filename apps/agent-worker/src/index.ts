@@ -128,8 +128,9 @@ export async function runGenerationWatchdog(env: Env): Promise<void> {
       ? "Queued generation cancelled by watchdog after waiting too long."
       : "Running generation marked failed by watchdog after timing out.";
 
+    // The API ends the job and closes a preview's check as timed out.
     if (job.status === "queued") {
-      await env.API.markJobCancelled(job.id, message);
+      await env.API.markJobTimedOut(job.id, "queued", message);
       await env.API.addJobEvent(job.id, {
         type: "watchdog_cancelled",
         message,
@@ -137,7 +138,7 @@ export async function runGenerationWatchdog(env: Env): Promise<void> {
         data: { elapsedSeconds: job.elapsedSeconds },
       });
     } else if (job.status === "running") {
-      await env.API.markJobFailed(job.id, message);
+      await env.API.markJobTimedOut(job.id, "running", message);
       await env.API.addJobEvent(job.id, {
         type: "watchdog_failed",
         message,

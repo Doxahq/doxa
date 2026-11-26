@@ -136,7 +136,12 @@ function createHarness(
     sourceRevision: string;
   } | null = null,
   previewBilling?: PreviewRunBilling,
-  options: { publicRepositoriesEnabled?: boolean; maxRepositorySizeKb?: number; analytics?: ProductAnalytics } = {},
+  options: {
+    publicRepositoriesEnabled?: boolean;
+    maxRepositorySizeKb?: number;
+    analytics?: ProductAnalytics;
+    previewRetries?: DoxabotWebhookDependencies["previewRetries"];
+  } = {},
 ) {
   const claimedDeliveries = new Set<string>();
   const normalizedEvents = new Map<
@@ -384,6 +389,7 @@ function createHarness(
     repositoryDefaultBranch,
     ...(options.maxRepositorySizeKb !== undefined ? { maxRepositorySizeKb: options.maxRepositorySizeKb } : {}),
     ...(options.analytics ? { analytics: options.analytics } : {}),
+    ...(options.previewRetries ? { previewRetries: options.previewRetries } : {}),
     now: () => new Date(closedAt),
   } satisfies DoxabotWebhookDependencies;
 
@@ -1943,3 +1949,69 @@ describe("Doxabot repository lifecycle events", () => {
     },
   );
 });
+
+describe("Doxabot retries from the pull request check", () => {
+  const retriedJobId = "44444444-4444-4444-8444-444444444444";
+
+  function checkRunDelivery(deliveryId: string, action: "rerequested" | "requested_action" = "rerequested"): ProcessGitHubWebhookInput {
+    return {
+      deliveryId,
+      eventName: "check_run",
+      rawBody: JSON.stringify({
+        action,
+        installation: { id: 789 },
+        repository: { id: 123456, private: true, default_branch: "main" },
+        sender: { id: 7, login: "maintainer" },
+        check_run: { id: 9001, name: "Doxa documentation preview", external_id: retriedJobId },
+        ...(action === "requested_action" ? { requested_action: { identifier: "retry_preview" } } : {}),
+      }),
+    };
+  }
+
+  test("hands a Re-run to the retry service and records the delivery as processed", async () => {
+    const retry = vi.fn(async () => ({ outcome: "started" as const, jobId: "job-new" }));
+    const harness = createHarness(createAutomationContext(), null, undefined, { previewRetries: { retry } });
+
+    await expect(harness.orchestrator.process(checkRunDelivery("check-1"))).resolves.toEqual({
+      outcome: "enqueued",
+      jobId: "job-new",
+    });
+
+    expect(retry).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "review_run_retry",
+      jobId: retriedJobId,
+      externalRunId: "9001",
+      trigger: "rerun",
+      requestedBy: { externalId: "7", login: "maintainer" },
+    }));
+    expect(harness.deliveries.markProcessed).toHaveBeenCalledWith({ provider: "github", deliveryId: "check-1" });
+    // A retry is not a push: no new pull request record and no webhook admission.
+    expect(harness.changeProposals.ensure).not.toHaveBeenCalled();
+    expect(harness.jobs.admitDoxabotJob).not.toHaveBeenCalled();
+  });
+
+  test("records a refused retry as ignored with its reason", async () => {
+    const retry = vi.fn(async () => ({ outcome: "refused" as const, reason: "not_permitted" as const }));
+    const harness = createHarness(createAutomationContext(), null, undefined, { previewRetries: { retry } });
+
+    await expect(harness.orchestrator.process(checkRunDelivery("check-2", "requested_action"))).resolves.toEqual({
+      outcome: "ignored",
+      reason: "preview_retry_not_permitted",
+    });
+    expect(harness.deliveries.markIgnored).toHaveBeenCalledWith({
+      provider: "github",
+      deliveryId: "check-2",
+      reason: "preview_retry_not_permitted",
+    });
+  });
+
+  test("ignores a retry when no retry service is set up", async () => {
+    const harness = createHarness();
+
+    await expect(harness.orchestrator.process(checkRunDelivery("check-3"))).resolves.toEqual({
+      outcome: "ignored",
+      reason: "preview_retry_unavailable",
+    });
+  });
+});
+

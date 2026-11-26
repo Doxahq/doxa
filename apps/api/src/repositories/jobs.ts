@@ -95,6 +95,7 @@ import { isUniqueViolation } from "./postgres-errors";
 
 const GLOBAL_CONTROL_ID = "global";
 const ACTIVE_JOB_STATUSES = ["queued", "running"] as const;
+const ENDED_JOB_STATUSES = ["succeeded", "failed", "cancelled", "stopped_credits"] as const;
 const PRODUCTION_CONCURRENCY_PREFIX = "publish";
 const PREVIEW_CONCURRENCY_PREFIX = "preview";
 /** A run id stored in event data, checked before it reaches a `uuid` column. */
@@ -291,8 +292,11 @@ export interface DoxabotQueueOutboxJobsStore {
 
 export interface ReviewRunJobContext {
   jobId: string;
+  projectId: string;
   /** The job's status now; the check must not contradict it. */
   status: GenerationJobDto["status"];
+  /** Why the job failed; null for a job that did not fail. */
+  errorMessage: string | null;
   provider: SourceProvider;
   targetRevision: string;
   externalReviewRunId: string | null;
@@ -325,6 +329,12 @@ export interface ReviewRunJobsStore {
     claimedAt: Date;
     externalRunId: string;
   }): Promise<boolean>;
+  /** Records that the job's check `externalRunId` reached `completed` on the provider. */
+  markReviewRunCompleted(input: {
+    jobId: string;
+    externalRunId: string;
+    completedAt: Date;
+  }): Promise<void>;
 }
 
 type JobsRepositoryEnv = Pick<
@@ -1411,7 +1421,9 @@ export class JobsRepository
     const [row] = await this.db
       .select({
         jobId: schema.generationJobs.id,
+        projectId: schema.generationJobs.projectId,
         status: schema.generationJobs.status,
+        errorMessage: schema.generationJobs.errorMessage,
         provider: schema.generationJobs.sourceProvider,
         targetRevision: schema.generationJobs.targetRevision,
         externalReviewRunId: schema.generationJobs.externalReviewRunId,
@@ -1478,7 +1490,9 @@ export class JobsRepository
 
     return {
       jobId: row.jobId,
+      projectId: row.projectId,
       status: row.status,
+      errorMessage: row.errorMessage,
       provider: row.provider,
       targetRevision: row.targetRevision,
       externalReviewRunId: row.externalReviewRunId,
@@ -1801,6 +1815,54 @@ export class JobsRepository
       .returning({ id: schema.generationJobs.id });
 
     return Boolean(updated);
+  }
+
+  async markReviewRunCompleted(input: {
+    jobId: string;
+    externalRunId: string;
+    completedAt: Date;
+  }): Promise<void> {
+    // Not `updatedAt`: the job did not change, and the sweep orders by it.
+    await this.db
+      .update(schema.generationJobs)
+      .set({ reviewRunCompletedAt: input.completedAt })
+      .where(
+        and(
+          eq(schema.generationJobs.id, input.jobId),
+          eq(schema.generationJobs.externalReviewRunId, input.externalRunId),
+          isNull(schema.generationJobs.reviewRunCompletedAt),
+        ),
+      );
+  }
+
+  /**
+   * Ended jobs whose pull request check is still open: the run ended without
+   * closing it, or the provider refused the close. Newest first, so a check
+   * that can never close does not hold back the checks that people look at
+   * now. A job that ended after `endedBefore` is skipped, so a close in
+   * flight can finish; one that ended before `endedAfter` is given up.
+   */
+  async listOpenReviewRunsOfEndedJobs(input: {
+    endedAfter: Date;
+    endedBefore: Date;
+    limit: number;
+  }): Promise<string[]> {
+    const rows = await this.db
+      .select({ id: schema.generationJobs.id })
+      .from(schema.generationJobs)
+      .where(
+        and(
+          isNotNull(schema.generationJobs.externalReviewRunId),
+          isNull(schema.generationJobs.reviewRunCompletedAt),
+          sql`${schema.generationJobs.externalReviewRunId} not like 'pending:%'`,
+          inArray(schema.generationJobs.status, [...ENDED_JOB_STATUSES]),
+          gt(schema.generationJobs.updatedAt, input.endedAfter),
+          lt(schema.generationJobs.updatedAt, input.endedBefore),
+        ),
+      )
+      .orderBy(desc(schema.generationJobs.updatedAt))
+      .limit(input.limit);
+    return rows.map((row) => row.id);
   }
 
   async getGenerationControl(): Promise<GenerationControlDto> {

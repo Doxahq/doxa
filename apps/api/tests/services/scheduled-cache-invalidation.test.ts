@@ -9,6 +9,7 @@ const pending = vi.hoisted(() => ({
   approvalSweeps: vi.fn(),
   domainChecks: vi.fn(),
   mergeRuns: vi.fn(),
+  previewChecks: vi.fn(),
 }));
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 vi.mock("../../src/services/docs-search/maintenance", () => ({
@@ -17,6 +18,11 @@ vi.mock("../../src/services/docs-search/maintenance", () => ({
 vi.mock("../../src/services/doxabot/queue-outbox", () => ({
   DoxabotQueueOutboxPublisher: {
     fromEnv: () => ({ publishPending: pending.generations }),
+  },
+}));
+vi.mock("../../src/services/doxabot/preview-check-sweep", () => ({
+  PreviewCheckSweeper: {
+    fromEnv: () => ({ run: pending.previewChecks }),
   },
 }));
 vi.mock("../../src/services/docs-cache-invalidation-monitoring", () => ({
@@ -69,6 +75,7 @@ describe("scheduled cache invalidation", () => {
     pending.approvalSweeps.mockResolvedValue({ expired: 0, removedKinds: 0, interrupted: 0, stale: 0 });
     pending.domainChecks.mockResolvedValue({ checked: 3, failed: 0 });
     pending.mergeRuns.mockResolvedValue(0);
+    pending.previewChecks.mockResolvedValue({ closed: 1, failed: 0 });
     const background: Promise<unknown>[] = [];
     await worker.scheduled(
       {} as never,
@@ -81,6 +88,7 @@ describe("scheduled cache invalidation", () => {
     );
     expect(await Promise.allSettled(background)).toEqual([
       { status: "rejected", reason: expect.any(Error) },
+      { status: "fulfilled", value: { closed: 1, failed: 0 } },
       { status: "fulfilled", value: { completed: 1, failed: 0 } },
       { status: "fulfilled", value: { slot: 3, due: 1, stored: 1, deleted: 0 } },
       { status: "fulfilled", value: { dispatched: 2 } },
@@ -105,5 +113,6 @@ describe("scheduled cache invalidation", () => {
     expect(pending.approvalSweeps).toHaveBeenCalledOnce();
     expect(pending.domainChecks).toHaveBeenCalledOnce();
     expect(pending.mergeRuns).toHaveBeenCalledOnce();
+    expect(pending.previewChecks).toHaveBeenCalledOnce();
   });
 });

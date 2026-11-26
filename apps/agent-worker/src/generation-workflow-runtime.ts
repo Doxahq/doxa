@@ -1470,19 +1470,15 @@ export class GenerationWorkflowRunner {
             overallTimeoutMs,
             2 * 60_000,
           ),
-          async () => {
-            await this.env.API.markJobFailed(
-              input.jobId,
-              planning.message,
-            );
-            await updatePreviewReviewRun(this.env, context, {
-              state: "action_required",
+          // The API closes the check with the job: a retry cannot help, so
+          // it needs a person and shows no retry button.
+          () =>
+            this.env.API.markJobFailed(input.jobId, planning.message, {
+              conclusion: "action_required",
               title: "Documentation preview needs a clean merge",
               summary:
                 "The pull request conflicts with its accepted base revision. Resolve the merge conflict before Doxa can generate a preview.",
-              detailsUrl: null,
-            });
-          },
+            }),
         );
         return { outcome: "action_required", versionId: null };
       }
@@ -2155,6 +2151,8 @@ export class GenerationWorkflowRunner {
             }
             return;
           }
+          // The API also closes a preview's check: the reason, a link to
+          // the run and a "Retry preview" button.
           await this.env.API.markJobFailed(input.jobId, message);
           const failedStep = stepTracker.failureOf(error);
           if (failedStep) {
@@ -2165,14 +2163,6 @@ export class GenerationWorkflowRunner {
                 : `The run stopped at "${failedStep.stepName}".`,
               source: "worker",
               data: failedStep,
-            }).catch(() => undefined);
-          }
-          if (isPreview) {
-            await updatePreviewReviewRun(this.env, context, {
-              state: "failure",
-              title: "Documentation preview failed",
-              summary: message,
-              detailsUrl: null,
             }).catch(() => undefined);
           }
         },

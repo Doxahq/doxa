@@ -28,6 +28,16 @@ export const RERUN_EVENT_TYPES = {
 } as const;
 
 /**
+ * A person asked on the pull request check to run a preview again ("Re-run"
+ * or "Retry preview"). Both go on the run of that check; `data.login` is the
+ * person, and a refusal keeps its code in `data.reason`.
+ */
+export const PREVIEW_RETRY_EVENT_TYPES = {
+  requested: "doxabot_retry_requested",
+  refused: "doxabot_retry_refused",
+} as const;
+
+/**
  * The flagged pages of a run from its `generation_page_flagged` events, in
  * event order. A page flagged twice, by a retried step, keeps its last flag;
  * an event with unreadable data is left out.

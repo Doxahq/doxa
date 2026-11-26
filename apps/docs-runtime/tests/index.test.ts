@@ -1512,6 +1512,7 @@ function createEnv(input: {
       markJobRunning: async () => undefined,
       markJobFailed: async () => undefined,
       markJobCancelled: async () => undefined,
+      markJobTimedOut: async () => undefined,
       markJobSuperseded: async () => undefined,
       isJobActive: async () => true,
       getJobStopReason: async () => null,

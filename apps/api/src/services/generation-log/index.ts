@@ -62,6 +62,19 @@ export function toGenerationLogEvent(event: JobEventDto): JobEventDto | null {
 
 type EventRule = (data: Record<string, unknown>, message: string) => GenerationLogLine | null;
 
+/** Why a retry from the pull request check did not start, by its stored code. */
+const RETRY_REFUSAL_TEXT: Partial<Record<string, string>> = {
+  not_permitted: "only people who can push to the repository can start it.",
+  permission_unknown: "GitHub did not confirm the person's access. Try again.",
+  already_active: "a preview of this pull request is already running.",
+  not_finished: "this preview is still running.",
+  superseded: "a newer push replaced this preview.",
+  change_not_open: "the pull request is closed or is a draft.",
+  base_not_production: "the pull request no longer targets the production branch.",
+  billing_refused: "the account has no AI credits left.",
+  paused: "new generations are paused for now.",
+};
+
 const EVENT_RULES: Record<string, EventRule> = {
   // The run
   queued: () => line("run", "Generation queued."),
@@ -118,6 +131,23 @@ const EVENT_RULES: Record<string, EventRule> = {
     ),
   review_run_update_failed: () =>
     line("run", "Doxabot could not update the check on the pull request.", "warning"),
+  doxabot_retry_requested: (data) => {
+    const login = stringField(data, "login");
+    return line(
+      "run",
+      login
+        ? `@${login} asked on the pull request to run this preview again.`
+        : "Someone asked on the pull request to run this preview again.",
+    );
+  },
+  doxabot_retry_refused: (data) => {
+    const reason = RETRY_REFUSAL_TEXT[stringField(data, "reason") ?? ""];
+    return line(
+      "run",
+      reason ? `Doxabot did not run this preview again: ${reason}` : "Doxabot did not run this preview again.",
+      "warning",
+    );
+  },
 
   // Credits (billing spec 10.5 and 10.6)
   [GENERATION_CREDITS_EVENT_TYPE]: creditsLine,

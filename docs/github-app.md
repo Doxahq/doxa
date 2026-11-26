@@ -27,6 +27,11 @@ suspended, unsuspended, permissions accepted) and `installation_repositories`
 (repositories added or removed). They need no subscription. Doxa uses the
 `sender` of `installation.created` to know who installed the app.
 
+GitHub also sends `check_run` with the actions `rerequested` and
+`requested_action` without a subscription, because the app has write access to
+Checks. GitHub sends them only for check runs that the app created. See "The
+preview check" below.
+
 Doxabot works with public and private repositories. During the rollout, the
 API flag `DOXABOT_PUBLIC_REPOSITORIES_ENABLED` is a kill switch for public
 repositories. While it is not `"true"`, the API refuses Doxabot for a public
@@ -57,6 +62,51 @@ shows "Doxabot is not available for public repositories yet."
   indexed, and every page shows an "Unreviewed pull request preview" banner.
   Production sites never show it.
 
+## The preview check
+
+Each preview run reports on its pull request as one check run, "Doxa
+documentation preview". Its external ID is the generation job ID.
+
+| The run | The check |
+| --- | --- |
+| Queued, running | `queued`, then `in_progress`. |
+| Succeeded | `success`, with a link to the preview. |
+| Failed | `failure`, with the reason, a link to the run in the dashboard, and a "Retry preview" button. |
+| Failed on a merge conflict | `action_required`, with a link to the run. It has no button: a retry cannot help. |
+| Waited or ran too long | "Documentation preview timed out", with a link and a "Retry preview" button. A queued run is cancelled (`cancelled`), a running run fails (`failure`). |
+| Cancelled, superseded, or stopped with its pull request | `cancelled`, with no button. |
+| Stopped for AI credits | `neutral`, with a link to the billing page (billing spec 10.6). |
+
+The API closes the check when the job ends: `markJobFailed`, `markJobTimedOut`,
+`markJobCancelled` and `markJobStopped` on the internal API. The worker's
+watchdog (5-minute cron) ends a run that waited 10 minutes or ran longer
+than its time limit.
+
+The API records when a check reached `completed`
+(`generation_jobs.review_run_completed_at`, migration 0053). If GitHub refuses
+a close, or a run ends without a close, the API cron closes the check from
+the job's own end (`PreviewCheckSweeper`). The cron waits 2 minutes after the
+end, and stops after 24 hours. GitHub marks a check `stale` only after 14
+days, so the cron is the only timeout that a person sees.
+
+### Running a preview again from GitHub
+
+"Re-run" on the check and the "Retry preview" button start the same re-run
+as the dashboard: a new run on the head of the pull request, with a new
+check. Before the run starts, the API makes sure that:
+
+- the check is the stored check of a preview job of the repository's project;
+- the person who pressed the button can push to the repository
+  (`GET /repos/{owner}/{repo}/collaborators/{login}/permission` is `admin` or
+  `write`). A person who cannot push starts nothing, and an unanswered check
+  also starts nothing.
+
+The project owner pays for the run, as for a push. A run that worked runs
+again too, because the person asked for it. The old run's log shows who asked,
+and why nothing started if the API refused (`doxabot_retry_requested`,
+`doxabot_retry_refused`). A pull request comment command (for example
+`@doxabot preview`) is not supported yet.
+
 ## URLs in the app settings
 
 | Setting | Value |
@@ -68,7 +118,14 @@ shows "Doxabot is not available for public repositories yet."
 | Expire user authorization tokens | Not recorded yet. |
 
 The API origin is `BETTER_AUTH_URL`, for example `https://api.doxa.so`. Add
-the URLs for every API origin that uses the app, such as a development tunnel.
+the callback URLs for every API origin that signs in with the app.
+
+A GitHub App has only one webhook URL. Do not point the production app's
+webhook at a development tunnel. Every production event then goes to the
+development API, production gets none, and the development API writes checks
+as the production app (found on 2026-11-25: it started on 2026-11-05). Use a
+separate GitHub App for development, with its own ID, key and webhook secret in
+`apps/api/.dev.vars`.
 
 ## Connecting an installation
 

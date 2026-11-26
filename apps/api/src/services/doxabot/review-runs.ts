@@ -3,11 +3,14 @@ import {
   updateReviewRunInputSchema,
   type CreateReviewRunInput,
   type DoxabotReviewRunState,
+  type FailedJobCheck,
   type GenerationJobDto,
+  type ReviewRunAction,
   type ReviewRunConclusion,
   type ReviewRunResult,
   type ReviewRunStatus,
   type SourceProvider,
+  type TimedOutJobStatus,
   type UpdateReviewRunInput,
 } from "@doxahq/contracts";
 import type { Env } from "../../env";
@@ -17,9 +20,11 @@ import {
   type ReviewRunJobContext,
   type ReviewRunJobsStore,
 } from "../../repositories/jobs";
+import { dashboardLinks, emailLinksFromEnv } from "../email/email-links";
 import {
   GitHubChecksAdapter,
 } from "./github-checks";
+import { RETRY_PREVIEW_ACTION_ID } from "./preview-check-identity";
 
 export interface ReviewRunReporter {
   create(
@@ -57,21 +62,99 @@ export interface ReviewRunProviderAdapter {
   ): Promise<{ externalRunId: string }>;
 }
 
+/** Dashboard pages that a check links to. */
+export interface ReviewRunLinks {
+  generation(projectId: string, jobId: string): string;
+}
+
 export interface ReviewRunsDependencies {
   jobs: ReviewRunJobsStore;
   adapters: Record<SourceProvider, ReviewRunProviderAdapter>;
+  links: ReviewRunLinks;
   createClaimToken(): string;
   now(): Date;
+}
+
+/** A conclusion that ends a check. */
+export type ReviewRunEndState = Exclude<DoxabotReviewRunState, "queued" | "in_progress">;
+
+/** How the check of an ended job reads. */
+export interface ReviewRunEnding {
+  title: string;
+  summary: string;
+  /**
+   * The check's link. When it is absent, a failure and a retryable end link
+   * to the run in the dashboard, and other ends have no link.
+   */
+  detailsUrl?: string | null;
+  /** Shows the "Retry preview" button. GitHub shows it on a completed check only. */
+  retryable?: boolean;
+}
+
+export const RETRY_PREVIEW_ACTION = {
+  label: "Retry preview",
+  description: "Run this documentation preview again",
+  identifier: RETRY_PREVIEW_ACTION_ID,
+} as const satisfies ReviewRunAction;
+
+const FAILED_PREVIEW_TITLE = "Documentation preview failed";
+const FAILED_PREVIEW_SUMMARY =
+  "Doxa could not generate a documentation preview for this pull request.";
+
+/** The check of a preview run that failed: the reason, a link to the run, and a retry. */
+export function failedPreviewEnding(message: string | null): ReviewRunEnding {
+  return {
+    title: FAILED_PREVIEW_TITLE,
+    summary: message?.trim() || FAILED_PREVIEW_SUMMARY,
+    retryable: true,
+  };
+}
+
+/**
+ * The check of a failed run. The worker names the end when a retry cannot
+ * help, for example a merge conflict (`action_required`, no button).
+ */
+export function failedJobEnd(
+  message: string,
+  check?: FailedJobCheck,
+): { state: ReviewRunEndState; ending: ReviewRunEnding } {
+  if (!check) return { state: "failure", ending: failedPreviewEnding(message) };
+  return {
+    state: check.conclusion,
+    ending: {
+      title: check.title,
+      summary: check.summary,
+      retryable: check.conclusion === "failure",
+    },
+  };
+}
+
+const TIMED_OUT_SUMMARY: Record<TimedOutJobStatus, string> = {
+  queued: "Doxa did not start this preview in time.",
+  running: "The preview ran longer than its time limit, so Doxa stopped it.",
+};
+
+/** The check of a run that the watchdog ended because it waited or ran too long. */
+export function timedOutPreviewEnding(status: TimedOutJobStatus): ReviewRunEnding {
+  return {
+    title: "Documentation preview timed out",
+    summary: `${TIMED_OUT_SUMMARY[status]} Retry it, or push a new commit to start a new preview.`,
+    retryable: true,
+  };
 }
 
 export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller {
   constructor(private readonly dependencies: ReviewRunsDependencies) {}
 
   static fromEnv(env: Env): ReviewRunsService {
+    const links = emailLinksFromEnv(env);
     return new ReviewRunsService({
       jobs: new JobsRepository(env),
       adapters: {
         github: GitHubChecksAdapter.fromEnv(env),
+      },
+      links: {
+        generation: (projectId, jobId) => dashboardLinks.generation(links, projectId, jobId),
       },
       createClaimToken: () => crypto.randomUUID(),
       now: () => new Date(),
@@ -85,7 +168,7 @@ export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller 
     const parsed = createReviewRunInputSchema.parse(rawInput);
     const context = await this.requireContext(jobId, parsed.sourceRevision);
     // The caller read the job before this call; the check shows it as it is now.
-    const input = withDisplaySummary(agreeWithJob(context, parsed));
+    const input = withDisplaySummary(this.agreeWithJob(context, parsed));
 
     if (
       context.externalReviewRunId !== null &&
@@ -123,7 +206,7 @@ export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller 
           claimedAt,
           externalRunId: reconciled.externalRunId,
         });
-        const updated = await adapter.update(context, {
+        const updated = await this.write(context, {
           ...input,
           externalRunId: reconciled.externalRunId,
         });
@@ -139,6 +222,7 @@ export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller 
       claimedAt,
       externalRunId: created.externalRunId,
     });
+    await this.recordCompletion(context, created.externalRunId, input);
     await this.settleWithJob(jobId, created.externalRunId, input);
     return { ...created, outcome: "created" };
   }
@@ -157,8 +241,8 @@ export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller 
     try {
       const context = await this.dependencies.jobs.getReviewRunContext(jobId);
       if (!context || checkAgreesWithJob(context.status, written)) return;
-      await this.adapterFor(context).update(context, {
-        ...withDisplaySummary(agreeWithJob(context, written)),
+      await this.write(context, {
+        ...withDisplaySummary(this.agreeWithJob(context, written)),
         externalRunId,
       });
     } catch {
@@ -203,7 +287,7 @@ export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller 
       return { externalRunId: input.externalRunId, outcome: "skipped" };
     }
 
-    const updated = await this.adapterFor(context).update(context, input);
+    const updated = await this.write(context, input);
     return { ...updated, outcome: "updated" };
   }
 
@@ -216,34 +300,51 @@ export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller 
 
   /**
    * Completes the check of an ended job with `state`, for an end that the
-   * worker does not report itself: a cancel, or a run that AI credits
-   * stopped (`neutral`, billing spec 10.6). False when the check has no run
-   * ID yet; its creator then reads the job's state.
+   * worker does not report itself: a failure, a cancel, or a run that AI
+   * credits stopped (`neutral`, billing spec 10.6). False when the check has
+   * no run ID yet; its creator then reads the job's state.
    */
   async finish(
     jobId: string,
-    state: "cancelled" | "neutral",
-    presentation: CancelledReviewRunPresentation & { detailsUrl?: string | null },
+    state: ReviewRunEndState,
+    ending: ReviewRunEnding,
   ): Promise<boolean> {
     const context = await this.dependencies.jobs.getReviewRunContext(jobId);
-    const externalRunId = context?.externalReviewRunId ?? null;
+    if (!context) return false;
+    return this.close(context, state, ending);
+  }
+
+  /**
+   * Completes the open check of a job that ended without closing it, with
+   * the job's own end. False when the job is still active or has no check.
+   */
+  async closeForEndedJob(jobId: string): Promise<boolean> {
+    const context = await this.dependencies.jobs.getReviewRunContext(jobId);
+    const end = context ? endingOfJob(context) : null;
+    if (!context || !end) return false;
+    return this.close(context, end.state, end.ending);
+  }
+
+  private async close(
+    context: ReviewRunJobContext,
+    state: ReviewRunEndState,
+    ending: ReviewRunEnding,
+  ): Promise<boolean> {
+    const externalRunId = context.externalReviewRunId;
     // A check that is still being created gets the job's state from its
     // creator; there is no run ID to update yet.
-    if (!context || externalRunId === null || isPendingReviewRunId(externalRunId)) {
+    if (externalRunId === null || isPendingReviewRunId(externalRunId)) {
       return false;
     }
 
     const input = withDisplaySummary(
       updateReviewRunInputSchema.parse({
         externalRunId,
-        ...mapDoxabotReviewRunState(state),
-        title: presentation.title,
-        summary: presentation.summary,
-        detailsUrl: presentation.detailsUrl ?? null,
+        ...this.endingFields(context, state, ending),
         sourceRevision: context.targetRevision,
       }),
     );
-    await this.adapterFor(context).update(context, input);
+    await this.write(context, input);
     return true;
   }
 
@@ -259,11 +360,86 @@ export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller 
       throw new Error("Review run creation is already in progress.");
     }
 
-    const updated = await this.adapterFor(context).update(context, {
+    const updated = await this.write(context, {
       ...input,
       externalRunId,
     });
     return { ...updated, outcome: "updated" };
+  }
+
+  /** Every update of an existing check goes through here, so a completed check is recorded. */
+  private async write(
+    context: ReviewRunJobContext,
+    input: UpdateReviewRunInput,
+  ): Promise<{ externalRunId: string }> {
+    const written = await this.adapterFor(context).update(context, input);
+    await this.recordCompletion(context, written.externalRunId, input);
+    return written;
+  }
+
+  /**
+   * Records the closed check of an ended job. The check of an active job
+   * can open again (a queue failure completes it, then the run starts), so
+   * only the job's end counts. The check is closed on the provider either
+   * way: a failed record only means that the cron closes it once more, so
+   * it never fails the caller.
+   */
+  private async recordCompletion(
+    context: Pick<ReviewRunJobContext, "jobId" | "status">,
+    externalRunId: string,
+    input: { status: ReviewRunStatus },
+  ): Promise<void> {
+    if (input.status !== "completed" || isActiveJob(context.status)) return;
+    try {
+      await this.dependencies.jobs.markReviewRunCompleted({
+        jobId: context.jobId,
+        externalRunId,
+        completedAt: this.dependencies.now(),
+      });
+    } catch (error) {
+      console.error("Review run completion could not be recorded.", {
+        jobId: context.jobId,
+        message: error instanceof Error ? error.message : "Unknown error.",
+      });
+    }
+  }
+
+  /**
+   * The input as written, or the job's own end when the input contradicts
+   * it. Only an ended job can disagree, and its state always names an end.
+   */
+  private agreeWithJob(
+    context: ReviewRunJobContext,
+    input: CreateReviewRunInput,
+  ): CreateReviewRunInput {
+    const end = endingOfJob(context);
+    if (!end || checkAgreesWithJob(context.status, input)) return input;
+    return { ...input, ...this.endingFields(context, end.state, end.ending) };
+  }
+
+  private endingFields(
+    context: Pick<ReviewRunJobContext, "jobId" | "projectId">,
+    state: ReviewRunEndState,
+    ending: ReviewRunEnding,
+  ): Pick<
+    CreateReviewRunInput,
+    "status" | "conclusion" | "title" | "summary" | "detailsUrl" | "actions"
+  > {
+    const linksToRun =
+      ending.retryable === true || state === "failure" || state === "action_required";
+    const detailsUrl =
+      ending.detailsUrl !== undefined
+        ? ending.detailsUrl
+        : linksToRun
+          ? this.dependencies.links.generation(context.projectId, context.jobId)
+          : null;
+    return {
+      ...mapDoxabotReviewRunState(state),
+      title: ending.title,
+      summary: ending.summary,
+      detailsUrl,
+      ...(ending.retryable ? { actions: [RETRY_PREVIEW_ACTION] } : {}),
+    };
   }
 
   private async requireContext(
@@ -288,6 +464,39 @@ export class ReviewRunsService implements ReviewRunReporter, ReviewRunCanceller 
   ): ReviewRunProviderAdapter {
     return this.dependencies.adapters[context.provider];
   }
+}
+
+/**
+ * The check of an ended job as its own end tells it: a failure with its
+ * reason, or a cancel with the text that the cancel stored. Null while the
+ * job is active.
+ */
+export function endingOfJob(
+  context: Pick<ReviewRunJobContext, "status" | "errorMessage" | "cancelledPresentation">,
+): { state: ReviewRunEndState; ending: ReviewRunEnding } | null {
+  switch (context.status) {
+    case "queued":
+    case "running":
+      return null;
+    case "failed":
+      return { state: "failure", ending: failedPreviewEnding(context.errorMessage) };
+    case "cancelled":
+      return {
+        state: "cancelled",
+        ending: context.cancelledPresentation ?? presentationText("cancelled"),
+      };
+    case "succeeded":
+      return { state: "success", ending: presentationText("succeeded") };
+    case "stopped_credits":
+      return { state: "neutral", ending: { ...STOPPED_CREDITS_CHECK } };
+  }
+}
+
+function presentationText(
+  status: GenerationJobDto["status"],
+): ReviewRunEnding {
+  const { title, summary } = reviewRunPresentationFor(status);
+  return { title, summary };
 }
 
 /** How the pull request check reads for a preview run in this state. */
@@ -322,9 +531,8 @@ export function reviewRunPresentationFor(
     case "failed":
       return {
         ...mapDoxabotReviewRunState("failure"),
-        title: "Documentation preview failed",
-        summary:
-          "Doxa could not generate a documentation preview for this pull request.",
+        title: FAILED_PREVIEW_TITLE,
+        summary: FAILED_PREVIEW_SUMMARY,
       };
     case "cancelled":
       return {
@@ -372,24 +580,6 @@ export function checkAgreesWithJob(
   }
 }
 
-/**
- * The input as written, or the job's own state when the input contradicts it.
- * Only an ended job can disagree, and its state always names a conclusion.
- * A cancelled job reads as its cancel says, for example "stopped" for a
- * closed pull request, when the cancel stored a text.
- */
-function agreeWithJob(
-  context: Pick<ReviewRunJobContext, "status" | "cancelledPresentation">,
-  input: CreateReviewRunInput,
-): CreateReviewRunInput {
-  if (checkAgreesWithJob(context.status, input)) return input;
-  return {
-    ...input,
-    ...reviewRunPresentationFor(context.status),
-    ...(context.status === "cancelled" ? context.cancelledPresentation : null),
-  };
-}
-
 export function mapDoxabotReviewRunState(state: DoxabotReviewRunState): {
   status: ReviewRunStatus;
   conclusion?: ReviewRunConclusion;
@@ -417,8 +607,7 @@ export function withDisplaySummary<T extends CreateReviewRunInput>(
 ): T {
   const lines = [input.summary];
   if (input.detailsUrl) {
-    // A `neutral` check is a billing stop (spec 10.6): its link is the billing page.
-    lines.push(`${input.conclusion === "neutral" ? "Billing" : "Preview"}: ${input.detailsUrl}`);
+    lines.push(`${detailsLinkLabel(input.conclusion)}: ${input.detailsUrl}`);
   }
 
   const metrics = input.metrics;
@@ -437,8 +626,31 @@ export function withDisplaySummary<T extends CreateReviewRunInput>(
   };
 }
 
+/**
+ * What the check's link opens: the preview while the run goes or after it
+ * worked, the billing page for a billing stop (spec 10.6), and the run in
+ * the dashboard for every other end.
+ */
+function detailsLinkLabel(conclusion: ReviewRunConclusion | undefined): string {
+  switch (conclusion) {
+    case undefined:
+    case "success":
+      return "Preview";
+    case "neutral":
+      return "Billing";
+    case "failure":
+    case "cancelled":
+    case "action_required":
+      return "Details";
+  }
+}
+
 function metric(label: string, value: number | undefined): string | null {
   return value === undefined ? null : `${label}: ${value}`;
+}
+
+function isActiveJob(status: GenerationJobDto["status"]): boolean {
+  return status === "queued" || status === "running";
 }
 
 function isPendingReviewRunId(value: string): boolean {

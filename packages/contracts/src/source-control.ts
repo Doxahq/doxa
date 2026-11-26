@@ -156,11 +156,36 @@ export const normalizedInstallationLifecycleEventSchema = z.object({
   }).strict().optional(),
 }).strict();
 
+/** How a person asked to run a preview check again on the provider. */
+export const reviewRunRetryTriggerSchema = z.enum([
+  /** The provider's own "Re-run" of the check (GitHub `check_run.rerequested`). */
+  "rerun",
+  /** The check's "Retry preview" button (GitHub `check_run.requested_action`). */
+  "retry_action",
+]);
+
+/** A person asked to run the preview of a Doxa check again. */
+export const normalizedReviewRunRetryEventSchema = z.object({
+  kind: z.literal("review_run_retry"),
+  deliveryId: z.string().min(1),
+  repository: sourceRepositorySchema,
+  /** The check run on the provider. */
+  externalRunId: z.string().min(1),
+  /** The generation job that the check reports, from the check's external ID. */
+  jobId: z.uuid(),
+  trigger: reviewRunRetryTriggerSchema,
+  requestedBy: z.object({
+    externalId: z.string().min(1),
+    login: z.string().min(1),
+  }).strict(),
+}).strict();
+
 export const normalizedSourceControlEventSchema = z.discriminatedUnion("kind", [
   normalizedChangeProposalEventSchema,
   normalizedDefaultBranchPushEventSchema,
   normalizedRepositoryLifecycleEventSchema,
   normalizedInstallationLifecycleEventSchema,
+  normalizedReviewRunRetryEventSchema,
 ]);
 
 export const sourceControlIrrelevantReasonSchema = z.enum([
@@ -170,6 +195,8 @@ export const sourceControlIrrelevantReasonSchema = z.enum([
   "no_repository_changes",
   /** Kept so stored deliveries stay readable. The parser no longer returns it. */
   "untrusted_fork",
+  /** A check event for a check that is not a Doxa preview check. */
+  "foreign_check",
 ]);
 
 export const sourceControlEventParseResultSchema = z.discriminatedUnion(
@@ -216,6 +243,10 @@ export type InstallationLifecycleAction = z.infer<
 >;
 export type NormalizedInstallationLifecycleEvent = z.infer<
   typeof normalizedInstallationLifecycleEventSchema
+>;
+export type ReviewRunRetryTrigger = z.infer<typeof reviewRunRetryTriggerSchema>;
+export type NormalizedReviewRunRetryEvent = z.infer<
+  typeof normalizedReviewRunRetryEventSchema
 >;
 export type NormalizedSourceControlEvent = z.infer<
   typeof normalizedSourceControlEventSchema

@@ -14,22 +14,34 @@ import {
 } from "../../src/services/doxabot/github-checks";
 import {
   checkAgreesWithJob,
+  failedJobEnd,
+  failedPreviewEnding,
   mapDoxabotReviewRunState,
+  RETRY_PREVIEW_ACTION,
   reviewRunPresentationFor,
   ReviewRunsService,
+  timedOutPreviewEnding,
   type ReviewRunProviderAdapter,
 } from "../../src/services/doxabot/review-runs";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 const jobId = "11111111-1111-4111-8111-111111111111";
 const headRevision = "b".repeat(40);
+const projectId = "22222222-2222-4222-8222-222222222222";
+const links = {
+  generation: (project: string, job: string) =>
+    `https://doxa.test/dashboard/projects/${project}/generations/${job}`,
+};
+const generationUrl = links.generation(projectId, jobId);
 
 function createContext(
   overrides: Partial<ReviewRunJobContext> = {},
 ): ReviewRunJobContext {
   return {
     jobId,
+    projectId,
     status: "queued",
+    errorMessage: null,
     provider: "github",
     targetRevision: headRevision,
     externalReviewRunId: null,
@@ -185,6 +197,35 @@ describe("GitHub Checks adapter", () => {
     );
   });
 
+  test("sends the check's buttons only when the command names them", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ id: 9001 }));
+    const adapter = new GitHubChecksAdapter({
+      createInstallationToken: vi.fn(async () => "ghs_scoped"),
+      fetch: fetchMock,
+    });
+    const failed = {
+      externalRunId: "9001",
+      status: "completed",
+      conclusion: "failure",
+      title: "Documentation preview failed",
+      summary: "The model provider timed out.",
+      detailsUrl: generationUrl,
+      sourceRevision: headRevision,
+    } as const;
+    const context = createContext({ externalReviewRunId: "9001" });
+
+    await adapter.update(context, { ...failed, actions: [RETRY_PREVIEW_ACTION] });
+    await adapter.update(context, failed);
+
+    const bodies = fetchMock.mock.calls.map((call) =>
+      JSON.parse(String((call as unknown as [string, RequestInit])[1].body)),
+    );
+    expect(bodies[0].actions).toEqual([
+      { label: "Retry preview", description: "Run this documentation preview again", identifier: "retry_preview" },
+    ]);
+    expect(bodies[1]).not.toHaveProperty("actions");
+  });
+
   test("does not call GitHub when scoped token creation fails", async () => {
     const fetchMock = vi.fn<typeof fetch>();
     const adapter = new GitHubChecksAdapter({
@@ -248,6 +289,7 @@ describe("provider-neutral review runs", () => {
         externalReviewRunId = input.externalRunId;
         return true;
       }),
+      markReviewRunCompleted: vi.fn(async () => undefined),
     };
     const find = vi.fn(async () => null);
     const create = vi.fn(async () => ({ externalRunId: "9001" }));
@@ -256,6 +298,7 @@ describe("provider-neutral review runs", () => {
     const service = new ReviewRunsService({
       jobs,
       adapters: { github },
+      links,
       createClaimToken: () => "claim-1",
       now: () => claimedAt,
     });
@@ -309,6 +352,7 @@ describe("provider-neutral review runs", () => {
         }),
       ),
       completeReviewRunClaim: vi.fn(async () => true),
+      markReviewRunCompleted: vi.fn(async () => undefined),
     };
     const github: ReviewRunProviderAdapter = {
       find: vi.fn(async () => null),
@@ -320,6 +364,7 @@ describe("provider-neutral review runs", () => {
     const service = new ReviewRunsService({
       jobs,
       adapters: { github },
+      links,
       createClaimToken: () => "claim-2",
       now: () => claimedAt,
     });
@@ -343,6 +388,7 @@ describe("provider-neutral review runs", () => {
         }),
       ),
       completeReviewRunClaim: vi.fn(async () => true),
+      markReviewRunCompleted: vi.fn(async () => undefined),
     };
     const find = vi.fn(async () => ({ externalRunId: "9001" }));
     const create = vi.fn(async () => ({ externalRunId: "9002" }));
@@ -350,6 +396,7 @@ describe("provider-neutral review runs", () => {
     const service = new ReviewRunsService({
       jobs,
       adapters: { github: { find, create, update } },
+      links,
       createClaimToken: () => "claim-4",
       now: () => claimedAt,
     });
@@ -386,6 +433,7 @@ describe("provider-neutral review runs", () => {
         async (): Promise<ReviewRunClaim> => ({ outcome: "pending" }),
       ),
       completeReviewRunClaim: vi.fn(async () => false),
+      markReviewRunCompleted: vi.fn(async () => undefined),
     };
     const update = vi.fn(async () => ({ externalRunId: "9001" }));
     const service = new ReviewRunsService({
@@ -397,6 +445,7 @@ describe("provider-neutral review runs", () => {
           update,
         },
       },
+      links,
       createClaimToken: () => "claim-3",
       now: () => new Date("2026-07-23T10:00:00.000Z"),
     });
@@ -426,8 +475,10 @@ describe("provider-neutral review runs", () => {
           getReviewRunContext: vi.fn(async () => (queue.length > 1 ? queue.shift() : queue[0]) ?? null),
           claimReviewRun: vi.fn(async (): Promise<ReviewRunClaim> => ({ outcome: "claimed", reconcile: false })),
           completeReviewRunClaim: vi.fn(async () => true),
+          markReviewRunCompleted: vi.fn(async () => undefined),
         },
         adapters: { github: { find: vi.fn(async () => null), create, update } },
+        links,
         createClaimToken: () => "claim-5",
         now: () => new Date("2026-07-23T10:00:00.000Z"),
       });
@@ -547,8 +598,10 @@ describe("provider-neutral review runs", () => {
           getReviewRunContext: vi.fn(async () => context),
           claimReviewRun: vi.fn(async (): Promise<ReviewRunClaim> => ({ outcome: "not_found" })),
           completeReviewRunClaim: vi.fn(async () => false),
+          markReviewRunCompleted: vi.fn(async () => undefined),
         },
         adapters: { github: { find: vi.fn(async () => null), create: vi.fn(async () => ({ externalRunId: "9001" })), update } },
+        links,
         createClaimToken: () => "claim-4",
         now: () => new Date("2026-07-23T10:00:00.000Z"),
       });
@@ -637,5 +690,248 @@ describe("provider-neutral review runs", () => {
         conclusion: "success",
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("ending the check of a preview job", () => {
+  function serviceFor(context: ReviewRunJobContext | null) {
+    const update = vi.fn(async () => ({ externalRunId: "9001" }));
+    const create = vi.fn(async () => ({ externalRunId: "9001" }));
+    const markReviewRunCompleted = vi.fn(async () => undefined);
+    const now = new Date("2026-11-25T18:00:00.000Z");
+    const service = new ReviewRunsService({
+      jobs: {
+        getReviewRunContext: vi.fn(async () => context),
+        claimReviewRun: vi.fn(async (): Promise<ReviewRunClaim> => ({ outcome: "claimed", reconcile: false })),
+        completeReviewRunClaim: vi.fn(async () => true),
+        markReviewRunCompleted,
+      },
+      adapters: { github: { find: vi.fn(async () => null), create, update } },
+      links,
+      createClaimToken: () => "claim-6",
+      now: () => now,
+    });
+    return { service, update, create, markReviewRunCompleted, now };
+  }
+
+  test("a failed run shows its reason, a link to the run and a retry button", async () => {
+    const context = createContext({ externalReviewRunId: "9001", status: "failed" });
+    const { service, update } = serviceFor(context);
+
+    await expect(
+      service.finish(jobId, "failure", failedPreviewEnding("The model provider timed out.")),
+    ).resolves.toBe(true);
+
+    expect(update).toHaveBeenCalledWith(context, {
+      externalRunId: "9001",
+      status: "completed",
+      conclusion: "failure",
+      title: "Documentation preview failed",
+      summary: `The model provider timed out.\n\nDetails: ${generationUrl}`,
+      detailsUrl: generationUrl,
+      sourceRevision: headRevision,
+      actions: [RETRY_PREVIEW_ACTION],
+    });
+  });
+
+  test("a failure without a reason uses the default text", () => {
+    expect(failedPreviewEnding(null)).toEqual({
+      title: "Documentation preview failed",
+      summary: "Doxa could not generate a documentation preview for this pull request.",
+      retryable: true,
+    });
+    expect(failedPreviewEnding("   ").summary).toBe(
+      "Doxa could not generate a documentation preview for this pull request.",
+    );
+  });
+
+  test("a failure that needs a person links to the run but offers no retry", async () => {
+    const context = createContext({ externalReviewRunId: "9001", status: "failed" });
+    const { service, update } = serviceFor(context);
+    const end = failedJobEnd("Merge conflict.", {
+      conclusion: "action_required",
+      title: "Documentation preview needs a clean merge",
+      summary: "Resolve the merge conflict.",
+    });
+
+    await service.finish(jobId, end.state, end.ending);
+
+    expect(update).toHaveBeenCalledWith(context, {
+      externalRunId: "9001",
+      status: "completed",
+      conclusion: "action_required",
+      title: "Documentation preview needs a clean merge",
+      summary: `Resolve the merge conflict.\n\nDetails: ${generationUrl}`,
+      detailsUrl: generationUrl,
+      sourceRevision: headRevision,
+    });
+  });
+
+  test("a failure that the worker names as a plain failure keeps the retry", () => {
+    expect(failedJobEnd("Boom.", { conclusion: "failure", title: "Failed", summary: "Boom." })).toEqual({
+      state: "failure",
+      ending: { title: "Failed", summary: "Boom.", retryable: true },
+    });
+    expect(failedJobEnd("Boom.")).toEqual({ state: "failure", ending: failedPreviewEnding("Boom.") });
+  });
+
+  test.each([
+    ["queued", "Doxa did not start this preview in time."],
+    ["running", "The preview ran longer than its time limit, so Doxa stopped it."],
+  ] as const)("a run that the watchdog ended while %s reads as timed out", (status, reason) => {
+    expect(timedOutPreviewEnding(status)).toEqual({
+      title: "Documentation preview timed out",
+      summary: `${reason} Retry it, or push a new commit to start a new preview.`,
+      retryable: true,
+    });
+  });
+
+  test("records a completed check, so the cron leaves it alone", async () => {
+    const { service, markReviewRunCompleted, now } = serviceFor(
+      createContext({ externalReviewRunId: "9001", status: "failed" }),
+    );
+
+    await service.finish(jobId, "failure", failedPreviewEnding("Boom."));
+
+    expect(markReviewRunCompleted).toHaveBeenCalledWith({ jobId, externalRunId: "9001", completedAt: now });
+  });
+
+  test("does not record a check that is still open", async () => {
+    const { service, markReviewRunCompleted } = serviceFor(createContext({ externalReviewRunId: "9001", status: "running" }));
+
+    await service.update(jobId, {
+      externalRunId: "9001",
+      status: "in_progress",
+      title: "Generating documentation preview",
+      summary: "Doxa is analyzing this pull request.",
+      detailsUrl: null,
+      sourceRevision: headRevision,
+    });
+
+    expect(markReviewRunCompleted).not.toHaveBeenCalled();
+  });
+
+  test("does not record a completed check of an active job, which can open again", async () => {
+    // A queue failure completes the check while the job waits; the run can still start.
+    const { service, markReviewRunCompleted } = serviceFor(createContext({ externalReviewRunId: "9001", status: "queued" }));
+
+    await service.update(jobId, {
+      externalRunId: "9001",
+      status: "completed",
+      conclusion: "action_required",
+      title: "Documentation preview could not start",
+      summary: "Doxa could not queue preview generation. A retry is required.",
+      detailsUrl: null,
+      sourceRevision: headRevision,
+    });
+
+    expect(markReviewRunCompleted).not.toHaveBeenCalled();
+  });
+
+  test("records a check that was created already completed", async () => {
+    const { service, markReviewRunCompleted, now } = serviceFor(createContext({ status: "failed" }));
+
+    await service.create(jobId, createCommand());
+
+    expect(markReviewRunCompleted).toHaveBeenCalledWith({ jobId, externalRunId: "9001", completedAt: now });
+  });
+
+  test("a failed record never fails the close: the cron closes the check once more", async () => {
+    const { service, markReviewRunCompleted } = serviceFor(createContext({ externalReviewRunId: "9001", status: "failed" }));
+    markReviewRunCompleted.mockRejectedValueOnce(new Error("database unavailable"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(service.finish(jobId, "failure", failedPreviewEnding("Boom."))).resolves.toBe(true);
+  });
+
+  test("creates the check of a run that already failed with its reason and a retry", async () => {
+    const { service, create } = serviceFor(createContext({ status: "failed", errorMessage: "Clone failed." }));
+
+    await service.create(jobId, createCommand());
+
+    expect(create).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        conclusion: "failure",
+        summary: `Clone failed.\n\nDetails: ${generationUrl}`,
+        detailsUrl: generationUrl,
+        actions: [RETRY_PREVIEW_ACTION],
+      }),
+    );
+  });
+
+  describe("closing the open check of an ended job", () => {
+    test("a failed job: its reason, the link and the retry", async () => {
+      const context = createContext({ externalReviewRunId: "9001", status: "failed", errorMessage: "Clone failed." });
+      const { service, update } = serviceFor(context);
+
+      await expect(service.closeForEndedJob(jobId)).resolves.toBe(true);
+      expect(update).toHaveBeenCalledWith(
+        context,
+        expect.objectContaining({
+          conclusion: "failure",
+          summary: `Clone failed.\n\nDetails: ${generationUrl}`,
+          actions: [RETRY_PREVIEW_ACTION],
+        }),
+      );
+    });
+
+    test("a cancelled job: the text that its cancel stored, with its retry", async () => {
+      const timedOut = timedOutPreviewEnding("queued");
+      const context = createContext({ externalReviewRunId: "9001", status: "cancelled", cancelledPresentation: timedOut });
+      const { service, update } = serviceFor(context);
+
+      await service.closeForEndedJob(jobId);
+
+      expect(update).toHaveBeenCalledWith(context, {
+        externalRunId: "9001",
+        status: "completed",
+        conclusion: "cancelled",
+        title: timedOut.title,
+        summary: `${timedOut.summary}\n\nDetails: ${generationUrl}`,
+        detailsUrl: generationUrl,
+        sourceRevision: headRevision,
+        actions: [RETRY_PREVIEW_ACTION],
+      });
+    });
+
+    test("a cancel without stored text uses the default cancel, with no retry", async () => {
+      const context = createContext({ externalReviewRunId: "9001", status: "cancelled" });
+      const { service, update } = serviceFor(context);
+
+      await service.closeForEndedJob(jobId);
+
+      expect(update).toHaveBeenCalledWith(context, {
+        externalRunId: "9001",
+        ...reviewRunPresentationFor("cancelled"),
+        detailsUrl: null,
+        sourceRevision: headRevision,
+      });
+    });
+
+    test.each([
+      ["succeeded", "success"],
+      ["stopped_credits", "neutral"],
+    ] as const)("a %s job closes as %s", async (status, conclusion) => {
+      const context = createContext({ externalReviewRunId: "9001", status });
+      const { service, update } = serviceFor(context);
+
+      await service.closeForEndedJob(jobId);
+
+      expect(update).toHaveBeenCalledWith(context, expect.objectContaining({ status: "completed", conclusion }));
+    });
+
+    test.each([
+      ["a queued job", createContext({ externalReviewRunId: "9001", status: "queued" })],
+      ["a running job", createContext({ externalReviewRunId: "9001", status: "running" })],
+      ["a job without a check", createContext({ status: "failed" })],
+      ["a check that is still being created", createContext({ status: "failed", externalReviewRunId: "pending:1:claim" })],
+      ["a job that is not a preview", null],
+    ])("does nothing for %s", async (_name, context) => {
+      const { service, update } = serviceFor(context);
+
+      await expect(service.closeForEndedJob(jobId)).resolves.toBe(false);
+      expect(update).not.toHaveBeenCalled();
+    });
   });
 });

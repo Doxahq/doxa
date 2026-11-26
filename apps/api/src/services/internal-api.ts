@@ -13,7 +13,13 @@ import type {
   StoreGenerationSiteAssetInput,
   StoreGenerationSiteAssetResult,
 } from "@doxahq/contracts";
-import { markJobStoppedInputSchema } from "@doxahq/contracts";
+import {
+  failedJobCheckSchema,
+  markJobStoppedInputSchema,
+  timedOutJobStatusSchema,
+  type FailedJobCheck,
+  type TimedOutJobStatus,
+} from "@doxahq/contracts";
 import type { GenerationInternalApi } from "@doxahq/generation";
 import type { Env } from "../env";
 import { DocsRepository } from "../repositories/docs";
@@ -26,7 +32,13 @@ import {
   toGenerationDiagnosticMetadata,
 } from "../repositories/generation-observability";
 import { resolveDocsHost as resolveDocsHostForEnv } from "./docs-host-resolution";
-import { ReviewRunsService } from "./doxabot/review-runs";
+import {
+  failedJobEnd,
+  ReviewRunsService,
+  timedOutPreviewEnding,
+} from "./doxabot/review-runs";
+import { finishPreviewCheckSafely, type PreviewCheckClose } from "./doxabot/preview-check-close";
+import type { CancelledReviewRunPresentation } from "../repositories/cancelled-review-run";
 import {
   CANCELLED_PREVIEW_CHECK,
   closePreviewCheck,
@@ -102,12 +114,16 @@ export class InternalApi extends WorkerEntrypoint<Env> implements InternalApiRpc
     return markJobRunning(this.env, jobId);
   }
 
-  markJobFailed(jobId: string, message: string) {
-    return markJobFailed(this.env, jobId, message);
+  markJobFailed(jobId: string, message: string, check?: FailedJobCheck) {
+    return markJobFailed(this.env, jobId, message, check);
   }
 
   markJobCancelled(jobId: string, message: string) {
     return markJobCancelled(this.env, jobId, message);
+  }
+
+  markJobTimedOut(jobId: string, status: TimedOutJobStatus, message: string) {
+    return markJobTimedOut(this.env, jobId, status, message);
   }
 
   markJobSuperseded(jobId: string, message: string) {
@@ -280,10 +296,52 @@ async function markJobRunning(env: Env, jobId: string): Promise<void> {
   await new JobsRepository(env).markRunning(jobId);
 }
 
-async function markJobFailed(env: Env, jobId: string, message: string): Promise<void> {
-  const failed = await new JobsRepository(env).markFailed(jobId, message);
-  if (failed) await endRun(env, jobId, "failed");
-  if (failed) await generationNotifierFromEnv(env).finished(jobId, "failed", message);
+/**
+ * Fails an active job. A preview's check finishes too, by default as
+ * `failure` with the reason, a link to the run and a "Retry preview" button.
+ */
+async function markJobFailed(
+  env: Env,
+  jobId: string,
+  message: string,
+  rawCheck?: FailedJobCheck,
+): Promise<void> {
+  // The worker sends the check over RPC, so it is checked here.
+  const check = rawCheck === undefined ? undefined : failedJobCheckSchema.parse(rawCheck);
+  await failJob(env, jobId, message, failedJobEnd(message, check));
+}
+
+async function failJob(
+  env: Env,
+  jobId: string,
+  message: string,
+  end: Omit<PreviewCheckClose, "jobId">,
+): Promise<void> {
+  const jobs = new JobsRepository(env);
+  if (!(await jobs.markFailed(jobId, message))) return;
+  await endRun(env, jobId, "failed");
+  await generationNotifierFromEnv(env).finished(jobId, "failed", message);
+  await finishPreviewCheckSafely(jobs, ReviewRunsService.fromEnv(env), { jobId, ...end });
+}
+
+/**
+ * The watchdog ends a stale job. A queued job never ran, so it is cancelled
+ * and charged as a cancel; a running job fails. Either way a preview's check
+ * reads "timed out" and offers a retry.
+ */
+async function markJobTimedOut(
+  env: Env,
+  jobId: string,
+  rawStatus: TimedOutJobStatus,
+  message: string,
+): Promise<void> {
+  const status = timedOutJobStatusSchema.parse(rawStatus);
+  const ending = timedOutPreviewEnding(status);
+  if (status === "queued") {
+    await markJobCancelled(env, jobId, message, ending);
+    return;
+  }
+  await failJob(env, jobId, message, { state: "failure", ending });
 }
 
 /**
@@ -322,9 +380,13 @@ async function markJobStopped(env: Env, jobId: string, rawInput: MarkJobStoppedI
  * The worker cancels its own job, for example while generation is paused,
  * then stops without touching the check. The check closes here.
  */
-async function markJobCancelled(env: Env, jobId: string, message: string): Promise<void> {
+async function markJobCancelled(
+  env: Env,
+  jobId: string,
+  message: string,
+  check: CancelledReviewRunPresentation = { title: CANCELLED_PREVIEW_CHECK.title, summary: message },
+): Promise<void> {
   const jobs = new JobsRepository(env);
-  const check = { title: CANCELLED_PREVIEW_CHECK.title, summary: message };
   if (!(await jobs.markCancelled(jobId, message, "generation_cancelled", undefined, check))) return;
   await endRun(env, jobId, "cancelled");
   await closePreviewCheck(jobs, ReviewRunsService.fromEnv(env), { jobId, message, check });

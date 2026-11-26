@@ -141,14 +141,19 @@ describe("agent worker watchdog", () => {
 
     await runGenerationWatchdog(env);
 
-    expect(env.API.markJobCancelled).toHaveBeenCalledWith(
+    // The API ends each job and closes a preview's check as timed out.
+    expect(env.API.markJobTimedOut).toHaveBeenCalledWith(
       "11111111-1111-4111-8111-111111111111",
+      "queued",
       "Queued generation cancelled by watchdog after waiting too long.",
     );
-    expect(env.API.markJobFailed).toHaveBeenCalledWith(
+    expect(env.API.markJobTimedOut).toHaveBeenCalledWith(
       "22222222-2222-4222-8222-222222222222",
+      "running",
       "Running generation marked failed by watchdog after timing out.",
     );
+    expect(env.API.markJobCancelled).not.toHaveBeenCalled();
+    expect(env.API.markJobFailed).not.toHaveBeenCalled();
     expect(env.AGENT_CONTAINER.fetch).toHaveBeenCalledTimes(2);
   });
 });
@@ -169,6 +174,7 @@ describe("createInternalApiAdapter", () => {
       markJobRunning: vi.fn(async () => undefined),
       markJobFailed: vi.fn(async () => undefined),
       markJobCancelled: vi.fn(async () => undefined),
+      markJobTimedOut: vi.fn(async () => undefined),
       markJobSuperseded: vi.fn(async () => undefined),
       isJobActive: vi.fn(async () => true),
       getJobStopReason: vi.fn(async () => null),
@@ -272,6 +278,7 @@ function createEnv(): Parameters<typeof worker.queue>[1] {
       markJobRunning: vi.fn(async () => undefined),
       markJobFailed: vi.fn(async () => undefined),
       markJobCancelled: vi.fn(async () => undefined),
+      markJobTimedOut: vi.fn(async () => undefined),
       markJobSuperseded: vi.fn(async () => undefined),
       isJobActive: vi.fn(async () => true),
       getJobStopReason: vi.fn(async () => null),

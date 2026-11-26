@@ -15,8 +15,9 @@ import {
 } from "./github-api";
 import type { ReviewRunProviderAdapter } from "./review-runs";
 
-export const DOXA_DOCUMENTATION_PREVIEW_CHECK =
-  "Doxa documentation preview";
+import { DOXA_DOCUMENTATION_PREVIEW_CHECK } from "./preview-check-identity";
+
+export { DOXA_DOCUMENTATION_PREVIEW_CHECK };
 
 export interface GitHubInstallationTokenRequest {
   installationId: string;
@@ -144,6 +145,7 @@ function githubReviewRunFields(
     status: input.status,
     ...(input.conclusion ? { conclusion: input.conclusion } : {}),
     ...(input.detailsUrl ? { details_url: input.detailsUrl } : {}),
+    ...(input.actions ? { actions: input.actions } : {}),
     output: {
       title: input.title,
       summary: input.summary,

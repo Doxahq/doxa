@@ -17,6 +17,14 @@ describe("the check text of a cancel event", () => {
     expect(cancelledCheckFromEventData({ ...data, outcome: "cancelled", terminal: true })).toEqual(stopped);
   });
 
+  test("keeps the retry button of a timed-out preview, and reads older events without it", () => {
+    const timedOut = { title: "Documentation preview timed out", summary: "Doxa did not start this preview in time.", retryable: true };
+
+    expect(cancelledCheckFromEventData(withCancelledCheck({}, timedOut))).toEqual(timedOut);
+    expect(cancelledCheckFromEventData({ check: stopped })).toEqual(stopped);
+    expect(cancelledCheckFromEventData({ check: stopped })).not.toHaveProperty("retryable");
+  });
+
   test("leaves the data as it is when the cancel has no check text", () => {
     expect(withCancelledCheck({ requestedByUserId: "user-1" }, undefined)).toEqual({ requestedByUserId: "user-1" });
     expect(withCancelledCheck(undefined, undefined)).toBeUndefined();

@@ -13,6 +13,7 @@ import { ACCOUNT_PAGES } from "~/lib/dashboard/account-pages"
 import { useIsFirstLoad } from "~/lib/dashboard/use-first-load"
 import { useGitHub } from "~/lib/dashboard/use-github"
 import { billingAccountsQueryOptions } from "~/lib/queries/billing"
+import { REPLAY_MASK_PROPS } from "~/lib/analytics/replay-privacy"
 import { githubInstallationsQueryOptions } from "~/lib/queries/dashboard"
 import { privacySettingsQueryOptions } from "~/lib/queries/privacy-settings"
 
@@ -62,7 +63,7 @@ function AccountSection({
       <SectionLabel>Profile</SectionLabel>
       <FieldList>
         <FieldRow label="Name">{name || "—"}</FieldRow>
-        <FieldRow label="Email">{email || "—"}</FieldRow>
+        <FieldRow label="Email">{email ? <span {...REPLAY_MASK_PROPS}>{email}</span> : "—"}</FieldRow>
       </FieldList>
     </section>
   )

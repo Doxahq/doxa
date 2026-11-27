@@ -7,6 +7,7 @@ import type { CreateTeamInviteInput, TeamDetail, TeamInvite } from "@doxahq/cont
 import { afterEach, describe, expect, test, vi } from "vitest"
 
 import { TeamInvitesSection } from "~/components/dashboard/teams/team-invites-section"
+import { REPLAY_MASK_TEXT_SELECTOR } from "~/lib/analytics/replay-privacy"
 import { useTeam } from "~/lib/dashboard/use-teams"
 import { teamQueryKeys } from "~/lib/queries/teams"
 import { renderInRouter } from "./fixtures/render-in-router"
@@ -89,9 +90,11 @@ describe("invites by email", () => {
     expect(onCreate).toHaveBeenCalledWith({ role: "editor" })
   })
 
-  test("shows the address of an invite sent by email", async () => {
+  test("shows the address of an invite sent by email, masked in replays", async () => {
     await renderSection(team([{ ...FIRST, email: "grace@example.com" }]))
-    expect(screen.getByText("Sent to grace@example.com")).toBeTruthy()
+    const address = screen.getByText("grace@example.com")
+    expect(address.parentElement?.textContent).toBe("Sent to grace@example.com")
+    expect(address.closest(REPLAY_MASK_TEXT_SELECTOR)).not.toBeNull()
   })
 })
 

@@ -4,6 +4,7 @@ import type { BillingAccountDetail } from "@doxahq/contracts/billing"
 import { SectionLabel } from "~/components/dashboard/dashboard-header"
 import { CardBrandMark } from "~/components/dashboard/billing/card-brand-mark"
 import { Button } from "~/components/ui/button"
+import { REPLAY_MASK_PROPS } from "~/lib/analytics/replay-privacy"
 import { paymentMethodView } from "~/lib/dashboard/billing-plan-view"
 import { cn } from "~/lib/utils"
 
@@ -33,7 +34,7 @@ export function BillingPaymentMethodSection({
       </SectionLabel>
       <div className="surface-card flex flex-wrap items-center gap-3.5 px-5 py-4">
         <CardBrandMark logo={view.logo} />
-        <span className="flex min-w-0 flex-[1_1_16rem] flex-col">
+        <span {...REPLAY_MASK_PROPS} className="flex min-w-0 flex-[1_1_16rem] flex-col">
           <span className="text-[14.5px] text-foreground">{view.title}</span>
           <span className={cn("text-[13px]", view.isProblem ? "text-destructive" : "text-muted-foreground")}>{view.detail}</span>
         </span>

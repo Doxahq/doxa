@@ -5,6 +5,7 @@ import { SectionLabel } from "~/components/dashboard/dashboard-header"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select"
+import { REPLAY_MASK_PROPS } from "~/lib/analytics/replay-privacy"
 import { useGitHubInstallations } from "~/lib/dashboard/use-github-installations"
 
 /**
@@ -91,7 +92,7 @@ function InstallationRow({
             <SelectContent>
               {targets.map((target) => (
                 <SelectItem key={target.userId} value={target.userId}>
-                  {target.name || target.email}
+                  {target.name || <span {...REPLAY_MASK_PROPS}>{target.email}</span>}
                 </SelectItem>
               ))}
             </SelectContent>

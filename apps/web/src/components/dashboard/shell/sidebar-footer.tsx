@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
 import { useDashboardAuth } from "~/lib/auth/dashboard-auth-context"
+import { REPLAY_MASK_PROPS } from "~/lib/analytics/replay-privacy"
 import { DOXA_DOCS_URL, DOXA_GITHUB_URL } from "~/lib/dashboard/external-links"
 import { useShell } from "~/lib/dashboard/shell-context"
 
@@ -90,7 +91,9 @@ export function UserRow({ showLinks = true }: { showLinks?: boolean }) {
         >
           {showsEmailInMenu ? (
             <>
-              <DropdownMenuLabel className="truncate font-normal text-muted-foreground">{email}</DropdownMenuLabel>
+              <DropdownMenuLabel {...REPLAY_MASK_PROPS} className="truncate font-normal text-muted-foreground">
+                {email}
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
             </>
           ) : null}

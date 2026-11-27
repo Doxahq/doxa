@@ -2,6 +2,7 @@ import { scrubAnalyticsProperties, scrubAnalyticsUrl, type BrowserAnalyticsMode 
 import type { CapturedNetworkRequest, CaptureResult, PostHogConfig } from "posthog-js"
 
 import type { PostHogConnection } from "~/lib/analytics/analytics-config"
+import { maskReplayAttribute, REPLAY_MASK_TEXT_SELECTOR, scrubReplayBatch } from "~/lib/analytics/replay-privacy"
 
 /** The modes in which posthog-js runs. `off` never starts it, or opts it out. */
 export type RunningAnalyticsMode = Exclude<BrowserAnalyticsMode, "off">
@@ -52,8 +53,9 @@ export function postHogInitOptions(
     capture_performance: mode === "full",
     session_recording: {
       maskAllInputs: true,
-      // Every text node: dashboard text names customer projects, pages and code.
-      maskTextSelector: "*",
+      // Only sensitive text: docs, code, secrets, emails and payment details (`replay-privacy.ts`).
+      maskTextSelector: REPLAY_MASK_TEXT_SELECTOR,
+      maskAttributeFn: maskReplayAttribute,
       recordHeaders: false,
       recordBody: false,
       maskCapturedNetworkRequestFn: scrubNetworkRequest,
@@ -65,16 +67,23 @@ export function postHogInitOptions(
 
 /**
  * Runs before posthog-js sends anything. URLs lose their tokens (`/invite/…`,
- * `?token=`), page titles are dropped, and a replay batch recorded on a page
- * whose address holds a secret is dropped, because rrweb stores the full
- * page address inside the replay data.
+ * `?token=`) and page titles are dropped. A replay batch keeps every event:
+ * its page addresses are scrubbed (`scrubReplayBatch`). A batch is dropped
+ * only on a page whose path is a secret, as a second guard after the
+ * project's replay URL blocklist.
+ *
+ * Never drop a batch for a query string: rrweb sends DOM changes as deltas,
+ * so one lost batch freezes the rest of the replay until the next full
+ * snapshot (the Content page keeps `?page=` in the address).
  */
 export function scrubCaptureResult(event: CaptureResult | null, currentHref: string | null = browserHref()): CaptureResult | null {
   if (!event) return null
-  if (event.event === "$snapshot" && currentHref !== null && urlHoldsSecret(currentHref)) return null
+  const isSnapshot = event.event === "$snapshot"
+  if (isSnapshot && currentHref !== null && pathHoldsSecret(currentHref)) return null
+  const properties = scrubAnalyticsProperties(event.properties)
   return {
     ...event,
-    properties: scrubAnalyticsProperties(event.properties),
+    properties: isSnapshot ? scrubReplayBatch(properties) : properties,
     ...(event.$set ? { $set: scrubAnalyticsProperties(event.$set) } : {}),
     ...(event.$set_once ? { $set_once: scrubAnalyticsProperties(event.$set_once) } : {}),
   }
@@ -85,10 +94,16 @@ export function scrubNetworkRequest(request: CapturedNetworkRequest): CapturedNe
   return { ...request, name: scrubAnalyticsUrl(request.name) }
 }
 
-/** True when scrubbing would change the address (the fragment aside): it carries a token or a secret path. */
-export function urlHoldsSecret(href: string): boolean {
-  const withoutFragment = href.split("#")[0] ?? href
-  return scrubAnalyticsUrl(withoutFragment) !== withoutFragment
+/** True when the path itself is a secret or a one-time ID (`/invite/…`, `/approve/…`). The query and fragment do not count. */
+export function pathHoldsSecret(href: string): boolean {
+  let url: URL
+  try {
+    url = new URL(href)
+  } catch {
+    return false
+  }
+  const pathOnly = `${url.origin}${url.pathname}`
+  return scrubAnalyticsUrl(pathOnly) !== pathOnly
 }
 
 function browserHref(): string | null {

@@ -8,6 +8,7 @@ import { SectionDescription, SectionLabel } from "~/components/dashboard/dashboa
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
+import { REPLAY_MASK_PROPS } from "~/lib/analytics/replay-privacy"
 import { TEAM_INVITES_ANCHOR, TEAM_ROLE_LABELS, assignableRoles, formatTeamDate } from "~/lib/dashboard/teams-model"
 
 /** How long a copy button shows "Copied". */
@@ -140,7 +141,15 @@ function PendingInviteRow({
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
             <Badge variant="muted">{TEAM_ROLE_LABELS[invite.role]}</Badge>
-            <span className="truncate">{invite.email ? `Sent to ${invite.email}` : "Pending invite"}</span>
+            <span className="truncate">
+              {invite.email ? (
+                <>
+                  Sent to <span {...REPLAY_MASK_PROPS}>{invite.email}</span>
+                </>
+              ) : (
+                "Pending invite"
+              )}
+            </span>
           </span>
           <span className="truncate text-xs text-muted-foreground">
             {invite.createdBy ? `By ${invite.createdBy.name} · ` : null}

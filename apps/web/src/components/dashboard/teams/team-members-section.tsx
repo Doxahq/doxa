@@ -6,6 +6,7 @@ import { Select } from "~/components/dashboard/content/site-settings/fields/cont
 import { SectionDescription, SectionLabel } from "~/components/dashboard/dashboard-header"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
+import { REPLAY_MASK_PROPS } from "~/lib/analytics/replay-privacy"
 import {
   TEAM_ROLE_LABELS,
   assignableRoles,
@@ -108,7 +109,7 @@ function MemberRow({
             {isViewer ? <span className="text-muted-foreground"> (you)</span> : null}
           </span>
           <span className="truncate text-xs text-muted-foreground">
-            {member.email} · Joined {formatTeamDate(member.joinedAt)}
+            <span {...REPLAY_MASK_PROPS}>{member.email}</span> · Joined {formatTeamDate(member.joinedAt)}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">

@@ -1,7 +1,8 @@
 import { describe, expect, test, vi } from "vitest"
 
 import { AnalyticsController, analyticsSwitchOn, shouldShowConsentPrompt } from "~/lib/analytics/analytics-controller"
-import { scrubCaptureResult, urlHoldsSecret } from "~/lib/analytics/posthog-options"
+import { pathHoldsSecret, scrubCaptureResult } from "~/lib/analytics/posthog-options"
+import { maskReplayAttribute, REPLAY_MASK_TEXT_SELECTOR } from "~/lib/analytics/replay-privacy"
 import { FakePostHog } from "./support/fake-posthog"
 
 const CONNECTION = { key: "phc_test_key", apiHost: "https://e.example.test", uiHost: "https://us.posthog.com" }
@@ -48,7 +49,13 @@ describe("analytics controller", () => {
       mask_all_element_attributes: true,
       persistence: "cookie",
       disable_session_recording: false,
-      session_recording: { maskAllInputs: true, maskTextSelector: "*", recordHeaders: false, recordBody: false },
+      session_recording: {
+        maskAllInputs: true,
+        maskTextSelector: REPLAY_MASK_TEXT_SELECTOR,
+        maskAttributeFn: maskReplayAttribute,
+        recordHeaders: false,
+        recordBody: false,
+      },
     })
   })
 
@@ -227,11 +234,13 @@ describe("before_send scrubbing", () => {
     expect(scrubbed?.$set_once).toEqual({ $initial_referrer: "https://doxa.so/approve/:requestId" })
   })
 
-  test("a replay batch recorded on a page whose address holds a secret is dropped", () => {
+  test("a replay batch is dropped only on a secret path, never for a query string", () => {
     const snapshot = { uuid: "2", event: "$snapshot", properties: {} }
-    expect(scrubCaptureResult(snapshot, "https://doxa.so/reset-password?token=abc")).toBeNull()
+    expect(scrubCaptureResult(snapshot, "https://doxa.so/invite/abc")).toBeNull()
     expect(scrubCaptureResult(snapshot, "https://doxa.so/dashboard#payg")).not.toBeNull()
-    expect(urlHoldsSecret("https://doxa.so/invite/abc")).toBe(true)
-    expect(urlHoldsSecret("https://doxa.so/pricing?utm_source=x")).toBe(false)
+    expect(scrubCaptureResult(snapshot, "https://doxa.so/dashboard/projects/p1/content?page=/intro")).not.toBeNull()
+    expect(pathHoldsSecret("https://doxa.so/approve/req-1")).toBe(true)
+    expect(pathHoldsSecret("https://doxa.so/reset-password?token=abc")).toBe(false)
+    expect(pathHoldsSecret("https://doxa.so/pricing?utm_source=x")).toBe(false)
   })
 })

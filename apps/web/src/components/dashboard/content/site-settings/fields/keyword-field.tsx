@@ -2,6 +2,7 @@ import { useState, type KeyboardEvent } from "react"
 import { X } from "lucide-react"
 
 import type { FieldControlProps } from "~/components/dashboard/content/site-settings/fields/validated-field"
+import { REPLAY_MASK_PROPS } from "~/lib/analytics/replay-privacy"
 import { cn } from "~/lib/utils"
 
 interface KeywordInputProps extends FieldControlProps {
@@ -47,6 +48,7 @@ export function KeywordInput({
 
   return (
     <div
+      {...REPLAY_MASK_PROPS}
       className={cn(
         "flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1.5 focus-within:border-ring focus-within:ring-1 focus-within:ring-ring",
         control["aria-invalid"] && "border-destructive",

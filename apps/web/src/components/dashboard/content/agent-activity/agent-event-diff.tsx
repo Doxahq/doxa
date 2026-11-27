@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { parseDiffLines, type DiffLineKind } from "~/lib/dashboard/agent-activity-model"
+import { REPLAY_MASK_PROPS } from "~/lib/analytics/replay-privacy"
 import { agentActivityDiffQueryOptions } from "~/lib/queries/agent-activity"
 import { cn } from "~/lib/utils"
 
@@ -15,7 +16,9 @@ const LINE_CLASS: Readonly<Record<DiffLineKind, string>> = {
 export function AgentEventDiff({ projectId, seq }: { projectId: string; seq: number }) {
   const diff = useQuery(agentActivityDiffQueryOptions(projectId, seq))
   return (
-    <div className="mr-4 mb-2 ml-[50px] overflow-x-auto rounded-[5px] border border-divider bg-background py-1.5 font-mono text-[11px] leading-relaxed scrollbar-subtle">
+    <div
+      {...REPLAY_MASK_PROPS}
+      className="mr-4 mb-2 ml-[50px] overflow-x-auto rounded-[5px] border border-divider bg-background py-1.5 font-mono text-[11px] leading-relaxed scrollbar-subtle">
       {diff.isPending ? (
         <p className="px-2 text-muted-foreground">Loading the change…</p>
       ) : diff.isError ? (

@@ -115,7 +115,9 @@ export function cloudflareApiFromEnvironment(root, env = process.env) {
 }
 
 function wranglerToken(root) {
-  const result = spawnSync("pnpm", ["exec", "wrangler", "auth", "token", "--json"], {
+  // Silent: inside a `pnpm --filter` run, pnpm writes its warnings (such as an
+  // unsupported Node engine) to stdout, before the JSON.
+  const result = spawnSync("pnpm", ["--reporter=silent", "exec", "wrangler", "auth", "token", "--json"], {
     cwd: path.join(root, WRANGLER_PACKAGE),
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],

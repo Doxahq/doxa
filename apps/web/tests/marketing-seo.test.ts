@@ -111,3 +111,33 @@ describe("sitemap", () => {
     expect(robots).toMatch(/^User-agent: \*\nAllow: \/$/m)
   })
 })
+
+describe("site icons", () => {
+  const publicFile = (path: string) => new URL(`../public${path}`, import.meta.url)
+
+  type ManifestIcon = { src: string; sizes: string; type: string; purpose: string }
+
+  /** Width and height from the IHDR chunk, which every PNG starts with. */
+  function pngSize(path: string): string {
+    const bytes = readFileSync(publicFile(path))
+    return `${bytes.readUInt32BE(16)}x${bytes.readUInt32BE(20)}`
+  }
+
+  const manifest: { icons: ManifestIcon[] } = JSON.parse(readFileSync(publicFile("/site.webmanifest"), "utf8"))
+
+  it("gives logo crawlers a 512 px PNG and a maskable icon", () => {
+    const pngs = manifest.icons.filter((icon) => icon.type === "image/png")
+    expect(pngs.map((icon) => `${icon.sizes}:${icon.purpose}`).sort()).toEqual([
+      "192x192:any",
+      "512x512:any",
+      "512x512:maskable",
+    ])
+  })
+
+  it("points every manifest icon at a file of the stated size", () => {
+    for (const icon of manifest.icons) {
+      expect(statSync(publicFile(icon.src)).isFile(), icon.src).toBe(true)
+      if (icon.type === "image/png") expect(pngSize(icon.src), icon.src).toBe(icon.sizes)
+    }
+  })
+})

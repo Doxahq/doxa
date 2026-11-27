@@ -33,8 +33,23 @@ const ALL_SOCIALS = {
 };
 
 describe("docs footer", () => {
-  it("leaves the Powered by Doxa credit to the page links above it", () => {
-    expect(renderFooter()).not.toContain("Powered by");
+  it("shows the Powered by Doxa credit after the site brand and socials", () => {
+    const html = renderFooter({
+      name: "Acme Docs",
+      footer: { socials: ALL_SOCIALS },
+    });
+
+    expect(html).toContain("Powered by");
+    expect(html.indexOf("Acme Docs")).toBeLessThan(html.indexOf("Powered by"));
+    expect(html.indexOf(ALL_SOCIALS.youtube)).toBeLessThan(
+      html.indexOf("Powered by")
+    );
+  });
+
+  it("hides the credit when the site turns it off", () => {
+    expect(renderFooter({ branding: { poweredBy: false } })).not.toContain(
+      "Powered by"
+    );
   });
 
   it("renders the site name, its link groups and an icon for each social", () => {

@@ -34,7 +34,7 @@ export function assertIdsFilled(root) {
     .filter(([, names]) => names.length > 0);
   if (unfilled.length > 0) {
     const list = unfilled.map(([file, names]) => `${file} (${names.join(", ")})`).join("; ");
-    throw new Error(`The Wrangler configs still hold ID placeholders: ${list}. Fill them first with scripts/apply-production-ids.mjs --values <file>.`);
+    throw new Error(`The Wrangler configs still hold ID placeholders: ${list}. Fill them first with scripts/deploy/apply-production-ids.mjs --values <file>.`);
   }
 }
 

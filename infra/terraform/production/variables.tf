@@ -25,7 +25,7 @@ variable "cloudflare_account_id" {
 # --- API task ---
 
 variable "api_image" {
-  description = "Image of the first deploy, as <repository_url>:<tag>. Later deploys go through scripts/deploy-api-ecs.mjs."
+  description = "Image of the first deploy, as <repository_url>:<tag>. Later deploys go through scripts/deploy/deploy-api-ecs.mjs."
   type        = string
 }
 
@@ -42,7 +42,7 @@ variable "memory_mb" {
 }
 
 variable "min_task_count" {
-  description = "Least number of running tasks."
+  description = "Least number of running tasks of the live color. It reaches ECS with the next deploy (the task count parameter)."
   type        = number
   default     = 1
 }
@@ -57,16 +57,6 @@ variable "log_retention_days" {
   description = "Days to keep the API container logs in CloudWatch."
   type        = number
   default     = 90
-}
-
-variable "daily_pause" {
-  description = "Daily window with no running API task, to save cost before launch. Hours are local to timezone. Null runs the API all day."
-  type = object({
-    stop_hour  = number
-    start_hour = number
-    timezone   = string
-  })
-  default = null
 }
 
 variable "api_environment" {

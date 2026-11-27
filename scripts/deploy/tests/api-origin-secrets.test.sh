@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Tests of scripts/api-origin-secrets.sh against a fake AWS CLI that keeps
+# Tests of scripts/deploy/api-origin-secrets.sh against a fake AWS CLI that keeps
 # parameters in a temporary folder. Nothing reaches AWS.
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SCRIPT="${ROOT_DIR}/scripts/api-origin-secrets.sh"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SCRIPT="${ROOT_DIR}/scripts/deploy/api-origin-secrets.sh"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/doxa-api-secrets-test.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 

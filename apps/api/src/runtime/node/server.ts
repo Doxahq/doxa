@@ -36,6 +36,7 @@ export async function startServer(source: Record<string, string | undefined> = p
     rpc: createRpcHandler({ env: nodeEnv.env, originKey: config.originKey, createExecutionContext }),
     cron: createCronHandler({ env: nodeEnv.env, originKey: config.originKey, tasks, withLock: nodeEnv.cronLock }),
     createExecutionContext,
+    releaseId: config.releaseId,
   });
 
   const server = serve(

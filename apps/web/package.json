@@ -8,7 +8,8 @@
     "build": "vite build",
     "start": "vite preview",
     "preview:cf": "wrangler dev",
-    "deploy": "DOXA_WEB_RELEASE=1 vite build && wrangler deploy",
+    "build:release": "DOXA_WEB_RELEASE=1 vite build",
+    "deploy": "pnpm run build:release && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

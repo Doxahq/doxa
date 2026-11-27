@@ -1,5 +1,5 @@
-// Pure parts of scripts/deploy-api.mjs: the image tag, the renderer release
-// and the commands of a deploy. The script runs them; the tests check them.
+// Pure parts of scripts/deploy/deploy-api.mjs: the image tag, the renderer release
+// and the arguments of its commands. The script runs them; the tests check them.
 
 /** The renderer release writes this file with DOXA_RENDERER_RELEASE_ID set. */
 export const RENDERER_RELEASE_CONFIG = "apps/api/dist/wrangler.production.json";
@@ -30,29 +30,35 @@ export function assertRendererRelease(release) {
   return release;
 }
 
+/** The edge Worker, as `wrangler deploy` and `wrangler versions upload` name it. */
+export const EDGE_TARGET = Object.freeze({ cwd: "apps/api-edge", args: Object.freeze(["--env", "production"]) });
+
+/** The `docker` arguments that build the image for Graviton and push it. */
+export function imageBuildArgs(image) {
+  return ["buildx", "build", "--platform", "linux/arm64", "-f", "apps/api/Dockerfile", "-t", image, "--push", "."];
+}
+
 /**
- * The steps of a deploy, in order:
- *   1. build and push the image, unless ECR has it or --image names one;
- *   2. roll the origin out on ECS (it waits until the new task is healthy);
- *   3. deploy the edge Worker, which then serves api.doxa.so.
- * The origin goes first: the edge forwards to whatever the origin runs.
+ * The scripts/deploy/deploy-api-ecs.mjs arguments that start an image on the idle
+ * color. The origin carries the release ID and, when the renderer release
+ * gives one, the renderer release ID.
+ *
+ * @param {{ image: string, color: string, releaseId: string, rendererRelease?: string, outputFile: string }} options
  */
-export function deploySteps({ image, build, rendererRelease }) {
-  const steps = [];
-  if (build) {
-    steps.push({
-      name: "image",
-      command: "docker",
-      args: ["buildx", "build", "--platform", "linux/arm64", "-f", "apps/api/Dockerfile", "-t", image, "--push", "."],
-    });
-  }
-  const originArgs = ["scripts/deploy-api-ecs.mjs", "--image", image];
-  if (rendererRelease) originArgs.push("--env", `DOXA_RENDERER_RELEASE_ID=${rendererRelease}`);
-  steps.push({ name: "origin", command: process.execPath, args: originArgs });
-  steps.push({
-    name: "edge",
-    command: "pnpm",
-    args: ["--filter", "@doxahq/api-edge", "exec", "wrangler", "deploy", "--env", "production"],
-  });
-  return steps;
+export function originStartArgs({ image, color, releaseId, rendererRelease, outputFile }) {
+  const args = ["scripts/deploy/deploy-api-ecs.mjs", "--color", color, "--image", image, "--env", `DOXA_RELEASE_ID=${releaseId}`];
+  if (rendererRelease) args.push("--env", `DOXA_RENDERER_RELEASE_ID=${rendererRelease}`);
+  args.push("--output", outputFile);
+  return args;
+}
+
+/**
+ * The edge variables of a release: the origin color it sends traffic to,
+ * and the release ID that it sends to the origin.
+ *
+ * @param {{ color: string, releaseId: string }} options
+ * @returns {Record<string, string>}
+ */
+export function edgeVars({ color, releaseId }) {
+  return { ORIGIN_COLOR: color, DOXA_RELEASE_ID: releaseId };
 }

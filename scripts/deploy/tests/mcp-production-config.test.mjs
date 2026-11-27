@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { validateMcpProductionConfig } from "./lib/mcp-production-config.mjs";
+import { validateMcpProductionConfig } from "../lib/mcp-production-config.mjs";
 
-const workspaceRoot = path.resolve(import.meta.dirname, "..");
+const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
 const readConfig = (relativePath) =>
   JSON.parse(readFileSync(path.join(workspaceRoot, relativePath), "utf8"));
 

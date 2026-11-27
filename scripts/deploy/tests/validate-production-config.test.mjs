@@ -14,12 +14,13 @@ import test from "node:test";
 import {
   validatePrerenderRollout,
   validatePreviousFallbackVars,
-} from "./lib/dispatcher-fallback-config.mjs";
+} from "../lib/dispatcher-fallback-config.mjs";
 
-const workspaceRoot = path.resolve(import.meta.dirname, "..");
+const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
 const validatorPath = path.join(
   workspaceRoot,
   "scripts",
+  "deploy",
   "validate-production-config.mjs",
 );
 const dispatcherConfigPath = path.join(

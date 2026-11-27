@@ -33,7 +33,7 @@ const BRIDGE_KEY = "b".repeat(40);
 
 type Respond = (request: Request) => Response | Promise<Response>;
 
-/** The ORIGIN VPC Service binding, which records the requests that the Worker sends through it. */
+/** An origin VPC Service binding, which records the requests that the Worker sends through it. */
 function stubOrigin(respond: Respond = () => new Response("ok")) {
   const requests: Request[] = [];
   const binding = {
@@ -46,10 +46,15 @@ function stubOrigin(respond: Respond = () => new Response("ok")) {
   return { binding, requests };
 }
 
-/** A production env: the origin is the ORIGIN binding, and ORIGIN_URL is not set. */
+/** The env of an edge that sends its traffic to this binding, as the blue origin. */
+function liveOrigin(binding: Fetcher): Partial<EdgeEnv> {
+  return { ORIGIN_BLUE: binding, ORIGIN_GREEN: stubOrigin(() => new Response("idle color")).binding, ORIGIN_COLOR: "blue" };
+}
+
+/** A production env: the origin is the blue binding, and ORIGIN_URL is not set. */
 function createEnv(overrides: Partial<EdgeEnv> = {}): EdgeEnv {
   return {
-    ORIGIN: stubOrigin().binding,
+    ...liveOrigin(stubOrigin().binding),
     ORIGIN_SHARED_SECRET: ORIGIN_KEY,
     BRIDGE_SHARED_SECRET: BRIDGE_KEY,
     GENERATION_QUEUE: { send: vi.fn(async () => ({})), sendBatch: vi.fn(), metrics: vi.fn() },
@@ -59,7 +64,7 @@ function createEnv(overrides: Partial<EdgeEnv> = {}): EdgeEnv {
 
 /** A development env: the origin is the local Node server at ORIGIN_URL. */
 function developmentEnv(overrides: Partial<EdgeEnv> = {}): EdgeEnv {
-  return createEnv({ ORIGIN: undefined, ORIGIN_URL: "http://localhost:8786", ...overrides });
+  return createEnv({ ORIGIN_BLUE: undefined, ORIGIN_GREEN: undefined, ORIGIN_COLOR: undefined, ORIGIN_URL: "http://localhost:8786", ...overrides });
 }
 
 /** Records the requests that the Worker sends with global fetch. */
@@ -123,17 +128,55 @@ describe("origin", () => {
     expect(requests).toHaveLength(3);
   });
 
-  it("refuses to run with both ORIGIN and ORIGIN_URL, or with neither", async () => {
+  it("refuses to run with both origin bindings and ORIGIN_URL, or with neither", async () => {
     const origin = stubOrigin();
     const requests = stubFetch(() => new Response("must not happen"));
 
     await expect(
-      worker.fetch(new Request("https://api.doxa.so/me"), createEnv({ ORIGIN: origin.binding, ORIGIN_URL: "http://localhost:8786" })),
-    ).rejects.toThrow(/both ORIGIN and ORIGIN_URL/);
-    await expect(worker.fetch(new Request("https://api.doxa.so/me"), createEnv({ ORIGIN: undefined }))).rejects.toThrow(/no origin/);
+      worker.fetch(new Request("https://api.doxa.so/me"), createEnv({ ...liveOrigin(origin.binding), ORIGIN_URL: "http://localhost:8786" })),
+    ).rejects.toThrow(/origin bindings and ORIGIN_URL/);
+    await expect(
+      worker.fetch(new Request("https://api.doxa.so/me"), createEnv({ ORIGIN_BLUE: undefined, ORIGIN_GREEN: undefined })),
+    ).rejects.toThrow(/no origin/);
 
     expect(origin.requests).toHaveLength(0);
     expect(requests).toHaveLength(0);
+  });
+
+  it("sends the traffic to the color that ORIGIN_COLOR names", async () => {
+    const blue = stubOrigin(() => new Response("blue"));
+    const green = stubOrigin(() => new Response("green"));
+    const env = (color: string) => createEnv({ ORIGIN_BLUE: blue.binding, ORIGIN_GREEN: green.binding, ORIGIN_COLOR: color });
+
+    expect(await (await worker.fetch(new Request("https://api.doxa.so/me"), env("green"))).text()).toBe("green");
+    expect(await (await worker.fetch(new Request("https://api.doxa.so/me"), env("blue"))).text()).toBe("blue");
+    expect(blue.requests).toHaveLength(1);
+    expect(green.requests).toHaveLength(1);
+  });
+
+  it("refuses a missing or unknown ORIGIN_COLOR, and a color without its binding", async () => {
+    const blue = stubOrigin();
+    const request = () => new Request("https://api.doxa.so/me");
+
+    for (const color of [undefined, "", "red", "toString"]) {
+      await expect(worker.fetch(request(), createEnv({ ORIGIN_COLOR: color })), String(color)).rejects.toThrow(/ORIGIN_COLOR must be blue or green/);
+    }
+    await expect(
+      worker.fetch(request(), createEnv({ ORIGIN_BLUE: blue.binding, ORIGIN_GREEN: undefined, ORIGIN_COLOR: "green" })),
+    ).rejects.toThrow(/no ORIGIN_GREEN binding/);
+    expect(blue.requests).toHaveLength(0);
+  });
+
+  it("sends its release to the origin with every request, and drops a client's", async () => {
+    const origin = stubOrigin(() => new Response(encodeResult({ ok: true, value: null }), { status: 202 }));
+    const env = createEnv({ ...liveOrigin(origin.binding), DOXA_RELEASE_ID: "0123456789ab" });
+
+    await worker.fetch(new Request("https://api.doxa.so/me", { headers: { "x-doxa-release": "forged" } }), env);
+    const pending: Promise<unknown>[] = [];
+    await worker.scheduled({ scheduledTime: 0, cron: "*/5 * * * *", noRetry: () => {} } as ScheduledController, env, executionContext(pending));
+    await Promise.all(pending);
+
+    expect(origin.requests.map((sent) => sent.headers.get("x-doxa-release"))).toEqual(["0123456789ab", "0123456789ab"]);
   });
 
   it("serves production on api.doxa.so only, with no workers.dev or preview URL", () => {
@@ -147,7 +190,12 @@ describe("origin", () => {
   it("binds the origin VPC Service in production only, never as a remote binding in development", () => {
     const production = wranglerConfig.env.production;
 
-    expect(production.vpc_services).toEqual([{ binding: "ORIGIN", service_id: expect.any(String) }]);
+    expect(production.vpc_services).toEqual([
+      { binding: "ORIGIN_BLUE", service_id: expect.any(String) },
+      { binding: "ORIGIN_GREEN", service_id: expect.any(String) },
+    ]);
+    // The release names the live color on each version; a config default would send traffic to a stopped color.
+    expect(production.vars).not.toHaveProperty("ORIGIN_COLOR");
     expect(production).not.toHaveProperty("vars.ORIGIN_URL");
     expect(wranglerConfig).not.toHaveProperty("vpc_services");
     expect(wranglerConfig.vars.ORIGIN_URL).toBe("http://localhost:8786");
@@ -161,7 +209,7 @@ function withCf(request: Request, cf: Record<string, unknown>): Request {
 }
 
 describe("public proxy", () => {
-  it("sends the request through the ORIGIN binding with the key, the public URL and the client IP", async () => {
+  it("sends the request through the origin binding with the key, the public URL and the client IP", async () => {
     const origin = stubOrigin();
     const publicFetch = stubFetch(() => new Response("must not happen"));
     const request = new Request("https://api.doxa.so/projects?x=1", {
@@ -170,7 +218,7 @@ describe("public proxy", () => {
       headers: { "cf-connecting-ip": "203.0.113.9", "content-type": "application/json" },
     });
 
-    const response = await worker.fetch(request, createEnv({ ORIGIN: origin.binding }));
+    const response = await worker.fetch(request, createEnv(liveOrigin(origin.binding)));
 
     expect(await response.text()).toBe("ok");
     expect(publicFetch).toHaveLength(0);
@@ -194,7 +242,7 @@ describe("public proxy", () => {
         body: "{}",
         headers: { "content-length": String(EDGE_MAX_BODY_BYTES + 1) },
       }),
-      createEnv({ ORIGIN: binding }),
+      createEnv(liveOrigin(binding)),
     );
 
     expect(response.status).toBe(413);
@@ -212,7 +260,7 @@ describe("public proxy", () => {
 
     const response = await worker.fetch(
       new Request("https://api.doxa.so/projects", { method: "POST", body, duplex: "half" } as RequestInit),
-      createEnv({ ORIGIN: binding }),
+      createEnv(liveOrigin(binding)),
     );
 
     expect(response.status).toBe(200);
@@ -224,7 +272,7 @@ describe("public proxy", () => {
 
     await worker.fetch(
       new Request("https://api.doxa.so/me", { headers: { [ORIGIN_KEY_HEADER]: "forged", [PUBLIC_URL_HEADER]: "https://evil.example/" } }),
-      createEnv({ ORIGIN: binding }),
+      createEnv(liveOrigin(binding)),
     );
 
     expect(requests[0]!.headers.get(ORIGIN_KEY_HEADER)).toBe(ORIGIN_KEY);
@@ -238,7 +286,7 @@ describe("public proxy", () => {
       { colo: "CDG", country: "FR" },
     );
 
-    await worker.fetch(request, createEnv({ ORIGIN: binding }));
+    await worker.fetch(request, createEnv(liveOrigin(binding)));
 
     expect(requests[0]!.headers.get(CLIENT_REGION_HEADER)).toBe("eu-west");
   });
@@ -248,11 +296,11 @@ describe("public proxy", () => {
 
     await worker.fetch(
       withCf(new Request("https://api.doxa.so/me", { headers: { [CLIENT_REGION_HEADER]: "us-east" } }), { country: "IN", continent: "AS" }),
-      createEnv({ ORIGIN: binding }),
+      createEnv(liveOrigin(binding)),
     );
     await worker.fetch(
       new Request("https://api.doxa.so/me", { headers: { [CLIENT_REGION_HEADER]: "us-east" } }),
-      createEnv({ ORIGIN: binding }),
+      createEnv(liveOrigin(binding)),
     );
 
     expect(requests.map((sent) => sent.headers.get(CLIENT_REGION_HEADER))).toEqual([null, null]);
@@ -264,7 +312,7 @@ describe("public proxy", () => {
     const paths = ["//evil.example/steal?x=1", "///evil.example/", "/\\evil.example/x"];
 
     for (const path of paths) {
-      await worker.fetch(new Request(`https://api.doxa.so${path}`), createEnv({ ORIGIN: origin.binding }));
+      await worker.fetch(new Request(`https://api.doxa.so${path}`), createEnv(liveOrigin(origin.binding)));
       await worker.fetch(new Request(`https://api.doxa.so${path}`), developmentEnv());
     }
 
@@ -281,7 +329,7 @@ describe("public proxy", () => {
   it("does not forward the client's Host header", async () => {
     const { binding, requests } = stubOrigin();
 
-    await worker.fetch(new Request("https://api.doxa.so/me", { headers: { host: "api.doxa.so" } }), createEnv({ ORIGIN: binding }));
+    await worker.fetch(new Request("https://api.doxa.so/me", { headers: { host: "api.doxa.so" } }), createEnv(liveOrigin(binding)));
 
     expect(requests[0]!.headers.get("host")).toBeNull();
   });
@@ -290,7 +338,7 @@ describe("public proxy", () => {
     const { binding, requests } = stubOrigin(() => new Response("must not happen"));
 
     for (const path of ["/__rpc/InternalApi/addJobEvent", "/__cron", "/__anything"]) {
-      const response = await worker.fetch(new Request(`https://api.doxa.so${path}`, { method: "POST" }), createEnv({ ORIGIN: binding }));
+      const response = await worker.fetch(new Request(`https://api.doxa.so${path}`, { method: "POST" }), createEnv(liveOrigin(binding)));
       expect(response.status, path).toBe(404);
     }
     expect(requests).toHaveLength(0);
@@ -370,7 +418,7 @@ describe("bridge", () => {
 describe("RPC entrypoints", () => {
   it("expose exactly the API methods, and forward each call to the origin", async () => {
     const { binding, requests } = stubOrigin(() => new Response(encodeResult({ ok: true, value: { active: true } })));
-    const env = createEnv({ ORIGIN: binding });
+    const env = createEnv(liveOrigin(binding));
 
     for (const [name, methods] of Object.entries(API_ENTRYPOINT_METHODS)) {
       const entrypoint = Reflect.get(edge, name);
@@ -396,7 +444,7 @@ describe("cron", () => {
 
     await worker.scheduled(
       { scheduledTime: 1_700_000_000_000, cron: "*/5 * * * *", noRetry: () => {} },
-      createEnv({ ORIGIN: binding }),
+      createEnv(liveOrigin(binding)),
       executionContext(pending),
     );
     await Promise.all(pending);
@@ -411,7 +459,7 @@ describe("cron", () => {
 
     await worker.scheduled(
       { scheduledTime: 1, cron: "*/5 * * * *", noRetry: () => {} },
-      createEnv({ ORIGIN: binding }),
+      createEnv(liveOrigin(binding)),
       executionContext(pending),
     );
 
@@ -430,7 +478,7 @@ describe("public rate limits", () => {
     return {
       origin,
       env: createEnv({
-        ORIGIN: origin.binding,
+        ...liveOrigin(origin.binding),
         API_OAUTH_REGISTER_LIMITER: limiter(true) as never,
         API_OAUTH_LIMITER: limiter(true) as never,
         API_PUBLIC_LIMITER: limiter(true) as never,
@@ -509,7 +557,7 @@ describe("client IP rate-limit key", () => {
   it("does not count CORS preflights or GitHub webhooks", async () => {
     const publicLimit = { limit: vi.fn(async () => ({ success: false })) };
     const { binding } = stubOrigin();
-    const env = createEnv({ ORIGIN: binding, API_PUBLIC_LIMITER: publicLimit as never });
+    const env = createEnv({ ...liveOrigin(binding), API_PUBLIC_LIMITER: publicLimit as never });
 
     const preflight = await worker.fetch(
       new Request("https://api.doxa.so/projects", { method: "OPTIONS", headers: { "cf-connecting-ip": "203.0.113.9" } }),

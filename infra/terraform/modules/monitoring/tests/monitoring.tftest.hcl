@@ -18,58 +18,43 @@ mock_provider "aws" {
 variables {
   name         = "doxa-api-test"
   cluster_name = "doxa-api-test"
-  service_name = "doxa-api-test"
-  service_arn  = "arn:aws:ecs:us-east-1:123456789012:service/doxa-api-test/doxa-api-test"
+  services = {
+    blue  = { name = "doxa-api-test", arn = "arn:aws:ecs:us-east-1:123456789012:service/doxa-api-test/doxa-api-test" }
+    green = { name = "doxa-api-test-green", arn = "arn:aws:ecs:us-east-1:123456789012:service/doxa-api-test/doxa-api-test-green" }
+  }
   alert_emails = ["alerts@example.com"]
 }
 
-run "keeps_the_alarm_on_all_day_without_a_daily_pause" {
+run "alerts_when_neither_color_runs_a_task" {
   command = plan
 
   assert {
-    condition     = length(aws_cloudwatch_alarm_mute_rule.daily_pause) == 0
-    error_message = "Without daily_pause the no-running-task alarm must never be muted."
+    condition     = one([for query in aws_cloudwatch_metric_alarm.no_running_task.metric_query : query.expression if query.return_data == true]) == "FILL(blue, 0) + FILL(green, 0)"
+    error_message = "The no-running-task alarm must add the CPU samples of both colors: the idle color sends none."
+  }
+
+  assert {
+    condition     = toset([for query in aws_cloudwatch_metric_alarm.no_running_task.metric_query : one(query.metric).dimensions.ServiceName if length(query.metric) > 0]) == toset(["doxa-api-test", "doxa-api-test-green"])
+    error_message = "The alarm must read the CPU samples of each color's service."
   }
 }
 
-run "mutes_the_no_running_task_alarm_during_the_daily_pause" {
-  command = apply
-
-  variables {
-    daily_pause = { stop_hour = 1, start_hour = 10, timezone = "Africa/Algiers" }
-  }
-
-  assert {
-    condition     = one(one(aws_cloudwatch_alarm_mute_rule.daily_pause[0].rule).schedule).expression == "cron(0 1 * * ?)"
-    error_message = "The mute must start at the stop hour."
-  }
-
-  assert {
-    condition     = one(one(aws_cloudwatch_alarm_mute_rule.daily_pause[0].rule).schedule).duration == "PT9H15M"
-    error_message = "The mute must last until 15 minutes after the start hour."
-  }
-
-  assert {
-    condition     = one(one(aws_cloudwatch_alarm_mute_rule.daily_pause[0].rule).schedule).timezone == "Africa/Algiers"
-    error_message = "The mute must use the timezone of the pause."
-  }
-
-  assert {
-    condition     = one(aws_cloudwatch_alarm_mute_rule.daily_pause[0].mute_targets).alarm_names == toset(["doxa-api-test-no-running-task"])
-    error_message = "The mute must target only the no-running-task alarm."
-  }
-}
-
-run "mutes_a_daily_pause_across_midnight" {
+run "watches_the_usage_and_the_deploys_of_each_color" {
   command = plan
 
-  variables {
-    daily_pause = { stop_hour = 22, start_hour = 6, timezone = "UTC" }
+  assert {
+    condition     = toset(keys(aws_cloudwatch_metric_alarm.high_usage)) == toset(["blue-cpu", "blue-memory", "green-cpu", "green-memory"])
+    error_message = "Each color must have its own CPU and memory alarm."
   }
 
   assert {
-    condition     = one(one(aws_cloudwatch_alarm_mute_rule.daily_pause[0].rule).schedule).duration == "PT8H15M"
-    error_message = "A pause from 22:00 to 06:00 must mute the alarm for 8 hours and 15 minutes."
+    condition     = aws_cloudwatch_metric_alarm.high_usage["blue-cpu"].alarm_name == "doxa-api-test-high-cpu"
+    error_message = "Blue must keep the alarm names from before blue/green."
+  }
+
+  assert {
+    condition     = jsondecode(aws_cloudwatch_event_rule.failed_deploy.event_pattern).resources == [var.services.blue.arn, var.services.green.arn]
+    error_message = "A failed deploy of either color must raise an alert."
   }
 }
 

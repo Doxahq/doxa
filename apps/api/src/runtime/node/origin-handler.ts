@@ -12,6 +12,7 @@ import {
 import { isWarmPool } from "@doxahq/contracts/docs-warm-region";
 import type { Env } from "../../env";
 import type { ScopedFetch } from "../../http/request-scope";
+import { createReleaseMismatchLog, withReleaseHeader } from "./release";
 
 /** The only request served without the origin key: the container health check. */
 const HEALTH_PATH = "/health";
@@ -27,10 +28,13 @@ export interface OriginHandlerDeps {
   rpc: (request: Request) => Promise<Response>;
   cron: (request: Request) => Promise<Response>;
   createExecutionContext(): ExecutionContext;
+  /** DOXA_RELEASE_ID of this origin. Unset in development. */
+  releaseId?: string;
 }
 
 /**
- * Every request to the Node server. Only the edge Worker knows the origin
+ * Every request to the Node server, and with a release ID, every response
+ * names the release (RELEASE_HEADER). Only the edge Worker knows the origin
  * key, so a request without it gets 401, except `GET /health`, which the
  * container health check calls on localhost. That one gets a fixed answer
  * here and never reaches the API, so its headers cannot steer a request.
@@ -41,12 +45,20 @@ export interface OriginHandlerDeps {
  * the client's cache pool under `CLIENT_REGION_HEADER` (see `client-region.ts`).
  */
 export function createOriginHandler(deps: OriginHandlerDeps): (request: Request) => Promise<Response> {
-  return async (request) => {
+  const { releaseId } = deps;
+  const route = createRouter(deps, releaseId ? createReleaseMismatchLog(releaseId) : () => {});
+  if (!releaseId) return route;
+  return async (request) => withReleaseHeader(await route(request), releaseId);
+}
+
+function createRouter(deps: OriginHandlerDeps, checkEdgeRelease: (request: Request) => void) {
+  return async (request: Request): Promise<Response> => {
     const { pathname } = new URL(request.url);
     if (!secretsMatch(request.headers.get(ORIGIN_KEY_HEADER), deps.originKey)) {
       if (request.method === "GET" && pathname === HEALTH_PATH) return Response.json({ ok: true, service: "doxa-api" });
       return new Response("Unauthorized.", { status: 401 });
     }
+    checkEdgeRelease(request);
 
     if (pathname.startsWith(RPC_PATH_PREFIX)) return deps.rpc(request);
     if (pathname === CRON_PATH) return deps.cron(request);

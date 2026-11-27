@@ -5,12 +5,14 @@ backend and deploy workflows: see
 [`docs/current/self-hosting.md`](../../docs/current/self-hosting.md).
 
 This folder creates the AWS and Cloudflare resources that run the Doxa API as a
-Node server on ECS Fargate. The thin `doxa-api` Worker stays on Cloudflare and
-calls this origin through its `ORIGIN` binding: a Workers VPC Service on a
-private Cloudflare Tunnel.
+Node server on ECS Fargate. The API runs as two ECS services, blue and green,
+each with its own private Cloudflare Tunnel and Workers VPC Service. The thin
+`doxa-api` Worker stays on Cloudflare and calls the live color through its
+`ORIGIN_BLUE` or `ORIGIN_GREEN` binding (`ORIGIN_COLOR` names it). Between
+releases the other color runs no task.
 
 ```
-caller Workers ─RPC─▶ doxa-api Worker ─ORIGIN binding (Workers VPC)─┐
+caller Workers ─RPC─▶ doxa-api Worker ─ORIGIN_<COLOR> binding (Workers VPC)─┐
                                                                     │ private tunnel,
 AWS us-east-1 · VPC with public subnets, no NAT                     ▼ no public hostname
 ┌ Fargate task, 2 vCPU / 4 GB, ARM64 ──────────────────────────────┐
@@ -121,12 +123,29 @@ After the apply:
 - The first task can log `Valkey connection error ... ETIMEDOUT` for about a
   minute: the ElastiCache endpoints finish after the cache shows `available`.
   The client reconnects by itself.
-- Set `terraform output -raw origin_vpc_service_id` as the `service_id` of the
-  `ORIGIN` binding in `apps/api-edge/wrangler.json` (`env.production`).
+- Put the two IDs of `terraform output origin_vpc_service_ids` in the values
+  file of the ops repo, as `CF_API_ORIGIN_BLUE_VPC_SERVICE_ID` and
+  `CF_API_ORIGIN_GREEN_VPC_SERVICE_ID` (the `ORIGIN_BLUE` and `ORIGIN_GREEN`
+  bindings of `apps/api-edge/wrangler.json`).
 - Check the path before the cutover. Deploy the thin Worker to a test name
-  with the `ORIGIN` binding, and request `/health` through it. The answer must
+  with `ORIGIN_COLOR=blue`, and request `/health` through it. The answer must
   be `{"ok":true,"service":"doxa-api"}`. Workers VPC is in beta, and this
   check is the first one that runs against the real tunnel.
+
+### Move a single-service stack to blue/green
+
+A stack from before blue/green has one service, one tunnel and one VPC
+Service. The `moved` blocks make them blue in place, with the same names, so
+the apply creates only green: its service with no task, its task family, its
+tunnel, its VPC Service, its `TUNNEL_TOKEN_GREEN` parameter, and the
+`deploy/task-count` parameter. `terraform plan` must show no replacement.
+
+1. `terraform apply`.
+2. In the values file, rename `CF_API_ORIGIN_VPC_SERVICE_ID` to
+   `CF_API_ORIGIN_BLUE_VPC_SERVICE_ID` (same value), and add
+   `CF_API_ORIGIN_GREEN_VPC_SERVICE_ID` from `origin_vpc_service_ids.green`.
+3. Release. The live edge has no `ORIGIN_COLOR`, so the release reads it as
+   blue and starts the new image on green.
 
 ## Secrets
 
@@ -162,10 +181,23 @@ rotate it at its source and run the script with `--overwrite`.
 
 ## Deploy
 
-A production deploy (`scripts/deploy-production.mjs`) deploys the API in its
-`docs-rendering` step with `scripts/deploy-api.mjs`: the origin first, with
-the new renderer release, then the edge Worker. The operator's deploy
-workflows run in the ops repo (see `docs/current/self-hosting.md`):
+A production deploy is a release (see
+[`docs/current/production-release.md`](../../docs/current/production-release.md)).
+Its `api` step runs `scripts/deploy/deploy-api.mjs --stage`:
+
+1. It reads the live color from the edge version that serves traffic.
+2. `scripts/deploy/deploy-api-ecs.mjs` registers a revision of the idle color's task
+   family with the new image, gives that color the task count of the
+   `deploy/task-count` parameter, and waits until its tasks are healthy and
+   cloudflared joined its tunnel.
+3. It uploads an edge version that names the idle color. The release flip
+   serves that version, and the traffic moves to the new color.
+
+The old color keeps running through the watch step of the release (15
+minutes), so a rollback is instant. Then the release stops it (0 tasks).
+
+The operator's deploy workflows run in the ops repo (see
+`docs/current/self-hosting.md`):
 
 - They take the deploy role through OIDC. The role trusts only the
   `production` environment of the repos in `github_repositories`.
@@ -179,46 +211,42 @@ workflows run in the ops repo (see `docs/current/self-hosting.md`):
 - The image is ARM64. Build it on an ARM64 runner (`ubuntu-24.04-arm`), or on
   `ubuntu-latest` with `docker/setup-qemu-action`.
 - Their Cloudflare token needs the Connectivity Directory bind permission,
-  for the edge's `ORIGIN` binding.
+  for the edge's `ORIGIN_BLUE` and `ORIGIN_GREEN` bindings.
 
-By hand, push the image with the git commit as its tag, then run:
-
-```sh
-pnpm deploy:api:ecs --image <ecr_repository_url>:<git-sha>
-```
-
-The script takes the latest task definition revision, changes the API image,
-registers the result and updates the service. ECS starts the new task, waits
-for its health check and then stops the old task. If the new task keeps
-failing, the circuit breaker restores the old revision, and the script exits
-with an error.
-
-The script prints a rollback command at the end:
+By hand, one color at a time (the edge does not change):
 
 ```sh
-pnpm deploy:api:ecs --revision arn:aws:ecs:us-east-1:<account-id>:task-definition/doxa-api-production:<n>
+pnpm deploy:api:ecs --color green --image <ecr_repository_url>:<git-sha>   # start an image on green
+pnpm deploy:api:ecs --color blue --revision <task-definition-arn>          # start a revision on blue
+pnpm deploy:api:ecs --retire blue                                          # stop blue
 ```
 
-Terraform does not change the running revision. A Terraform change to the
-task definition (size, environment, secrets) registers a new revision, and the
-next deploy ships it.
+Within a color, ECS starts the new task, waits for its health check and then
+stops the old task. If the new task keeps failing, the circuit breaker
+restores the old revision, and the script exits with an error.
 
-`--env NAME=VALUE` sets a plain variable on the new revision. The renderer
-release uses it for `DOXA_RENDERER_RELEASE_ID`, which changes with every
-renderer deploy. A Terraform revision does not hold that variable, so a
-deploy that does not set it keeps the value of the running revision
-(`DEPLOY_VARIABLES` in `scripts/lib/ecs-task-definition.mjs`).
+Terraform does not change the running revision or the task count of a color.
+A Terraform change to the task definition (size, environment, secrets)
+registers a new revision, and the next deploy ships it. A change of
+`min_task_count` or `max_task_count` updates the `deploy/task-count`
+parameter, and the next deploy applies it to the color that it starts.
+
+`--env NAME=VALUE` sets a plain variable on the new revision. The release
+sets `DOXA_RELEASE_ID` and `DOXA_RENDERER_RELEASE_ID` with it. A Terraform
+revision does not hold `DOXA_RENDERER_RELEASE_ID`, so a deploy that does not
+set it keeps the value of the live color's revision (`DEPLOY_VARIABLES` in
+`scripts/deploy/lib/ecs-task-definition.mjs`).
 
 ## Day to day
 
 | Task | Command or place |
 |---|---|
-| Read logs | `aws logs tail /ecs/doxa-api-production --follow` |
+| Read logs | `aws logs tail /ecs/doxa-api-production --follow` (both colors write to this group) |
 | Shell into the API | ECS Exec is off by default. Set `enable_execute_command = true`, `terraform apply`, then deploy so a new task starts with it. Run `aws ecs execute-command --cluster doxa-api-production --task <task-id> --container api --interactive --command sh`. Set it back to `false` and apply after the session. |
 | Add a secret | Add the name to `api_secret_names`, run `pnpm secrets:api:ecs --tfvars <ops>/production.tfvars`, `terraform apply`, then deploy. |
 | Rotate a secret | `pnpm secrets:api:ecs --tfvars <ops>/production.tfvars --overwrite NAME`, then deploy. For the two shared keys, also update the edge Worker (the script prints the command). |
 | Change the task size | Set `cpu_units` and `memory_mb`, `terraform apply`, then deploy. |
-| Turn on autoscaling | Set `max_task_count` above `min_task_count` and `terraform apply`. It scales on 60% average CPU. |
+| Turn on autoscaling | Set `max_task_count` above `min_task_count`, `terraform apply`, then release. Each color scales on 60% average CPU. |
 | Update cloudflared | Change `cloudflared_image` in `modules/api-service` to a new pinned tag, `terraform apply`, then deploy. Workers VPC needs cloudflared 2025.7.0 or later and QUIC (outbound UDP 7844). |
 
 ## Checks
@@ -231,5 +259,6 @@ terraform fmt -check -recursive
 (cd modules/api-service && terraform init && terraform test)
 (cd modules/cloudflare-tunnel && terraform init && terraform test)
 tflint --init && tflint --recursive --config "$PWD/.tflint.hcl"
-node --test scripts/ecs-task-definition.test.mjs scripts/deploy-api-ecs.test.mjs   # from the repo root
+(cd modules/monitoring && terraform init && terraform test)
+node --test scripts/deploy/tests/ecs-task-definition.test.mjs scripts/deploy/tests/deploy-api-ecs.test.mjs scripts/deploy/tests/release.test.mjs   # from the repo root
 ```

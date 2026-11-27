@@ -8,14 +8,14 @@ output "cluster_name" {
   value       = module.api_service.cluster_name
 }
 
-output "service_name" {
-  description = "ECS service of the API."
-  value       = module.api_service.service_name
+output "service_names" {
+  description = "Color => ECS service of the API."
+  value       = module.api_service.service_names
 }
 
-output "task_definition_family" {
-  description = "Task definition family of the API."
-  value       = module.api_service.task_definition_family
+output "task_definition_families" {
+  description = "Color => task definition family of the API."
+  value       = module.api_service.task_definition_families
 }
 
 output "api_container_name" {
@@ -28,9 +28,9 @@ output "log_group_name" {
   value       = module.api_service.log_group_name
 }
 
-output "origin_vpc_service_id" {
-  description = "Workers VPC Service of the origin: the service_id of the ORIGIN binding in apps/api-edge/wrangler.json."
-  value       = module.tunnel.vpc_service_id
+output "origin_vpc_service_ids" {
+  description = "Color => Workers VPC Service of that origin: the service_id of the ORIGIN_BLUE and ORIGIN_GREEN bindings in apps/api-edge/wrangler.json (CF_API_ORIGIN_BLUE_VPC_SERVICE_ID, CF_API_ORIGIN_GREEN_VPC_SERVICE_ID)."
+  value       = { for color, tunnel in module.tunnel : color => tunnel.vpc_service_id }
 }
 
 output "github_deploy_role_arn" {

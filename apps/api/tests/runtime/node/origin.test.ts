@@ -9,6 +9,7 @@ import {
   CLIENT_REGION_HEADER,
   ORIGIN_KEY_HEADER,
   PUBLIC_URL_HEADER,
+  RELEASE_HEADER,
   callRemote,
   rpcPath,
 } from "@doxahq/api-bridge";
@@ -16,6 +17,7 @@ import type { Env } from "../../../src/env";
 import { BackgroundTasks } from "../../../src/runtime/node/background-tasks";
 import { createCronHandler } from "../../../src/runtime/node/cron";
 import { asPublicRequest, createOriginHandler } from "../../../src/runtime/node/origin-handler";
+import { createReleaseMismatchLog } from "../../../src/runtime/node/release";
 import { API_ENTRYPOINTS, createRpcHandler, type EntrypointClasses } from "../../../src/runtime/node/rpc-handler";
 
 const KEY = "o".repeat(40);
@@ -176,6 +178,38 @@ describe("public requests", () => {
     );
 
     expect(request.url).toBe(`${ORIGIN}/me`);
+  });
+});
+
+describe("release", () => {
+  const RELEASE = "0123456789ab";
+  const keyed = (edgeRelease?: string) =>
+    new Request(`${ORIGIN}/me`, { headers: { [ORIGIN_KEY_HEADER]: KEY, ...(edgeRelease ? { [RELEASE_HEADER]: edgeRelease } : {}) } });
+
+  it("names its release on every response, also the unkeyed health check and a refusal", async () => {
+    const { handler } = originWith({ releaseId: RELEASE });
+
+    for (const request of [keyed(RELEASE), new Request(`${ORIGIN}/health`), new Request(`${ORIGIN}/me`)]) {
+      expect((await handler(request)).headers.get(RELEASE_HEADER)).toBe(RELEASE);
+    }
+  });
+
+  it("adds no release header without a release ID", async () => {
+    const { handler } = originWith();
+
+    expect((await handler(keyed())).headers.has(RELEASE_HEADER)).toBe(false);
+  });
+
+  it("logs an edge of another release once per release", () => {
+    const warn = vi.fn();
+    const check = createReleaseMismatchLog(RELEASE, warn);
+
+    for (const edgeRelease of [RELEASE, "aaaaaaaaaaaa", "aaaaaaaaaaaa", undefined, undefined]) check(keyed(edgeRelease));
+
+    expect(warn.mock.calls).toEqual([
+      [`Release mismatch: the edge runs aaaaaaaaaaaa, this origin runs ${RELEASE}.`],
+      [`Release mismatch: the edge runs (none), this origin runs ${RELEASE}.`],
+    ]);
   });
 });
 

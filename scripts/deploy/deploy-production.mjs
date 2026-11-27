@@ -3,10 +3,14 @@
 // Production workflow. The workflow runs each step with `--step`, so a failed
 // service shows as its own CI step.
 //
-//   node scripts/deploy-production.mjs                  every step, in order
-//   node scripts/deploy-production.mjs --from <step>    resume at a step
-//   node scripts/deploy-production.mjs --step <step>    one step
-//   node scripts/deploy-production.mjs --list           print the steps
+//   node scripts/deploy/deploy-production.mjs                  every step, in order
+//   node scripts/deploy/deploy-production.mjs --from <step>    resume at a step (the staged release stays)
+//   node scripts/deploy/deploy-production.mjs --step <step>    one step
+//   node scripts/deploy/deploy-production.mjs --list           print the steps
+//
+// Roll the live release back with: node scripts/deploy/release.mjs rollback
+// The watch step holds for 15 minutes; DOXA_RELEASE_HOLD_MINUTES changes it.
+// A release reads the Cloudflare API, so it needs CLOUDFLARE_ACCOUNT_ID.
 //
 // The docs-rendering step needs --previous-fallback on|off (or the
 // DOXA_RENDERER_PREVIOUS_FALLBACK variable): see apps/docs-template/scripts/
@@ -23,44 +27,59 @@ import { EXCLUDE_WRANGLER_CONFIGS, assertIdsFilled } from "./lib/production-ids.
 const RENDERER_HEAP = "--max-old-space-size=4096";
 
 /**
- * The deployment order. The docs-rendering step also deploys the API last:
- * the renderer release writes apps/api/dist/wrangler.production.json, and
- * scripts/deploy-api.mjs deploys the Node origin on ECS with that release,
- * then the thin doxa-api Worker. The API goes before the Workers that call it:
- * the email Worker, the MCP Worker, the agent container and the agent Worker.
+ * The release, in phases (scripts/deploy/release.mjs):
+ *
+ *   1. release   start the release: contract check against the live release
+ *   2. stage     each service step uploads its new version without traffic.
+ *                The api step starts the new origin on the idle ECS color. A
+ *                Worker that only `wrangler deploy` can ship (the agent
+ *                container, a new Durable Object migration) deploys live here.
+ *   3. flip      serve every staged version, callees first, in about 30 seconds
+ *   4. verify    smoke-check production; a failure rolls everything back
+ *   5. watch     keep checking while the old API color still runs, then stop it
+ *
+ * The stage steps can run in any order. Their flip order is in
+ * scripts/deploy/lib/release/services.mjs.
  */
 const STEPS = [
   { name: "validate", title: "Validate production configuration", command: ["pnpm", "validate:production-config"] },
   // agent-worker bundles @doxahq/agent, and the API, web and renderer bundle
   // @doxahq/mdx-runtime, from their dist/ folders.
   { name: "packages", title: "Build workspace packages", command: ["pnpm", "--filter", "./packages/**", "build"] },
-  { name: "docs-resolver", title: "Deploy the private docs resolver", command: ["pnpm", "deploy:docs-resolver"] },
-  { name: "docs-runtime", title: "Deploy the docs runtime", command: ["pnpm", "deploy:docs-runtime"] },
-  // The dispatcher binds to it, and a binding needs an existing Worker.
-  { name: "try-proxy", title: "Deploy the playground proxy", command: ["pnpm", "deploy:try-proxy"] },
-  // Before the dispatcher, which sends searches to it. It binds to the resolver.
-  { name: "search-gateway", title: "Deploy the search gateway", command: ["pnpm", "deploy:search-gateway"] },
+  { name: "release", title: "Start the release", command: ["node", "scripts/deploy/release.mjs", "init"] },
+  stageStep("docs-resolver", "the private docs resolver"),
+  stageStep("docs-runtime", "the docs runtime"),
+  stageStep("try-proxy", "the playground proxy"),
+  stageStep("search-gateway", "the search gateway"),
   {
     name: "docs-rendering",
-    title: "Deploy the docs renderer, dispatcher, prerenderer and API",
-    command: ["pnpm", "deploy:docs-template", "--", "--skip-secret"],
+    title: "Stage the docs renderer, dispatcher and prerenderer",
+    command: ["pnpm", "deploy:docs-template", "--", "--stage"],
     // The renderer SSR build runs out of memory at Node's default heap.
     env: { NODE_OPTIONS: withNodeOption(process.env.NODE_OPTIONS, RENDERER_HEAP) },
   },
-  // Both bind to entrypoints of doxa-api-production, so they follow the API.
-  { name: "email-worker", title: "Deploy the email Worker", command: ["pnpm", "deploy:email-worker"] },
-  { name: "mcp", title: "Deploy the MCP Worker", command: ["pnpm", "deploy:mcp"] },
+  // After docs-rendering, which writes the renderer release of the origin.
+  { name: "api", title: "Start the API origin on the idle color and stage the edge", command: ["node", "scripts/deploy/deploy-api.mjs", "--stage"] },
+  stageStep("email-worker", "the email Worker"),
+  stageStep("mcp", "the MCP Worker"),
   {
-    name: "agent-container",
-    title: "Deploy the agent container",
-    command: ["pnpm", "deploy:agent-container"],
+    ...stageStep("agent-container", "the agent container"),
+    // Containers roll out only with wrangler deploy, so it is live from here.
+    title: "Deploy the agent container (live now)",
     // The image pushes fail now and then; a second attempt usually passes.
     attempts: 2,
     retryDelayMs: 30_000,
   },
-  { name: "agent-worker", title: "Deploy the agent Worker", command: ["pnpm", "deploy:agent-worker"] },
-  { name: "web", title: "Deploy the web app", command: ["pnpm", "deploy:web"] },
+  stageStep("agent-worker", "the agent Worker"),
+  stageStep("web", "the web app"),
+  { name: "flip", title: "Flip production to the new versions", command: ["node", "scripts/deploy/release.mjs", "flip"] },
+  { name: "verify", title: "Smoke-check production", command: ["node", "scripts/deploy/release.mjs", "verify"] },
+  { name: "watch", title: "Watch the release, then stop the old API color", command: ["node", "scripts/deploy/release.mjs", "watch"] },
 ];
+
+function stageStep(service, label) {
+  return { name: service, title: `Stage ${label}`, command: ["node", "scripts/deploy/release.mjs", "stage", service] };
+}
 
 const options = parseArgs(process.argv.slice(2));
 
@@ -80,13 +99,13 @@ if (selected.some((step) => step.name === "docs-rendering") && previousFallback 
 }
 if (previousFallback) process.env.DOXA_RENDERER_PREVIOUS_FALLBACK = previousFallback;
 if (!options.allowDirty && !process.env.CI) assertCleanTree();
-// The ops repo fills the Cloudflare IDs before a deploy (scripts/apply-production-ids.mjs).
+// The ops repo fills the Cloudflare IDs before a deploy (scripts/deploy/apply-production-ids.mjs).
 try {
   assertIdsFilled(process.cwd());
 } catch (error) {
   fail(error.message);
 }
-// scripts/deploy-api.mjs builds the API image, and asks for the same consent.
+// scripts/deploy/deploy-api.mjs builds the API image, and asks for the same consent.
 if (options.allowDirty) process.env.DOXA_DEPLOY_ALLOW_DIRTY = "1";
 
 const startedAt = Date.now();
@@ -116,9 +135,12 @@ async function runStep(step) {
     }
   }
   const index = STEPS.indexOf(step);
-  console.error(`\n[deploy] ✗ ${step.name} failed. The steps before it are deployed.`);
+  console.error(`\n[deploy] ✗ ${step.name} failed.`);
+  if (index < STEPS.findIndex((candidate) => candidate.name === "flip")) {
+    console.error("[deploy] Production still serves the previous release: staged versions get no traffic.");
+    console.error("[deploy] The agent container, and a Worker with a new Durable Object migration, deploy live when staged.");
+  }
   console.error(`[deploy] Fix the cause, then resume: pnpm deploy:all --from ${step.name}`);
-  if (index > 0) console.error(`[deploy] Deployed already: ${STEPS.slice(0, index).map((s) => s.name).join(", ")}`);
   process.exit(1);
 }
 

@@ -8,14 +8,17 @@ variable "cluster_name" {
   type        = string
 }
 
-variable "service_name" {
-  description = "Watched ECS service."
-  type        = string
-}
+variable "services" {
+  description = "The blue/green ECS services of the API: color => { name, arn }. One of them serves at a time."
+  type = map(object({
+    name = string
+    arn  = string
+  }))
 
-variable "service_arn" {
-  description = "ARN of the watched ECS service, for deploy events."
-  type        = string
+  validation {
+    condition     = length(var.services) > 0
+    error_message = "services must name at least one ECS service."
+  }
 }
 
 variable "alert_emails" {
@@ -63,16 +66,6 @@ variable "budget_notifications" {
     condition     = length(var.budget_notifications) > 0 && alltrue([for notice in var.budget_notifications : contains(["ACTUAL", "FORECASTED"], notice.type) && notice.threshold_percent > 0])
     error_message = "budget_notifications must hold at least one notice, each with type ACTUAL or FORECASTED and a threshold_percent above 0."
   }
-}
-
-variable "daily_pause" {
-  description = "Daily window in which the API runs no task on purpose (see the api-service module). The no-running-task alarm is muted then. Null keeps the alarm on all day."
-  type = object({
-    stop_hour  = number
-    start_hour = number
-    timezone   = string
-  })
-  default = null
 }
 
 variable "valkey" {

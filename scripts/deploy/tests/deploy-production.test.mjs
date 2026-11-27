@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-const workspaceRoot = path.resolve(import.meta.dirname, "..");
-const script = path.join(workspaceRoot, "scripts", "deploy-production.mjs");
+const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
+const script = path.join(workspaceRoot, "scripts", "deploy", "deploy-production.mjs");
 // The Deploy Production workflow lives in the operator's private ops repo. Its
 // deploy job runs this test with DOXA_DEPLOY_WORKFLOW set to that workflow.
 const workflow = process.env.DOXA_DEPLOY_WORKFLOW;
@@ -30,20 +30,13 @@ test("the workflow deploys every script step, in the script's order", { skip: !w
   );
 });
 
-test("the API deploys before every Worker that binds to it", () => {
-  const steps = scriptSteps();
-  const api = steps.indexOf("docs-rendering");
+test("a release starts first, stages every service, then flips, verifies and watches", () => {
+  const steps = scriptSteps().filter((step) => !CI_SETUP_STEPS.includes(step));
 
-  for (const dependent of ["email-worker", "mcp", "agent-container", "agent-worker"]) {
-    assert.ok(steps.indexOf(dependent) > api, dependent);
-  }
-});
-
-test("the playground proxy deploys before the dispatcher that binds to it", () => {
-  const steps = scriptSteps();
-
-  assert.ok(steps.indexOf("try-proxy") >= 0);
-  assert.ok(steps.indexOf("try-proxy") < steps.indexOf("docs-rendering"));
+  assert.equal(steps[0], "release");
+  assert.deepEqual(steps.slice(-3), ["flip", "verify", "watch"]);
+  // The api step reads the renderer release that the docs-rendering step writes.
+  assert.ok(steps.indexOf("api") > steps.indexOf("docs-rendering"));
 });
 
 test("rejects an unknown step", () => {

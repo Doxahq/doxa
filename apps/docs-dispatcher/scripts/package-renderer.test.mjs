@@ -15,7 +15,7 @@ import {
 import {
   listClientAssetFiles,
   planClientAssetUploads,
-} from "../../../scripts/lib/client-assets-upload.mjs";
+} from "../../../scripts/deploy/lib/client-assets-upload.mjs";
 
 const gunzipAsync = promisify(gunzip);
 

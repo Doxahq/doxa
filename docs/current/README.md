@@ -32,3 +32,4 @@ describe the implemented state.
 - [Email](email.md)
 - [API on Node: design](api-node-origin.md)
 - [Running your own production (ops repo, IDs, deploys)](self-hosting.md)
+- [Production releases: stage, flip, watch, roll back](production-release.md)

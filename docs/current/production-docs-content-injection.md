@@ -533,7 +533,7 @@ dispatcher's `ASSETS` binding has only the new files.
   `cache-control: public, max-age=31536000, immutable`. It runs
   `wrangler r2 object put --remote`, 6 at a time, and re-puts every file on
   every deploy. A dry run skips it. The plan is a pure function in
-  `scripts/lib/client-assets-upload.mjs`. The upload does not change the
+  `scripts/deploy/lib/client-assets-upload.mjs`. The upload does not change the
   release ID.
 - Expiry: a lifecycle rule on the prefix `client-assets/` (exactly that prefix)
   deletes the files 30 days after their last upload. A rule on a wider prefix
@@ -696,7 +696,7 @@ in `packages/contracts/src/docs-prerender.ts` and
 - `apps/docs-dispatcher/src/routing-policy.ts`
 - `apps/docs-dispatcher/scripts/package-renderer.mjs`
 - `apps/docs-template/scripts/deploy-renderer.mjs`
-- `scripts/lib/client-assets-upload.mjs`
+- `scripts/deploy/lib/client-assets-upload.mjs`
 - `apps/docs-dispatcher/src/client-asset-fallback.ts`
 - `apps/docs-dispatcher/src/client-asset-cache-entrypoint.ts`
 - `apps/docs-dispatcher/src/text-cache-entrypoint.ts`

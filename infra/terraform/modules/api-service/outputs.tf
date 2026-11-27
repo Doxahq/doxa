@@ -3,14 +3,14 @@ output "cluster_name" {
   value       = aws_ecs_cluster.this.name
 }
 
-output "service_name" {
-  description = "Name of the ECS service."
-  value       = aws_ecs_service.this.name
+output "service_names" {
+  description = "Color => name of the ECS service."
+  value       = { for color, service in aws_ecs_service.color : color => service.name }
 }
 
-output "service_arn" {
-  description = "ARN of the ECS service."
-  value       = aws_ecs_service.this.id
+output "service_arns" {
+  description = "Color => ARN of the ECS service."
+  value       = { for color, service in aws_ecs_service.color : color => service.id }
 }
 
 output "security_group_id" {
@@ -18,9 +18,9 @@ output "security_group_id" {
   value       = aws_security_group.tasks.id
 }
 
-output "task_definition_family" {
-  description = "Task definition family that deploys register new revisions in."
-  value       = aws_ecs_task_definition.this.family
+output "task_definition_families" {
+  description = "Color => task definition family that deploys register new revisions in."
+  value       = { for color, definition in aws_ecs_task_definition.color : color => definition.family }
 }
 
 output "api_container_name" {

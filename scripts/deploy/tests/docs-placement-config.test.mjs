@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateDocsPlacementConfigs } from "./lib/docs-placement-config.mjs";
+import { validateDocsPlacementConfigs } from "../lib/docs-placement-config.mjs";
 
 function configs() {
   const placement = { region: "aws:us-east-1" };

@@ -2,7 +2,7 @@ locals {
   api_container_name    = "api"
   tunnel_container_name = "cloudflared"
 
-  secret_parameter_arns = distinct(concat(values(var.api_secrets), [var.tunnel_token_parameter_arn]))
+  secret_parameter_arns = distinct(concat(values(var.api_secrets), values(var.tunnel_token_parameter_arns)))
 
   # Node is in every API image, and a fetch needs no curl or wget in the image.
   api_health_url = "http://127.0.0.1:${var.api_port}${var.api_health_check_path}"
@@ -48,9 +48,6 @@ locals {
     # pin QUIC and let a blocked QUIC fail at the start, in the logs.
     command = ["tunnel", "--no-autoupdate", "--protocol", "quic", "--grace-period", "${var.tunnel_grace_period_seconds}s", "run"]
 
-    # cloudflared reads the token from TUNNEL_TOKEN.
-    secrets = [{ name = "TUNNEL_TOKEN", valueFrom = var.tunnel_token_parameter_arn }]
-
     # Join the tunnel only when the API answers. At shutdown ECS stops this
     # container first, so the tunnel drains before the API gets SIGTERM.
     dependsOn = [{ containerName = local.api_container_name, condition = "HEALTHY" }]
@@ -74,8 +71,11 @@ locals {
   }
 }
 
-resource "aws_ecs_task_definition" "this" {
-  family                   = var.name
+# One family per color: the colors differ only in their tunnel token.
+resource "aws_ecs_task_definition" "color" {
+  for_each = var.colors
+
+  family                   = each.value
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = tostring(var.cpu_units)
@@ -88,9 +88,19 @@ resource "aws_ecs_task_definition" "this" {
     cpu_architecture        = var.cpu_architecture
   }
 
-  container_definitions = jsonencode([local.api_container, local.tunnel_container])
+  container_definitions = jsonencode([
+    local.api_container,
+    # cloudflared reads the token of this color's tunnel from TUNNEL_TOKEN.
+    merge(local.tunnel_container, { secrets = [{ name = "TUNNEL_TOKEN", valueFrom = var.tunnel_token_parameter_arns[each.key] }] }),
+  ])
 
   # The deploy script registers later revisions of this family. Keep old
   # revisions when Terraform registers a new one, so rollbacks can use them.
   skip_destroy = true
+}
+
+# The single service from before blue/green became blue, with its names.
+moved {
+  from = aws_ecs_task_definition.this
+  to   = aws_ecs_task_definition.color["blue"]
 }

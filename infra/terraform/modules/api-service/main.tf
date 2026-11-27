@@ -1,4 +1,5 @@
-# The API on ECS Fargate. Each task runs two containers that share localhost:
+# The API on ECS Fargate, as two services: blue and green (see service.tf).
+# Each task runs two containers that share localhost:
 #
 #   api          the Node server of apps/api
 #   cloudflared  joins the Cloudflare Tunnel and forwards requests to the api

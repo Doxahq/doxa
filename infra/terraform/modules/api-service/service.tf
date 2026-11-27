@@ -1,8 +1,23 @@
-resource "aws_ecs_service" "this" {
-  name             = var.name
+# Two services of the same task, blue and green. The edge Worker sends
+# traffic to one of them; the other runs no task between releases. A release
+# starts the new image on the idle color, switches the edge, and stops the
+# old color after a while (scripts/deploy/release.mjs).
+#
+# Terraform creates blue with min_task_count tasks and green with none. After
+# that the deploy owns the revision and the task count of each color.
+
+locals {
+  # The color that serves when Terraform creates the services.
+  initial_live_color = "blue"
+}
+
+resource "aws_ecs_service" "color" {
+  for_each = var.colors
+
+  name             = each.value
   cluster          = aws_ecs_cluster.this.id
-  task_definition  = aws_ecs_task_definition.this.arn
-  desired_count    = var.min_task_count
+  task_definition  = aws_ecs_task_definition.color[each.key].arn
+  desired_count    = each.key == local.initial_live_color ? var.min_task_count : 0
   launch_type      = "FARGATE"
   platform_version = "LATEST"
 
@@ -10,8 +25,8 @@ resource "aws_ecs_service" "this" {
   enable_ecs_managed_tags = true
   propagate_tags          = "SERVICE"
 
-  # Rolling deploy with no capacity loss: start the new task, wait until it
-  # is healthy, then stop the old one. A deploy whose tasks keep failing rolls
+  # Within one color, a deploy starts the new task, waits until it is
+  # healthy, then stops the old one. A deploy whose tasks keep failing rolls
   # back to the last working revision.
   deployment_minimum_healthy_percent = 100
   deployment_maximum_percent         = 200
@@ -28,9 +43,14 @@ resource "aws_ecs_service" "this" {
   }
 
   lifecycle {
-    # The deploy script owns the running revision, and autoscaling owns the
-    # task count. Terraform changes to the task definition reach the service
-    # with the next deploy, which starts from the latest revision.
+    # The deploy script owns the running revision and the task count.
+    # Terraform changes to the task definition reach a color with the next
+    # deploy, which starts from the latest revision of the family.
     ignore_changes = [task_definition, desired_count]
   }
+}
+
+moved {
+  from = aws_ecs_service.this
+  to   = aws_ecs_service.color["blue"]
 }

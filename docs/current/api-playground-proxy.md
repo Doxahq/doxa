@@ -108,7 +108,7 @@ The next deploy turns the proxy on for all sites, because `DOXA_PROD_TRY_PROXY_M
 2. Check `Cf-Worker` on that request. Rename the `workers.dev` subdomain if the value names a person.
 3. Open the panel on a docs site, and read the `docs_csp_report` lines. `DOXA_PROD_DOCS_CSP_MODE` is now `enforce`, and only this deploy runs the new panel under that policy. See `docs-content-security-policy.md`.
 
-Deploy `doxa-try-proxy` before the dispatcher, because a service binding needs an existing Worker. `scripts/deploy-production.mjs` keeps this order.
+Deploy `doxa-try-proxy` before the dispatcher, because a service binding needs an existing Worker. `scripts/deploy/deploy-production.mjs` keeps this order.
 
 ## Not in version 1
 

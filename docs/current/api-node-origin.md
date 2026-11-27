@@ -11,16 +11,16 @@ own runbook lives in its private ops repo.
 | Part | Path | What it does |
 |---|---|---|
 | Node origin | `apps/api/src/runtime/node/` | Runs the same Hono app (`src/app.ts`) as a Node server on 127.0.0.1:8786. Bundled by `apps/api/scripts/node-server.mjs` into `dist-node/server.mjs`. |
-| Thin Worker | `apps/api-edge/` | Keeps the name `doxa-api`. Proxies `api.doxa.so`, exposes the 5 RPC entrypoints as forwarders, serves the bridge and sends the cron tick. Reaches the origin through its `ORIGIN` binding. |
+| Thin Worker | `apps/api-edge/` | Keeps the name `doxa-api`. Proxies `api.doxa.so`, exposes the 5 RPC entrypoints as forwarders, serves the bridge and sends the cron tick. Reaches the live origin color through its `ORIGIN_BLUE` or `ORIGIN_GREEN` binding, as `ORIGIN_COLOR` names it. |
 | Protocol | `packages/api-bridge/` | Paths, headers, the method lists, the `devalue` codec, `callRemote` and `serveRemoteCall`. Both sides import it. |
-| AWS and Cloudflare | `infra/terraform/` | ECS Fargate, ECR, Valkey, the private tunnel and its Workers VPC Service, the deploy role and alerts. See its README. |
-| Deploy | `scripts/deploy-api.mjs` (`pnpm deploy:api`) | Builds or reuses the ARM64 image of the commit, rolls the origin out on ECS with the renderer release, then deploys the edge. The renderer release (`pnpm deploy:all --step docs-rendering`) runs it as its last step. |
-| Origin only | `scripts/deploy-api-ecs.mjs` (`pnpm deploy:api:ecs`) | Registers a task definition revision with a given image and rolls it out. Also rolls back. |
+| AWS and Cloudflare | `infra/terraform/` | ECS Fargate (a blue and a green service), ECR, Valkey, one private tunnel and Workers VPC Service per color, the deploy role and alerts. See its README. |
+| Deploy | `scripts/deploy/deploy-api.mjs` (`pnpm deploy:api`) | Builds or reuses the ARM64 image of the commit and starts it on the idle color. With `--stage` (the `api` step of a release) it uploads an edge version that names that color, and the release flip serves it. Without `--stage` it deploys the edge now and stops the old color. See [production-release.md](production-release.md). |
+| One color | `scripts/deploy/deploy-api-ecs.mjs` (`pnpm deploy:api:ecs`) | Starts an image or a revision on one color (`--color`), or stops a color (`--retire`). It never changes the edge. |
 
 ## Network path
 
 ```
-production   doxa-api Worker ─ORIGIN binding (Workers VPC Service)─▶ private tunnel
+production   doxa-api Worker ─ORIGIN_<COLOR> binding (Workers VPC Service)─▶ private tunnel of that color
                ─▶ cloudflared in the task ─▶ 127.0.0.1:8786 (Node origin)
 development  api-edge in wrangler dev ─fetch─▶ ORIGIN_URL (http://localhost:8786)
 ```
@@ -70,13 +70,16 @@ origin → edge   header x-doxa-bridge-key (BRIDGE_SHARED_SECRET)
 ## Security rules
 
 - The origin has no public route. Never add a public hostname, DNS record or
-  ingress rule to the tunnel: the edge reaches it only through the `ORIGIN`
-  VPC Service binding.
-- `resolveOrigin` in `apps/api-edge/src/origin.ts` accepts the `ORIGIN`
-  binding, or an `ORIGIN_URL` on loopback (development), never both. Any
-  other setup throws, so the origin key never goes to another host. Never
-  set `remote: true` on the `ORIGIN` binding: local development would then
-  send requests into the production tunnel.
+  ingress rule to a tunnel: the edge reaches the origin only through the
+  `ORIGIN_BLUE` and `ORIGIN_GREEN` VPC Service bindings.
+- `resolveOrigin` in `apps/api-edge/src/origin.ts` accepts the origin
+  bindings with an `ORIGIN_COLOR` of `blue` or `green`, or an `ORIGIN_URL` on
+  loopback (development), never both. Any other setup throws, so the origin
+  key never goes to another host. The release sets `ORIGIN_COLOR` on each
+  edge version; the config has no default, so a plain `wrangler deploy` of
+  the edge serves nothing instead of a stopped color. Never set
+  `remote: true` on an origin binding: local development would then send
+  requests into a production tunnel.
 - The Node origin listens on 127.0.0.1 (`HOST`). cloudflared shares the
   task's network, so nothing outside the task can connect.
 - The origin answers only requests with the origin key. The one exception is
@@ -134,8 +137,11 @@ The move from the full API Worker happened on 2026-10-24. Login sessions and
 MCP OAuth grants stayed in Workers KV, and the origin started with an empty
 Valkey, so every user signed in again once. Decided: no data copy.
 
-- Origin: `pnpm deploy:api:ecs --revision <task-definition-arn>`. Every
-  deploy prints the ARN of the revision before it.
+- A release: `node scripts/deploy/release.mjs rollback` starts the old color again
+  if it was stopped, then serves the previous edge version. See
+  [production-release.md](production-release.md).
+- One color by hand: `pnpm deploy:api:ecs --color <color> --revision <task-definition-arn>`.
+  Every deploy prints the ARN of the revision before it.
 - Edge: `pnpm --filter @doxahq/api-edge exec wrangler rollback <version-id> --env production`.
   The last full API Worker version still has its KV, R2 and Hyperdrive
   bindings, so a rollback to it serves without the origin. The operator's

@@ -80,7 +80,7 @@
   "env": {
     "production": {
       "build": {
-        "command": "node ../../scripts/refuse-api-worker-deploy.mjs"
+        "command": "node ../../scripts/deploy/refuse-api-worker-deploy.mjs"
       },
       "placement": { "region": "aws:us-east-1" },
       "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],

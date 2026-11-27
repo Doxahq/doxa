@@ -4,9 +4,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { assertConfigFilled, assertIdsFilled, fillPlaceholders, parseValues, placeholdersIn } from "./lib/production-ids.mjs";
+import { assertConfigFilled, assertIdsFilled, fillPlaceholders, parseValues, placeholdersIn } from "../lib/production-ids.mjs";
 
-const ROOT = path.resolve(import.meta.dirname, "..");
+const ROOT = path.resolve(import.meta.dirname, "../../..");
 
 test("refuses to deploy one config that still holds a placeholder", () => {
   const root = mkdtempSync(path.join(tmpdir(), "doxa-ids-"));
@@ -89,5 +89,5 @@ test("no Wrangler config holds a KV, Hyperdrive, VPC Service or zone ID", () => 
 });
 
 test("a deploy refuses this checkout until the ops values fill the placeholders", () => {
-  assert.throws(() => assertIdsFilled(ROOT), /still hold ID placeholders: .*apps\/api-edge\/wrangler.json \(CF_API_ORIGIN_VPC_SERVICE_ID\)/);
+  assert.throws(() => assertIdsFilled(ROOT), /still hold ID placeholders: .*apps\/api-edge\/wrangler.json \(CF_API_ORIGIN_BLUE_VPC_SERVICE_ID, CF_API_ORIGIN_GREEN_VPC_SERVICE_ID\)/);
 });

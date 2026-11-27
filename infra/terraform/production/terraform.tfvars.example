@@ -11,9 +11,6 @@ memory_mb      = 4096
 min_task_count = 1
 max_task_count = 1
 
-# Optional: run no API task from 01:00 to 10:00 local time, to save cost
-# before launch. Docs sites stay up; the dashboard, MCP and publishing do not.
-# daily_pause = { stop_hour = 1, start_hour = 10, timezone = "Africa/Algiers" }
 
 alert_emails       = ["<you@example.com>"]
 monthly_budget_usd = 120

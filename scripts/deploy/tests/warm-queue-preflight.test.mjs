@@ -8,11 +8,11 @@ import {
   describeQueueProblems,
   findQueueProblems,
   listConfiguredQueues,
-} from "./lib/warm-queue-preflight.mjs";
+} from "../lib/warm-queue-preflight.mjs";
 
 const dispatcherConfig = JSON.parse(
   readFileSync(
-    path.join(import.meta.dirname, "..", "apps", "docs-dispatcher", "wrangler.json"),
+    path.join(import.meta.dirname, "../../..", "apps", "docs-dispatcher", "wrangler.json"),
     "utf8",
   ),
 );

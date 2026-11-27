@@ -9,8 +9,8 @@ import {
   planClientAssetUploads,
   runQuietCommand,
   uploadClientAssets,
-} from "../../../scripts/lib/client-assets-upload.mjs";
-import { requireResolverBinding } from "../../../scripts/lib/docs-placement-config.mjs";
+} from "../../../scripts/deploy/lib/client-assets-upload.mjs";
+import { requireResolverBinding } from "../../../scripts/deploy/lib/docs-placement-config.mjs";
 import {
   RENDERER_RELEASE_RECORD_KEY,
   createRendererReleaseRecord,
@@ -23,11 +23,18 @@ import {
   previousBuildVars,
   releaseRecordPutArgs,
   retryReleaseRecordWrite,
-} from "../../../scripts/lib/renderer-release-record.mjs";
+} from "../../../scripts/deploy/lib/renderer-release-record.mjs";
 import {
   describeQueueProblems,
   findQueueProblems,
-} from "../../../scripts/lib/warm-queue-preflight.mjs";
+} from "../../../scripts/deploy/lib/warm-queue-preflight.mjs";
+import { cloudflareApiFromEnvironment } from "../../../scripts/deploy/lib/release/cloudflare-api.mjs";
+import {
+  requireStagedManifest,
+  withRendererRecord,
+  writeManifestFile,
+} from "../../../scripts/deploy/lib/release/manifest.mjs";
+import { stageService } from "../../../scripts/deploy/lib/release/stage.mjs";
 import { preparePrerenderConfigs } from "./prepare-prerender-configs.mjs";
 
 const SHARED_WORKER_NAME = "doxa-docs-renderer-shared";
@@ -51,6 +58,8 @@ try {
   // F10: fail before any build when the operator did not choose.
   const previousFallback = parsePreviousFallbackOption(options.previousFallback);
   const revoke = options.revoke.map(parseRevokedReleaseId);
+  // A stage adds to the release that the release step started: fail before the build.
+  if (options.stage) requireStagedManifest(workspaceRoot);
   validateMode(options.mode, options.siteIds);
   // Unset keeps the committed rollout (F1); package-renderer reads it.
   if (options.prerenderMode !== undefined) {
@@ -188,31 +197,28 @@ try {
   // this build's files next to the older ones before any Worker serves it.
   await uploadBuildClientAssets(codeBucket);
 
+  if (options.stage) {
+    await stageRendererWorkers({
+      codeBucket,
+      metadata,
+      releaseRecord,
+      revoke,
+      sharedGeneratedConfigPath,
+      dispatcherConfigPath,
+      prerendererConfigPath: preparedConfigs.prerendererOutputPath,
+    });
+    globalThis.console.log(
+      `[deploy-renderer] Docs rendering staged. Dynamic mode: ${options.mode}. Pre-render mode: ${dispatcherConfig.vars.DOXA_PROD_PRERENDER_MODE}. Route-data cache mode: ${options.routeDataCacheMode}. Release: ${preparedConfigs.releaseId}. The flip serves it.`
+    );
+    process.exit(0);
+  }
+
   // Publish the fallback before moving the public route to the dispatcher.
   run("pnpm", ["exec", "wrangler", "deploy", "-c", sharedGeneratedConfigPath], {
     cwd: templateRoot,
   });
 
-  run(
-    "pnpm",
-    [
-      "exec",
-      "wrangler",
-      "r2",
-      "object",
-      "put",
-      `${codeBucket}/${metadata.objectKey}`,
-      "--file",
-      metadata.packagePath,
-      "--content-type",
-      "application/json",
-      "--content-encoding",
-      "gzip",
-      "--remote",
-      "--force",
-    ],
-    { cwd: dispatcherRoot }
-  );
+  putRendererPackage(codeBucket, metadata);
 
   // This generated config carries the requested rollout mode and immutable
   // renderer build ID. Pass allowlist or off for a controlled rollback.
@@ -250,10 +256,10 @@ try {
   );
 
   // The API: the Node origin on ECS with this renderer release, then the
-  // thin doxa-api Worker. See scripts/deploy-api.mjs.
+  // thin doxa-api Worker. See scripts/deploy/deploy-api.mjs.
   run(
     process.execPath,
-    ["scripts/deploy-api.mjs", "--renderer-release", preparedConfigs.releaseId],
+    ["scripts/deploy/deploy-api.mjs", "--renderer-release", preparedConfigs.releaseId],
     { cwd: workspaceRoot },
   );
 
@@ -290,6 +296,87 @@ async function uploadBuildClientAssets(bucket) {
   );
 }
 
+/**
+ * Release step (--stage): uploads the three Workers as versions without
+ * traffic, and leaves the release record to the flip, which writes it once
+ * the dispatcher serves this build. The flip serves the shared renderer
+ * before the dispatcher (scripts/deploy/lib/release/services.mjs).
+ */
+async function stageRendererWorkers({
+  codeBucket,
+  metadata,
+  releaseRecord,
+  revoke,
+  sharedGeneratedConfigPath,
+  dispatcherConfigPath,
+  prerendererConfigPath,
+}) {
+  const cloudflare = cloudflareApiFromEnvironment(workspaceRoot);
+  const targetOf = (appRoot, configPath) => ({
+    cwd: path.relative(workspaceRoot, appRoot),
+    args: ["-c", path.relative(appRoot, configPath)],
+  });
+
+  await stageService(workspaceRoot, {
+    id: "docs-renderer-shared",
+    target: targetOf(templateRoot, sharedGeneratedConfigPath),
+    cloudflare,
+  });
+  // The package key is immutable, so the live dispatcher never reads it.
+  putRendererPackage(codeBucket, metadata);
+  await stageService(workspaceRoot, {
+    id: "docs-dispatcher",
+    target: targetOf(dispatcherRoot, dispatcherConfigPath),
+    cloudflare,
+  });
+  await stageService(workspaceRoot, {
+    id: "docs-prerenderer",
+    target: targetOf(prerendererRoot, prerendererConfigPath),
+    cloudflare,
+  });
+
+  writeManifestFile(
+    workspaceRoot,
+    withRendererRecord(requireStagedManifest(workspaceRoot), {
+      bucket: codeBucket,
+      recordBefore: releaseRecord,
+      recordAfter: createRendererReleaseRecord({
+        record: releaseRecord,
+        current: {
+          buildId: metadata.buildId,
+          releaseId: metadata.rendererReleaseId,
+          packageKey: metadata.objectKey,
+        },
+        plan: metadata.previousBuild,
+        revoke,
+      }),
+    }),
+  );
+}
+
+function putRendererPackage(bucket, metadata) {
+  run(
+    "pnpm",
+    [
+      "exec",
+      "wrangler",
+      "r2",
+      "object",
+      "put",
+      `${bucket}/${metadata.objectKey}`,
+      "--file",
+      metadata.packagePath,
+      "--content-type",
+      "application/json",
+      "--content-encoding",
+      "gzip",
+      "--remote",
+      "--force",
+    ],
+    { cwd: dispatcherRoot }
+  );
+}
+
 function parseArgs(args) {
   const parsed = {
     sharedConfig: DEFAULT_SHARED_CONFIG,
@@ -310,6 +397,7 @@ function parseArgs(args) {
       process.env.DOXA_RENDERER_PREVIOUS_FALLBACK?.trim() || undefined,
     revoke: [],
     dryRun: false,
+    stage: false,
     help: false,
   };
 
@@ -340,6 +428,8 @@ function parseArgs(args) {
       parsed.revoke.push(readArg(args, ++index, arg));
     } else if (arg === "--dry-run") {
       parsed.dryRun = true;
+    } else if (arg === "--stage") {
+      parsed.stage = true;
     } else if (arg === "--skip-secret") {
       // Kept for compatibility. Shared rendering now uses a private RPC binding.
     } else if (arg === "--set-secret") {
@@ -667,6 +757,9 @@ Options:
   --config <path>             Shared renderer source config
   --generated-config <path>   Shared renderer generated config
   --dry-run                   Build, package, and validate without deploying
+  --stage                     Release step: upload the renderer, dispatcher and
+                              prerenderer as versions without traffic, for the
+                              flip (scripts/deploy/release.mjs). Deploys no API.
   --skip-secret               Deprecated no-op kept for command compatibility
   -h, --help                  Show this help
 

@@ -40,8 +40,13 @@ variable "ecr_repository_arn" {
   type        = string
 }
 
-variable "ecs_service_arn" {
-  description = "ECS service that the role updates."
+variable "ecs_service_arns" {
+  description = "ECS services that the role updates: the blue and the green service of the API."
+  type        = list(string)
+}
+
+variable "task_count_parameter_arn" {
+  description = "SSM parameter with the task count of the live color, which the deploy reads."
   type        = string
 }
 

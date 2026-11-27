@@ -10,11 +10,11 @@ import {
   validateWarmFlags,
   validateWarmJobConfig,
   validateWarmQueues,
-} from "./lib/dispatcher-warm-config.mjs";
+} from "../lib/dispatcher-warm-config.mjs";
 
 const dispatcherConfigPath = path.join(
   import.meta.dirname,
-  "..",
+  "../../..",
   "apps",
   "docs-dispatcher",
   "wrangler.json",

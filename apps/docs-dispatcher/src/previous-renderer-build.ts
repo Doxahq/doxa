@@ -1,6 +1,6 @@
 /**
  * The deployed renderer build and the previous one, as the deploy wrote them
- * into the dispatcher vars (`scripts/lib/renderer-release-record.mjs`).
+ * into the dispatcher vars (`scripts/deploy/lib/renderer-release-record.mjs`).
  */
 export interface RendererBuild {
   buildId: string;

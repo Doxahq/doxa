@@ -11,7 +11,7 @@ import path from "node:path";
 import process from "node:process";
 import { assertConfigFilled } from "./lib/production-ids.mjs";
 
-const ROOT = path.resolve(import.meta.dirname, "..");
+const ROOT = path.resolve(import.meta.dirname, "../..");
 
 try {
   assertConfigFilled(ROOT, "apps/try-proxy/wrangler.json");

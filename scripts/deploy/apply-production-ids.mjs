@@ -3,9 +3,9 @@
 // in this checkout from a values file, before a production deploy. The
 // operator's ops repo keeps the values file. See docs/current/self-hosting.md.
 //
-//   node scripts/apply-production-ids.mjs --values <file>          fill in place
-//   node scripts/apply-production-ids.mjs --values <file> --check  only check that every placeholder has a value
-//   node scripts/apply-production-ids.mjs --list                   list the placeholders
+//   node scripts/deploy/apply-production-ids.mjs --values <file>          fill in place
+//   node scripts/deploy/apply-production-ids.mjs --values <file> --check  only check that every placeholder has a value
+//   node scripts/deploy/apply-production-ids.mjs --list                   list the placeholders
 //
 // It changes files in place, so run it in a deploy checkout, not in your
 // working tree.
@@ -15,7 +15,7 @@ import path from "node:path";
 import process from "node:process";
 import { fillPlaceholders, parseValues, placeholdersIn, wranglerConfigs } from "./lib/production-ids.mjs";
 
-const ROOT = path.resolve(import.meta.dirname, "..");
+const ROOT = path.resolve(import.meta.dirname, "../..");
 const options = parseArgs(process.argv.slice(2));
 
 const configs = wranglerConfigs(ROOT);

@@ -538,7 +538,7 @@ URLs. Rate limits count per Cloudflare location.
   provider to `none` (this Worker takes no payments) and reads the other two
   from `${OPS_BILLING_ENFORCEMENT}` and `${OPS_BILLING_DEFAULT_PLAN}`, which
   must match the API. Without them, enforcement is `off` and every project gets
-  the free plan stubs. `scripts/lib/mcp-production-config.mjs` refuses a
+  the free plan stubs. `scripts/deploy/lib/mcp-production-config.mjs` refuses a
   production config without them.
 
 ## Local development
@@ -565,7 +565,7 @@ send `x-doxa-dev-user-id` and `x-doxa-dev-scopes` instead of a token.
   `https://api.doxa.so`, `MCP_RESOURCE_URL` is `https://mcp.doxa.so/mcp`, and
   grants and tokens live in the `OAUTH_KV` namespace.
 - `pnpm validate:production-config` checks these rules
-  (`scripts/lib/mcp-production-config.mjs`):
+  (`scripts/deploy/lib/mcp-production-config.mjs`):
   - the bypass is off;
   - no var points to localhost;
   - both bindings target `doxa-api-production`;
@@ -579,7 +579,7 @@ send `x-doxa-dev-user-id` and `x-doxa-dev-scopes` instead of a token.
 ## Related files
 
 - `apps/mcp/` (Worker, tests, `wrangler.json`)
-- `scripts/deploy-production.mjs`, `scripts/lib/mcp-production-config.mjs`
+- `scripts/deploy/deploy-production.mjs`, `scripts/deploy/lib/mcp-production-config.mjs`
 - `apps/api/src/services/oauth/`, `apps/api/src/routes/agent-access.ts`
 - `apps/api/src/services/agent-access/`
 - `apps/web/src/routes/oauth/consent.tsx`,

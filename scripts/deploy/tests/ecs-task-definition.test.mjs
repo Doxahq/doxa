@@ -6,7 +6,7 @@ import {
   carriedDeployVariables,
   nextRevisionWithImage,
   parseEnvironmentAssignments,
-} from "./lib/ecs-task-definition.mjs";
+} from "../lib/ecs-task-definition.mjs";
 
 const OLD_IMAGE = "123456789012.dkr.ecr.us-east-1.amazonaws.com/doxa-api:aaaaaaa";
 const NEW_IMAGE = "123456789012.dkr.ecr.us-east-1.amazonaws.com/doxa-api:bbbbbbb";

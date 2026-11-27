@@ -12,9 +12,9 @@ import {
   listClientAssetFiles,
   planClientAssetUploads,
   uploadClientAssets,
-} from "./lib/client-assets-upload.mjs";
+} from "../lib/client-assets-upload.mjs";
 
-const workspaceRoot = path.resolve(import.meta.dirname, "..");
+const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
 
 async function createAssetsDirectory(files) {
   const directory = await mkdtemp(path.join(tmpdir(), "doxa-client-assets-"));

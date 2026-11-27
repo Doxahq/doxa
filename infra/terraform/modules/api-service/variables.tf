@@ -1,6 +1,21 @@
 variable "name" {
-  description = "Name of the cluster, service, task family, roles and log group."
+  description = "Name of the cluster, roles, security group and log group."
   type        = string
+}
+
+variable "colors" {
+  description = <<-EOT
+    The blue/green ECS services of the API: color => name of its service and
+    task family. The edge Worker sends traffic to one color; a release starts
+    the new image on the other one and then switches the edge
+    (scripts/deploy/deploy-api-ecs.mjs, scripts/deploy/release.mjs).
+  EOT
+  type        = map(string)
+
+  validation {
+    condition     = toset(keys(var.colors)) == toset(["blue", "green"]) && length(toset(values(var.colors))) == 2
+    error_message = "colors must name two different services, blue and green."
+  }
 }
 
 # --- Network ---
@@ -110,9 +125,14 @@ variable "cloudflared_image" {
   }
 }
 
-variable "tunnel_token_parameter_arn" {
-  description = "ARN of the SSM SecureString that holds the tunnel token."
-  type        = string
+variable "tunnel_token_parameter_arns" {
+  description = "Color => ARN of the SSM SecureString that holds the token of that color's tunnel."
+  type        = map(string)
+
+  validation {
+    condition     = toset(keys(var.tunnel_token_parameter_arns)) == toset(["blue", "green"])
+    error_message = "tunnel_token_parameter_arns needs the token of the blue and of the green tunnel."
+  }
 }
 
 variable "tunnel_grace_period_seconds" {
@@ -129,7 +149,7 @@ variable "tunnel_grace_period_seconds" {
 # --- Scaling and deploys ---
 
 variable "min_task_count" {
-  description = "Least number of running tasks."
+  description = "Least number of running tasks of the live color. Terraform sets it on blue when it creates the services; after that, each deploy sets it from the stack's task count parameter."
   type        = number
   default     = 1
 
@@ -147,25 +167,6 @@ variable "max_task_count" {
   validation {
     condition     = var.max_task_count >= var.min_task_count
     error_message = "max_task_count must be at least min_task_count."
-  }
-}
-
-variable "daily_pause" {
-  description = "Daily window with no running task, to save cost: the service stops at stop_hour and starts again at start_hour. Both are whole hours in timezone, an IANA name such as Africa/Algiers. Null runs the service all day."
-  type = object({
-    stop_hour  = number
-    start_hour = number
-    timezone   = string
-  })
-  default = null
-
-  validation {
-    condition = var.daily_pause == null ? true : (
-      alltrue([for hour in [var.daily_pause.stop_hour, var.daily_pause.start_hour] : hour == floor(hour) && hour >= 0 && hour <= 23])
-      && var.daily_pause.stop_hour != var.daily_pause.start_hour
-      && length(var.daily_pause.timezone) > 0
-    )
-    error_message = "daily_pause needs two different whole hours from 0 to 23 and a timezone."
   }
 }
 

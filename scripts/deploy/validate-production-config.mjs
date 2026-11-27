@@ -34,7 +34,7 @@ const REQUIRED_HYPERDRIVE_BINDINGS = [
  * level, the same way Wrangler applies it.
  */
 // The checked-in configs, also when a test runs this script from a copy.
-const REPOSITORY_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const REPOSITORY_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
 
 const PRIVATE_URL_WORKER_CONFIGS = [
   "apps/agent-container/wrangler.json",

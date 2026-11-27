@@ -14,7 +14,7 @@ import {
   previousBuildVars,
   releaseRecordPutArgs,
   retryReleaseRecordWrite,
-} from "./lib/renderer-release-record.mjs";
+} from "../lib/renderer-release-record.mjs";
 
 const A = { buildId: "a".repeat(64), releaseId: "1".repeat(64) };
 const B = { buildId: "b".repeat(64), releaseId: "2".repeat(64) };

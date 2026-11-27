@@ -203,7 +203,7 @@ Measured on a 0.5 GB Typesense node on 2026-11-05, with synthetic pages of 3.05 
 
 ## Rollout Order
 
-The renderer is evergreen, and `features` is a strict schema. Every reader of site config must be live before a site stores `features.searchProvider`. Follow this order. `pnpm deploy:api:ecs` alone is not enough, because the resolver, the MCP Worker and the agent services deploy separately. `scripts/deploy-production.mjs` deploys all of these readers.
+The renderer is evergreen, and `features` is a strict schema. Every reader of site config must be live before a site stores `features.searchProvider`. Follow this order. `pnpm deploy:api:ecs` alone is not enough, because the resolver, the MCP Worker and the agent services deploy separately. `scripts/deploy/deploy-production.mjs` deploys all of these readers.
 
 1. Run migrations `0041_docs_search` and `0042_docs_search_index_key`.
 2. Deploy every reader, with all search modes off:

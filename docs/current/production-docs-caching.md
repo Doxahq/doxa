@@ -666,7 +666,7 @@ global `fetch` to a customer hostname.
 
 An invalid value falls back to the default with a warning. The queue, Durable
 Object, migration and cron settings are pinned by
-`scripts/lib/dispatcher-warm-config.mjs`; migrations are append-only.
+`scripts/deploy/lib/dispatcher-warm-config.mjs`; migrations are append-only.
 
 ### Status (M45b)
 

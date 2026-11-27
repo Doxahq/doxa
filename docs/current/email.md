@@ -241,7 +241,7 @@ The order matters: each step needs the one before it.
 1. Run the migrations (`0031_email`, `0032_docs_domain_checks`).
 2. Create the queue once: `pnpm --filter @doxahq/email-worker exec wrangler queues create doxa-email-deliveries`.
 3. Deploy with `pnpm deploy:all` or the Deploy Production workflow (in the ops repo). Both run
-   `scripts/deploy-production.mjs`:
+   `scripts/deploy/deploy-production.mjs`:
    - The `docs-rendering` step deploys `doxa-api` last. The renderer release
      generates its config, `apps/api/dist/wrangler.production.json`, from
      `apps/api/wrangler.json`.

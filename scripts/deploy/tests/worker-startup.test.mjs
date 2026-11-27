@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const root = new URL("../", import.meta.url);
+const root = new URL("../../../", import.meta.url);
 
 /** Workers whose health route answers JSON with their service name. */
 const JSON_HEALTH_SERVICES = {

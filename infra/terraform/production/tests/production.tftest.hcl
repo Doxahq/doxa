@@ -69,23 +69,33 @@ run "wires_the_stack_together" {
   command = apply
 
   assert {
-    condition     = output.origin_vpc_service_id == "5f0c1e2d-0000-4000-8000-000000000000"
-    error_message = "The stack must output the VPC Service ID for the ORIGIN binding of the thin Worker."
+    condition     = output.origin_vpc_service_ids == { blue = "5f0c1e2d-0000-4000-8000-000000000000", green = "5f0c1e2d-0000-4000-8000-000000000000" }
+    error_message = "The stack must output the VPC Service ID of each color, for the ORIGIN_BLUE and ORIGIN_GREEN bindings of the thin Worker."
   }
 
   assert {
-    condition     = module.tunnel.tunnel_id == "0b6e7d1a-0000-4000-8000-000000000000"
+    condition     = module.tunnel["blue"].tunnel_id == "0b6e7d1a-0000-4000-8000-000000000000"
     error_message = "The VPC Service and the cloudflared token must use the stack's tunnel."
   }
 
   assert {
-    condition     = output.service_name == "doxa-api-test" && output.task_definition_family == "doxa-api-test"
-    error_message = "Resource names must carry the environment."
+    condition     = output.service_names == { blue = "doxa-api-test", green = "doxa-api-test-green" } && output.task_definition_families.blue == "doxa-api-test"
+    error_message = "Resource names must carry the environment, and blue must keep the names from before blue/green."
   }
 
   assert {
-    condition     = aws_ssm_parameter.tunnel_token.name == "/doxa/api/test/TUNNEL_TOKEN" && aws_ssm_parameter.tunnel_token.type == "SecureString"
-    error_message = "The tunnel token must be a SecureString next to the API secrets."
+    condition     = aws_ssm_parameter.tunnel_token["blue"].name == "/doxa/api/test/TUNNEL_TOKEN" && aws_ssm_parameter.tunnel_token["green"].name == "/doxa/api/test/TUNNEL_TOKEN_GREEN" && aws_ssm_parameter.tunnel_token["green"].type == "SecureString"
+    error_message = "Each tunnel token must be a SecureString next to the API secrets, and blue must keep its name."
+  }
+
+  assert {
+    condition     = module.tunnel["green"].tunnel_id != null && length(module.tunnel) == 2
+    error_message = "Each color must have its own tunnel."
+  }
+
+  assert {
+    condition     = aws_ssm_parameter.task_count.name == "/doxa/api/test/deploy/task-count" && jsondecode(aws_ssm_parameter.task_count.value) == { min = 1, max = 1 }
+    error_message = "The deploy reads the task count of the live color from this parameter."
   }
 
   assert {

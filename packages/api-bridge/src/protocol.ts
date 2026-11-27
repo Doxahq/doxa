@@ -39,6 +39,13 @@ export const CLIENT_REGION_HEADER = "x-doxa-client-region";
 export const FORWARD_URL_HEADER = "x-doxa-forward-url";
 /** The URL that the client called at the edge, for example https://api.doxa.so/me. */
 export const PUBLIC_URL_HEADER = "x-doxa-public-url";
+/**
+ * The release ID of the sender (DOXA_RELEASE_ID). The edge sends its release
+ * to the origin, and the origin puts its own on every response. The origin
+ * logs a request from an edge of another release, so a mixed-version window
+ * shows in the logs. The smoke checks read it on api.doxa.so.
+ */
+export const RELEASE_HEADER = "x-doxa-release";
 
 /** Headers that only the edge may set. The edge drops them from public requests. */
 export const EDGE_ONLY_HEADERS = [
@@ -49,6 +56,7 @@ export const EDGE_ONLY_HEADERS = [
   CLIENT_REGION_HEADER,
   FORWARD_URL_HEADER,
   PUBLIC_URL_HEADER,
+  RELEASE_HEADER,
 ] as const;
 
 export const CODEC_CONTENT_TYPE = "application/x-doxa-devalue";

@@ -249,7 +249,7 @@ The deploy keeps a release record at
 bucket: `{ buildId, releaseId, packageKey, deployedAt, previous, revoked }`.
 `deploy-renderer.mjs` reads it before packaging and writes it after the
 dispatcher deploy succeeds. The rules are in
-`scripts/lib/renderer-release-record.mjs`:
+`scripts/deploy/lib/renderer-release-record.mjs`:
 
 | Deploy | Previous build in the dispatcher |
 |---|---|

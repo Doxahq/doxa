@@ -102,6 +102,15 @@ describe("server config", () => {
     expect(() => readServerConfig({ ...base, SHUTDOWN_GRACE_MS: "200000" })).toThrow();
   });
 
+  it("reads the release ID that the deploy sets, and refuses anything else", () => {
+    expect(readServerConfig(base).releaseId).toBeUndefined();
+    expect(readServerConfig({ ...base, DOXA_RELEASE_ID: "0123456789ab" }).releaseId).toBe("0123456789ab");
+    expect(readServerConfig({ ...base, DOXA_RELEASE_ID: "0123456789ab-dirty-20261126-101500" }).releaseId).toBe(
+      "0123456789ab-dirty-20261126-101500",
+    );
+    expect(() => readServerConfig({ ...base, DOXA_RELEASE_ID: "main" })).toThrow(/DOXA_RELEASE_ID/);
+  });
+
   it("listens on loopback unless HOST names another IP address", () => {
     expect(readServerConfig({ ...base, HOST: "0.0.0.0" }).host).toBe("0.0.0.0");
     expect(readServerConfig({ ...base, HOST: "::1" }).host).toBe("::1");

@@ -111,8 +111,12 @@
       "vars": {},
       "vpc_services": [
         {
-          "binding": "ORIGIN",
-          "service_id": "${CF_API_ORIGIN_VPC_SERVICE_ID}"
+          "binding": "ORIGIN_BLUE",
+          "service_id": "${CF_API_ORIGIN_BLUE_VPC_SERVICE_ID}"
+        },
+        {
+          "binding": "ORIGIN_GREEN",
+          "service_id": "${CF_API_ORIGIN_GREEN_VPC_SERVICE_ID}"
         }
       ],
       "services": [

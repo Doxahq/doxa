@@ -188,7 +188,7 @@ collector.
 | `DOXA_PROD_BLOB_CACHE_SITE_IDS` | Comma-separated site ids for `allowlist`. | empty |
 
 `pnpm validate:production-config` checks the cache settings and the mode
-(`scripts/lib/docs-runtime-config.mjs`).
+(`scripts/deploy/lib/docs-runtime-config.mjs`).
 
 The `docs_runtime_reads` log line has three counters for the storage reads
 below the logical reads, by where they were served: `edgeCacheHits`

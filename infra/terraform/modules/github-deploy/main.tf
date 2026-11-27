@@ -1,6 +1,6 @@
 # A role that GitHub Actions takes through OIDC to deploy the API: push an
-# image, register a task definition revision and update the service. There
-# are no long-lived AWS keys in GitHub.
+# image, register a task definition revision, and start or stop the blue and
+# green services. There are no long-lived AWS keys in GitHub.
 
 locals {
   github_oidc_host = "token.actions.githubusercontent.com"
@@ -97,7 +97,23 @@ data "aws_iam_policy_document" "deploy" {
   statement {
     sid       = "EcsService"
     actions   = ["ecs:DescribeServices", "ecs:UpdateService"]
-    resources = [var.ecs_service_arn]
+    resources = var.ecs_service_arns
+  }
+
+  # A deploy gives the color it starts the stack's task count, and the color
+  # it stops 0 tasks (scripts/deploy/deploy-api-ecs.mjs). Application Auto Scaling
+  # names targets by resource ID, not ARN, so these take no resource
+  # condition; ECS still checks UpdateService on the service above.
+  statement {
+    sid       = "ScaleColors"
+    actions   = ["application-autoscaling:RegisterScalableTarget", "application-autoscaling:DescribeScalableTargets"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "ReadTaskCount"
+    actions   = ["ssm:GetParameter"]
+    resources = [var.task_count_parameter_arn]
   }
 
   statement {

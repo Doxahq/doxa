@@ -66,6 +66,8 @@ export interface NodeServerConfig {
   shutdownGraceMs: number;
   /** Refuse fetches to non-public addresses, as the production Worker does. Off in local development. */
   strictPublicFetch: boolean;
+  /** The release that this origin runs (DOXA_RELEASE_ID, set by the deploy). Unset in development. */
+  releaseId?: string;
 }
 
 const serverSchema = z.object({
@@ -86,6 +88,11 @@ const serverSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   WRANGLER_CONFIG_PATH: z.string().optional(),
   WRANGLER_PERSIST_PATH: z.string().optional(),
+  // The image tag rule of scripts/deploy/lib/api-deploy.mjs: a commit, and a time stamp for a tree with changes.
+  DOXA_RELEASE_ID: z
+    .string()
+    .regex(/^[0-9a-f]{12}(?:-dirty-\d{8}-\d{6})?$/, "DOXA_RELEASE_ID must be a release ID such as 0123456789ab")
+    .optional(),
 });
 
 /** Reads and checks the server settings. A missing or weak setting fails start-up. */
@@ -104,6 +111,7 @@ export function readServerConfig(source: Record<string, string | undefined>): No
     pgPoolMax: parsed.PG_POOL_MAX,
     shutdownGraceMs: parsed.SHUTDOWN_GRACE_MS,
     strictPublicFetch: parsed.STRICT_PUBLIC_FETCH === "true",
+    releaseId: parsed.DOXA_RELEASE_ID,
   };
 }
 

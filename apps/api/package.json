@@ -71,7 +71,7 @@
     "dev": "wrangler dev --port 8787 --inspector-port 9230 --persist-to ../../.wrangler/state",
     "dev:node": "node scripts/node-server.mjs dev",
     "build:node": "node scripts/node-server.mjs build",
-    "deploy": "node ../../scripts/refuse-api-worker-deploy.mjs",
+    "deploy": "node ../../scripts/deploy/refuse-api-worker-deploy.mjs",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

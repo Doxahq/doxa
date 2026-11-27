@@ -24,12 +24,16 @@ mock_provider "aws" {
 }
 
 variables {
-  name                       = "doxa-api-test"
-  vpc_id                     = "vpc-0123456789abcdef0"
-  subnet_ids                 = ["subnet-a", "subnet-b"]
-  api_image                  = "123456789012.dkr.ecr.us-east-1.amazonaws.com/doxa-api:abc1234"
-  tunnel_token_parameter_arn = "arn:aws:ssm:us-east-1:123456789012:parameter/doxa/api/test/TUNNEL_TOKEN"
-  api_environment            = { WEB_ORIGIN = "https://doxa.so", BETTER_AUTH_URL = "https://api.doxa.so" }
+  name       = "doxa-api-test"
+  vpc_id     = "vpc-0123456789abcdef0"
+  subnet_ids = ["subnet-a", "subnet-b"]
+  api_image  = "123456789012.dkr.ecr.us-east-1.amazonaws.com/doxa-api:abc1234"
+  colors     = { blue = "doxa-api-test", green = "doxa-api-test-green" }
+  tunnel_token_parameter_arns = {
+    blue  = "arn:aws:ssm:us-east-1:123456789012:parameter/doxa/api/test/TUNNEL_TOKEN"
+    green = "arn:aws:ssm:us-east-1:123456789012:parameter/doxa/api/test/TUNNEL_TOKEN_GREEN"
+  }
+  api_environment = { WEB_ORIGIN = "https://doxa.so", BETTER_AUTH_URL = "https://api.doxa.so" }
   api_secrets = {
     DATABASE_URL = "arn:aws:ssm:us-east-1:123456789012:parameter/doxa/api/test/DATABASE_URL"
   }
@@ -39,67 +43,67 @@ run "task_runs_the_api_and_the_tunnel_side_by_side" {
   command = apply
 
   assert {
-    condition     = [for container in jsondecode(aws_ecs_task_definition.this.container_definitions) : container.name] == ["api", "cloudflared"]
+    condition     = [for container in jsondecode(aws_ecs_task_definition.color["blue"].container_definitions) : container.name] == ["api", "cloudflared"]
     error_message = "The task must run the api container and the cloudflared container."
   }
 
   assert {
-    condition     = jsondecode(aws_ecs_task_definition.this.container_definitions)[1].dependsOn == [{ containerName = "api", condition = "HEALTHY" }]
+    condition     = jsondecode(aws_ecs_task_definition.color["blue"].container_definitions)[1].dependsOn == [{ containerName = "api", condition = "HEALTHY" }]
     error_message = "cloudflared must start only after the api container is healthy."
   }
 
   assert {
-    condition     = jsondecode(aws_ecs_task_definition.this.container_definitions)[1].secrets == [{ name = "TUNNEL_TOKEN", valueFrom = var.tunnel_token_parameter_arn }]
+    condition     = jsondecode(aws_ecs_task_definition.color["blue"].container_definitions)[1].secrets == [{ name = "TUNNEL_TOKEN", valueFrom = var.tunnel_token_parameter_arns.blue }]
     error_message = "cloudflared must read its token from the tunnel token parameter."
   }
 
   assert {
-    condition     = jsondecode(aws_ecs_task_definition.this.container_definitions)[0].stopTimeout == 120
+    condition     = jsondecode(aws_ecs_task_definition.color["blue"].container_definitions)[0].stopTimeout == 120
     error_message = "The api container must get the full Fargate stop timeout to drain background tasks."
   }
 
   assert {
-    condition     = join(" ", jsondecode(aws_ecs_task_definition.this.container_definitions)[1].command) == "tunnel --no-autoupdate --protocol quic --grace-period 25s run"
+    condition     = join(" ", jsondecode(aws_ecs_task_definition.color["blue"].container_definitions)[1].command) == "tunnel --no-autoupdate --protocol quic --grace-period 25s run"
     error_message = "cloudflared must use QUIC: Workers VPC does not work over the HTTP/2 fallback."
   }
 
   assert {
-    condition     = jsondecode(aws_ecs_task_definition.this.container_definitions)[1].stopTimeout == 30
+    condition     = jsondecode(aws_ecs_task_definition.color["blue"].container_definitions)[1].stopTimeout == 30
     error_message = "cloudflared must stop 5 seconds after its 25-second grace period."
   }
 
   assert {
-    condition     = [for variable in jsondecode(aws_ecs_task_definition.this.container_definitions)[0].environment : variable.name] == ["BETTER_AUTH_URL", "WEB_ORIGIN"]
+    condition     = [for variable in jsondecode(aws_ecs_task_definition.color["blue"].container_definitions)[0].environment : variable.name] == ["BETTER_AUTH_URL", "WEB_ORIGIN"]
     error_message = "Environment variables must be sorted by name, so the task definition does not change between plans."
   }
 
   assert {
-    condition     = strcontains(jsondecode(aws_ecs_task_definition.this.container_definitions)[0].healthCheck.command[3], "http://127.0.0.1:8786/health")
+    condition     = strcontains(jsondecode(aws_ecs_task_definition.color["blue"].container_definitions)[0].healthCheck.command[3], "http://127.0.0.1:8786/health")
     error_message = "The health check must probe the API port and health path."
   }
 
   assert {
-    condition     = aws_ecs_task_definition.this.cpu == "2048" && aws_ecs_task_definition.this.memory == "4096"
+    condition     = aws_ecs_task_definition.color["blue"].cpu == "2048" && aws_ecs_task_definition.color["blue"].memory == "4096"
     error_message = "The default task size must be 2 vCPU and 4 GB."
   }
 
   assert {
-    condition     = one(aws_ecs_task_definition.this.runtime_platform).cpu_architecture == "ARM64"
+    condition     = one(aws_ecs_task_definition.color["blue"].runtime_platform).cpu_architecture == "ARM64"
     error_message = "The default architecture must be ARM64."
   }
 
   assert {
-    condition     = length(aws_ecs_service.this.load_balancer) == 0
+    condition     = length(aws_ecs_service.color["blue"].load_balancer) == 0
     error_message = "The service must not use a load balancer: requests arrive through the tunnel."
   }
 
   assert {
-    condition     = one(aws_ecs_service.this.network_configuration).assign_public_ip
+    condition     = one(aws_ecs_service.color["blue"].network_configuration).assign_public_ip
     error_message = "Tasks need a public IP for outbound traffic, because the VPC has no NAT gateway."
   }
 
   assert {
-    condition     = one(aws_ecs_service.this.deployment_circuit_breaker).rollback
+    condition     = one(aws_ecs_service.color["blue"].deployment_circuit_breaker).rollback
     error_message = "A failed deploy must roll back."
   }
 
@@ -151,66 +155,59 @@ run "rejects_a_stop_timeout_above_the_fargate_limit" {
   expect_failures = [var.api_stop_timeout_seconds]
 }
 
-run "runs_all_day_without_a_daily_pause" {
-  command = plan
-
-  assert {
-    condition     = length(aws_appautoscaling_scheduled_action.stop) == 0 && length(aws_appautoscaling_scheduled_action.start) == 0
-    error_message = "Without daily_pause the service must have no scheduled actions."
-  }
-}
-
-run "stops_and_starts_the_service_every_day" {
+run "runs_blue_and_keeps_green_idle" {
   command = apply
+  # A new stack: Terraform sets the task counts only when it creates the
+  # services, so the state of the runs above would keep theirs.
+  state_key = "new_stack"
 
   variables {
-    min_task_count = 1
-    max_task_count = 2
-    daily_pause    = { stop_hour = 1, start_hour = 10, timezone = "Africa/Algiers" }
+    min_task_count = 2
+    max_task_count = 4
   }
 
   assert {
-    condition     = aws_appautoscaling_scheduled_action.stop[0].schedule == "cron(0 1 * * ? *)" && aws_appautoscaling_scheduled_action.stop[0].timezone == "Africa/Algiers"
-    error_message = "The service must stop at 01:00 local time."
+    condition     = aws_ecs_service.color["blue"].name == "doxa-api-test" && aws_ecs_service.color["green"].name == "doxa-api-test-green"
+    error_message = "Each color must be its own service with its own name."
   }
 
   assert {
-    condition     = one(aws_appautoscaling_scheduled_action.stop[0].scalable_target_action).min_capacity == "0" && one(aws_appautoscaling_scheduled_action.stop[0].scalable_target_action).max_capacity == "0"
-    error_message = "The stop action must allow no task."
+    condition     = aws_ecs_task_definition.color["green"].family == "doxa-api-test-green"
+    error_message = "Each color must have its own task family."
   }
 
   assert {
-    condition     = aws_appautoscaling_scheduled_action.start[0].schedule == "cron(0 10 * * ? *)" && aws_appautoscaling_scheduled_action.start[0].timezone == "Africa/Algiers"
-    error_message = "The service must start at 10:00 local time."
+    condition     = jsondecode(aws_ecs_task_definition.color["green"].container_definitions)[1].secrets == [{ name = "TUNNEL_TOKEN", valueFrom = var.tunnel_token_parameter_arns.green }]
+    error_message = "Each color must join its own tunnel."
   }
 
   assert {
-    condition     = one(aws_appautoscaling_scheduled_action.start[0].scalable_target_action).min_capacity == "1" && one(aws_appautoscaling_scheduled_action.start[0].scalable_target_action).max_capacity == "2"
-    error_message = "The start action must restore the day bounds of the target."
+    condition     = jsondecode(aws_ecs_task_definition.color["green"].container_definitions)[0] == jsondecode(aws_ecs_task_definition.color["blue"].container_definitions)[0]
+    error_message = "Both colors must run the same API container."
   }
 
   assert {
-    condition     = aws_appautoscaling_scheduled_action.start[0].resource_id == aws_appautoscaling_target.this.resource_id
-    error_message = "The scheduled actions must act on the service's scaling target."
+    condition     = aws_ecs_service.color["blue"].desired_count == 2 && aws_ecs_service.color["green"].desired_count == 0
+    error_message = "Blue must start with min_task_count tasks, and green with none."
+  }
+
+  assert {
+    condition     = aws_appautoscaling_target.color["blue"].min_capacity == 2 && aws_appautoscaling_target.color["blue"].max_capacity == 4
+    error_message = "Blue must start with the task count bounds."
+  }
+
+  assert {
+    condition     = aws_appautoscaling_target.color["green"].min_capacity == 0 && aws_appautoscaling_target.color["green"].max_capacity == 0
+    error_message = "The idle color must have no room to scale until a deploy starts it."
   }
 }
 
-run "rejects_a_daily_pause_hour_outside_the_day" {
+run "rejects_colors_other_than_blue_and_green" {
   command = plan
 
   variables {
-    daily_pause = { stop_hour = 1, start_hour = 24, timezone = "Africa/Algiers" }
+    colors = { blue = "doxa-api-test", red = "doxa-api-test-red" }
   }
 
-  expect_failures = [var.daily_pause]
-}
-
-run "rejects_a_daily_pause_that_stops_and_starts_at_the_same_hour" {
-  command = plan
-
-  variables {
-    daily_pause = { stop_hour = 1, start_hour = 1, timezone = "Africa/Algiers" }
-  }
-
-  expect_failures = [var.daily_pause]
+  expect_failures = [var.colors]
 }

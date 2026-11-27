@@ -1,7 +1,7 @@
 # Alerts for the API service, sent by email through one SNS topic:
 #
-#   no running task   no CPU samples for 3 minutes, muted in the daily pause
-#   high CPU / memory the task is close to its size
+#   no running task   no CPU samples from either color for 3 minutes
+#   high CPU / memory the tasks of a color are close to their size
 #   failed deploy     ECS rolled a deploy back or cannot start tasks
 #   monthly budget    the AWS bill passes the limit
 #   valkey            the cache nears its storage or ECPU limit, or throttles
@@ -12,14 +12,16 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  service_dimensions = {
-    ClusterName = var.cluster_name
-    ServiceName = var.service_name
-  }
-
-  # The task needs a few minutes after start_hour to report CPU again.
-  pause_start_grace_minutes = 15
-  pause_hours               = var.daily_pause == null ? 0 : (var.daily_pause.start_hour - var.daily_pause.stop_hour + 24) % 24
+  # The usage alarms per color and metric. An idle color sends no samples,
+  # which counts as "not breaching".
+  usage_alarms = merge([
+    for color, service in var.services : {
+      for metric, alarm in {
+        cpu    = { metric = "CPUUtilization", threshold = var.cpu_alarm_percent }
+        memory = { metric = "MemoryUtilization", threshold = var.memory_alarm_percent }
+      } : "${color}-${metric}" => merge(alarm, { color = color, kind = metric, service_name = service.name })
+    }
+  ]...)
 }
 
 resource "aws_sns_topic" "alerts" {
@@ -58,55 +60,50 @@ resource "aws_sns_topic_policy" "alerts" {
   policy = data.aws_iam_policy_document.alerts_topic.json
 }
 
-# A running task reports CPU every minute. No sample means no task runs.
+# A running task reports CPU every minute. No sample from either color means
+# that no task runs: the edge serves the live color, and the other is idle.
 resource "aws_cloudwatch_metric_alarm" "no_running_task" {
   alarm_name          = "${var.name}-no-running-task"
-  alarm_description   = "The API service has had no running task for 3 minutes."
-  namespace           = "AWS/ECS"
-  metric_name         = "CPUUtilization"
-  dimensions          = local.service_dimensions
-  statistic           = "SampleCount"
-  period              = 60
+  alarm_description   = "The API has had no running task for 3 minutes."
   evaluation_periods  = 3
   comparison_operator = "LessThanThreshold"
   threshold           = 1
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
-}
 
-# The alarm keeps its state during the mute, but sends nothing. If the task is
-# still down when the mute ends, CloudWatch sends the ALARM email then.
-resource "aws_cloudwatch_alarm_mute_rule" "daily_pause" {
-  count = var.daily_pause == null ? 0 : 1
-
-  name        = "${var.name}-daily-pause"
-  description = "The API runs no task during its daily pause."
-
-  rule {
-    schedule {
-      expression = "cron(0 ${var.daily_pause.stop_hour} * * ?)"
-      duration   = format("PT%dH%dM", local.pause_hours, local.pause_start_grace_minutes)
-      timezone   = var.daily_pause.timezone
-    }
+  metric_query {
+    id          = "samples"
+    expression  = join(" + ", [for color in sort(keys(var.services)) : "FILL(${color}, 0)"])
+    label       = "CPU samples of all colors"
+    return_data = true
   }
 
-  mute_targets {
-    alarm_names = [aws_cloudwatch_metric_alarm.no_running_task.alarm_name]
+  dynamic "metric_query" {
+    for_each = var.services
+
+    content {
+      id = metric_query.key
+
+      metric {
+        namespace   = "AWS/ECS"
+        metric_name = "CPUUtilization"
+        dimensions  = { ClusterName = var.cluster_name, ServiceName = metric_query.value.name }
+        stat        = "SampleCount"
+        period      = 60
+      }
+    }
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "high_usage" {
-  for_each = {
-    cpu    = { metric = "CPUUtilization", threshold = var.cpu_alarm_percent }
-    memory = { metric = "MemoryUtilization", threshold = var.memory_alarm_percent }
-  }
+  for_each = local.usage_alarms
 
-  alarm_name          = "${var.name}-high-${each.key}"
-  alarm_description   = "Average ${each.key} use of the API service is above ${each.value.threshold}% for 10 minutes."
+  alarm_name          = "${each.value.service_name}-high-${each.value.kind}"
+  alarm_description   = "Average ${each.value.kind} use of the ${each.value.color} API service is above ${each.value.threshold}% for 10 minutes."
   namespace           = "AWS/ECS"
   metric_name         = each.value.metric
-  dimensions          = local.service_dimensions
+  dimensions          = { ClusterName = var.cluster_name, ServiceName = each.value.service_name }
   statistic           = "Average"
   period              = 300
   evaluation_periods  = 2
@@ -119,11 +116,11 @@ resource "aws_cloudwatch_metric_alarm" "high_usage" {
 
 resource "aws_cloudwatch_event_rule" "failed_deploy" {
   name        = "${var.name}-failed-deploy"
-  description = "ECS deploy failures and task start problems of the API service."
+  description = "ECS deploy failures and task start problems of the API services."
 
   event_pattern = jsonencode({
     source        = ["aws.ecs"]
-    resources     = [var.service_arn]
+    resources     = sort([for service in values(var.services) : service.arn])
     "detail-type" = ["ECS Deployment State Change", "ECS Service Action"]
     detail = {
       eventName = [
@@ -212,4 +209,14 @@ resource "aws_cloudwatch_metric_alarm" "valkey_throttled" {
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+moved {
+  from = aws_cloudwatch_metric_alarm.high_usage["cpu"]
+  to   = aws_cloudwatch_metric_alarm.high_usage["blue-cpu"]
+}
+
+moved {
+  from = aws_cloudwatch_metric_alarm.high_usage["memory"]
+  to   = aws_cloudwatch_metric_alarm.high_usage["blue-memory"]
 }

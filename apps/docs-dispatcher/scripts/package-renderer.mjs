@@ -15,7 +15,7 @@ import {
   parseRevokedReleaseId,
   planPreviousBuild,
   previousBuildVars,
-} from "../../../scripts/lib/renderer-release-record.mjs";
+} from "../../../scripts/deploy/lib/renderer-release-record.mjs";
 
 const gzipAsync = promisify(gzip);
 const SCHEMA_VERSION = 1;
